@@ -1,0 +1,386 @@
+/* ==========================================================================
+   ALLY — Help & Support View Stylesheet
+   ========================================================================== */
+
+/* ---- Page Header ---- */
+.hp-help-header {
+  text-align: center;
+  margin: 10px auto 38px;
+  max-width: 600px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.hp-header-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(16, 185, 129, 0.12);
+  color: var(--emerald, #10B981);
+  display: grid;
+  place-items: center;
+  margin-bottom: 6px;
+}
+
+.hp-header-icon svg {
+  width: 24px;
+  height: 24px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+}
+
+.hp-help-title {
+  font-family: var(--serif);
+  font-size: 34px;
+  font-weight: 700;
+  color: var(--ink, #16241c);
+  margin: 0;
+}
+
+.hp-help-subtitle {
+  font-family: var(--body);
+  font-size: 13.5px;
+  line-height: 1.58;
+  color: var(--muted, #556458);
+  margin: 0;
+}
+
+/* ---- Two columns contact & quick actions ---- */
+.hp-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 28px;
+  align-items: start;
+  margin-bottom: 40px;
+}
+
+.hp-card {
+  background: #ffffff;
+  border: 1px solid var(--bd, #e7e0d6);
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: var(--shadow-card);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-height: 236px;
+}
+
+.hp-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--display);
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted-2, #6c7a70);
+  text-align: left;
+}
+
+.hp-card-head svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+}
+
+.hp-contact-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+}
+
+.hp-contact-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  font-size: 13.5px;
+}
+
+.hp-contact-lbl {
+  font-family: var(--body);
+  color: var(--muted-2, #6c7a70);
+}
+
+.hp-contact-val {
+  font-family: var(--body);
+  font-weight: 650;
+  color: var(--ink, #16241c);
+}
+
+.hp-contact-val.link {
+  color: var(--emerald-dark, #0c7a54);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.hp-contact-val.link:hover {
+  text-decoration: underline;
+}
+
+.hp-contact-footer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--body);
+  font-size: 11.5px;
+  color: var(--muted-2, #6c7a70);
+  border-top: 1px solid var(--bd, #e7e0d6);
+  padding-top: 14px;
+  margin-top: auto;
+}
+
+.hp-contact-footer .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--emerald, #10B981);
+}
+
+/* ---- Quick Actions Grid ---- */
+.hp-actions-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.hp-action-btn {
+  border: 1px solid var(--bd, #e7e0d6);
+  background: #fdfcf7;
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  transition: all 0.2s var(--ease);
+  text-align: left;
+}
+
+.hp-action-btn:hover {
+  border-color: var(--bd-2, #d8cfc2);
+  background: var(--ivory-2, #fbf7f2);
+}
+
+.hp-action-ic {
+  color: var(--emerald-dark, #0c7a54);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.hp-action-ic svg {
+  width: 14.5px;
+  height: 14.5px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+}
+
+.hp-action-lbl {
+  font-family: var(--body);
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--ink, #16241c);
+}
+
+/* ---- FAQs list & accordions ---- */
+.hp-faq-title-sec {
+  font-family: var(--serif);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--ink, #16241c);
+  margin: 40px 2px 16px;
+  text-align: left;
+}
+
+.hp-faq-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 40px;
+}
+
+.hp-faq-row {
+  background: #ffffff;
+  border: 1px solid var(--bd, #e7e0d6);
+  border-radius: 10px;
+  overflow: hidden;
+  transition: border-color 0.2s var(--ease);
+}
+
+.hp-faq-row:hover {
+  border-color: var(--bd-2, #d8cfc2);
+}
+
+.hp-faq-trigger {
+  width: 100%;
+  background: transparent;
+  border: none;
+  padding: 16px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  text-align: left;
+}
+
+.hp-faq-q {
+  font-family: var(--body);
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--ink, #16241c);
+}
+
+.hp-faq-chevron {
+  color: var(--muted-2, #6c7a70);
+  transition: transform 0.2s var(--ease);
+  display: grid;
+  place-items: center;
+}
+
+.hp-faq-chevron svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+}
+
+.hp-faq-row.open .hp-faq-chevron {
+  transform: rotate(180deg);
+}
+
+.hp-faq-answer {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.25s var(--ease);
+}
+
+.hp-faq-row.open .hp-faq-answer {
+  max-height: 200px;
+}
+
+.hp-faq-answer-inner {
+  padding: 0 20px 18px;
+  font-family: var(--body);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--muted, #556458);
+  text-align: left;
+}
+
+/* ---- Still need help? Footer Banner ---- */
+.hp-footer-card {
+  background: radial-gradient(130% 140% at 100% 0%, #123e28, #0E2A1C 62%, #06150e);
+  border: 1px solid rgba(16, 185, 129, 0.22);
+  border-radius: 16px;
+  padding: 32px;
+  color: #ffffff;
+  box-shadow: var(--shadow-dark);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 32px;
+  text-align: left;
+}
+
+.hp-footer-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.hp-footer-title {
+  font-family: var(--display);
+  font-size: 20px;
+  font-weight: 750;
+  color: #ffffff;
+  margin: 0;
+}
+
+.hp-footer-desc {
+  font-family: var(--body);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--on-dark-muted, #a7c0b4);
+  margin: 0;
+}
+
+.hp-footer-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.hp-footer-btn-green {
+  background: var(--emerald, #10B981);
+  color: #06231a;
+  font-family: var(--display);
+  font-size: 12.5px;
+  font-weight: 800;
+  padding: 10px 16px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: background 0.2s var(--ease), transform 0.2s var(--ease);
+  border: none;
+}
+
+.hp-footer-btn-green:hover {
+  background: var(--emerald-bright, #34d399);
+  transform: translateY(-1px);
+}
+
+.hp-footer-btn-ghost {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+  font-family: var(--display);
+  font-size: 12.5px;
+  font-weight: 750;
+  padding: 10px 16px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: background 0.2s var(--ease), border-color 0.2s var(--ease), transform 0.2s var(--ease);
+}
+
+.hp-footer-btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.25);
+  transform: translateY(-1px);
+}
+
+.hp-footer-btn-green svg, .hp-footer-btn-ghost svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+}
+
+@media (max-width: 900px) {
+  .hp-grid {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+  .hp-footer-card {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 20px;
+  }
+}

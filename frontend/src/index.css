@@ -1,0 +1,121 @@
+@import "tailwindcss";
+@import "./styles/platform.css";
+@import "./styles/founder-dna.css";
+@import "./styles/report.css";
+@import "./styles/plan.css";
+@import "./styles/discovery.css";
+@import "./styles/profile.css";
+@import "./styles/help.css";
+
+@theme {
+  /* ── Ivory palette ── */
+  --color-ivory: #f7f1eb;
+  --color-ivory-2: #fbf7f2;
+  --color-ivory-3: #efe6d9;
+  --color-sand: #efe4d2;
+  --color-sand-2: #e3d5bf;
+  /* ── Forest palette ── */
+  --color-forest: #1B4332;
+  --color-forest-2: #143726;
+  --color-forest-3: #0b2418;
+  --color-forest-deep: #0E2A1C;
+  --color-forest-deep-2: #0a2016;
+  --color-forest-night: #06140d;
+  /* ── Emerald palette ── */
+  --color-emerald: #10B981;
+  --color-emerald-bright: #34d399;
+  --color-emerald-glow: #5eead4;
+  --color-emerald-dark: #0c7a54;
+  /* ── Accent ── */
+  --color-lime-edge: #A8D94A;
+  --color-clay: #b7895f;
+  /* ── Ink / muted ── */
+  --color-ink: #16241c;
+  --color-muted: #556458;
+  --color-muted-2: #6c7a70;
+  --color-moss: #3a5f47;
+  /* ── Borders ── */
+  --color-bd: #e7e0d6;
+  --color-bd-2: #d8cfc2;
+  /* ── On-dark text ── */
+  --color-on-dark: #eaf3ee;
+  --color-on-dark-muted: #a7c0b4;
+  --color-on-dark-dim: #7d9488;
+  /* ── Lines ── */
+  --color-line: rgba(255,255,255,.08);
+  --color-line-2: rgba(255,255,255,.13);
+  /* ── Fonts ── */
+  --font-display: 'Inter Tight', 'Inter', system-ui, sans-serif;
+  --font-body: 'Inter', system-ui, sans-serif;
+  --font-serif: 'Fraunces', 'Georgia', serif;
+}
+
+/* ── CSS custom properties (consumed by platform.css) ── */
+:root {
+  --sb: 248px;
+  --rail: 68px;
+  --on-dark: #eaf3ee;
+  --on-dark-muted: #a7c0b4;
+  --on-dark-dim: #7d9488;
+  --forest: #1B4332;
+  --forest-deep: #0E2A1C;
+  --forest-night: #06140d;
+  --emerald: #10B981;
+  --emerald-bright: #34d399;
+  --emerald-glow: #5eead4;
+  --lime-edge: #A8D94A;
+  --clay: #b7895f;
+  --ink: #16241c;
+  --muted: #556458;
+  --muted-2: #6c7a70;
+  --ivory: #f7f1eb;
+  --ivory-2: #fbf7f2;
+  --ivory-3: #efe6d9;
+  --bd: #e7e0d6;
+  --bd-2: #d8cfc2;
+  --line: rgba(255,255,255,.08);
+  --line-2: rgba(255,255,255,.13);
+  --line-dark: rgba(255,255,255,.08);
+  --line-dark-2: rgba(255,255,255,.13);
+  --glass-dark: rgba(255,255,255,.04);
+  --shadow-card: 0 1px 2px -1px rgba(6,20,13,.14),0 6px 16px -6px rgba(6,20,13,.18);
+  --shadow-dark: 0 2px 6px -2px rgba(0,0,0,.4),0 24px 60px -20px rgba(0,0,0,.55);
+  --display: 'Inter Tight', 'Inter', system-ui, sans-serif;
+  --body: 'Inter', system-ui, sans-serif;
+  --serif: 'Fraunces', 'Georgia', serif;
+  --primary: cubic-bezier(.22,1,.3,1);
+  --secondary: cubic-bezier(.2,.7,.2,1);
+  --micro: cubic-bezier(.34,1.4,.5,1);
+  --ease: cubic-bezier(.22,1,.3,1);
+  --ease-spring: cubic-bezier(.34,1.4,.5,1);
+}
+
+/* ── Global resets ── */
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  color: var(--color-ink);
+  background: var(--color-forest-night);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+::selection { background: var(--color-emerald); color: #fff; }
+* { scrollbar-width: thin; scrollbar-color: rgba(16,185,129,.42) transparent; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: linear-gradient(180deg,rgba(16,185,129,.32),rgba(16,185,129,.5)); border-radius: 99px; border: 3px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background: linear-gradient(180deg,rgba(16,185,129,.55),rgba(52,211,153,.7)); background-clip: padding-box; }
+::-webkit-scrollbar-corner { background: transparent; }
+button { font-family: inherit; cursor: pointer; border: none; }
+a { color: inherit; text-decoration: none; }
+:focus { outline: none; }
+:focus-visible { outline: 2.5px solid var(--color-emerald-bright); outline-offset: 3px; border-radius: 8px; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0; }
+
+/* ── Shared keyframe animations ── */
+@keyframes float-orb {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(18px, -22px, 0) scale(1.04); }
+}

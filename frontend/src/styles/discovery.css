@@ -1,0 +1,248 @@
+/* ==========================================================================
+   ALLY — Discovery Call Booking View Stylesheet
+   ========================================================================== */
+
+.dc-container {
+  padding: 26px 32px 60px;
+  max-width: 1120px;
+  margin: 0 auto;
+}
+
+.dc-grid {
+  display: grid;
+  grid-template-columns: 1.15fr 0.85fr;
+  gap: 28px;
+  align-items: start;
+  margin-top: 14px;
+}
+
+/* ---- Left card (information) ---- */
+.dc-info-card {
+  background: radial-gradient(130% 140% at 100% 0%, #123e28, #0E2A1C 62%, #06150e);
+  border: 1px solid rgba(16, 185, 129, 0.22);
+  border-radius: 20px;
+  padding: 34px;
+  color: #ffffff;
+  box-shadow: var(--shadow-dark, 0 2px 6px -2px rgba(0,0,0,.4), 0 24px 60px -20px rgba(0,0,0,.55));
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  text-align: left;
+}
+
+.dc-info-badge {
+  align-self: flex-start;
+  background: rgba(52, 211, 153, 0.12);
+  border: 1px solid rgba(52, 211, 153, 0.28);
+  color: var(--emerald-bright, #34d399);
+  font-family: var(--display);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 5px 12px;
+  border-radius: 6px;
+}
+
+.dc-info-title {
+  font-family: var(--display);
+  font-size: 26px;
+  font-weight: 755;
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+  margin: 0;
+  color: #ffffff;
+}
+
+.dc-info-desc {
+  font-family: var(--body);
+  font-size: 13.5px;
+  line-height: 1.58;
+  color: var(--on-dark-muted, #a7c0b4);
+  margin: 0 0 8px;
+}
+
+.dc-info-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.dc-info-item {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.dc-info-ic {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(52, 211, 153, 0.14);
+  color: var(--emerald-bright, #34d399);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.dc-info-ic svg {
+  width: 11px;
+  height: 11px;
+  stroke: currentColor;
+  stroke-width: 3.2;
+  fill: none;
+}
+
+.dc-info-text {
+  font-family: var(--body);
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--on-dark, #eaf3ee);
+}
+
+.dc-info-text strong {
+  font-weight: 700;
+  color: #ffffff;
+}
+
+/* ---- Right card (scheduler) ---- */
+.dc-picker-card {
+  background: #ffffff;
+  border: 1px solid var(--bd, #e7e0d6);
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: var(--shadow-card);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  text-align: left;
+}
+
+.dc-picker-title {
+  font-family: var(--display);
+  font-size: 15px;
+  font-weight: 750;
+  color: var(--ink, #16241c);
+  margin: 0;
+}
+
+.dc-picker-sub {
+  font-family: var(--body);
+  font-size: 11.5px;
+  color: var(--muted-2, #6c7a70);
+  margin-top: 3px;
+  display: block;
+}
+
+.dc-days-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.dc-day-btn {
+  border: 1px solid var(--bd, #e7e0d6);
+  background: #ffffff;
+  border-radius: 10px;
+  padding: 10px 6px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s var(--ease);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.dc-day-btn:hover {
+  border-color: var(--bd-2, #d8cfc2);
+}
+
+.dc-day-btn.active {
+  background: var(--forest, #1B4332);
+  border-color: var(--forest, #1B4332);
+  color: #ffffff;
+}
+
+.dc-day-lbl {
+  font-family: var(--display);
+  font-size: 8.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted-2, #6c7a70);
+}
+
+.dc-day-btn.active .dc-day-lbl {
+  color: var(--on-dark-muted, #a7c0b4);
+}
+
+.dc-day-val {
+  font-family: var(--display);
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--ink, #16241c);
+}
+
+.dc-day-btn.active .dc-day-val {
+  color: #ffffff;
+}
+
+.dc-times-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.dc-time-btn {
+  border: 1px solid var(--bd, #e7e0d6);
+  background: #ffffff;
+  border-radius: 8px;
+  padding: 10px 4px;
+  font-family: var(--display);
+  font-size: 12.5px;
+  font-weight: 750;
+  color: var(--forest, #1B4332);
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s var(--ease);
+}
+
+.dc-time-btn:hover {
+  border-color: var(--bd-2, #d8cfc2);
+}
+
+.dc-time-btn.active {
+  background: var(--emerald, #10B981);
+  border-color: var(--emerald, #10B981);
+  color: #06231a;
+}
+
+.dc-confirm-btn {
+  background: var(--emerald, #10B981);
+  color: #06231a;
+  font-family: var(--display);
+  font-size: 13.5px;
+  font-weight: 800;
+  padding: 12px 18px;
+  border-radius: 10px;
+  width: 100%;
+  text-align: center;
+  cursor: pointer;
+  transition: background 0.2s var(--ease), transform 0.2s var(--ease);
+  box-shadow: 0 4px 12px -4px rgba(16, 185, 129, 0.4);
+  margin-top: 4px;
+}
+
+.dc-confirm-btn:hover {
+  background: var(--emerald-bright, #34d399);
+  transform: translateY(-1px);
+}
+
+@media (max-width: 900px) {
+  .dc-grid {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+}
