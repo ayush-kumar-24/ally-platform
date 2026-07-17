@@ -22,7 +22,10 @@ export default function Login() {
   return (
     <section className="view j-stage active auth-active" id="v-login">
       {showAuthTransition && (
-        <AuthTransition onComplete={() => navigate('/guided/welcome')} />
+        <AuthTransition
+          onNavigate={() => navigate('/guided/welcome')}
+          onComplete={() => setShowAuthTransition(false)}
+        />
       )}
       <div className="j-inner">
         <div className="j-avatar"><img src="/ally-logo.png" alt="" /></div>

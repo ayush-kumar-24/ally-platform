@@ -387,7 +387,10 @@ export default function LandingPage() {
   return (
     <div id="landing-page" ref={containerRef} className="scrollbar-thin">
       {showAuthTransition && (
-        <AuthTransition onComplete={() => navigate('/guided/welcome')} />
+        <AuthTransition
+          onNavigate={() => navigate('/guided/welcome')}
+          onComplete={() => setShowAuthTransition(false)}
+        />
       )}
       {/* ── STICKY NAV ────────────────────────────────────────────── */}
       <nav className={`lp-nav ${scrolled ? 'lp-scrolled' : ''}`} aria-label="Main navigation">
