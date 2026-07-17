@@ -48,3 +48,5 @@ uvicorn==0.51.0
 watchfiles==1.2.0
 websockets==16.1
 win32_setctime==1.2.0
+sentry-sdk[fastapi]==2.14.0
+httpx==0.28.1
