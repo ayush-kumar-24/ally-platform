@@ -11,7 +11,7 @@ export default function Welcome() {
   return (
     <section className="view j-stage active" id="v-welcome">
       <div className="j-inner wide wc-inner">
-        <div className="j-avatar">✦</div>
+        <div className="j-avatar"><img src="/ally-logo.png" alt="" /></div>
         <div className="j-eye" style={{ justifyContent: 'center' }}>
           Signed in · <span data-fe="true">{email}</span>
         </div>
