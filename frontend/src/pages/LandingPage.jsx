@@ -391,6 +391,7 @@ export default function LandingPage() {
         </a>
 
         <div className="lp-nav-links" role="list">
+          <a href="#lp-story" onClick={(e) => { e.preventDefault(); scrollToId('lp-story'); }}>Our Story</a>
           <a href="#lp-engine" onClick={(e) => { e.preventDefault(); scrollToId('lp-engine'); }}>Inside the Engine</a>
           <a href="#lp-features" onClick={(e) => { e.preventDefault(); scrollToId('lp-features'); }}>Why Ally</a>
           <a href="#lp-how" onClick={(e) => { e.preventDefault(); scrollToId('lp-how'); }}>The Clarity Method</a>
@@ -442,7 +443,7 @@ export default function LandingPage() {
         </div>
 
         <div className="lp-hero-inner">
-          <div className="j-avatar">✦</div>
+          <div className="j-avatar"><img src="/ally-logo.png" alt="" /></div>
           <div className="j-eye"><span className="lv"></span> GoXL &middot; Ally</div>
           <h1>Meet Ally, your <em>founder DNA</em> engine.</h1>
           <p className="lp-hero-sub">In about 20 minutes, Ally learns how you lead and finds what's really holding your business back. You'll leave with a clarity report and your next move.</p>
@@ -471,6 +472,42 @@ export default function LandingPage() {
         <div className="lp-scroll-cue" aria-hidden="true" onClick={() => scrollToId('lp-engine')} style={{ cursor: 'pointer' }}>
           <span>Scroll to explore</span>
           <div className="track"><i></i></div>
+        </div>
+      </section>
+
+      {/* ── OUR STORY · Why GoXL exists ──────────────────────────── */}
+      <section className="story" id="lp-story">
+        <div className="lp-wrap">
+          <div className="feat-head">
+            <div className="lp-eyebrow center lp-reveal">Why GoXL exists</div>
+            <h2 className="lp-reveal d1">Built from an unfulfilled dream.</h2>
+            <p className="lp-reveal d2">Entrepreneurs aren't short on effort — they're short on clarity. Every founder hits moments of uncertainty, decision fatigue, and isolation. Passion and hard work alone don't fix that; the real gap is structure and the right support at the right time.</p>
+          </div>
+
+          <blockquote className="story-quote lp-reveal d2">
+            <p className="q">"I gave everything I had — time, money, effort, passion — and still felt stuck and alone. That's when I realized: the problem was never a lack of effort. It was a lack of clarity, guidance, and structure. GoXL exists so no founder has to go through that alone."</p>
+            <cite className="attribution">Viraj Desai, Founder, GoXL</cite>
+          </blockquote>
+
+          <div className="story-steps lp-reveal d3">
+            <div className="story-step">
+              <span className="n">01</span>
+              <h3 className="t-k">Diagnose</h3>
+              <p className="t-d">We assess your Founder DNA and identify exactly where your business stands.</p>
+            </div>
+            <div className="story-step">
+              <span className="n">02</span>
+              <h3 className="t-k">Define</h3>
+              <p className="t-d">We align your vision with clear, achievable outcomes and priorities.</p>
+            </div>
+            <div className="story-step">
+              <span className="n">03</span>
+              <h3 className="t-k">Deliver</h3>
+              <p className="t-d">We build the structure, systems, and connections to get you there — sustainably.</p>
+            </div>
+          </div>
+
+          <p className="story-closing lp-reveal d3">Entrepreneurship shouldn't just be successful — it should be sustainable, structured, and deeply fulfilling.</p>
         </div>
       </section>
 

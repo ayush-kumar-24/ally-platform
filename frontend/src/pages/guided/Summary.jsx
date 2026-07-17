@@ -64,7 +64,7 @@ export default function Summary() {
     <section className="view j-stage active">
       <div className="j-inner wide" style={{ textAlign: 'left' }}>
         <div style={{ textAlign: 'center' }}>
-          <div className="j-avatar">✦</div>
+          <div className="j-avatar"><img src="/ally-logo.png" alt="" /></div>
           <div className="j-eye">How Ally read you</div>
           <h1 className="j-title" style={{ textAlign: 'center', maxWidth: 'none' }}>
             Here's what I've got, <em style={{ fontStyle: 'italic', color: 'var(--emerald-glow)' }}>{user?.name ? user.name.split(' ')[0] : 'Ayush'}</em>.

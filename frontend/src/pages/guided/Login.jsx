@@ -19,7 +19,7 @@ export default function Login() {
   return (
     <section className="view j-stage active auth-active" id="v-login">
       <div className="j-inner">
-        <div className="j-avatar">✦</div>
+        <div className="j-avatar"><img src="/ally-logo.png" alt="" /></div>
         <div className="j-eye"><span className="lv"></span> GoXL &middot; Ally</div>
         <h1 className="j-title">Meet Ally, your <em>founder DNA</em> engine.</h1>
         <p className="j-sub">In about 20 minutes, Ally learns how you lead and finds what's really holding your business back. You'll leave with a clarity report and your next move.</p>
