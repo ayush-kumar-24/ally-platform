@@ -1,9 +1,12 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
+import AuthTransition from '../../components/AuthTransition';
 
 export default function Login() {
   const navigate = useNavigate();
   const { setUser } = useApp();
+  const [showAuthTransition, setShowAuthTransition] = useState(false);
 
   const handleAuth = (provider) => {
     setUser(prev => ({
@@ -13,11 +16,17 @@ export default function Login() {
       email: provider === 'linkedin' ? 'ayush.sharma@brightloom.in' : 'ayush@brightloom.in',
       initials: 'AS'
     }));
-    navigate('/guided/welcome');
+    setShowAuthTransition(true);
   };
 
   return (
     <section className="view j-stage active auth-active" id="v-login">
+      {showAuthTransition && (
+        <AuthTransition
+          onNavigate={() => navigate('/guided/welcome')}
+          onComplete={() => setShowAuthTransition(false)}
+        />
+      )}
       <div className="j-inner">
         <div className="j-avatar"><img src="/ally-logo.png" alt="" /></div>
         <div className="j-eye"><span className="lv"></span> GoXL &middot; Ally</div>
