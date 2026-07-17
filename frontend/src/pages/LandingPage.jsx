@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
+import AuthTransition from '../components/AuthTransition';
 
 
 const DIMS = [
@@ -136,6 +137,7 @@ export default function LandingPage() {
   const [scrolled, setScrolled] = useState(false);
   const [timelineActiveIndex, setTimelineActiveIndex] = useState(-1);
   const [timelineHeight, setTimelineHeight] = useState(0);
+  const [showAuthTransition, setShowAuthTransition] = useState(false);
 
   const demoPanelRef = useRef(null);
   const timelineRef = useRef(null);
@@ -379,11 +381,14 @@ export default function LandingPage() {
       email: provider === 'linkedin' ? 'ayush.sharma@brightloom.in' : 'ayush@brightloom.in',
       initials: 'AS'
     }));
-    navigate('/guided/welcome');
+    setShowAuthTransition(true);
   };
 
   return (
     <div id="landing-page" ref={containerRef} className="scrollbar-thin">
+      {showAuthTransition && (
+        <AuthTransition onComplete={() => navigate('/guided/welcome')} />
+      )}
       {/* ── STICKY NAV ────────────────────────────────────────────── */}
       <nav className={`lp-nav ${scrolled ? 'lp-scrolled' : ''}`} aria-label="Main navigation">
         <a href="#lp-hero" onClick={(e) => { e.preventDefault(); containerRef.current?.scrollTo({ top: 0, behavior: 'smooth' }); }} className="lp-nav-logo" aria-label="GoXL Ally — go to top">
