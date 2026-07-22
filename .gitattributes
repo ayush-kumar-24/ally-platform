@@ -1,0 +1,41 @@
+# Normalize line endings across all machines.
+# Text files are stored as LF in the repo and checked out as LF everywhere,
+# so Windows/Mac/Linux teammates never see spurious whole-file diffs.
+* text=auto eol=lf
+
+# Explicit text types (Python backend, JS/TS frontend, configs, docs)
+*.py    text eol=lf
+*.pyi   text eol=lf
+*.mako  text eol=lf
+*.ini   text eol=lf
+*.cfg   text eol=lf
+*.toml  text eol=lf
+*.js    text eol=lf
+*.jsx   text eol=lf
+*.ts    text eol=lf
+*.tsx   text eol=lf
+*.json  text eol=lf
+*.css   text eol=lf
+*.html  text eol=lf
+*.md    text eol=lf
+*.sql   text eol=lf
+*.env   text eol=lf
+*.sh    text eol=lf
+
+# Windows batch/PowerShell must keep CRLF to run correctly
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+*.ps1   text eol=crlf
+
+# Binary assets — never touched or diffed by Git
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.svg   binary
+*.ico   binary
+*.mp4   binary
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+*.pdf   binary

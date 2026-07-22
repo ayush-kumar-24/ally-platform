@@ -104,6 +104,7 @@ app/
   core/                config, cors, logging
   db/session.py        engine + session (do not modify)
   models/              SQLAlchemy models — must be imported in __init__.py
+  repositories/        generic CRUD base + per-model repositories
   schemas/             Pydantic request/response shapes
   middleware/          request logging, error handling
 ```
@@ -125,6 +126,8 @@ database.
   (issue / refresh / validate / logout), session revocation scaffold
 - Models — all 56 logical tables mapped in `app/models/`, verified zero-drift
   against the live schema (`schema.py` generated + curated, `partitioned.py` by hand)
+- Repository layer — generic CRUD `BaseRepository` in `app/repositories/`; routes
+  depend on repositories, not raw SQLAlchemy (`founder_repository` wired into profile)
 - `profile` — done
 - `ai`, `dashboard`, `diagnosis`, `discovery`, `planning`, `reports`, `settings` — stubs
 - Founder provisioning on signup — scaffolded, disabled (needs DB signup-bug fix + sign-off)

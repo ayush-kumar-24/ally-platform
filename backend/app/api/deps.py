@@ -7,6 +7,7 @@ from app.core.auth import AuthUser, get_current_founder
 from app.db.session import get_db
 from app.middleware.error_handler import AppError
 from app.models import Founder
+from app.repositories import founder_repository
 
 
 class FounderNotFoundError(AppError):
@@ -47,7 +48,7 @@ def get_founder_record(
     except (ValueError, AttributeError, TypeError) as exc:
         raise InvalidFounderIdentityError() from exc
 
-    founder = db.query(Founder).filter(Founder.user_id == user_uuid).first()
+    founder = founder_repository.get_by_user_id(db, user_uuid)
     if founder is None:
         raise FounderNotFoundError()
 

@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_founder_record
 from app.db.session import get_db
 from app.models import Founder
+from app.repositories import founder_repository
 from app.schemas.founder import FounderRead, FounderUpdate
 
 router = APIRouter(prefix="/profile", tags=["profile"])
@@ -30,10 +31,4 @@ async def update_profile(
     `updated_at` is left alone deliberately -- the set_updated_at trigger owns it.
     """
     changes = payload.model_dump(exclude_unset=True)
-
-    for field, value in changes.items():
-        setattr(founder, field, value)
-
-    db.commit()
-    db.refresh(founder)
-    return founder
+    return founder_repository.update(db, founder, changes)
