@@ -17,6 +17,22 @@ from app.api.v1.router import api_router
 
 configure_logging()
 
+# Sentry is optional -- with no DSN set (the default in development) this is a
+# no-op and nothing is sent anywhere.
+if settings.SENTRY_DSN:
+    import sentry_sdk
+
+    sentry_sdk.init(
+        dsn=settings.SENTRY_DSN,
+        environment=settings.ENVIRONMENT,
+        release=settings.VERSION,
+        # Sampled, not exhaustive -- full tracing on every request is expensive
+        # and rarely what you want in production.
+        traces_sample_rate=0.1 if settings.is_production else 1.0,
+        # These carry founder data. Turn on deliberately, not by default.
+        send_default_pii=False,
+    )
+
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.VERSION,

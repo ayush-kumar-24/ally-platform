@@ -1,18 +1,41 @@
+"""Quick database connectivity check.
+
+Reads DATABASE_URL from .env via settings -- never hardcode the connection
+string here. This file is committed; .env is not.
+
+    python test_connection.py
+"""
+
 import sys
-import psycopg
 
-print("Starting connection test...", flush=True)
+from sqlalchemy import text
 
-try:
-    conn = psycopg.connect(
-        "postgresql://postgres.wxggmjvyzuerjbhhtcab:founder-alley2026@aws-1-ap-south-1.pooler.supabase.com:5432/postgres",
-        connect_timeout=10
-    )
-    print("SUCCESS — connected!", flush=True)
-    conn.close()
-except BaseException as e:
-    print("REAL ERROR:", flush=True)
-    print(repr(e), flush=True)
-    sys.exit(1)
+from app.core.config import settings
+from app.db.session import engine
 
-print("Script finished normally.", flush=True)
+
+def main() -> int:
+    # Host only -- never print the URL itself, it contains the password.
+    host = settings.DATABASE_URL.split("@")[-1].split("/")[0]
+    print(f"Connecting to {host} ...", flush=True)
+
+    try:
+        with engine.connect() as conn:
+            version = conn.execute(text("SELECT version()")).scalar()
+            tables = conn.execute(
+                text(
+                    "SELECT count(*) FROM information_schema.tables "
+                    "WHERE table_schema = 'public' AND table_type = 'BASE TABLE'"
+                )
+            ).scalar()
+    except Exception as exc:
+        print("FAILED:", repr(exc), flush=True)
+        return 1
+
+    print(f"SUCCESS -- {version.split(',')[0]}", flush=True)
+    print(f"public tables: {tables}", flush=True)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

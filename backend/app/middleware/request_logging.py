@@ -15,15 +15,20 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
 
         duration_ms = round((time.perf_counter() - start) * 1000, 2)
-        logger.info(
-            "Request handled",
-            extra={
-                "request_id": request_id,
-                "path": request.url.path,
-                "method": request.method,
-                "status_code": response.status_code,
-                "duration_ms": duration_ms,
-            },
-        )
+
+        # Set by the auth dependency during the request, so it is only present
+        # on authenticated routes -- which is exactly when it is worth having.
+        extra = {
+            "request_id": request_id,
+            "path": request.url.path,
+            "method": request.method,
+            "status_code": response.status_code,
+            "duration_ms": duration_ms,
+        }
+        founder_id = getattr(request.state, "founder_id", None)
+        if founder_id:
+            extra["founder_id"] = founder_id
+
+        logger.info("Request handled", extra=extra)
         response.headers["X-Request-ID"] = request_id
         return response
