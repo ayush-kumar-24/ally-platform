@@ -337,6 +337,9 @@ body.gate .j-bar{display:none!important}
 .wc-inner{position:relative;z-index:2;text-align:center}
 .wc-title{margin:12px auto 7px}
 .wc-sub{max-width:38ch;margin:0 auto}
+.wc-expect{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin:22px auto 0}
+.wc-expect span{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:500;padding:8px 15px;border-radius:999px;border:1px solid var(--line-2);background:rgba(255,255,255,.04);color:var(--on-dark-muted)}
+.wc-expect span::before{content:"✓";font-size:11px;color:var(--emerald-bright)}
 .wc-flow{position:relative;display:grid;grid-template-columns:repeat(4,1fr);gap:14px;max-width:740px;margin:36px auto 0}
 .wc-line{position:absolute;top:26px;left:12.5%;right:12.5%;height:2px;border-radius:2px;z-index:0;overflow:visible;
   background:linear-gradient(90deg,rgba(16,185,129,.14),rgba(52,211,153,.42),rgba(168,217,74,.32),rgba(16,185,129,.14))}
