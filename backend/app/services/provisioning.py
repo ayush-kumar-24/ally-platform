@@ -1,35 +1,78 @@
 """Founder provisioning -- create the founder row that backs a new login.
 
-Deliberately inert right now. `ENABLE_FOUNDER_PROVISIONING` defaults to false, so
-`ensure_founder` never writes to the database. Two things must happen before it
-can be turned on:
+Called at /auth/session. Idempotent: if a founder already exists for the
+identity it is returned unchanged; otherwise, for a real logged-in user, a row
+is created via the create_founder_on_signup database function (which also writes
+the initial consent record).
 
-1. The create_founder_on_signup / consents bugs must be fixed (onboarding writes
-   fail today), and
-2. someone must approve writing real rows.
-
-When enabled, this will call the create_founder_on_signup database function
-inside a transaction, keyed on the founder's user_id (the Supabase auth uid).
-Until then, turning the flag on raises loudly rather than silently doing nothing.
+Dev-mode identities are never provisioned -- they have no auth.users row, and
+founders.user_id is a FK to auth.users, so the insert would fail. Dev therefore
+stays read-only, which is what its tests expect.
 """
 
+from uuid import UUID
+
+from sqlalchemy import text
+from sqlalchemy.exc import DatabaseError
 from sqlalchemy.orm import Session
 
 from app.core.auth.base import AuthUser
 from app.core.config import settings
+from app.core.logger import logger
+from app.models import Founder
+from app.repositories import founder_repository
 
 
-def ensure_founder(identity: AuthUser, db: Session) -> bool:
-    """Ensure a founder row exists for this identity. Returns True if provisioned.
+def _display_name(identity: AuthUser) -> str:
+    """Best-effort human name from the IdP token, falling back to the email."""
+    claims = identity.claims or {}
+    meta = claims.get("user_metadata") or {}
+    name = meta.get("full_name") or meta.get("name") or claims.get("name")
+    if name:
+        return str(name)
+    if identity.email:
+        return identity.email.split("@")[0]
+    return "Founder"
 
-    No-op (returns False) while provisioning is disabled -- login still succeeds,
-    the user just has no founder row until provisioning is switched on.
+
+def ensure_founder(identity: AuthUser, db: Session, ip_address: str = "0.0.0.0") -> Founder | None:
+    """Return the founder for this identity, creating one on first real login.
+
+    Returns None when there is no founder and none can be created (provisioning
+    disabled, or a dev identity).
     """
-    if not settings.ENABLE_FOUNDER_PROVISIONING:
-        return False
+    try:
+        user_uuid = UUID(str(identity.id))
+    except (ValueError, TypeError):
+        return None  # non-uuid subject (dev tokens) -- nothing to provision
 
-    raise NotImplementedError(
-        "Founder provisioning is enabled but not wired to live DB writes yet. "
-        "Fix create_founder_on_signup / consents first and implement the guarded "
-        "INSERT here, with explicit approval to write rows."
-    )
+    existing = founder_repository.get_by_user_id(db, user_uuid)
+    if existing is not None:
+        return existing
+
+    if not settings.ENABLE_FOUNDER_PROVISIONING or identity.provider == "dev":
+        return None
+
+    try:
+        founder_id = db.execute(
+            text("SELECT create_founder_on_signup(:u, :n, :e, :p, :t, :i, :b)"),
+            {
+                "u": str(user_uuid),
+                "n": _display_name(identity),
+                "e": identity.email,
+                "p": settings.PRIVACY_POLICY_VERSION,
+                "t": settings.TERMS_VERSION,
+                "i": ip_address,
+                "b": identity.provider,
+            },
+        ).scalar()
+        db.commit()
+    except DatabaseError:
+        # e.g. the token's subject has no auth.users row. A real Supabase token
+        # always does; this guards against bad/test tokens. Login still succeeds
+        # (unprovisioned) rather than 500-ing.
+        db.rollback()
+        logger.warning("Founder provisioning failed", extra={"founder_id": str(user_uuid)})
+        return None
+
+    return founder_repository.get(db, founder_id)

@@ -6,6 +6,13 @@ has one home and is testable in isolation.
 """
 
 from app.repositories.base import BaseRepository
+from app.repositories.discovery import DiscoveryCallRepository, discovery_call_repository
 from app.repositories.founder import FounderRepository, founder_repository
 
-__all__ = ["BaseRepository", "FounderRepository", "founder_repository"]
+__all__ = [
+    "BaseRepository",
+    "FounderRepository",
+    "founder_repository",
+    "DiscoveryCallRepository",
+    "discovery_call_repository",
+]

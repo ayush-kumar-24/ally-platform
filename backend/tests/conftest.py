@@ -26,6 +26,19 @@ from app.core.config import settings
 from app.main import app
 
 
+@pytest.fixture(autouse=True)
+def _no_real_google_calendar(monkeypatch):
+    """Force calendar stub mode in every test so bookings never hit real Google.
+
+    The dev .env may carry live Google credentials; without this, a booking test
+    would create a real calendar event. Tests that exercise Google mode
+    (test_calendar_google) re-enable it with a *fake* client.
+    """
+    monkeypatch.setattr(settings, "GOOGLE_CALENDAR_ID", "")
+    monkeypatch.setattr(settings, "GOOGLE_CALENDAR_CREDENTIALS_FILE", "")
+    monkeypatch.setattr(settings, "GOOGLE_CALENDAR_CREDENTIALS_JSON", "")
+
+
 @pytest.fixture
 def client():
     """A TestClient in dev mode (default), reset around each test."""

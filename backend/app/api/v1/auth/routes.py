@@ -14,7 +14,7 @@ Why the backend issues its own tokens: the rest of the API never depends on the
 provider's token format, so moving to AWS Cognito later changes only step 1.
 """
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.orm import Session
 
 from app.core.auth import (
@@ -58,21 +58,25 @@ def _token_pair(identity: AuthUser) -> TokenPair:
 
 @router.post("/session", response_model=SessionResponse)
 async def start_session(
+    request: Request,
     identity: AuthUser = Depends(get_upstream_identity),
     db: Session = Depends(get_db),
 ):
     """Exchange a verified Google/LinkedIn (Supabase) token for backend tokens.
 
-    Send the Supabase access token as the bearer token. In dev mode, send any id
-    as the bearer token (or none for the default dev founder).
+    On a real first login this also creates the founder row (provisioning); on
+    later logins it just finds it. Send the Supabase access token as the bearer
+    token. In dev mode, send any id as the bearer token (or none for the default
+    dev founder) -- dev identities are not provisioned.
     """
-    provisioned = ensure_founder(identity, db)
+    ip = request.client.host if request.client else "0.0.0.0"
+    founder = ensure_founder(identity, db, ip_address=ip)
 
     pair = _token_pair(identity)
     return SessionResponse(
         **pair.model_dump(),
         founder=IdentityOut(id=identity.id, email=identity.email, provider=identity.provider),
-        provisioned=provisioned,
+        provisioned=founder is not None,
     )
 
 

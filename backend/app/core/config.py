@@ -36,10 +36,48 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
 
     # --- Provisioning ---
-    # OFF by default: first login does NOT write a founder row while this is false,
-    # so no rows are created in the database without an explicit opt-in. Turning it
-    # on also requires the create_founder_on_signup / consents bugs to be fixed.
-    ENABLE_FOUNDER_PROVISIONING: bool = False
+    # ON: first real (Supabase) login creates the founder row via
+    # create_founder_on_signup. Dev-mode identities are never provisioned (they
+    # have no auth.users row for the FK), so dev stays read-only.
+    ENABLE_FOUNDER_PROVISIONING: bool = True
+
+    # Consent versions stamped onto the founder + consent records at provisioning.
+    # Bump these when the policy/terms text changes.
+    PRIVACY_POLICY_VERSION: str = "v1"
+    TERMS_VERSION: str = "v1"
+
+    # --- Discovery calls / Google Calendar ---
+    # Both must be set for real scheduling; until then calendar.py runs in stub
+    # mode (deterministic slots + placeholder meeting links) so dev/tests work.
+    #   GOOGLE_CALENDAR_ID:               the host calendar shared with the service account
+    # Provide the service-account key ONE of two ways (file is easier -- the key
+    # is multi-line JSON, which .env cannot hold inline):
+    #   GOOGLE_CALENDAR_CREDENTIALS_FILE: path to the downloaded key .json  (recommended)
+    #   GOOGLE_CALENDAR_CREDENTIALS_JSON: the key JSON minified onto one line
+    GOOGLE_CALENDAR_ID: str = ""
+    GOOGLE_CALENDAR_CREDENTIALS_FILE: str = ""
+    GOOGLE_CALENDAR_CREDENTIALS_JSON: str = ""
+    DISCOVERY_CALL_DURATION_MINUTES: int = 45
+    DISCOVERY_TIMEZONE: str = "Asia/Kolkata"
+    # Personal Gmail calendars can't invite attendees via a service account
+    # ("forbiddenForServiceAccounts"); only turn this on with a Google Workspace
+    # calendar + domain-wide delegation. When off, the booking is created without
+    # attendees and the app delivers the meeting link to the founder itself.
+    GOOGLE_CALENDAR_INVITE_ATTENDEES: bool = False
+    # Auto-generating a Google Meet link also needs Workspace -- personal Gmail
+    # rejects it ("Invalid conference type value"). When off, the booking is a
+    # plain event and the meeting link comes from GOXL_MEETING_URL.
+    GOOGLE_CALENDAR_CREATE_MEET: bool = False
+    # A permanent video-room link (Google Meet / Zoom) used for every discovery
+    # call when auto-Meet is off. Recommended for the personal-Gmail setup.
+    GOXL_MEETING_URL: str = ""
+
+    @property
+    def google_calendar_enabled(self) -> bool:
+        return bool(
+            self.GOOGLE_CALENDAR_ID
+            and (self.GOOGLE_CALENDAR_CREDENTIALS_FILE or self.GOOGLE_CALENDAR_CREDENTIALS_JSON)
+        )
 
     # --- CORS ---
     CORS_ORIGINS: str = "http://localhost:3000"

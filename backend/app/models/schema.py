@@ -343,7 +343,8 @@ class Founders(Base):
     __table_args__ = (
         CheckConstraint("business_model::text = ANY (ARRAY['B2B'::character varying, 'B2C'::character varying, 'B2B2C'::character varying, 'marketplace'::character varying, 'D2C'::character varying, 'other'::character varying]::text[])", name='founders_business_model_check'),
         CheckConstraint("current_revenue::text = ANY (ARRAY['pre_revenue'::character varying, 'under_1L'::character varying, '1L_5L'::character varying, '5L_25L'::character varying, '25L_1Cr'::character varying, 'above_1Cr'::character varying]::text[])", name='founders_current_revenue_check'),
-        CheckConstraint("emotional_state::text = ANY (ARRAY['excited'::character varying, 'inspired'::character varying, 'confident'::character varying, 'curious'::character varying, 'overwhelmed'::character varying, 'stuck'::character varying, 'determined'::character varying, 'hopeful'::character varying]::text[])", name='founders_emotional_state_check'),
+        # emotional_state is a jsonb array (multi-select); CHECK restricts elements to the allowed feelings.
+        CheckConstraint("""emotional_state IS NULL OR (jsonb_typeof(emotional_state) = 'array' AND emotional_state <@ '["excited","inspired","confident","curious","overwhelmed","stuck","determined","hopeful"]'::jsonb)""", name='founders_emotional_state_check'),
         CheckConstraint("experience_level::text = ANY (ARRAY['first_time'::character varying, 'one_company'::character varying, 'serial'::character varying, 'investor'::character varying, 'mentor'::character varying, 'executive'::character varying]::text[])", name='founders_experience_level_check'),
         CheckConstraint("plan_type::text = ANY (ARRAY['free'::character varying, 'starter'::character varying, 'pro'::character varying, 'enterprise'::character varying]::text[])", name='founders_plan_type_check'),
         CheckConstraint("team_size::text = ANY (ARRAY['solo'::character varying, '2_5'::character varying, '6_10'::character varying, '11_25'::character varying, '26_50'::character varying, '50_plus'::character varying]::text[])", name='founders_team_size_check'),
@@ -377,7 +378,7 @@ class Founders(Base):
     working_relationship: Mapped[Optional[str]] = mapped_column(String(30))
     support_preferences: Mapped[Optional[dict]] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
     experience_level: Mapped[Optional[str]] = mapped_column(String(20))
-    emotional_state: Mapped[Optional[str]] = mapped_column(String(20))
+    emotional_state: Mapped[Optional[dict]] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
     adaptive_reflection: Mapped[Optional[str]] = mapped_column(Text)
     adaptive_question_id: Mapped[Optional[str]] = mapped_column(String(20))
     decision_making_style: Mapped[Optional[str]] = mapped_column(String(30))
@@ -586,6 +587,7 @@ class Consents(Base):
     consented_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
     browser: Mapped[Optional[str]] = mapped_column(Text)
     created_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True), server_default=text('now()'))
+    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
 
     founder: Mapped['Founders'] = relationship('Founders', back_populates='consents')
 

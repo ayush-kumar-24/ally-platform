@@ -128,6 +128,8 @@ database.
   against the live schema (`schema.py` generated + curated, `partitioned.py` by hand)
 - Repository layer — generic CRUD `BaseRepository` in `app/repositories/`; routes
   depend on repositories, not raw SQLAlchemy (`founder_repository` wired into profile)
-- `profile` — done
+- `profile` — done: whole-profile GET/PATCH plus four section endpoints
+  (`/profile/founder`, `/business`, `/goals`, `/company`) mapped to the 13
+  onboarding questions; founder rows auto-provisioned on first real login
 - `ai`, `dashboard`, `diagnosis`, `discovery`, `planning`, `reports`, `settings` — stubs
 - Founder provisioning on signup — scaffolded, disabled (needs DB signup-bug fix + sign-off)

@@ -1,8 +1,51 @@
 from datetime import datetime
-from typing import Any
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field
+
+# The eight feelings the founders_emotional_state_check CHECK allows.
+Feeling = Literal[
+    "excited", "inspired", "confident", "curious",
+    "overwhelmed", "stuck", "determined", "hopeful",
+]
+
+
+def _clean_str_list(v: list[str] | None) -> list[str] | None:
+    """Strip each entry, drop blanks, de-duplicate (case-insensitive), keep order.
+
+    Turns messy multi-select input -- ['Sales', ' sales ', '', 'Hiring'] -- into
+    ['Sales', 'Hiring'] so the stored jsonb array is clean.
+    """
+    if v is None:
+        return None
+    seen: set[str] = set()
+    out: list[str] = []
+    for item in v:
+        s = (item or "").strip()
+        key = s.lower()
+        if s and key not in seen:
+            seen.add(key)
+            out.append(s)
+    return out
+
+
+def _dedupe(v: list | None) -> list | None:
+    """De-duplicate while preserving order (for already-validated enum lists)."""
+    if v is None:
+        return None
+    seen: set = set()
+    out: list = []
+    for item in v:
+        if item not in seen:
+            seen.add(item)
+            out.append(item)
+    return out
+
+
+# Multi-select field types: capped, cleaned, de-duplicated.
+CleanStrList = Annotated[list[str], AfterValidator(_clean_str_list), Field(max_length=30)]
+Feelings = Annotated[list[Feeling], AfterValidator(_dedupe), Field(max_length=8)]
 
 
 class FounderRead(BaseModel):
@@ -31,7 +74,7 @@ class FounderRead(BaseModel):
     working_relationship: str | None = None
     support_preferences: Any | None = None
     experience_level: str | None = None
-    emotional_state: str | None = None
+    emotional_state: list[str] | None = None  # multi-select feelings
     decision_making_style: str | None = None
 
     # Business DNA
@@ -68,24 +111,26 @@ class FounderUpdate(BaseModel):
     consent or retention (owned by the DPDP flows).
     """
 
-    model_config = ConfigDict(extra="forbid")
+    # str_strip_whitespace: trims every string, so "  " on a min_length=1 field
+    # (full_name) is rejected rather than saved as blank.
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     full_name: str | None = Field(default=None, min_length=1, max_length=200)
 
-    founder_motivation: str | None = None
+    founder_motivation: str | None = Field(default=None, max_length=5000)
     working_relationship: str | None = Field(default=None, max_length=100)
-    support_preferences: list[str] | None = None
+    support_preferences: CleanStrList | None = None
     experience_level: str | None = Field(default=None, max_length=100)
-    emotional_state: str | None = Field(default=None, max_length=100)
+    emotional_state: Feelings | None = None  # multi-select; rejects values outside the allowed 8
     decision_making_style: str | None = Field(default=None, max_length=100)
 
-    building_summary: str | None = None
-    problem_statement: str | None = None
+    building_summary: str | None = Field(default=None, max_length=5000)
+    problem_statement: str | None = Field(default=None, max_length=5000)
     customer_segment: str | None = Field(default=None, max_length=100)
     industry: str | None = Field(default=None, max_length=100)
-    current_challenges: list[str] | None = None
-    goal_90_day: str | None = None
-    vision_1_year: str | None = None
+    current_challenges: CleanStrList | None = None
+    goal_90_day: str | None = Field(default=None, max_length=5000)
+    vision_1_year: str | None = Field(default=None, max_length=5000)
     team_size: str | None = Field(default=None, max_length=50)
     current_revenue: str | None = Field(default=None, max_length=50)
     business_model: str | None = Field(default=None, max_length=100)
