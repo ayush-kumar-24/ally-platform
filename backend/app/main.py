@@ -49,6 +49,14 @@ app.add_exception_handler(RequestValidationError, validation_exception_handler)
 app.add_exception_handler(Exception, unhandled_exception_handler)
 
 # --- Routes ---
+# Composition: bind reasoning as the diagnosis session-completion listener.
+# The diagnosis module depends only on its SessionCompletionNotifier port; here
+# we wire the reasoning trigger as the concrete listener.
+from app.api.v1.diagnosis.notifications import get_session_completion_notifier
+from app.api.v1.reasoning.trigger import get_reasoning_trigger
+
+app.dependency_overrides[get_session_completion_notifier] = get_reasoning_trigger
+
 app.include_router(api_router)
 
 

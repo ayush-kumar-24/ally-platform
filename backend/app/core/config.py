@@ -86,6 +86,35 @@ class Settings(BaseSettings):
     SENTRY_DSN: str = ""
     LOG_LEVEL: str = "INFO"
 
+    # --- Tier-1 Reasoning: answer classifier ---
+    # "stored" (deterministic, reads answers.score_label) | "llm" (provider-driven)
+    ANSWER_CLASSIFIER: str = "stored"
+    LLM_PROVIDER: str = ""            # openai | anthropic | gemini
+    LLM_MODEL: str = ""              # empty -> the adapter's default model
+    LLM_CLASSIFIER_MAX_RETRIES: int = 2
+    LLM_CLASSIFIER_TIMEOUT_SECONDS: float = 30.0
+    LLM_CLASSIFIER_TEMPERATURE: float = 0.0
+
+    # --- Tier-1 Reasoning: retrieval / embeddings ---
+    RETRIEVAL_ENABLED: bool = False
+    EMBEDDING_PROVIDER: str = ""      # openai | gemini
+    EMBEDDING_MODEL: str = "gte-small"
+    EMBEDDING_DIMENSION: int = 384
+    RETRIEVAL_TOP_K: int = 5
+    RETRIEVAL_MIN_SIMILARITY: float = 0.0
+
+    # --- Provider adapters (credentials via env; never logged) ---
+    OPENAI_API_KEY: str = ""
+    ANTHROPIC_API_KEY: str = ""
+    GEMINI_API_KEY: str = ""
+    ANTHROPIC_VERSION: str = "2023-06-01"
+    OPENAI_BASE_URL: str = "https://api.openai.com"
+    ANTHROPIC_BASE_URL: str = "https://api.anthropic.com"
+    GEMINI_BASE_URL: str = "https://generativelanguage.googleapis.com"
+    PROVIDER_TIMEOUT_SECONDS: float = 30.0
+    PROVIDER_MAX_RETRIES: int = 3
+    PROVIDER_BACKOFF_SECONDS: float = 0.5
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
