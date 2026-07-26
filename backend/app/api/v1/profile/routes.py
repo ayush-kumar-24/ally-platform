@@ -21,8 +21,9 @@ from app.api.deps import get_founder_record
 from app.db.session import get_db
 from app.middleware.error_handler import AppError
 from app.models import Founder
-from app.repositories import founder_repository
+from app.repositories import founder_context_repository, founder_repository
 from app.schemas.founder import FounderRead, FounderUpdate
+from app.schemas.founder_context import FounderContextRead, FounderContextUpdate
 from app.schemas.progress import ProgressResponse, ValidationResponse
 from app.schemas.sections import (
     BusinessInfoRead,
@@ -72,6 +73,30 @@ async def read_progress(founder: Founder = Depends(get_founder_record)):
 async def validate(founder: Founder = Depends(get_founder_record)):
     """Whether the profile has every required field; lists what's still missing."""
     return validate_profile(founder)
+
+
+# --- founder context / "memory" ---------------------------------------------
+
+@router.get("/context", response_model=FounderContextRead)
+async def read_context(
+    founder: Founder = Depends(get_founder_record),
+    db: Session = Depends(get_db),
+):
+    """The founder's background context. Returns an empty object if none set yet."""
+    ctx = founder_context_repository.get_by_founder(db, founder.founder_id)
+    return ctx if ctx is not None else FounderContextRead()
+
+
+@router.put("/context", response_model=FounderContextRead)
+async def upsert_context(
+    payload: FounderContextUpdate,
+    founder: Founder = Depends(get_founder_record),
+    db: Session = Depends(get_db),
+):
+    """Create or update the founder's background context (one row per founder)."""
+    return founder_context_repository.upsert(
+        db, founder.founder_id, payload.model_dump(exclude_unset=True)
+    )
 
 
 # --- Founder information (Q9-13 + name) -------------------------------------

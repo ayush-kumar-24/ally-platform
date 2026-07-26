@@ -13,7 +13,7 @@ storage stay the same.
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, BackgroundTasks, Depends, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_founder_record
@@ -23,6 +23,7 @@ from app.models import Founder
 from app.repositories import discovery_call_repository
 from app.schemas.discovery import BookingRequest, CallRead, SlotsResponse
 from app.services.calendar import DEFAULT_TIMEZONE, available_slots, create_meeting
+from app.services.discovery_notifications import send_booking_confirmation
 
 router = APIRouter(prefix="/discovery", tags=["discovery"])
 
@@ -48,10 +49,12 @@ async def get_slots(days: int = 7, founder: Founder = Depends(get_founder_record
 @router.post("/book", response_model=CallRead, status_code=status.HTTP_201_CREATED)
 async def book_call(
     payload: BookingRequest,
+    background: BackgroundTasks,
     founder: Founder = Depends(get_founder_record),
     db: Session = Depends(get_db),
 ):
-    """Book a discovery call. Creates the meeting (stub) and records it."""
+    """Book a discovery call: create the calendar event, record it, and email a
+    confirmation (in the background, so email never blocks or breaks booking)."""
     scheduled = payload.scheduled_at
     if scheduled.tzinfo is None:
         scheduled = scheduled.replace(tzinfo=timezone.utc)
@@ -70,7 +73,14 @@ async def book_call(
     }
     if payload.timezone:
         data["timezone"] = payload.timezone
-    return discovery_call_repository.create(db, data)
+    call = discovery_call_repository.create(db, data)
+
+    if founder.email:
+        background.add_task(
+            send_booking_confirmation,
+            founder.email, founder.full_name, call.scheduled_at, call.meeting_link,
+        )
+    return call
 
 
 @router.get("/calls", response_model=list[CallRead])
