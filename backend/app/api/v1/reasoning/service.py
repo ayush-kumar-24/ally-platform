@@ -1,0 +1,457 @@
+"""ReasoningService -- end-to-end orchestrator for the Tier-1 reasoning pipeline.
+
+Runs, for one COMPLETED session, exactly once:
+
+    Diagnosis -> Category Scoring -> Stage Detection -> Symptom Detection
+    -> Root Cause -> Confidence -> Retrieval Enrichment -> Recommendation
+    -> Report Generation -> Persist
+
+Guarantees:
+  * Exactly once: an active founder_report is the idempotency signal; a re-trigger
+    is a no-op. A row-lock on the session during persist serialises concurrent
+    completions, and the persist re-checks the guard under the lock.
+  * Single transaction: all reads and writes run in one transaction; the writes
+    commit together at the end, and any failure rolls everything back.
+  * No engine logic here: this only sequences the engines, times/logs each stage,
+    assembles the report bundle, and persists. Engines are untouched.
+
+Persistence covers detected_root_causes, the session confidence/routing/distress
+fields, and one founder_reports row carrying both the founder report (in
+`insights`) and the internal consultant report (in `business_dna`).
+"""
+
+from __future__ import annotations
+
+import time
+from dataclasses import replace
+from datetime import datetime, timezone
+from decimal import Decimal
+
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
+
+from app.api.v1.reasoning.config import ConfidenceInputs, ReasoningConfig
+from app.api.v1.reasoning.engines.diagnosis import DeterministicDiagnosisEngine
+from app.api.v1.reasoning.errors import (
+    ReasoningError,
+    ReasoningPersistenceError,
+    SessionNotAnalyzableError,
+)
+from app.api.v1.reasoning.interfaces import (
+    ConfidenceModel,
+    ReasoningContext,
+    RecommendationEngine,
+    RootCauseEngine,
+)
+from app.api.v1.reasoning.reporting import (
+    BusinessProfile,
+    DictReportRenderer,
+    FounderProfile,
+    MarkdownReportRenderer,
+    ReasoningBundle,
+    ReportGenerator,
+)
+from app.api.v1.reasoning.repository import ReasoningRepository
+from app.api.v1.reasoning.schemas import (
+    ReasoningResult,
+    RecommendationType,
+    ScoredRootCause,
+)
+from app.core.logger import logger
+from app.models import (
+    DetectedRootCause,
+    FounderReport,
+    InternalIntelligenceReport,
+    ReportType,
+    SessionStatus,
+)
+from app.models.diagnosis import Founder
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _elapsed_ms(start: float) -> float:
+    return round((time.perf_counter() - start) * 1000, 2)
+
+
+class ReasoningService:
+    def __init__(
+        self,
+        db: Session,
+        repository: ReasoningRepository,
+        config: ReasoningConfig,
+        diagnosis_engine: DeterministicDiagnosisEngine,
+        root_cause_engine: RootCauseEngine,
+        confidence_model: ConfidenceModel,
+        recommendation_engine: RecommendationEngine,
+        report_generator: ReportGenerator | None = None,
+        retrieval_enabled: bool = False,
+    ):
+        self.db = db
+        self.repository = repository
+        self.config = config
+        self.diagnosis_engine = diagnosis_engine
+        self.root_cause_engine = root_cause_engine
+        self.confidence_model = confidence_model
+        self.recommendation_engine = recommendation_engine
+        self.report_generator = report_generator or ReportGenerator()
+        self.retrieval_enabled = retrieval_enabled
+
+    async def analyze_session(
+        self, founder: Founder, session_id: int, *, force: bool = False
+    ) -> ReasoningResult | None:
+        """Run the full pipeline once for a completed session and persist results.
+
+        Returns the ReasoningResult, or None when the session was already analysed
+        (idempotent no-op). Any failure rolls the whole transaction back.
+        """
+        session = self._load_analyzable_session(founder, session_id)
+
+        if not force and self.repository.get_active_report(session_id) is not None:
+            logger.info(
+                "reasoning already completed; skipping",
+                extra={"session_id": session_id, "stage": "idempotency_guard"},
+            )
+            return None
+
+        pipeline_start = time.perf_counter()
+        try:
+            result = await self._run_pipeline(session, founder, force=force)
+        except ReasoningError:
+            self.db.rollback()
+            raise
+        except Exception as exc:  # any engine/report failure -> roll everything back
+            self.db.rollback()
+            logger.error(
+                "reasoning pipeline failed; rolled back",
+                extra={"session_id": session_id, "stage": "pipeline"},
+                exc_info=exc,
+            )
+            raise
+        logger.info(
+            "reasoning pipeline complete",
+            extra={
+                "session_id": session_id,
+                "stage": "pipeline",
+                "duration_ms": _elapsed_ms(pipeline_start),
+                "skipped": result is None,
+            },
+        )
+        return result
+
+    # --- Pipeline ---------------------------------------------------------
+
+    async def _run_pipeline(
+        self, session, founder: Founder, *, force: bool = False
+    ) -> ReasoningResult | None:
+        session_id = session.session_id
+        context = self._build_context(session, founder)
+
+        start = time.perf_counter()
+        answers = self.repository.get_answers_for_session(session_id)
+        if not answers:
+            raise SessionNotAnalyzableError("Session has no answers to analyse.")
+        questions = self.repository.get_questions_by_ids(a.question_id for a in answers)
+        self._log_stage("load_inputs", session_id, start, answers=len(answers))
+
+        # --- Diagnosis (category scoring + stage + symptom detection) ---
+        start = time.perf_counter()
+        diagnosis = await self.diagnosis_engine.diagnose(answers, questions, context)
+        self._log_stage(
+            "diagnosis", session_id, start,
+            classifications=len(diagnosis.classifications),
+            flagged=sum(1 for c in diagnosis.category_risks if c.is_flagged),
+            stage_id=diagnosis.stage_detection.stage_id,
+            symptoms=len(diagnosis.symptoms),
+            distress=diagnosis.distress_mode,
+        )
+        if diagnosis.stage_detection.stage_id is not None:
+            context = replace(context, stage_id=diagnosis.stage_detection.stage_id)
+
+        # --- Root Cause (+ retrieval enrichment inside the engine) ---
+        start = time.perf_counter()
+        detections = self.root_cause_engine.detect(
+            list(diagnosis.classifications), list(diagnosis.category_risks),
+            questions, context,
+        )
+        self._log_stage(
+            "root_cause", session_id, start,
+            detections=len(detections), retrieval_enabled=self.retrieval_enabled,
+        )
+
+        # --- Confidence ---
+        start = time.perf_counter()
+        scored = self.confidence_model.score_and_rank(detections, context)
+        overall_confidence = self.confidence_model.overall_confidence(
+            ConfidenceInputs(
+                questions_answered=len(answers),
+                ranked_root_cause_scores=tuple(s.final_weighted_score for s in scored),
+                flagged_category_count=sum(1 for c in diagnosis.category_risks if c.is_flagged),
+                distress_mode=diagnosis.distress_mode,
+            ),
+            context,
+        )
+        routing_state = self.config.confidence.routing_state_for(overall_confidence)
+        self._log_stage(
+            "confidence", session_id, start,
+            scored=len(scored), overall_confidence=str(overall_confidence),
+            routing_state=routing_state,
+        )
+
+        # --- Recommendation ---
+        start = time.perf_counter()
+        top = [s for s in scored if s.is_top_finding]
+        semantic_evidence = {d.root_cause_id: d.semantic_evidence for d in detections}
+        recommendations = self.recommendation_engine.recommend(
+            top, context, semantic_evidence=semantic_evidence
+        )
+        self._log_stage(
+            "recommendation", session_id, start,
+            recommendations=len(recommendations.recommendations),
+        )
+
+        # --- Report generation ---
+        start = time.perf_counter()
+        founder_report, internal_report = self._generate_reports(
+            session, founder, context, diagnosis, detections, scored,
+            recommendations, overall_confidence, routing_state,
+        )
+        self._log_stage("report_generation", session_id, start)
+
+        # --- Persist (single committed transaction) ---
+        return self._persist(
+            session=session,
+            founder=founder,
+            scored=scored,
+            overall_confidence=overall_confidence,
+            routing_state=routing_state,
+            distress_mode=diagnosis.distress_mode,
+            recommendations=recommendations,
+            founder_report=founder_report,
+            internal_report=internal_report,
+            force=force,
+        )
+
+    # --- Report assembly (delegates to the report module) -----------------
+
+    def _generate_reports(
+        self, session, founder, context, diagnosis, detections, scored,
+        recommendations, overall_confidence, routing_state,
+    ):
+        rc_map = self.repository.get_root_causes_by_ids(s.root_cause_id for s in scored)
+        iv_map = self.repository.get_interventions_by_ids(
+            r.intervention_id for r in recommendations.recommendations
+        )
+        industry_name = None
+        if context.industry_id is not None:
+            industry = self.repository.get_industry(context.industry_id)
+            industry_name = industry.industry_name if industry is not None else None
+
+        bundle = ReasoningBundle(
+            diagnosis=diagnosis,
+            detections=tuple(detections),
+            scored_root_causes=tuple(scored),
+            recommendations=recommendations,
+            overall_confidence_score=overall_confidence,
+            routing_state=routing_state,
+            founder_profile=FounderProfile(founder.founder_id, founder.full_name),
+            business_profile=BusinessProfile(industry=industry_name),
+            session_id=session.session_id,
+            root_cause_labels={rid: rc.root_cause_name for rid, rc in rc_map.items()},
+            intervention_labels={iid: iv.intervention_code for iid, iv in iv_map.items()},
+        )
+        return (
+            self.report_generator.founder_report(bundle),
+            self.report_generator.internal_report(bundle),
+        )
+
+    # --- Persistence ------------------------------------------------------
+
+    def _persist(
+        self,
+        *,
+        session,
+        founder: Founder,
+        scored: list[ScoredRootCause],
+        overall_confidence: Decimal,
+        routing_state: str,
+        distress_mode: bool,
+        recommendations,
+        founder_report,
+        internal_report,
+        force: bool = False,
+    ) -> ReasoningResult | None:
+        start = time.perf_counter()
+        renderer = DictReportRenderer()
+        try:
+            # Lock the session and re-check the guard: exactly-once under races.
+            # A forced reprocess intentionally overwrites, so it skips the guard.
+            self.repository.get_session_for_update(session.session_id)
+            if not force and self.repository.get_active_report(session.session_id) is not None:
+                self.db.rollback()
+                logger.info(
+                    "reasoning completed concurrently; skipping persist",
+                    extra={"session_id": session.session_id, "stage": "persist"},
+                )
+                return None
+
+            rows = [self._to_detection_row(session, founder, s) for s in scored]
+            self.repository.replace_detected_root_causes(session.session_id, rows)
+
+            session.overall_confidence_score = overall_confidence
+            session.routing_state = routing_state
+            session.distress_mode_triggered = distress_mode
+            session.session_state = self._session_state(session, distress_mode)
+            session.last_activity_at = _utcnow()
+
+            self.repository.deactivate_existing_reports(session.session_id)
+            report = FounderReport(
+                founder_id=founder.founder_id,
+                session_id=session.session_id,
+                report_type=ReportType.FULL_DIAGNOSIS.value,
+                summary=founder_report.executive_summary,
+                top_root_cause_ids=[s.root_cause_id for s in scored if s.is_top_finding],
+                recommended_intervention_ids=list(recommendations.intervention_ids),
+                confirm_actions=self._action_dicts(recommendations, RecommendationType.CONFIRM),
+                solve_actions=self._action_dicts(recommendations, RecommendationType.SOLVE),
+                distress_acknowledged_first=distress_mode,
+                session_state_at_generation=session.session_state,
+                # Founder report -> insights (its founder-facing slot).
+                insights=renderer.render_founder(founder_report),
+            )
+            self.repository.add_report(report)  # flush populates report_id
+
+            # Internal consultant report -> its dedicated table, linked to the
+            # founder report via report_id.
+            self.repository.replace_internal_report(
+                session.session_id,
+                self._build_internal_report_row(
+                    session, founder, report.report_id, internal_report,
+                ),
+            )
+
+            self.db.commit()
+        except SQLAlchemyError as exc:
+            self.db.rollback()
+            logger.error(
+                "database error persisting reasoning result; rolled back",
+                extra={"session_id": session.session_id, "stage": "persist"},
+                exc_info=exc,
+            )
+            raise ReasoningPersistenceError()
+
+        self.db.refresh(session)
+        self._log_stage(
+            "persist", session.session_id, start,
+            detected_root_causes=len(scored), report_id=report.report_id,
+        )
+        return ReasoningResult(
+            session_id=session.session_id,
+            founder_id=founder.founder_id,
+            detected_root_causes=tuple(scored),
+            overall_confidence_score=overall_confidence,
+            routing_state=routing_state,
+            distress_mode=distress_mode,
+            recommendations=recommendations,
+            report_id=report.report_id,
+        )
+
+    # --- Helpers ----------------------------------------------------------
+
+    def _load_analyzable_session(self, founder: Founder, session_id: int):
+        session = self.repository.get_session(session_id)
+        if session is None or session.founder_id != founder.founder_id:
+            raise SessionNotAnalyzableError("No analysable session was found.")
+        if session.status != SessionStatus.COMPLETED:
+            raise SessionNotAnalyzableError(
+                f"Session {session_id} is '{session.status}', not 'completed'."
+            )
+        return session
+
+    def _build_context(self, session, founder: Founder) -> ReasoningContext:
+        return ReasoningContext(
+            session=session,
+            founder=founder,
+            config=self.config,
+            stage_id=session.founder_stage_id or founder.stage_id,
+            industry_id=session.founder_industry_id or founder.industry_mapped_id,
+        )
+
+    def _to_detection_row(
+        self, session, founder: Founder, scored: ScoredRootCause
+    ) -> DetectedRootCause:
+        return DetectedRootCause(
+            session_id=session.session_id,
+            founder_id=founder.founder_id,
+            root_cause_id=scored.root_cause_id,
+            category_risk_score=scored.category_risk_score,
+            confirmation_status=scored.confirmation_status.value,
+            confirmation_multiplier=scored.confirmation_multiplier,
+            stage_probability=scored.stage_probability,
+            industry_probability=scored.industry_probability,
+            final_weighted_score=scored.final_weighted_score,
+            rank=scored.rank,
+            is_top_finding=scored.is_top_finding,
+        )
+
+    def _build_internal_report_row(
+        self, session, founder: Founder, report_id: int, internal_report
+    ) -> InternalIntelligenceReport:
+        """Map the internal report onto internal_intelligence_reports.
+
+        `psychological_state` reuses the session-state vocabulary (which the
+        table's CHECK enforces). `internal_notes` carries the rendered consultant
+        report. `distress_signals` captures the distress-flagged symptoms.
+        `blind_spot_ids` and `behaviour_pattern_ids` are left empty: the current
+        deterministic pipeline does not produce those, and inventing them is out
+        of scope. The review columns default to the un-reviewed state.
+        """
+        distress_signals = [
+            {
+                "category": s.category,
+                "symptoms": list(s.symptoms),
+                "severity": str(s.severity),
+            }
+            for s in internal_report.symptoms
+            if s.is_distress
+        ]
+        return InternalIntelligenceReport(
+            founder_id=founder.founder_id,
+            session_id=session.session_id,
+            report_id=report_id,
+            psychological_state=session.session_state,
+            distress_signals=distress_signals,
+            internal_notes=MarkdownReportRenderer().render_internal(internal_report),
+        )
+
+    def _action_dicts(self, recommendations, rec_type: RecommendationType) -> list[dict]:
+        return [
+            {
+                "intervention_id": rec.intervention_id,
+                "priority": rec.priority,
+                "next_actions": list(rec.next_actions),
+                "rationale": rec.rationale,
+            }
+            for rec in recommendations.recommendations
+            if rec.recommendation_type == rec_type
+        ]
+
+    def _session_state(self, session, distress_mode: bool) -> str:
+        # Reflect distress in the session state without recomputing anything: the
+        # diagnosis engine already decided distress_mode.
+        if distress_mode:
+            return "high_distress"
+        return session.session_state or "stable"
+
+    def _log_stage(self, stage: str, session_id: int, start: float, **extra) -> None:
+        logger.info(
+            f"reasoning stage: {stage}",
+            extra={
+                "session_id": session_id,
+                "stage": stage,
+                "duration_ms": _elapsed_ms(start),
+                **extra,
+            },
+        )

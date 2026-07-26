@@ -23,6 +23,37 @@ from app.models.schema import Founders
 # Existing code (api/deps.py, profile routes) refers to `Founder`.
 Founder = Founders
 
+# --- Tier-1 reasoning compatibility aliases + enums ---
+# Singular names the diagnosis/reasoning engine imports, re-exported from the
+# canonical schema.py tables (see models/diagnosis.py, reasoning.py, scoring.py).
+from app.models.diagnosis import Answer, DiagnosisSession, FounderStage, Question
+from app.models.enums import (
+    ConfirmationStatus,
+    QuestionPriority,
+    QuestionType,
+    ReportType,
+    RoutingState,
+    ScoreLabel,
+    SessionState,
+    SessionStatus,
+    StageGroup,
+)
+from app.models.reasoning import (
+    AgentInterpretation,
+    DetectedRootCause,
+    FounderReport,
+    Industry,
+    InternalIntelligenceReport,
+    Intervention,
+    Problem,
+    ProblemStageMapping,
+    RootCause,
+    RootCauseWeight,
+    StageAssessment,
+    StageDiagnosisLogic,
+)
+from app.models.scoring import ScoringRule
+
 __all__ = [
     "schema",
     "partitioned",
@@ -31,4 +62,32 @@ __all__ = [
     "Message",
     "AnalyticsEvent",
     "AuditLog",
+    # reasoning compat
+    "Answer",
+    "DiagnosisSession",
+    "FounderStage",
+    "Question",
+    "AgentInterpretation",
+    "DetectedRootCause",
+    "FounderReport",
+    "Industry",
+    "InternalIntelligenceReport",
+    "Intervention",
+    "Problem",
+    "ProblemStageMapping",
+    "RootCause",
+    "RootCauseWeight",
+    "StageAssessment",
+    "StageDiagnosisLogic",
+    "ScoringRule",
+    # enums
+    "ConfirmationStatus",
+    "QuestionPriority",
+    "QuestionType",
+    "ReportType",
+    "RoutingState",
+    "ScoreLabel",
+    "SessionState",
+    "SessionStatus",
+    "StageGroup",
 ]

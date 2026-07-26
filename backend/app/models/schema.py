@@ -27,7 +27,7 @@ class AgentInterpretations(Base):
     likely_root_cause: Mapped[str] = mapped_column(Text, nullable=False)
     linked_root_cause_ids: Mapped[Optional[dict]] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
     linked_problem_ids: Mapped[Optional[dict]] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
-    embedding: Mapped[Optional[Any]] = mapped_column(Vector(384))
+    embedding: Mapped[Optional[Any]] = mapped_column(Vector(1536))
     created_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True), server_default=text('now()'))
     updated_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True), server_default=text('now()'))
 
@@ -49,7 +49,7 @@ class Archetypes(Base):
     updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
     assignment_criteria: Mapped[Optional[str]] = mapped_column(Text)
     linked_founder_dimension_ids: Mapped[Optional[dict]] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
-    embedding: Mapped[Optional[Any]] = mapped_column(Vector(384))
+    embedding: Mapped[Optional[Any]] = mapped_column(Vector(1536))
 
 
 class BehaviourPatterns(Base):
@@ -70,7 +70,7 @@ class BehaviourPatterns(Base):
     what_they_mean: Mapped[Optional[str]] = mapped_column(Text)
     empathy_response: Mapped[Optional[str]] = mapped_column(Text)
     linked_root_cause_ids: Mapped[Optional[dict]] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
-    embedding: Mapped[Optional[Any]] = mapped_column(Vector(384))
+    embedding: Mapped[Optional[Any]] = mapped_column(Vector(1536))
     created_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True), server_default=text('now()'))
     updated_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True), server_default=text('now()'))
 
@@ -482,7 +482,7 @@ class Problems(Base):
     pillar_id: Mapped[int] = mapped_column(Integer, nullable=False)
     subcategory: Mapped[Optional[str]] = mapped_column(String(100))
     related_problem_ids: Mapped[Optional[dict]] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
-    embedding: Mapped[Optional[Any]] = mapped_column(Vector(384))
+    embedding: Mapped[Optional[Any]] = mapped_column(Vector(1536))
     created_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True), server_default=text('now()'))
     updated_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True), server_default=text('now()'))
 
@@ -506,8 +506,8 @@ class RagChunks(Base):
     document_id: Mapped[int] = mapped_column(Integer, nullable=False)
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
     chunk_text: Mapped[str] = mapped_column(Text, nullable=False)
-    embedding: Mapped[Any] = mapped_column(Vector(384), nullable=False)
-    embedding_model: Mapped[str] = mapped_column(String(100), nullable=False, server_default=text("'gte-small'::character varying"))
+    embedding: Mapped[Any] = mapped_column(Vector(1536), nullable=False)
+    embedding_model: Mapped[str] = mapped_column(String(100), nullable=False, server_default=text("'text-embedding-3-small'::character varying"))
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text('true'))
     chunk_token_count: Mapped[Optional[int]] = mapped_column(Integer)
     metadata_tags: Mapped[Optional[dict]] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
@@ -932,7 +932,7 @@ class RootCauses(Base):
     explanation: Mapped[str] = mapped_column(Text, nullable=False)
     confidence_weight: Mapped[decimal.Decimal] = mapped_column(Numeric(5, 2), nullable=False)
     layer: Mapped[str] = mapped_column(String(20), nullable=False)
-    embedding: Mapped[Optional[Any]] = mapped_column(Vector(384))
+    embedding: Mapped[Optional[Any]] = mapped_column(Vector(1536))
     created_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True), server_default=text('now()'))
     updated_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True), server_default=text('now()'))
     primary_stage_group: Mapped[Optional[str]] = mapped_column(String(20))
@@ -1169,7 +1169,7 @@ class Questions(Base):
     red_flag_pattern: Mapped[Optional[str]] = mapped_column(Text)
     green_flag_pattern: Mapped[Optional[str]] = mapped_column(Text)
     follow_up_question_id: Mapped[Optional[int]] = mapped_column(Integer)
-    embedding: Mapped[Optional[Any]] = mapped_column(Vector(384))
+    embedding: Mapped[Optional[Any]] = mapped_column(Vector(1536))
     created_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True), server_default=text('now()'))
     updated_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True), server_default=text('now()'))
     primary_stage_group: Mapped[Optional[str]] = mapped_column(String(20))
