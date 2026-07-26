@@ -11,6 +11,10 @@ pip install -r requirements.txt
 python test_connection.py     # verify the database is reachable
 ```
 
+`.env.example` also documents the optional integrations, all of which run in a
+safe stub/off mode until configured: Supabase auth (`SUPABASE_JWT_SECRET`),
+Google Calendar for discovery calls, and email/SMTP.
+
 ## Run
 
 ```bash
@@ -93,6 +97,33 @@ Two limits to know:
   (see the `include_object` guard in `alembic/env.py`). This is what keeps
   autogenerate from destroying the 56 existing tables.
 
+## Discovery calls
+
+A founder books a 45-minute discovery call (timezone `Asia/Kolkata`): the backend
+reads real availability from Google Calendar, creates the event, and emails a
+confirmation. Endpoints: `GET /discovery/slots`, `POST /discovery/book`,
+`GET /discovery/calls`, `GET /discovery/calls/{id}`.
+
+**Calendar** (`app/services/calendar.py`) — Google Calendar via a service
+account. Runs in a stub (deterministic slots + placeholder link) until
+`GOOGLE_CALENDAR_ID` and a service-account key are set; then it filters slots by
+the host calendar's free/busy and creates real events. Supply the key as a file
+(`GOOGLE_CALENDAR_CREDENTIALS_FILE`, recommended) or inline JSON. On a **personal
+Gmail** calendar a service account cannot auto-create a Meet link or email
+invites (needs Google Workspace + domain-wide delegation), so a static room link
+`GOXL_MEETING_URL` is attached and `GOOGLE_CALENDAR_CREATE_MEET` /
+`GOOGLE_CALENDAR_INVITE_ATTENDEES` stay off; on Workspace, flip both to `true`
+with no code change.
+
+**Email** (`app/services/email.py`, `app/services/discovery_notifications.py`) —
+generic SMTP with a stub fallback (logs instead of sending until `EMAIL_HOST` is
+set). Booking sends a confirmation as a background task (never blocks or breaks
+the booking); `send_due_reminders()` sends 24h/1h reminders and respects the
+founder's `notification_preferences.email_reminders`. That reminder function
+needs a scheduler to call it (cron / APScheduler / Supabase scheduled function) —
+deployment infra, not built here. Works with any SMTP provider; **AWS SES** later
+is a config-only swap to its SMTP endpoint, no code change.
+
 ## Layout
 
 ```
@@ -128,8 +159,11 @@ database.
   against the live schema (`schema.py` generated + curated, `partitioned.py` by hand)
 - Repository layer — generic CRUD `BaseRepository` in `app/repositories/`; routes
   depend on repositories, not raw SQLAlchemy (`founder_repository` wired into profile)
-- `profile` — done: whole-profile GET/PATCH plus four section endpoints
-  (`/profile/founder`, `/business`, `/goals`, `/company`) mapped to the 13
-  onboarding questions; founder rows auto-provisioned on first real login
-- `ai`, `dashboard`, `diagnosis`, `discovery`, `planning`, `reports`, `settings` — stubs
+- `profile` — done: whole-profile GET/PATCH, three section endpoints
+  (`/profile/founder`, `/business`, `/goals`) mapped to the 13 onboarding
+  questions, plus `/profile/progress` and `/profile/validate` (completeness +
+  required-field check); founder rows auto-provisioned on first real login
+- `discovery` — done: Google Calendar booking (live), plus email confirmation and
+  24h/1h reminders over SMTP (AWS SES-ready); reminder scheduler is deployment infra
+- `ai`, `dashboard`, `diagnosis`, `planning`, `reports`, `settings` — stubs
 - Founder provisioning on signup — scaffolded, disabled (needs DB signup-bug fix + sign-off)

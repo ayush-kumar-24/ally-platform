@@ -79,6 +79,20 @@ class Settings(BaseSettings):
             and (self.GOOGLE_CALENDAR_CREDENTIALS_FILE or self.GOOGLE_CALENDAR_CREDENTIALS_JSON)
         )
 
+    # --- Email (SMTP -- works with Gmail, SendGrid, SES, etc.) ---
+    # Until EMAIL_HOST is set, email.py runs in stub mode (logs instead of sends)
+    # so dev/tests never send real mail.
+    EMAIL_HOST: str = ""
+    EMAIL_PORT: int = 587
+    EMAIL_USER: str = ""
+    EMAIL_PASSWORD: str = ""
+    EMAIL_FROM: str = "GoXL <no-reply@goxl.in>"
+    EMAIL_USE_TLS: bool = True
+
+    @property
+    def email_enabled(self) -> bool:
+        return bool(self.EMAIL_HOST)
+
     # --- CORS ---
     CORS_ORIGINS: str = "http://localhost:3000"
 

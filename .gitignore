@@ -29,3 +29,9 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+
+# Google service-account key -- never commit
+google-credentials.json
+*service-account*.json
+*-credentials.json
+ally-platform-*.json
