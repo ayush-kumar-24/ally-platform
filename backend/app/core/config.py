@@ -98,8 +98,11 @@ class Settings(BaseSettings):
     # --- Tier-1 Reasoning: retrieval / embeddings ---
     RETRIEVAL_ENABLED: bool = False
     EMBEDDING_PROVIDER: str = ""      # openai | gemini
-    EMBEDDING_MODEL: str = "gte-small"
-    EMBEDDING_DIMENSION: int = 384
+    EMBEDDING_MODEL: str = "text-embedding-3-small"
+    EMBEDDING_DIMENSION: int = 1536
+    # Stamped into the *_embedding tables' embedding_version column by the
+    # migration, so every vector records which generation it belongs to.
+    EMBEDDING_VERSION: str = "openai-3-small-v1"
     RETRIEVAL_TOP_K: int = 5
     RETRIEVAL_MIN_SIMILARITY: float = 0.0
 
