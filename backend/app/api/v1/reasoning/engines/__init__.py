@@ -1,6 +1,7 @@
 """Concrete reasoning engines."""
 
 from app.api.v1.reasoning.engines.confidence import WeightedConfidenceModel
+from app.api.v1.reasoning.engines.confidence_score import ConfidenceScoreStrategy
 from app.api.v1.reasoning.engines.diagnosis import DeterministicDiagnosisEngine
 from app.api.v1.reasoning.engines.diagnostic import (
     LLMAnswerClassifier,
@@ -25,5 +26,6 @@ __all__ = [
     "SymptomDetector",
     "StandardRootCauseEngine",
     "WeightedConfidenceModel",
+    "ConfidenceScoreStrategy",
     "StandardRecommendationEngine",
 ]

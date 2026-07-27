@@ -52,6 +52,9 @@ class RuleCode(str, Enum):
     AMBER_CLUSTER_TRIGGER = "AMBER_CLUSTER_TRIGGER"
     MULTI_CATEGORY_FLAG_THRESHOLD = "MULTI_CATEGORY_FLAG_THRESHOLD"
     TOP_ROOT_CAUSES_REPORT = "TOP_ROOT_CAUSES_REPORT"
+    # Detection focusing (provisional; safe defaults apply if the rows are absent).
+    ROOT_CAUSE_MIN_DETECTION_CONFIDENCE = "ROOT_CAUSE_MIN_DETECTION_CONFIDENCE"
+    ROOT_CAUSE_MAX_CANDIDATES = "ROOT_CAUSE_MAX_CANDIDATES"
 
     DISTRESS_SCORE_RED = "DISTRESS_SCORE_RED"
     DISTRESS_QUESTIONS_TRIGGER = "DISTRESS_QUESTIONS_TRIGGER"
@@ -61,6 +64,20 @@ class RuleCode(str, Enum):
     CONFIDENCE_VALIDATE_MIN = "CONFIDENCE_VALIDATE_MIN"
     CONFIDENCE_VALIDATE_MAX = "CONFIDENCE_VALIDATE_MAX"
     CONFIDENCE_GENERATE_REPORT_MIN = "CONFIDENCE_GENERATE_REPORT_MIN"
+
+    # Overall-confidence methodology (CONFIDENCE_SCORE_METHODOLOGY). The five
+    # evidence-signal weights must sum to CONFIDENCE_INTEGRITY_WEIGHTS_SUM (1.0).
+    # They are selected by explicit code -- NOT by a CONFIDENCE_WEIGHT_% prefix --
+    # because "_" is a single-char wildcard in SQL LIKE and would also match the
+    # integrity row, inflating the sum against valid data.
+    CONFIDENCE_WEIGHT_CATEGORY_SIGNAL = "CONFIDENCE_WEIGHT_CATEGORY_SIGNAL"
+    CONFIDENCE_WEIGHT_COVERAGE = "CONFIDENCE_WEIGHT_COVERAGE"
+    CONFIDENCE_WEIGHT_CONSISTENCY = "CONFIDENCE_WEIGHT_CONSISTENCY"
+    CONFIDENCE_WEIGHT_CONFIRMATION = "CONFIDENCE_WEIGHT_CONFIRMATION"
+    CONFIDENCE_WEIGHT_SEPARATION = "CONFIDENCE_WEIGHT_SEPARATION"
+    CONFIDENCE_INTEGRITY_WEIGHTS_SUM = "CONFIDENCE_INTEGRITY_WEIGHTS_SUM"
+    CONFIDENCE_STAGE_COHERENCE_FACTOR = "CONFIDENCE_STAGE_COHERENCE_FACTOR"
+    CONFIDENCE_MIN_QUESTIONS_FLOOR = "CONFIDENCE_MIN_QUESTIONS_FLOOR"
 
 
 # ---------------------------------------------------------------------------
@@ -117,6 +134,39 @@ class RankingWeights:
 
 
 @dataclass(frozen=True)
+class ConfidenceScoreWeights:
+    """The five evidence-signal weights of the overall-confidence base score.
+
+    From CONFIDENCE_WEIGHT_CATEGORY_SIGNAL / _COVERAGE / _CONSISTENCY /
+    _CONFIRMATION / _SEPARATION. Validated to sum to `expected_sum`
+    (CONFIDENCE_INTEGRITY_WEIGHTS_SUM, normally 1.0) before any scoring runs --
+    the same fail-closed guard RankingWeights applies to the ranking weights.
+    """
+
+    category_signal: Decimal
+    coverage: Decimal
+    consistency: Decimal
+    confirmation: Decimal
+    separation: Decimal
+    expected_sum: Decimal = Decimal("1")
+
+    def validate(self) -> None:
+        total = (
+            self.category_signal
+            + self.coverage
+            + self.consistency
+            + self.confirmation
+            + self.separation
+        )
+        if abs(total - self.expected_sum) > _WEIGHT_SUM_TOLERANCE:
+            raise ReasoningConfigError(
+                f"Confidence weights sum to {total}, expected {self.expected_sum} "
+                "(CONFIDENCE_INTEGRITY_WEIGHTS_SUM). Adjust the scoring_rules so the "
+                "five confidence weight factors sum to exactly the check value."
+            )
+
+
+@dataclass(frozen=True)
 class BranchingThresholds:
     """Inner-layer branching parameters."""
 
@@ -124,6 +174,12 @@ class BranchingThresholds:
     amber_cluster_trigger: int
     multi_category_flag_threshold: int
     top_root_causes_report: int
+    # Detection focusing: admit a candidate root cause only when its corroboration
+    # (detection_confidence) reaches this floor, then keep at most this many
+    # candidates. Stops a long tail of single-weak-signal causes (sessions were
+    # surfacing up to 35). Provisional -- pending product sign-off.
+    root_cause_min_detection_confidence: Decimal = Decimal("0")
+    root_cause_max_candidates: int = 0  # 0 = no cap
 
 
 @dataclass(frozen=True)
@@ -167,14 +223,37 @@ class ConfidenceThresholds:
 
 @dataclass(frozen=True)
 class ConfidenceInputs:
-    """Everything the confidence formula may draw on. Fields are intentionally
-    generous so a strategy can use as much or as little as its formula needs
-    without changing this contract."""
+    """Resolved inputs to the overall-confidence formula for one session.
 
-    questions_answered: int
-    ranked_root_cause_scores: tuple[Decimal, ...]
-    flagged_category_count: int
-    distress_mode: bool
+    Every field is pre-computed by the caller (the confidence model's assembler,
+    which owns the DB access) so a strategy's `compute` is a pure function of
+    these values plus its DB-loaded weights. The five evidence signals are each
+    normalised to 0..1; the reliability factor and hard-rule facts follow.
+    """
+
+    # --- Five evidence signals (each 0..1), per CONFIDENCE_SCORE_METHODOLOGY ---
+    category_signal: Decimal        # (a) strongest category risk, max(normalised_risk)
+    evidence_coverage: Decimal      # (b) answered / in-scope questions, capped 1.0
+    confirmation_ratio: Decimal     # (d) top causes' confirmation, rescaled to 0..1
+    separation: Decimal             # (e) (top - second) / top of ranked scores
+
+    # (c) ANSWER CONSISTENCY. Availability is explicit rather than encoded in the
+    # number: `consistency_available` is False while the LLM contradiction detector
+    # is unimplemented, and `consistency_score` is the measured 0..1 value only when
+    # it is True. An unmeasured signal is excluded from the weighted average (and
+    # the other weights renormalised), never defaulted to a perfect 1.0.
+    consistency_available: bool
+    consistency_score: Decimal | None
+
+    # --- Reliability modifier (from session_state_bands); None = High Distress ---
+    reliability_factor: Decimal | None
+
+    # --- Facts the six hard rules evaluate before routing ---
+    questions_answered: int         # rule 3: minimum question floor
+    flagged_category_count: int     # rule 5: multi-category cross-check
+    any_category_flagged: bool      # rule 4: no category above threshold
+    distress_override: bool         # rule 1: distress path
+    stages_away: int | None         # rule 2: severe stage mismatch (>= 2)
 
 
 @runtime_checkable
@@ -313,7 +392,9 @@ class ReasoningConfig:
         return self.industry_probability
 
 
-def _require(values: Mapping[str, Decimal], code: RuleCode) -> Decimal:
+def require_rule_value(values: Mapping[str, Decimal], code: RuleCode) -> Decimal:
+    """Fetch one active rule value or fail closed. Public so the composition root
+    can load rules for the confidence strategy without reaching into internals."""
     try:
         return values[code.value]
     except KeyError:
@@ -321,6 +402,18 @@ def _require(values: Mapping[str, Decimal], code: RuleCode) -> Decimal:
             f"Required scoring rule {code.value!r} is missing or inactive in "
             "scoring_rules."
         )
+
+
+def _require(values: Mapping[str, Decimal], code: RuleCode) -> Decimal:
+    return require_rule_value(values, code)
+
+
+def _optional(values: Mapping[str, Decimal], code: RuleCode, default: Decimal) -> Decimal:
+    """Like _require but returns `default` when the rule is absent/inactive. For
+    provisional rules that may not yet exist in scoring_rules -- the default is a
+    safe fallback, and the DB row (once present) overrides it. Never a hardcoded
+    business rule: the value is externalised, this is only the empty-DB fallback."""
+    return values.get(code.value, default)
 
 
 def build_reasoning_config(
@@ -366,6 +459,12 @@ def build_reasoning_config(
             ),
             top_root_causes_report=int(
                 _require(rule_values, RuleCode.TOP_ROOT_CAUSES_REPORT)
+            ),
+            root_cause_min_detection_confidence=_optional(
+                rule_values, RuleCode.ROOT_CAUSE_MIN_DETECTION_CONFIDENCE, Decimal("0.20")
+            ),
+            root_cause_max_candidates=int(
+                _optional(rule_values, RuleCode.ROOT_CAUSE_MAX_CANDIDATES, Decimal("8"))
             ),
         ),
         distress=DistressThresholds(

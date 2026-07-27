@@ -364,6 +364,11 @@ class StandardDiagnosticEngine(DiagnosticEngine):
         for category in sorted(by_category):
             members = by_category[category]
             raw = sum((m.score for m in members), _ZERO)
+            # Per-session category maximum (CATEGORY_MAX_COMPUTED_PER_SESSION): the
+            # worst the answered questions in this category could have scored. An
+            # explicit provider (Doc 12) overrides it when configured. (A full
+            # question-bank denominator was trialled and rejected in validation --
+            # it was so large that no category ever crossed the flag threshold.)
             max_score = (
                 provider.max_score(category)
                 if provider is not None

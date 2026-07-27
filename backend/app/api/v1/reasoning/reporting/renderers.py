@@ -82,6 +82,23 @@ class MarkdownReportRenderer:
             lines.append(f"- {cat.category}: {cat.band.value}, risk {cat.risk}{flag}")
         lines.append("")
 
+        bhs = report.business_health_score
+        if bhs is not None:
+            lines.append("## Business Health Score")
+            lines.append(f"Overall: {bhs.overall_score}/100 ({bhs.band or 'n/a'})")
+            for p in bhs.pillars:
+                if p.score is None:
+                    lines.append(f"- {p.pillar_name} (weight {p.weight}%): not assessed")
+                else:
+                    flag = " ⚠ red flag" if p.red_flag_triggered else ""
+                    lines.append(
+                        f"- {p.pillar_name} (weight {p.weight}%): {p.score}/100 "
+                        f"[{p.band or 'n/a'}]{flag}"
+                    )
+            if bhs.red_flags:
+                lines.append(f"Red flags: {', '.join(bhs.red_flags)}")
+            lines.append("")
+
         lines.append("## Top Root Causes")
         if not report.top_root_causes:
             lines.append("- None identified.")

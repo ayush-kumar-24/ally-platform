@@ -38,6 +38,7 @@ from app.api.v1.reasoning.config import ConfidenceInputs, ConfirmationMultiplier
 from app.api.v1.reasoning.interfaces import ConfidenceModel, ReasoningContext
 from app.api.v1.reasoning.repository import ReasoningRepository
 from app.api.v1.reasoning.schemas import (
+    DiagnosisResult,
     RootCauseDetection,
     ScoreComponent,
     ScoredRootCause,
@@ -214,6 +215,134 @@ class WeightedConfidenceModel(ConfidenceModel):
                 )
             )
         return result
+
+    # --- Outer layer: assemble confidence inputs --------------------------
+
+    def build_confidence_inputs(
+        self,
+        *,
+        diagnosis: DiagnosisResult,
+        scored: list[ScoredRootCause],
+        questions_answered: int,
+        context: ReasoningContext,
+    ) -> ConfidenceInputs:
+        """Resolve the five evidence signals, the reliability modifier and the
+        hard-rule facts (CONFIDENCE_SCORE_METHODOLOGY). This is where the DB reads
+        live, so the strategy's compute stays a pure function of the result."""
+        cfg = context.config
+
+        # (a) CATEGORY SIGNAL -- strongest normalised category risk (already
+        # category_risk_score / category_max, 0..1). Raw risk, not the ranked
+        # score, so confirmation is not counted twice.
+        category_signal = max(
+            (c.normalised_risk for c in diagnosis.category_risks), default=_ZERO
+        )
+
+        # (b) EVIDENCE COVERAGE -- answered / in-scope questions for the founder's
+        # stage group, capped at 1.0. Self-reported stage owns the question set.
+        in_scope = self.repository.get_in_scope_question_count(context.founder.stage_id)
+        coverage = (
+            _ZERO
+            if in_scope <= 0
+            else min(_ONE, Decimal(questions_answered) / Decimal(in_scope))
+        )
+
+        # (c) ANSWER CONSISTENCY -- measured by the semantic contradiction detector
+        # (an LLM-layer feature). It is not implemented yet, so the signal is marked
+        # UNAVAILABLE rather than defaulted to a perfect 1.0: the strategy then
+        # excludes it and renormalises the remaining weights, so an unmeasured
+        # signal neither rewards nor penalises the founder. When the detector lands,
+        # set consistency_available=True and pass its measured 0..1 score here.
+        consistency_available = False
+        consistency_score: Decimal | None = None
+
+        # (d) CONFIRMATION RATIO -- top causes' confirmation status rescaled to 0..1.
+        confirmation_ratio = self._confirmation_ratio(
+            [s for s in scored if s.is_top_finding], cfg.confirmation_multipliers
+        )
+
+        # (e) SEPARATION -- gap between the top two ranked scores.
+        separation = self._separation(scored)
+
+        # Reliability modifier: band for the session's distress score. None (High
+        # Distress) or a distress trigger routes through the distress hard rule.
+        distress_score = context.session.session_distress_score
+        distress_override = bool(diagnosis.distress_mode) or (
+            distress_score is not None
+            and Decimal(distress_score) >= cfg.distress.high_distress_score
+        )
+        reliability_factor = (
+            None
+            if distress_override
+            else self.repository.get_reliability_factor(distress_score)
+        )
+
+        flagged = [c for c in diagnosis.category_risks if c.is_flagged]
+        return ConfidenceInputs(
+            category_signal=category_signal,
+            evidence_coverage=coverage,
+            consistency_available=consistency_available,
+            consistency_score=consistency_score,
+            confirmation_ratio=confirmation_ratio,
+            separation=separation,
+            reliability_factor=reliability_factor,
+            questions_answered=questions_answered,
+            flagged_category_count=len(flagged),
+            any_category_flagged=bool(flagged),
+            distress_override=distress_override,
+            stages_away=self._stages_away(context),
+        )
+
+    def _confirmation_ratio(
+        self, top_findings, multipliers: ConfirmationMultipliers
+    ) -> Decimal:
+        """Mean confirmation of the top-ranked causes, each mapped via the
+        confirmation multipliers and rescaled (value - not_tested) / range to 0..1
+        (Confirmed 1.5 -> 1.0, Unconfirmed 1.0 -> 0.5, Not Tested 0.5 -> 0.0)."""
+        if not top_findings:
+            return _ZERO
+        low = multipliers.not_tested
+        span = multipliers.confirmed - low
+        if span <= 0:
+            return _ZERO
+        by_status = {
+            ConfirmationStatus.CONFIRMED: multipliers.confirmed,
+            ConfirmationStatus.UNCONFIRMED: multipliers.unconfirmed,
+            ConfirmationStatus.NOT_TESTED: multipliers.not_tested,
+        }
+        values = [
+            _clamp((by_status[s.confirmation_status] - low) / span, _ZERO, _ONE)
+            for s in top_findings
+        ]
+        return _q(sum(values, _ZERO) / Decimal(len(values)))
+
+    def _separation(self, scored: list[ScoredRootCause]) -> Decimal:
+        """(top - second) / top over the ranked scores, capped at 1.0; 0 when the
+        top score is 0 or the top two are tied. Guards against a decisive-sounding
+        report built on a near-tie."""
+        ranked = sorted(scored, key=lambda s: s.rank)
+        if not ranked:
+            return _ZERO
+        top = ranked[0].final_weighted_score
+        if top <= _ZERO:
+            return _ZERO
+        second = ranked[1].final_weighted_score if len(ranked) > 1 else _ZERO
+        if top == second:
+            return _ZERO
+        return min(_ONE, _q((top - second) / top))
+
+    def _stages_away(self, context: ReasoningContext) -> int | None:
+        """How many stages the evidence-detected stage sits from the self-reported
+        stage, by founder_stages.stage_order. None when either stage is unknown."""
+        self_reported = context.founder.stage_id
+        detected = context.stage_id
+        if self_reported is None or detected is None:
+            return None
+        reported_order = self.repository.get_stage_order(self_reported)
+        detected_order = self.repository.get_stage_order(detected)
+        if reported_order is None or detected_order is None:
+            return None
+        return abs(reported_order - detected_order)
 
     # --- Outer layer: session confidence + routing ------------------------
 

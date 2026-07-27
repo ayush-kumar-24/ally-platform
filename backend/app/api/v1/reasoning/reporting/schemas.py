@@ -16,6 +16,7 @@ from enum import Enum
 from typing import Mapping
 
 from app.api.v1.reasoning.schemas import (
+    BusinessHealthScore,
     CategoryRisk,
     DiagnosisResult,
     FollowUpTrigger,
@@ -76,6 +77,9 @@ class ReasoningBundle:
     session_id: int | None = None
     root_cause_labels: Mapping[int, str] = field(default_factory=dict)
     intervention_labels: Mapping[int, str] = field(default_factory=dict)
+    # Weighted readiness across the six pillars (readiness_pillars); optional so
+    # the bundle is constructible without it.
+    business_health: BusinessHealthScore | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -164,6 +168,8 @@ class FounderReport:
     priority_actions: tuple[PriorityAction, ...]
     recommended_interventions: tuple[InterventionHighlight, ...]
     next_steps: tuple[str, ...]
+    # Readiness pillar scores, overall health, band and triggered red flags.
+    business_health_score: BusinessHealthScore | None = None
 
 
 # ---------------------------------------------------------------------------

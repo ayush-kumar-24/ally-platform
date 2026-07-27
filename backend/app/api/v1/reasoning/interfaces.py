@@ -22,6 +22,7 @@ from app.api.v1.reasoning.schemas import (
     AnswerClassification,
     CategoryRisk,
     ConversationTurn,
+    DiagnosisResult,
     FollowUpTrigger,
     RecommendationResult,
     RootCauseDetection,
@@ -156,6 +157,20 @@ class ConfidenceModel(abc.ABC):
         detections: list[RootCauseDetection],
         context: ReasoningContext,
     ) -> list[ScoredRootCause]:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def build_confidence_inputs(
+        self,
+        *,
+        diagnosis: DiagnosisResult,
+        scored: list[ScoredRootCause],
+        questions_answered: int,
+        context: ReasoningContext,
+    ) -> ConfidenceInputs:
+        """Resolve the five evidence signals, the reliability modifier and the
+        hard-rule facts for a session, so `overall_confidence` stays a pure
+        function of the returned inputs. Owns the DB access the signals need."""
         raise NotImplementedError
 
     @abc.abstractmethod

@@ -297,3 +297,45 @@ class DiagnosisResult:
     distress_mode: bool
     distress_signal_count: int
     unscored_answer_ids: tuple[int, ...] = ()
+
+
+# ---------------------------------------------------------------------------
+# Business Health Score (readiness_pillars)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class PillarScore:
+    """One readiness pillar's health for a session.
+
+    `score` is 0-100 (higher = healthier), derived from the session answers mapped
+    to this pillar via question -> problem.pillar_id, then inverted from risk. It
+    is None when the session contained no questions for the pillar. `weight`,
+    `band` and the red-flag threshold all come from the readiness_pillars row --
+    none are hardcoded.
+    """
+
+    pillar_id: int
+    pillar_name: str
+    weight: Decimal                 # pillar_weightage from readiness_pillars
+    score: Decimal | None           # 0-100 health, None if not assessed
+    band: str | None                # score_bands level (e.g. "Developing")
+    red_flag_triggered: bool
+    red_flag_note: str | None
+    assessed_question_count: int
+
+
+@dataclass(frozen=True)
+class BusinessHealthScore:
+    """Weighted readiness across the six pillars.
+
+    `overall_score` is the pillar scores weighted by pillar_weightage (renormalised
+    over the pillars actually assessed in the session). `band` uses the same
+    score_bands. `red_flags` lists the pillars whose score fell to/below their
+    configured red_flag_threshold.
+    """
+
+    overall_score: Decimal          # 0-100
+    band: str | None
+    pillars: tuple[PillarScore, ...]
+    red_flags: tuple[str, ...]
