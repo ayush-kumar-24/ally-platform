@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Sequence
 from decimal import Decimal
 
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import delete, func, or_, select, text
 from sqlalchemy.orm import Session
 
 from app.models import (
@@ -30,6 +30,7 @@ from app.models import (
     ScoringRule,
     StageDiagnosisLogic,
 )
+from app.models.schema import ReadinessPillars
 
 
 class ReasoningRepository:
@@ -45,6 +46,12 @@ class ReasoningRepository:
             ScoringRule.is_active.is_(True)
         )
         return {code: value for code, value in self.db.execute(stmt).all()}
+
+    def get_readiness_pillars(self) -> list[ReadinessPillars]:
+        """All readiness pillars, ordered. Source of the Business Health Score's
+        weights, score bands and red-flag thresholds -- never hardcoded."""
+        stmt = select(ReadinessPillars).order_by(ReadinessPillars.pillar_order.asc())
+        return list(self.db.execute(stmt).scalars().all())
 
     # --- Session inputs ----------------------------------------------------
 
@@ -120,6 +127,58 @@ class ReasoningRepository:
 
     def get_industry(self, industry_id: int) -> Industry | None:
         return self.db.get(Industry, industry_id)
+
+    # --- Overall-confidence inputs ----------------------------------------
+
+    def get_in_scope_question_count(self, stage_id: int | None) -> int:
+        """Count of questions in scope for the founder's stage group -- the
+        denominator of the confidence EVIDENCE COVERAGE signal.
+
+        A question is in scope when its `primary_stage_group` matches the founder's
+        stage group, i.e. the `onboarding_label` of the founder's stage
+        (founder_stages: stage_id -> onboarding_label; questions.primary_stage_group
+        holds the same group labels 'Stage 0' / 'Stage 0->1' / 'Stage 1->10+').
+        Returns 0 when the stage is unknown, so the caller yields 0 coverage rather
+        than dividing by zero.
+        """
+        if stage_id is None:
+            return 0
+        stmt = (
+            select(func.count(Question.question_id))
+            .select_from(Question)
+            .join(FounderStage, FounderStage.onboarding_label == Question.primary_stage_group)
+            .where(FounderStage.stage_id == stage_id)
+        )
+        return int(self.db.execute(stmt).scalar_one())
+
+    def get_reliability_factor(self, distress_score: Decimal | int | None) -> Decimal | None:
+        """session_state_bands.reliability_factor for the band whose score range
+        contains the session's distress score -- the confidence RELIABILITY modifier.
+
+        None means either no band matched or the matching band has no factor (the
+        High Distress band, 36+, deliberately carries a null factor). Read via a
+        Core query because session_state_bands has no ORM model in schema.py.
+        """
+        if distress_score is None:
+            return None
+        row = self.db.execute(
+            text(
+                "select reliability_factor from session_state_bands "
+                "where score_min <= :s and (score_max is null or :s <= score_max) "
+                "order by score_min desc limit 1"
+            ),
+            {"s": distress_score},
+        ).first()
+        return row[0] if row and row[0] is not None else None
+
+    def get_stage_order(self, stage_id: int | None) -> int | None:
+        """The ordinal position (founder_stages.stage_order) of a stage, used to
+        measure how many stages apart two stages are for the severe-stage-mismatch
+        hard rule. None when the stage is unknown."""
+        if stage_id is None:
+            return None
+        stage = self.db.get(FounderStage, stage_id)
+        return stage.stage_order if stage is not None else None
 
     def get_interpretations_by_category(self, category: str) -> list[AgentInterpretation]:
         stmt = select(AgentInterpretation).where(

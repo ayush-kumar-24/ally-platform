@@ -30,9 +30,11 @@ from decimal import Decimal
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from app.api.v1.reasoning.config import ConfidenceInputs, ReasoningConfig
+from app.api.v1.reasoning.config import ReasoningConfig
+from app.api.v1.reasoning.engines.business_health import BusinessHealthScorer
 from app.api.v1.reasoning.engines.diagnosis import DeterministicDiagnosisEngine
 from app.api.v1.reasoning.errors import (
+    FeatureDisabledError,
     ReasoningError,
     ReasoningPersistenceError,
     SessionNotAnalyzableError,
@@ -68,6 +70,12 @@ from app.models import (
 from app.models.diagnosis import Founder
 
 
+# Routing state for a session that leaves the diagnostic loop for wellbeing
+# support (CONFIDENCE_HARD_RULES rule 1). Distinct from the confidence-driven
+# states so the app can divert to a support flow instead of asking more questions.
+DISTRESS_SUPPORT_ROUTE = "distress_support"
+
+
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -98,6 +106,7 @@ class ReasoningService:
         self.recommendation_engine = recommendation_engine
         self.report_generator = report_generator or ReportGenerator()
         self.retrieval_enabled = retrieval_enabled
+        self.business_health_scorer = BusinessHealthScorer(repository)
 
     async def analyze_session(
         self, founder: Founder, session_id: int, *, force: bool = False
@@ -184,16 +193,21 @@ class ReasoningService:
         # --- Confidence ---
         start = time.perf_counter()
         scored = self.confidence_model.score_and_rank(detections, context)
+        confidence_inputs = self.confidence_model.build_confidence_inputs(
+            diagnosis=diagnosis,
+            scored=scored,
+            questions_answered=len(answers),
+            context=context,
+        )
         overall_confidence = self.confidence_model.overall_confidence(
-            ConfidenceInputs(
-                questions_answered=len(answers),
-                ranked_root_cause_scores=tuple(s.final_weighted_score for s in scored),
-                flagged_category_count=sum(1 for c in diagnosis.category_risks if c.is_flagged),
-                distress_mode=diagnosis.distress_mode,
-            ),
-            context,
+            confidence_inputs, context
         )
         routing_state = self.config.confidence.routing_state_for(overall_confidence)
+        # Distress overrides routing entirely: wellbeing before diagnostic
+        # completeness. The session leaves the confidence loop for a support path
+        # rather than being told to keep answering questions.
+        if confidence_inputs.distress_override:
+            routing_state = DISTRESS_SUPPORT_ROUTE
         self._log_stage(
             "confidence", session_id, start,
             scored=len(scored), overall_confidence=str(overall_confidence),
@@ -212,11 +226,32 @@ class ReasoningService:
             recommendations=len(recommendations.recommendations),
         )
 
+        # --- Business Health Score (readiness pillars; independent of confidence) ---
+        # Fail-closed: if the pillar scoring formula is not configured, omit the
+        # score from the report rather than failing the whole pipeline.
+        start = time.perf_counter()
+        try:
+            business_health = self.business_health_scorer.compute(
+                list(diagnosis.classifications), questions, context
+            )
+            self._log_stage(
+                "business_health", session_id, start,
+                overall=str(business_health.overall_score),
+                red_flags=len(business_health.red_flags),
+            )
+        except FeatureDisabledError as exc:
+            business_health = None
+            logger.info(
+                "business health score disabled; omitting from report",
+                extra={"session_id": session_id, "stage": "business_health",
+                       "reason": str(exc)},
+            )
+
         # --- Report generation ---
         start = time.perf_counter()
         founder_report, internal_report = self._generate_reports(
             session, founder, context, diagnosis, detections, scored,
-            recommendations, overall_confidence, routing_state,
+            recommendations, overall_confidence, routing_state, business_health,
         )
         self._log_stage("report_generation", session_id, start)
 
@@ -238,7 +273,7 @@ class ReasoningService:
 
     def _generate_reports(
         self, session, founder, context, diagnosis, detections, scored,
-        recommendations, overall_confidence, routing_state,
+        recommendations, overall_confidence, routing_state, business_health,
     ):
         rc_map = self.repository.get_root_causes_by_ids(s.root_cause_id for s in scored)
         iv_map = self.repository.get_interventions_by_ids(
@@ -261,6 +296,7 @@ class ReasoningService:
             session_id=session.session_id,
             root_cause_labels={rid: rc.root_cause_name for rid, rc in rc_map.items()},
             intervention_labels={iid: iv.intervention_code for iid, iv in iv_map.items()},
+            business_health=business_health,
         )
         return (
             self.report_generator.founder_report(bundle),

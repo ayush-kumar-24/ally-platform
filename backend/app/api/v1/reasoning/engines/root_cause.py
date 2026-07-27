@@ -102,9 +102,35 @@ class StandardRootCauseEngine(RootCauseEngine):
                 detections.append(detection)
 
         detections = self._order(detections)
+        detections = self._focus(detections, context)
 
         if self.enricher is not None:
             detections = self.enricher.enrich(detections, context)
+        return detections
+
+    def _focus(
+        self, detections: list[RootCauseDetection], context: ReasoningContext
+    ) -> list[RootCauseDetection]:
+        """Drop weakly-corroborated candidates and cap the count, so a focused set
+        reaches ranking instead of a long tail of single-signal causes.
+
+        A CONFIRMED cause (a real double-red) is never dropped by the confidence
+        floor -- confirmation is the strongest signal we have. Limits come from
+        config (scoring_rules, with safe provisional defaults); 0 disables a limit.
+        """
+        floor = context.config.branching.root_cause_min_detection_confidence
+        cap = context.config.branching.root_cause_max_candidates
+
+        if floor > 0:
+            detections = [
+                d
+                for d in detections
+                if d.detection_confidence >= floor
+                or d.confirmation_status == ConfirmationStatus.CONFIRMED
+            ]
+        if cap and len(detections) > cap:
+            # detections are already in priority order (_order); keep the strongest.
+            detections = detections[:cap]
         return detections
 
     # --- Detection of a single root cause ---------------------------------

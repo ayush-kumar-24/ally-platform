@@ -106,6 +106,7 @@ class ReportGenerator:
             priority_actions=priority_actions,
             recommended_interventions=recommended_interventions,
             next_steps=self._next_steps(recommendations),
+            business_health_score=bundle.business_health,
         )
 
     def _founder_stage(self, bundle: ReasoningBundle) -> FounderStageSection:

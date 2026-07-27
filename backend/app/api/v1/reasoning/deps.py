@@ -16,12 +16,19 @@ from __future__ import annotations
 from fastapi import Depends
 from sqlalchemy.orm import Session
 
+from collections.abc import Mapping
+from decimal import Decimal
+
 from app.api.v1.reasoning.config import (
-    NotImplementedOverallConfidenceStrategy,
+    ConfidenceScoreWeights,
+    OverallConfidenceStrategy,
     ReasoningConfig,
+    RuleCode,
     build_reasoning_config,
+    require_rule_value,
 )
 from app.api.v1.reasoning.engines import (
+    ConfidenceScoreStrategy,
     DeterministicDiagnosisEngine,
     LLMAnswerClassifier,
     StageDetector,
@@ -47,6 +54,42 @@ def get_reasoning_repository(db: Session = Depends(get_db)) -> ReasoningReposito
     return ReasoningRepository(db)
 
 
+def build_confidence_strategy(
+    rule_values: Mapping[str, Decimal],
+) -> OverallConfidenceStrategy:
+    """Construct the overall-confidence strategy from scoring_rules.
+
+    Every weight, factor and threshold is read from the database here -- the
+    strategy holds no literal business values. The five evidence weights are
+    selected by explicit code (never a CONFIDENCE_WEIGHT_% prefix) and validated to
+    sum to CONFIDENCE_INTEGRITY_WEIGHTS_SUM inside the strategy's constructor.
+    """
+    weights = ConfidenceScoreWeights(
+        category_signal=require_rule_value(rule_values, RuleCode.CONFIDENCE_WEIGHT_CATEGORY_SIGNAL),
+        coverage=require_rule_value(rule_values, RuleCode.CONFIDENCE_WEIGHT_COVERAGE),
+        consistency=require_rule_value(rule_values, RuleCode.CONFIDENCE_WEIGHT_CONSISTENCY),
+        confirmation=require_rule_value(rule_values, RuleCode.CONFIDENCE_WEIGHT_CONFIRMATION),
+        separation=require_rule_value(rule_values, RuleCode.CONFIDENCE_WEIGHT_SEPARATION),
+        expected_sum=require_rule_value(rule_values, RuleCode.CONFIDENCE_INTEGRITY_WEIGHTS_SUM),
+    )
+    return ConfidenceScoreStrategy(
+        weights=weights,
+        stage_coherence_factor=require_rule_value(
+            rule_values, RuleCode.CONFIDENCE_STAGE_COHERENCE_FACTOR
+        ),
+        min_questions_floor=int(
+            require_rule_value(rule_values, RuleCode.CONFIDENCE_MIN_QUESTIONS_FLOOR)
+        ),
+        multi_category_flag_threshold=int(
+            require_rule_value(rule_values, RuleCode.MULTI_CATEGORY_FLAG_THRESHOLD)
+        ),
+        continue_max=require_rule_value(rule_values, RuleCode.CONFIDENCE_CONTINUE_MAX),
+        generate_report_min=require_rule_value(
+            rule_values, RuleCode.CONFIDENCE_GENERATE_REPORT_MIN
+        ),
+    )
+
+
 def get_reasoning_config(
     repository: ReasoningRepository = Depends(get_reasoning_repository),
 ) -> ReasoningConfig:
@@ -56,7 +99,10 @@ def get_reasoning_config(
     is safe to cache with invalidation on scoring_rules change -- the values are
     configuration, not per-session data.
     """
-    return build_reasoning_config(repository.get_active_rule_values())
+    rule_values = repository.get_active_rule_values()
+    return build_reasoning_config(
+        rule_values, confidence_strategy=build_confidence_strategy(rule_values)
+    )
 
 
 def get_answer_classifier() -> AnswerClassifier:
@@ -125,12 +171,12 @@ def build_reasoning_service(db: Session) -> ReasoningService:
     completion trigger, so both stay identical.
     """
     repository = ReasoningRepository(db)
-    # The overall-confidence formula (PRD Section 04) is not implemented; the
-    # fail-closed strategy raises rather than routing on placeholder logic. Swap
-    # it for the real strategy to enable confidence/routing.
+    # Overall confidence uses the approved CONFIDENCE_SCORE_METHODOLOGY, with every
+    # weight and factor loaded from scoring_rules (never hardcoded).
+    rule_values = repository.get_active_rule_values()
     config = build_reasoning_config(
-        repository.get_active_rule_values(),
-        confidence_strategy=NotImplementedOverallConfidenceStrategy(),
+        rule_values,
+        confidence_strategy=build_confidence_strategy(rule_values),
     )
     diagnosis_engine = DeterministicDiagnosisEngine(
         category_engine=StandardDiagnosticEngine(get_answer_classifier()),
