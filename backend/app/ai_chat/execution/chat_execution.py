@@ -70,7 +70,14 @@ class ChatExecutionService:
         self.clock = clock or SystemClock()
         self._new_id = id_factory or (lambda: uuid.uuid4().hex)
 
-    def send_message(self, request: ChatRequest) -> ChatResponse:
+    def send_message(self, request: ChatRequest, *, persist_assistant: bool = True) -> ChatResponse:
+        """Run one contextual chat turn.
+
+        `persist_assistant` (default True) preserves the Milestone-2 behaviour: the
+        assistant reply is appended to the conversation before returning. The
+        streaming layer passes False so it can persist the assistant ONLY after the
+        stream completes (and never on cancel) -- the turn is otherwise identical.
+        """
         started = self.clock.now()
         request_id = request.request_id or self._new_id()
         completed: list[str] = []
@@ -112,9 +119,10 @@ class ChatExecutionService:
         ai = self.execution.execute(AIRequest(prompt=rendered))
         completed.append(EXECUTE_AI)
 
-        # 7. Persist the assistant reply (automatic) -- only on success.
+        # 7. Persist the assistant reply (automatic) -- only on success, and only
+        #    when the caller wants it now (streaming defers this to post-COMPLETE).
         assistant_id = None
-        if ai.ok:
+        if ai.ok and persist_assistant:
             usage = ai.token_usage or TokenUsage()
             message = self.conversation_service.append_message(
                 conversation.conversation_id, MessageRole.ASSISTANT, ai.content,
