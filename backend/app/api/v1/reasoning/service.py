@@ -303,6 +303,7 @@ class ReasoningService:
             founder_report=founder_report,
             internal_report=internal_report,
             archetype=archetype,
+            business_health=business_health,
             force=force,
         )
 
@@ -355,6 +356,7 @@ class ReasoningService:
         founder_report,
         internal_report,
         archetype=None,
+        business_health=None,
         force: bool = False,
     ) -> ReasoningResult | None:
         start = time.perf_counter()
@@ -396,6 +398,9 @@ class ReasoningService:
                 insights=renderer.render_founder(founder_report),
                 # Founder pattern/archetype -> founder_dna (its founder-DNA slot).
                 founder_dna=({"archetype": archetype.as_founder_dna()} if archetype is not None else None),
+                # Business health (readiness pillars) -> business_dna (structured,
+                # queryable for the Business-DNA report + dashboard display).
+                business_dna=self._business_dna(business_health),
             )
             self.repository.add_report(report)  # flush populates report_id
 
@@ -501,6 +506,31 @@ class ReasoningService:
             distress_signals=distress_signals,
             internal_notes=MarkdownReportRenderer().render_internal(internal_report),
         )
+
+    def _business_dna(self, business_health) -> dict | None:
+        """Serialise the Business Health score to structured JSON for
+        founder_reports.business_dna -- the queryable Business-DNA snapshot the
+        report aggregation and the dashboard display layer read."""
+        if business_health is None:
+            return None
+        return {
+            "overall_score": int(business_health.overall_score),
+            "band": business_health.band,
+            "red_flags": list(business_health.red_flags),
+            "pillars": [
+                {
+                    "pillar_id": p.pillar_id,
+                    "pillar_name": p.pillar_name,
+                    "weight": float(p.weight),
+                    "score": (int(p.score) if p.score is not None else None),
+                    "band": p.band,
+                    "red_flag_triggered": p.red_flag_triggered,
+                    "red_flag_note": p.red_flag_note,
+                    "assessed_question_count": p.assessed_question_count,
+                }
+                for p in business_health.pillars
+            ],
+        }
 
     def _action_dicts(self, recommendations, rec_type: RecommendationType) -> list[dict]:
         return [
