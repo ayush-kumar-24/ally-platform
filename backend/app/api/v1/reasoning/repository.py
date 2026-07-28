@@ -13,6 +13,7 @@ from decimal import Decimal
 from sqlalchemy import delete, func, or_, select, text
 from sqlalchemy.orm import Session
 
+from app.models.schema import Archetypes
 from app.models import (
     AgentInterpretation,
     Answer,
@@ -170,6 +171,15 @@ class ReasoningRepository:
             {"s": distress_score},
         ).first()
         return row[0] if row and row[0] is not None else None
+
+    def get_archetypes(self) -> list["Archetypes"]:
+        """The seeded founder-archetype catalogue (8 rows) the Archetype engine
+        matches a founder against."""
+        return list(
+            self.db.execute(select(Archetypes).order_by(Archetypes.archetype_id))
+            .scalars()
+            .all()
+        )
 
     def get_distress_signal_weights(self) -> dict[int, Decimal]:
         """{signal_id: score_per_instance} for every psychological_state_signal.

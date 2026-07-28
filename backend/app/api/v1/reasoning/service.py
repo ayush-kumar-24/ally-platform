@@ -31,6 +31,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.api.v1.reasoning.config import ReasoningConfig
+from app.api.v1.reasoning.engines.archetype import ArchetypeEngine
 from app.api.v1.reasoning.engines.business_health import BusinessHealthScorer
 from app.api.v1.reasoning.engines.psychological_state import (
     PsychologicalStateEngine,
@@ -116,6 +117,7 @@ class ReasoningService:
             PsychologicalStateSignalScorer(repository),
             config.distress.high_distress_score,
         )
+        self.archetype_engine = ArchetypeEngine(repository)
 
     async def analyze_session(
         self, founder: Founder, session_id: int, *, force: bool = False
@@ -272,6 +274,15 @@ class ReasoningService:
                        "reason": str(exc)},
             )
 
+        # --- Founder archetype / pattern (deterministic lexical match; LLM seam) ---
+        start = time.perf_counter()
+        archetype = self.archetype_engine.assign([a.answer_text for a in answers])
+        self._log_stage(
+            "archetype", session_id, start,
+            archetype=(archetype.name if archetype is not None else None),
+            fit=(str(archetype.score) if archetype is not None else None),
+        )
+
         # --- Report generation ---
         start = time.perf_counter()
         founder_report, internal_report = self._generate_reports(
@@ -291,6 +302,7 @@ class ReasoningService:
             recommendations=recommendations,
             founder_report=founder_report,
             internal_report=internal_report,
+            archetype=archetype,
             force=force,
         )
 
@@ -342,6 +354,7 @@ class ReasoningService:
         recommendations,
         founder_report,
         internal_report,
+        archetype=None,
         force: bool = False,
     ) -> ReasoningResult | None:
         start = time.perf_counter()
@@ -381,6 +394,8 @@ class ReasoningService:
                 session_state_at_generation=session.session_state,
                 # Founder report -> insights (its founder-facing slot).
                 insights=renderer.render_founder(founder_report),
+                # Founder pattern/archetype -> founder_dna (its founder-DNA slot).
+                founder_dna=({"archetype": archetype.as_founder_dna()} if archetype is not None else None),
             )
             self.repository.add_report(report)  # flush populates report_id
 
