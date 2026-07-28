@@ -32,6 +32,10 @@ from sqlalchemy.orm import Session
 
 from app.api.v1.reasoning.config import ReasoningConfig
 from app.api.v1.reasoning.engines.business_health import BusinessHealthScorer
+from app.api.v1.reasoning.engines.psychological_state import (
+    PsychologicalStateEngine,
+    PsychologicalStateSignalScorer,
+)
 from app.api.v1.reasoning.engines.diagnosis import DeterministicDiagnosisEngine
 from app.api.v1.reasoning.errors import (
     FeatureDisabledError,
@@ -107,6 +111,11 @@ class ReasoningService:
         self.report_generator = report_generator or ReportGenerator()
         self.retrieval_enabled = retrieval_enabled
         self.business_health_scorer = BusinessHealthScorer(repository)
+        self.psychological_state_engine = PsychologicalStateEngine(
+            repository,
+            PsychologicalStateSignalScorer(repository),
+            config.distress.high_distress_score,
+        )
 
     async def analyze_session(
         self, founder: Founder, session_id: int, *, force: bool = False
@@ -178,6 +187,22 @@ class ReasoningService:
         )
         if diagnosis.stage_detection.stage_id is not None:
             context = replace(context, stage_id=diagnosis.stage_detection.stage_id)
+
+        # --- Psychological state: compute the session distress score ---
+        # Sets sessions.session_distress_score (previously never computed -> 0),
+        # which the Confidence model reads for its reliability modifier and the
+        # High-Distress override. Deterministic proxy until the LLM signal
+        # detector is wired; see PsychologicalStateEngine.
+        start = time.perf_counter()
+        distress = self.psychological_state_engine.assess_from_diagnosis(
+            list(diagnosis.classifications), questions
+        )
+        session.session_distress_score = distress.session_distress_score
+        self._log_stage(
+            "psychological_state", session_id, start,
+            session_distress_score=str(distress.session_distress_score),
+            high_distress=distress.is_high_distress,
+        )
 
         # --- Root Cause (+ retrieval enrichment inside the engine) ---
         start = time.perf_counter()
