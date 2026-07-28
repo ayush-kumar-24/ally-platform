@@ -31,7 +31,12 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.api.v1.reasoning.config import ReasoningConfig
+from app.api.v1.reasoning.engines.archetype import ArchetypeEngine
 from app.api.v1.reasoning.engines.business_health import BusinessHealthScorer
+from app.api.v1.reasoning.engines.psychological_state import (
+    PsychologicalStateEngine,
+    PsychologicalStateSignalScorer,
+)
 from app.api.v1.reasoning.engines.diagnosis import DeterministicDiagnosisEngine
 from app.api.v1.reasoning.errors import (
     FeatureDisabledError,
@@ -107,6 +112,12 @@ class ReasoningService:
         self.report_generator = report_generator or ReportGenerator()
         self.retrieval_enabled = retrieval_enabled
         self.business_health_scorer = BusinessHealthScorer(repository)
+        self.psychological_state_engine = PsychologicalStateEngine(
+            repository,
+            PsychologicalStateSignalScorer(repository),
+            config.distress.high_distress_score,
+        )
+        self.archetype_engine = ArchetypeEngine(repository)
 
     async def analyze_session(
         self, founder: Founder, session_id: int, *, force: bool = False
@@ -179,6 +190,22 @@ class ReasoningService:
         if diagnosis.stage_detection.stage_id is not None:
             context = replace(context, stage_id=diagnosis.stage_detection.stage_id)
 
+        # --- Psychological state: compute the session distress score ---
+        # Sets sessions.session_distress_score (previously never computed -> 0),
+        # which the Confidence model reads for its reliability modifier and the
+        # High-Distress override. Deterministic proxy until the LLM signal
+        # detector is wired; see PsychologicalStateEngine.
+        start = time.perf_counter()
+        distress = self.psychological_state_engine.assess_from_diagnosis(
+            list(diagnosis.classifications), questions
+        )
+        session.session_distress_score = distress.session_distress_score
+        self._log_stage(
+            "psychological_state", session_id, start,
+            session_distress_score=str(distress.session_distress_score),
+            high_distress=distress.is_high_distress,
+        )
+
         # --- Root Cause (+ retrieval enrichment inside the engine) ---
         start = time.perf_counter()
         detections = self.root_cause_engine.detect(
@@ -247,6 +274,15 @@ class ReasoningService:
                        "reason": str(exc)},
             )
 
+        # --- Founder archetype / pattern (deterministic lexical match; LLM seam) ---
+        start = time.perf_counter()
+        archetype = self.archetype_engine.assign([a.answer_text for a in answers])
+        self._log_stage(
+            "archetype", session_id, start,
+            archetype=(archetype.name if archetype is not None else None),
+            fit=(str(archetype.score) if archetype is not None else None),
+        )
+
         # --- Report generation ---
         start = time.perf_counter()
         founder_report, internal_report = self._generate_reports(
@@ -266,6 +302,8 @@ class ReasoningService:
             recommendations=recommendations,
             founder_report=founder_report,
             internal_report=internal_report,
+            archetype=archetype,
+            business_health=business_health,
             force=force,
         )
 
@@ -317,6 +355,8 @@ class ReasoningService:
         recommendations,
         founder_report,
         internal_report,
+        archetype=None,
+        business_health=None,
         force: bool = False,
     ) -> ReasoningResult | None:
         start = time.perf_counter()
@@ -356,6 +396,11 @@ class ReasoningService:
                 session_state_at_generation=session.session_state,
                 # Founder report -> insights (its founder-facing slot).
                 insights=renderer.render_founder(founder_report),
+                # Founder pattern/archetype -> founder_dna (its founder-DNA slot).
+                founder_dna=({"archetype": archetype.as_founder_dna()} if archetype is not None else None),
+                # Business health (readiness pillars) -> business_dna (structured,
+                # queryable for the Business-DNA report + dashboard display).
+                business_dna=self._business_dna(business_health),
             )
             self.repository.add_report(report)  # flush populates report_id
 
@@ -461,6 +506,31 @@ class ReasoningService:
             distress_signals=distress_signals,
             internal_notes=MarkdownReportRenderer().render_internal(internal_report),
         )
+
+    def _business_dna(self, business_health) -> dict | None:
+        """Serialise the Business Health score to structured JSON for
+        founder_reports.business_dna -- the queryable Business-DNA snapshot the
+        report aggregation and the dashboard display layer read."""
+        if business_health is None:
+            return None
+        return {
+            "overall_score": int(business_health.overall_score),
+            "band": business_health.band,
+            "red_flags": list(business_health.red_flags),
+            "pillars": [
+                {
+                    "pillar_id": p.pillar_id,
+                    "pillar_name": p.pillar_name,
+                    "weight": float(p.weight),
+                    "score": (int(p.score) if p.score is not None else None),
+                    "band": p.band,
+                    "red_flag_triggered": p.red_flag_triggered,
+                    "red_flag_note": p.red_flag_note,
+                    "assessed_question_count": p.assessed_question_count,
+                }
+                for p in business_health.pillars
+            ],
+        }
 
     def _action_dicts(self, recommendations, rec_type: RecommendationType) -> list[dict]:
         return [

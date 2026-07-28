@@ -13,6 +13,7 @@ from decimal import Decimal
 from sqlalchemy import delete, func, or_, select, text
 from sqlalchemy.orm import Session
 
+from app.models.schema import Archetypes
 from app.models import (
     AgentInterpretation,
     Answer,
@@ -170,6 +171,40 @@ class ReasoningRepository:
             {"s": distress_score},
         ).first()
         return row[0] if row and row[0] is not None else None
+
+    def get_archetypes(self) -> list["Archetypes"]:
+        """The seeded founder-archetype catalogue (8 rows) the Archetype engine
+        matches a founder against."""
+        return list(
+            self.db.execute(select(Archetypes).order_by(Archetypes.archetype_id))
+            .scalars()
+            .all()
+        )
+
+    def get_distress_signal_weights(self) -> dict[int, Decimal]:
+        """{signal_id: score_per_instance} for every psychological_state_signal.
+
+        The scoring table the Psychological State engine sums over. Core query
+        because psychological_state_signals has no ORM model in schema.py."""
+        rows = self.db.execute(
+            text(
+                "select signal_id, score_per_instance from psychological_state_signals "
+                "where is_active is true"
+            )
+        ).all()
+        return {int(r[0]): Decimal(r[1]) for r in rows if r[1] is not None}
+
+    def get_acute_distress_signal_id(self) -> int | None:
+        """The lowest-severity acute (State D) signal id -- the conservative unit
+        the deterministic distress fallback counts in. None if State D is unseeded."""
+        row = self.db.execute(
+            text(
+                "select signal_id from psychological_state_signals "
+                "where state_code = 'D' and is_active is true "
+                "order by score_per_instance asc, signal_id asc limit 1"
+            )
+        ).first()
+        return int(row[0]) if row else None
 
     def get_stage_order(self, stage_id: int | None) -> int | None:
         """The ordinal position (founder_stages.stage_order) of a stage, used to

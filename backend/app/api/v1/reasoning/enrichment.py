@@ -80,18 +80,24 @@ class RetrievalRootCauseEnricher:
             if not query:
                 enriched.append(detection)
                 continue
-            enriched.append(self._enrich_one(detection, query))
+            enriched.append(self._enrich_one(detection, query, context))
         return enriched
 
     # --- Internals --------------------------------------------------------
 
-    def _enrich_one(self, detection: RootCauseDetection, query: str) -> RootCauseDetection:
+    def _enrich_one(
+        self, detection: RootCauseDetection, query: str, context: ReasoningContext
+    ) -> RootCauseDetection:
+        # Pre-scope the supporting-evidence search to the cause's own category so
+        # we corroborate within the relevant slice instead of the whole corpus.
+        filters = self._filters_for(detection, context)
         try:
             evidence = self.retrieval.search(
                 query,
                 sources=self.sources,
                 k=self.top_k,
                 min_similarity=self.min_similarity,
+                filters=filters,
             )
         except (RetrievalError, EmbeddingError) as exc:
             if not self.fail_open:
@@ -112,6 +118,18 @@ class RetrievalRootCauseEnricher:
             semantic_evidence=tuple(evidence),
             contributing_factors=factors,
         )
+
+    def _filters_for(
+        self, detection: RootCauseDetection, context: ReasoningContext
+    ) -> dict[str, object]:
+        """Build the pre-filter for this detection. Category scopes the supporting
+        sources (problems, agent_interpretations) to the same diagnostic area;
+        sources that don't support a key simply ignore it."""
+        filters: dict[str, object] = {}
+        category = getattr(detection, "category", None)
+        if category and category != "Uncategorised":
+            filters["category"] = category
+        return filters
 
     def _query_text(self, root_cause) -> str:
         if root_cause is None:
