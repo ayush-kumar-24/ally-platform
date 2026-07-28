@@ -39,6 +39,7 @@ from app.api.v1.reasoning.engines import (
     SymptomDetector,
     WeightedConfidenceModel,
 )
+from app.api.v1.reasoning.engines.psychological_state import PsychologicalStateSignalScorer
 from app.api.v1.reasoning.enrichment import RetrievalRootCauseEnricher
 from app.api.v1.reasoning.interfaces import AnswerClassifier, RootCauseEnricher
 from app.api.v1.reasoning.repository import ReasoningRepository
@@ -177,6 +178,10 @@ def build_reasoning_service(db: Session) -> ReasoningService:
     config = build_reasoning_config(
         rule_values,
         confidence_strategy=build_confidence_strategy(rule_values),
+        # Distress scoring is now implemented (Doc-10 tables), replacing the
+        # fail-closed stub. The named PsychologicalStateEngine in the service
+        # uses the same scorer to compute sessions.session_distress_score.
+        distress_scorer=PsychologicalStateSignalScorer(repository),
     )
     diagnosis_engine = DeterministicDiagnosisEngine(
         category_engine=StandardDiagnosticEngine(get_answer_classifier()),
