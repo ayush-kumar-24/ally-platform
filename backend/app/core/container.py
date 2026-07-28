@@ -33,6 +33,10 @@ from app.api.v1.ally.prompts.grounding import default_grounded_prompt_manager
 from app.ai_chat.builders.context_window import ContextWindowBuilder
 from app.ai_chat.execution.chat_execution import ChatExecutionService
 from app.ai_chat.services.conversation import build_conversation_service
+from app.ai_chat.streaming.service import StreamingChatService
+from app.ai_chat.attachments.repository import InMemoryAttachmentRepository
+from app.ai_chat.attachments.service import AttachmentService
+from app.ai_chat.links.extractor import LinkExtractor
 
 
 class Container:
@@ -71,6 +75,13 @@ class Container:
             retrieval=self._retrieval_service,
             knowledge_graph=self._kg_service,
         )
+
+        # --- Phase 6 attachments + links (Milestone 4) -- additive, metadata only.
+        # Attachments are a process-level store (swap for a DB repository later); the
+        # link extractor is pure/stateless.
+        self._attachment_repository = InMemoryAttachmentRepository()
+        self._attachment_service = AttachmentService(self._attachment_repository)
+        self._link_extractor = LinkExtractor()
 
     # --- Provider registry ------------------------------------------------
 
@@ -141,6 +152,23 @@ class Container:
             prompt_manager=self._grounded_prompt_manager,
             execution=self._execution_service,
         )
+
+    def streaming_chat(self, db: Session) -> StreamingChatService:
+        """Assemble a request-scoped StreamingChatService that wraps the chat flow.
+        Additive: it composes the existing ChatExecutionService and the shared
+        conversation store; no existing service is changed."""
+        return StreamingChatService(
+            chat_service=self.chat_execution(db),
+            conversation_service=self._conversation_service,
+        )
+
+    # --- Phase 6 attachments + links accessors ----------------------------
+
+    def attachment_service(self) -> AttachmentService:
+        return self._attachment_service
+
+    def link_extractor(self) -> LinkExtractor:
+        return self._link_extractor
 
 
 # Application-wide container instance. Import and use `container.orchestrator(db)`.
