@@ -1,4 +1,4 @@
-name: Deploy Frontend to AWS S3 + CloudFront
+name: Deploy Frontend to AWS S3
 
 on:
   push:
@@ -38,8 +38,6 @@ jobs:
         working-directory: frontend
         run: npm run build
         env:
-          # Add any VITE_ env vars your app needs at build time here:
-          # VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
           NODE_ENV: production
 
       # 5. Configure AWS credentials
@@ -53,20 +51,5 @@ jobs:
       # 6. Sync /dist to S3 bucket
       - name: Deploy to S3
         run: |
-          # All hashed assets (JS, CSS, images) → aggressively cached (1 year)
-          aws s3 sync frontend/dist/ s3://${{ secrets.S3_BUCKET_NAME }}/ \
-            --delete \
-            --cache-control "public, max-age=31536000, immutable" \
-            --exclude "index.html"
-
-          # index.html → never cached (always serve fresh)
-          aws s3 cp frontend/dist/index.html s3://${{ secrets.S3_BUCKET_NAME }}/index.html \
-            --cache-control "no-cache, no-store, must-revalidate" \
-            --content-type "text/html"
-
-      # 7. Invalidate CloudFront cache so users get the latest build immediately
-      - name: Invalidate CloudFront cache
-        run: |
-          aws cloudfront create-invalidation \
-            --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
-            --paths "/*"
+          # Sync files (HTML, JS, CSS, assets) to S3 bucket
+          aws s3 sync frontend/dist/ s3://${{ secrets.S3_BUCKET_NAME }}/ --delete
