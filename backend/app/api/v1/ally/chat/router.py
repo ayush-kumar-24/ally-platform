@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 # Phase 3's get_founder_record resolves the AuthUser token -> Founders row.
 from app.api.deps import get_founder_record as get_current_founder
 from app.api.v1.ally.chat.deps import get_orchestrator_service
-from app.api.v1.ally.chat.schemas import ChatMetrics, ChatRequest, ChatResponse, ChatTrace
+from app.api.v1.ally.chat.schemas import ChatRequest, ChatResponse
 from app.api.v1.ally.orchestrator import FounderRequest, OrchestratorResponse, OrchestratorService
 from app.core.logger import logger
 from app.middleware.error_handler import AppError
@@ -92,7 +92,8 @@ def chat(
 
 
 def _to_response(result: OrchestratorResponse) -> ChatResponse:
-    m = result.trace.metrics
+    # The full trace (provider/model, counts, tokens, confidence) stays server-side;
+    # it is logged with the request_id, never returned to the founder.
     friendly_error = None if result.ok else _USER_MESSAGE.get(
         result.trace.failed_step or "", "The request could not be completed."
     )
@@ -101,20 +102,6 @@ def _to_response(result: OrchestratorResponse) -> ChatResponse:
         ok=result.ok,
         answer=result.answer,
         response_type=result.response_type,
-        confidence=float(result.confidence) if result.confidence is not None else None,
         citations=list(result.citations),
         error=friendly_error,
-        trace=ChatTrace(
-            request_id=result.trace.request_id,
-            duration_ms=result.trace.duration_ms,
-            completed_steps=list(result.trace.completed_steps),
-            failed_step=result.trace.failed_step,
-            provider=result.trace.provider,
-            model=result.trace.model,
-            metrics=ChatMetrics(
-                memory_reads=m.memory_reads, retrieval_hits=m.retrieval_hits,
-                graph_nodes=m.graph_nodes, prompt_version=m.prompt_version,
-                total_tokens=m.token_usage.total_tokens,
-            ),
-        ),
     )

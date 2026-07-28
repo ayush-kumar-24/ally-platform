@@ -86,9 +86,14 @@ class ArchetypeEngine:
         repository: ReasoningRepository,
         *,
         min_confidence: Decimal = Decimal("0.15"),
+        min_margin: Decimal = Decimal("0.05"),
     ):
         self.repository = repository
         self.min_confidence = min_confidence
+        # Minimum gap between the top and second archetype to call the assignment
+        # confident. Without it a near-tie (e.g. 0.007 apart) is presented as a
+        # definite archetype -- a coin flip sold as insight.
+        self.min_margin = min_margin
 
     def assign(self, answer_texts: Sequence[str]) -> ArchetypeMatch | None:
         """Best-fit archetype for the founder, or None when there is no signal
@@ -122,7 +127,10 @@ class ArchetypeEngine:
         if best_score <= 0:
             return None
         runner_up = scored[1][0] if len(scored) > 1 else Decimal("0")
-        confident = best_score >= self.min_confidence and best_score > runner_up
+        confident = (
+            best_score >= self.min_confidence
+            and (best_score - runner_up) >= self.min_margin
+        )
         return ArchetypeMatch(
             archetype_id=best.archetype_id, code=best.code, name=best.name,
             core_motivation=best.core_motivation, score=best_score,

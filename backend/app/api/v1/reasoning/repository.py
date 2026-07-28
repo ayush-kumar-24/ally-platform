@@ -194,6 +194,18 @@ class ReasoningRepository:
         ).all()
         return {int(r[0]): Decimal(r[1]) for r in rows if r[1] is not None}
 
+    def get_empathy_protocol(self, prompt_code: str) -> str | None:
+        """The distress empathy-protocol text from prompt_library (category
+        'distress') for a State A/B/C/D protocol code. None if unseeded/inactive."""
+        row = self.db.execute(
+            text(
+                "select prompt_text from prompt_library "
+                "where prompt_code = :c and category = 'distress' and is_active is true"
+            ),
+            {"c": prompt_code},
+        ).first()
+        return row[0] if row else None
+
     def get_acute_distress_signal_id(self) -> int | None:
         """The lowest-severity acute (State D) signal id -- the conservative unit
         the deterministic distress fallback counts in. None if State D is unseeded."""

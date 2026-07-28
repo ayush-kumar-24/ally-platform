@@ -64,6 +64,17 @@ class PsychologicalStateSignalScorer:
         return total
 
 
+# Acute-state code -> prompt_library distress empathy protocol. The deterministic
+# proxy detects State D (crisis) from distress-tagged Reds; A/B/C (stress /
+# withdrawal / defensiveness) need the LLM linguistic detector.
+_STATE_PROTOCOL = {
+    "A": "PROMPT-EMPATHY-STRESS",
+    "B": "PROMPT-EMPATHY-WITHDRAWAL",
+    "C": "PROMPT-EMPATHY-DEFENSIVENESS",
+    "D": "PROMPT-EMPATHY-DISTRESS",
+}
+
+
 @dataclass(frozen=True)
 class DistressAssessment:
     """Result of a psychological-state assessment for one session."""
@@ -71,6 +82,12 @@ class DistressAssessment:
     session_distress_score: Decimal
     signal_occurrences: Mapping[str, int]
     is_high_distress: bool
+    # The session must leave the confidence loop for the wellbeing path.
+    distress_override: bool = False
+    distress_red_count: int = 0
+    # The empathy protocol (prompt_library, category='distress') to apply.
+    empathy_protocol_code: str | None = None
+    empathy_protocol_text: str | None = None
 
 
 class PsychologicalStateEngine:
@@ -92,10 +109,12 @@ class PsychologicalStateEngine:
     def assess(self, signal_occurrences: Mapping[str, int]) -> DistressAssessment:
         """Score an already-detected occurrence map (the LLM detector's output)."""
         score = self.scorer.session_distress_score(signal_occurrences)
+        high = score >= self.high_distress_score
         return DistressAssessment(
             session_distress_score=score,
             signal_occurrences=dict(signal_occurrences),
-            is_high_distress=score >= self.high_distress_score,
+            is_high_distress=high,
+            distress_override=high,
         )
 
     def assess_from_diagnosis(
@@ -103,14 +122,36 @@ class PsychologicalStateEngine:
         classifications: list[AnswerClassification],
         questions: dict[int, Question],
     ) -> DistressAssessment:
-        """Deterministic fallback until the LLM linguistic detector is wired.
+        """Deterministic detection from distress-tagged Red answers.
 
-        Each distress-tagged Red answer is counted as one occurrence of the
-        lowest-severity acute (State D) signal -- a deliberately conservative
-        floor so we never fabricate a High-Distress score from thin evidence
-        (2+ distress Reds already trip `distress_mode` independently). Reaching
-        the 36+ score threshold is left to the richer LLM signal detection."""
-        return self.assess(self._detect_deterministic(classifications, questions))
+        A distress-tagged question probes exactly the State-D acute signals
+        (identity collapse, hopelessness, isolation, sustained neglect), so a Red
+        on one IS an acute State-D signal. Per DISTRESS_SCORE_RED and
+        session_state_bands band 4, ANY single such signal is a complete distress
+        override and classifies the session High Distress -- regardless of the
+        cumulative score. We therefore FAIL CLOSED: one distress Red => High
+        Distress + override. The cumulative score is kept for when the LLM adds
+        the State A/B/C linguistic signals; until then the persisted score is
+        floored to the High-Distress threshold so the confidence model's existing
+        score>=threshold override + null reliability fire through unchanged."""
+        occ = self._detect_deterministic(classifications, questions)
+        acute = sum(occ.values())  # distress-tagged Reds = State-D acute signals
+        cumulative = self.scorer.session_distress_score(occ)
+        is_high = acute >= 1 or cumulative >= self.high_distress_score
+        score = max(cumulative, self.high_distress_score) if is_high else cumulative
+        protocol_code = _STATE_PROTOCOL["D"] if acute >= 1 else None
+        protocol_text = (
+            self.repository.get_empathy_protocol(protocol_code) if protocol_code else None
+        )
+        return DistressAssessment(
+            session_distress_score=score,
+            signal_occurrences=occ,
+            is_high_distress=is_high,
+            distress_override=is_high,
+            distress_red_count=acute,
+            empathy_protocol_code=protocol_code,
+            empathy_protocol_text=protocol_text,
+        )
 
     def _detect_deterministic(
         self,

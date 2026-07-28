@@ -22,30 +22,15 @@ class ChatRequest(BaseModel):
     response_category: str = Field(default="diagnosis_answer", max_length=64)
 
 
-class ChatMetrics(BaseModel):
-    memory_reads: int
-    retrieval_hits: int
-    graph_nodes: int
-    prompt_version: int | None
-    total_tokens: int
-
-
-class ChatTrace(BaseModel):
-    request_id: str
-    duration_ms: float
-    completed_steps: list[str]
-    failed_step: str | None
-    provider: str | None
-    model: str | None
-    metrics: ChatMetrics
-
-
 class ChatResponse(BaseModel):
+    """Founder-facing response. Deliberately excludes the confidence score
+    (scores are never shown to the founder during a session) and all internal
+    orchestration detail (provider/model, memory/retrieval/graph counts, token
+    usage, pipeline steps) -- those stay server-side (logs), never on the wire."""
+
     request_id: str
     ok: bool
     answer: str
     response_type: str
-    confidence: float | None
     citations: list[str]
     error: str | None
-    trace: ChatTrace
