@@ -27,6 +27,9 @@ class _FakeRepo:
         # lowest-severity State-D signal (score 3) -> id 19
         return 19
 
+    def get_empathy_protocol(self, code):
+        return f"GUIDANCE::{code}"
+
 
 class _Q:
     def __init__(self, is_distress_tagged):
@@ -82,19 +85,31 @@ def test_assess_below_threshold_not_high():
 
 # --- engine: deterministic fallback from diagnosis --------------------------
 
-def test_deterministic_counts_distress_tagged_reds():
+def test_single_distress_red_triggers_override_fail_closed():
+    # Spec (DISTRESS_SCORE_RED / band 4): ONE distress-tagged Red is a complete
+    # override and classifies the session High Distress, regardless of cumulative.
+    eng = _engine(high=Decimal("36"))
+    a = eng.assess_from_diagnosis([_cls(1, ScoreLabel.RED)], {1: _Q(True)})
+    assert a.distress_red_count == 1
+    assert a.is_high_distress is True
+    assert a.distress_override is True
+    # Score floored to the High-Distress threshold so the confidence override fires.
+    assert a.session_distress_score == Decimal("36")
+    assert a.empathy_protocol_code == "PROMPT-EMPATHY-DISTRESS"
+    assert a.empathy_protocol_text == "GUIDANCE::PROMPT-EMPATHY-DISTRESS"
+
+
+def test_flagged_answer_also_counts():
     eng = _engine()
     qs = {1: _Q(True), 2: _Q(True), 3: _Q(False)}
     cls = [
-        _cls(1, ScoreLabel.RED),                       # distress-tagged Red -> counts
-        _cls(2, ScoreLabel.AMBER),                     # tagged but not Red -> no
+        _cls(1, ScoreLabel.RED),                            # distress-tagged Red
+        _cls(2, ScoreLabel.AMBER),                          # tagged but not Red -> no
         _cls(3, ScoreLabel.RED, is_distress_flagged=True),  # flagged Red -> counts
     ]
     a = eng.assess_from_diagnosis(cls, qs)
-    # 2 occurrences x signal 19 (weight 3) = 6
-    assert a.signal_occurrences == {"19": 2}
-    assert a.session_distress_score == Decimal("6")
-    assert a.is_high_distress is False
+    assert a.distress_red_count == 2 and a.is_high_distress is True
+    assert a.session_distress_score >= Decimal("36")
 
 
 def test_deterministic_no_distress_is_zero():
@@ -103,3 +118,5 @@ def test_deterministic_no_distress_is_zero():
     a = eng.assess_from_diagnosis([_cls(1, ScoreLabel.RED)], qs)
     assert a.signal_occurrences == {}
     assert a.session_distress_score == Decimal("0")
+    assert a.is_high_distress is False and a.distress_override is False
+    assert a.empathy_protocol_code is None

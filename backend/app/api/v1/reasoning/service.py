@@ -233,7 +233,7 @@ class ReasoningService:
         # Distress overrides routing entirely: wellbeing before diagnostic
         # completeness. The session leaves the confidence loop for a support path
         # rather than being told to keep answering questions.
-        if confidence_inputs.distress_override:
+        if confidence_inputs.distress_override or distress.distress_override:
             routing_state = DISTRESS_SUPPORT_ROUTE
         self._log_stage(
             "confidence", session_id, start,
@@ -298,12 +298,13 @@ class ReasoningService:
             scored=scored,
             overall_confidence=overall_confidence,
             routing_state=routing_state,
-            distress_mode=diagnosis.distress_mode,
+            distress_mode=diagnosis.distress_mode or distress.is_high_distress,
             recommendations=recommendations,
             founder_report=founder_report,
             internal_report=internal_report,
             archetype=archetype,
             business_health=business_health,
+            distress_assessment=distress,
             force=force,
         )
 
@@ -357,6 +358,7 @@ class ReasoningService:
         internal_report,
         archetype=None,
         business_health=None,
+        distress_assessment=None,
         force: bool = False,
     ) -> ReasoningResult | None:
         start = time.perf_counter()
@@ -410,6 +412,7 @@ class ReasoningService:
                 session.session_id,
                 self._build_internal_report_row(
                     session, founder, report.report_id, internal_report,
+                    distress_assessment,
                 ),
             )
 
@@ -478,7 +481,8 @@ class ReasoningService:
         )
 
     def _build_internal_report_row(
-        self, session, founder: Founder, report_id: int, internal_report
+        self, session, founder: Founder, report_id: int, internal_report,
+        distress_assessment=None,
     ) -> InternalIntelligenceReport:
         """Map the internal report onto internal_intelligence_reports.
 
@@ -498,6 +502,14 @@ class ReasoningService:
             for s in internal_report.symptoms
             if s.is_distress
         ]
+        # Record the empathy protocol to apply (prompt_library, category='distress')
+        # for the detected acute state -- service-role only, never shown to the founder.
+        if distress_assessment is not None and distress_assessment.empathy_protocol_code:
+            distress_signals.insert(0, {
+                "empathy_protocol": distress_assessment.empathy_protocol_code,
+                "guidance": distress_assessment.empathy_protocol_text,
+                "distress_red_count": distress_assessment.distress_red_count,
+            })
         return InternalIntelligenceReport(
             founder_id=founder.founder_id,
             session_id=session.session_id,
