@@ -35,15 +35,13 @@ def build_report_pdf(narrative) -> bytes:
         story.append(Paragraph(_esc(s.heading), h))
         if s.prose:
             story.append(Paragraph(_esc(s.prose), body))
-        # Business DNA: render the pillar score cards as a small table.
+        # Business DNA: render the pillar bands as a small table (no raw scores).
         pillars = (s.facts or {}).get("pillars")
         if pillars:
-            rows = [["Pillar", "Score", "Band"]]
+            rows = [["Pillar", "Band"]]
             for p in pillars:
-                rows.append([p.get("pillar_name", ""),
-                             "-" if p.get("score") is None else str(p["score"]),
-                             p.get("band") or "-"])
-            t = Table(rows, colWidths=[70*mm, 25*mm, 55*mm])
+                rows.append([p.get("pillar_name", ""), p.get("band") or "-"])
+            t = Table(rows, colWidths=[95*mm, 55*mm])
             t.setStyle(TableStyle([
                 ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0f2e25")),
                 ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),

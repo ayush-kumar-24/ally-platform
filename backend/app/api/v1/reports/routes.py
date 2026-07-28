@@ -89,6 +89,7 @@ async def full_report(
         sections=[SectionOut(key=s.key, heading=s.heading, prose=s.prose, facts=s.facts)
                   for s in n.sections],
         unpopulated_sections=list(n.unpopulated_sections),
+        narrator_provenance=n.narrator_provenance,
     )
 
 

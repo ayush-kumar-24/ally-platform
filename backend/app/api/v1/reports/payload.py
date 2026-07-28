@@ -39,10 +39,11 @@ class RootCauseFinding:
 class PillarFinding:
     pillar_id: int
     name: str
-    score: int | None
-    band: str | None
+    score: int | None                 # engine-internal: NOT exposed in the report
+    band: str | None                  # score_bands level (shown)
     red_flag_triggered: bool
     red_flag_note: str | None
+    band_description: str | None = None  # score_bands description for `band` (shown)
 
 
 @dataclass(frozen=True)
@@ -168,10 +169,18 @@ def build_report_payload(db: Session, report) -> ReportPayload:
 
     # --- business health (from the persisted business_dna snapshot) ---
     bd = report.business_dna or {}
+    # score_bands are the spec-owned band label + written description per pillar.
+    # We surface the band + its paragraph and keep the raw number internal, so the
+    # report never reduces a founder to a grade (readiness_pillars.score_bands).
+    band_desc: dict[tuple, str] = {}
+    for row in db.execute(text("select pillar_id, score_bands from readiness_pillars")).mappings():
+        for b in (row["score_bands"] or []):
+            band_desc[(row["pillar_id"], b.get("level"))] = b.get("description")
     pillars = tuple(
         PillarFinding(
             pillar_id=p.get("pillar_id"), name=p.get("pillar_name"),
             score=p.get("score"), band=p.get("band"),
+            band_description=band_desc.get((p.get("pillar_id"), p.get("band"))),
             red_flag_triggered=bool(p.get("red_flag_triggered")),
             red_flag_note=p.get("red_flag_note"),
         )

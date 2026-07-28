@@ -4,11 +4,17 @@ Order of sections is chosen by variant + the hard rules; the NARRATOR only fills
 prose. Facts on each section are engine-owned and pass through untouched.
 
 Numeric-score decision (made explicit, per the brief):
-  * EXPOSED: business-health overall score + per-pillar scores (0-100). These are
-    the Business-DNA product itself (the score cards), not an ad-hoc grade.
-  * NOT EXPOSED: an overall "clarity score", a root-cause "confidence %", and the
-    archetype fit_score. Those read as grades and are deliberately omitted from the
-    founder-facing report (see the flag in the module report).
+  * The report exposes NO raw numbers. Business health and each pillar are shown as
+    their score_bands LABEL + written description (readiness_pillars.score_bands) --
+    the paragraph exists precisely so a band can be shown instead of a grade. Raw
+    scores stay internal (engine + dashboard). This keeps the report off the
+    grade-anxiety surface the diagnosis engine was designed to avoid.
+  * ALSO NOT EXPOSED: an overall "clarity score", a root-cause "confidence %", and
+    the archetype fit_score -- all read as grades.
+
+Narrator provenance: every section records which narrator produced it (template /
+llm / llm_fallback_template). A silent LLM->template fallback would make report
+quality vary invisibly, so `narrator_provenance` surfaces it (owner view only).
 """
 
 from __future__ import annotations
@@ -51,8 +57,9 @@ class ReportNarrative:
     variant: ReportVariant
     tone_persona: str | None
     sections: tuple[Section, ...]
-    exposes_numeric_scores: bool = True   # business-health/pillar scores only
+    exposes_numeric_scores: bool = False  # report shows bands + descriptions, not numbers
     unpopulated_sections: tuple[str, ...] = UNPOPULATED_SECTIONS
+    narrator_provenance: dict[str, Any] = field(default_factory=dict)
 
     def as_dict(self) -> dict:
         return {
@@ -63,6 +70,7 @@ class ReportNarrative:
                 for s in self.sections
             ],
             "unpopulated_sections": list(self.unpopulated_sections),
+            "narrator_provenance": self.narrator_provenance,
         }
 
 
@@ -87,17 +95,42 @@ class ReportNarrativeGenerator:
         order = self._section_order(payload, variant)
 
         sections: list[Section] = []
+        sources: list[str] = []
         for key in order:
             slots, facts = self._slots_and_facts(key, payload, separate_identity)
-            prose = self.narrator.narrate(key, slots, tone)
+            prose, source = self._narrate(key, slots, tone)
             if not prose and not facts:
                 continue  # missing value -> omit the section, never guess
-            sections.append(Section(key, _HEADINGS.get(key, key.title()), prose, facts))
+            if prose:
+                sources.append(source)
+                facts = {**facts, "_narrator": source}
+            heading = _HEADINGS.get(key, key.title())
+            if key == "psychological_note" and facts.get("section") == "H":
+                heading = "Section H — Psychological State Note"
+            sections.append(Section(key, heading, prose, facts))
+
+        by_source: dict[str, int] = {}
+        for s in sources:
+            by_source[s] = by_source.get(s, 0) + 1
+        provenance = {
+            "narrator": type(self.narrator).__name__,
+            "by_source": by_source,
+            "degraded": any(s == "llm_fallback_template" for s in sources),
+        }
 
         return ReportNarrative(
             report_id=payload.report_id, variant=variant,
             tone_persona=payload.tone_persona, sections=tuple(sections),
+            narrator_provenance=provenance,
         )
+
+    def _narrate(self, key: str, slots: dict, tone: ToneGuidance) -> tuple[str, str]:
+        """Return (prose, source). Prefers a provenance-aware narrator; falls back
+        to the plain protocol (recorded as 'template') for older narrators."""
+        with_source = getattr(self.narrator, "narrate_with_source", None)
+        if callable(with_source):
+            return with_source(key, slots, tone)
+        return self.narrator.narrate(key, slots, tone), "template"
 
     # --- ordering (hard rules 1 + distress) -------------------------------
     def _section_order(self, p: ReportPayload, variant: ReportVariant) -> list[str]:
@@ -150,30 +183,44 @@ class ReportNarrativeGenerator:
             return slots, facts
 
         if key == "psychological_note":
-            # Hard rule 2: the Founder Readiness red-flag note surfaces (Section H)
-            # regardless of the overall score. Identity fusion -> separation language.
-            fr = next((p for p in p.pillars if p.name == "Founder Readiness"
-                       and p.red_flag_triggered), None)
+            # Section H (Psychological State Note): a NAMED, spec-defined section
+            # triggered when Founder Readiness is in the Critical Gap band (0-35).
+            # Its content is that band's written description. It surfaces regardless
+            # of the overall score. Identity fusion -> separation language.
+            fr = next((pl for pl in p.pillars if pl.name == "Founder Readiness"), None)
+            critical_gap = bool(fr and (fr.band == "Critical Gap" or fr.red_flag_triggered))
+            section_h_text = fr.band_description if (fr and critical_gap) else None
             note = fr.red_flag_note if fr else None
-            slots = {"red_flag_note": note, "separate_identity": separate_identity}
-            facts = {"psychology_flagged": p.psychology_flagged,
-                     "red_flag_pillars": [rp.name for rp in p.red_flag_pillars]}
-            if not note and not p.psychology_flagged and not p.red_flag_pillars:
+            slots = {"section_h_text": section_h_text, "red_flag_note": note,
+                     "separate_identity": separate_identity}
+            facts = {
+                "section": "H" if critical_gap else None,
+                "trigger": ("founder_readiness_critical_gap" if critical_gap
+                            else "psychology_category"),
+                "psychology_flagged": p.psychology_flagged,
+                "red_flag_pillars": [rp.name for rp in p.red_flag_pillars],
+                "founder_readiness_band": fr.band if fr else None,
+            }
+            if not section_h_text and not note and not p.psychology_flagged and not p.red_flag_pillars:
                 return {}, {}
             return slots, facts
 
         if key == "business_dna":
-            pillars = [{"pillar_name": pf.name, "score": pf.score, "band": pf.band,
+            # Bands + descriptions, NOT raw numbers. Founder Readiness in Critical
+            # Gap is deferred to Section H (its full paragraph lives there) so the
+            # report does not print the same block twice.
+            pillars = [{"pillar_name": pf.name, "band": pf.band,
+                        "band_description": (
+                            None if (pf.name == "Founder Readiness" and pf.band == "Critical Gap")
+                            else pf.band_description),
                         "red_flag_triggered": pf.red_flag_triggered,
                         "red_flag_note": pf.red_flag_note} for pf in p.pillars]
-            slots = {"overall_score": p.business_health_overall,
-                     "band": p.business_health_band, "pillars": pillars}
+            slots = {"overall_band": p.business_health_band, "pillars": pillars}
             # Hard rule 2 in the facts: red-flag pillars are listed even when the
-            # overall number is healthy.
-            facts = {"overall_score": p.business_health_overall,
-                     "band": p.business_health_band, "pillars": pillars,
+            # overall band is healthy.
+            facts = {"overall_band": p.business_health_band, "pillars": pillars,
                      "red_flag_pillars": [rp.name for rp in p.red_flag_pillars]}
-            if p.business_health_overall is None and not pillars:
+            if p.business_health_band is None and not pillars:
                 return {}, {}
             return slots, facts
 

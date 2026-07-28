@@ -20,9 +20,10 @@ class ReportView(BaseModel):
     variant: str
     tone_persona: str | None = None
     generated_at: datetime | None = None
-    exposes_numeric_scores: bool = True
+    exposes_numeric_scores: bool = False
     sections: list[SectionOut]
     unpopulated_sections: list[str] = []
+    narrator_provenance: dict = {}
 
 
 class SectionSlice(BaseModel):
