@@ -37,6 +37,9 @@ class TemplateNarrator:
         fn = getattr(self, f"_{section_key}", None)
         return fn(slots, tone) if fn else ""
 
+    def narrate_with_source(self, section_key, slots, tone) -> tuple[str, str]:
+        return self.narrate(section_key, slots, tone), "template"
+
     # --- sections --------------------------------------------------------
     def _founder_summary(self, s, tone):
         name = s.get("founder_name") or "there"
@@ -61,24 +64,33 @@ class TemplateNarrator:
         )
 
     def _psychological_note(self, s, tone):
-        note = s.get("red_flag_note") or tone.session_framing
+        # Section H content is the Critical Gap band description; fall back to the
+        # red-flag note / session framing only if that is absent.
+        body = s.get("section_h_text") or s.get("red_flag_note") or tone.session_framing
+        if not body:
+            return ""
         base = "A note on where you are right now, before anything about the business. "
         sep = s.get("separate_identity")
         sep_txt = " The business has challenges. You are not those challenges." if sep else ""
-        return (base + note + sep_txt) if note else ""
+        return base + body + sep_txt
 
     def _business_dna(self, s, tone):
+        # Bands + written descriptions -- never raw numbers.
         parts = []
-        overall, band = s.get("overall_score"), s.get("band")
-        if overall is not None:
-            band_txt = f" ({band})" if band else ""
-            parts.append(f"Across the six readiness pillars, business health sits at {overall} out of 100{band_txt}.")
-        strong = [p for p in s.get("pillars", []) if p.get("score") is not None and p["score"] >= 70]
-        weak = [p for p in s.get("pillars", []) if p.get("score") is not None and p["score"] < 40]
+        band = s.get("overall_band")
+        if band:
+            parts.append(f'Across the six readiness pillars, your business health reads as "{band}".')
+        pillars = s.get("pillars", [])
+        strong = [p for p in pillars if p.get("band") == "Strong"]
         if strong:
-            parts.append("Strongest: " + ", ".join(f"{p['pillar_name']} ({p['score']})" for p in strong) + ".")
-        if weak:
-            parts.append("Needs attention: " + ", ".join(f"{p['pillar_name']} ({p['score']})" for p in weak) + ".")
+            parts.append("Strongest: " + ", ".join(p["pillar_name"] for p in strong) + ".")
+        concern = [p for p in pillars if p.get("band") in ("Critical Gap", "Needs Attention")]
+        for p in concern:
+            desc = p.get("band_description")
+            line = f"{p['pillar_name']} — {p.get('band')}."
+            if desc:
+                line += f" {desc}"
+            parts.append(line)
         return " ".join(parts)
 
     def _problem_path(self, s, tone):
@@ -142,6 +154,12 @@ class LLMSectionNarrator:
         self.fallback = fallback or TemplateNarrator()
 
     def narrate(self, section_key: str, slots: dict[str, Any], tone: ToneGuidance) -> str:
+        return self.narrate_with_source(section_key, slots, tone)[0]
+
+    def narrate_with_source(self, section_key, slots, tone) -> tuple[str, str]:
+        """Return (prose, source). A silent fallback would hide degraded quality,
+        so the source distinguishes real LLM output ('llm') from a template
+        fallback after an error/empty output ('llm_fallback_template')."""
         import json
 
         prompt = (
@@ -155,4 +173,6 @@ class LLMSectionNarrator:
             out = (self.llm(prompt) or "").strip()
         except Exception:
             out = ""
-        return out or self.fallback.narrate(section_key, slots, tone)
+        if out:
+            return out, "llm"
+        return self.fallback.narrate(section_key, slots, tone), "llm_fallback_template"
