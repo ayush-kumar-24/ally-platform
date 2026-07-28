@@ -29,6 +29,10 @@ from app.api.v1.ally.orchestrator import AgentOrchestrator, OrchestratorService
 from app.api.v1.ally.prompts.library import default_prompt_manager
 from app.api.v1.ally.rag.repository import InMemoryVectorRetrievalRepository
 from app.api.v1.ally.rag.service import build_retrieval_service
+from app.api.v1.ally.prompts.grounding import default_grounded_prompt_manager
+from app.ai_chat.builders.context_window import ContextWindowBuilder
+from app.ai_chat.execution.chat_execution import ChatExecutionService
+from app.ai_chat.services.conversation import build_conversation_service
 
 
 class Container:
@@ -54,6 +58,19 @@ class Container:
         # --- Prompt library + LLM execution (register real providers here) ---
         self._prompt_manager = default_prompt_manager()
         self._execution_service = self._build_execution()
+
+        # --- Phase 6 AI Chat flow (Milestone 2) -- additive, composes the frozen
+        # foundation. The orchestrator wiring above is untouched. Conversations are
+        # a process-level store (swap for a DB repository later); the grounded
+        # prompt manager is separate from the orchestrator's standard manager.
+        self._conversation_service = build_conversation_service()
+        self._grounded_prompt_manager = default_grounded_prompt_manager()
+        self._context_window_builder = ContextWindowBuilder(
+            conversation_service=self._conversation_service,
+            memory=self._memory_service,
+            retrieval=self._retrieval_service,
+            knowledge_graph=self._kg_service,
+        )
 
     # --- Provider registry ------------------------------------------------
 
@@ -101,6 +118,29 @@ class Container:
             execution=self.execution(),
         )
         return OrchestratorService(agent)
+
+    # --- Phase 6 chat flow accessors --------------------------------------
+
+    def conversation_service(self):
+        return self._conversation_service
+
+    def context_window_builder(self):
+        return self._context_window_builder
+
+    def grounded_prompt_manager(self):
+        return self._grounded_prompt_manager
+
+    def chat_execution(self, db: Session) -> ChatExecutionService:
+        """Assemble a request-scoped ChatExecutionService: the per-request context
+        builder (needs the DB session) over the process-level conversation store,
+        context-window builder, grounded prompt manager and execution service."""
+        return ChatExecutionService(
+            context_builder=self.context_builder(db),
+            conversation_service=self._conversation_service,
+            context_window_builder=self._context_window_builder,
+            prompt_manager=self._grounded_prompt_manager,
+            execution=self._execution_service,
+        )
 
 
 # Application-wide container instance. Import and use `container.orchestrator(db)`.
