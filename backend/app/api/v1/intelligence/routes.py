@@ -84,6 +84,7 @@ def _report_detail(db: Session, report) -> ReportDetail:
         generated_at=report.generated_at,
         insights=report.insights,
         founder_dna=report.founder_dna,
+        business_dna=report.business_dna,
         top_root_causes=top_root_causes,
         recommended_interventions=recommended,
         confirm_actions=list(report.confirm_actions or []),

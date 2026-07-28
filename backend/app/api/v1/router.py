@@ -1,7 +1,9 @@
 from fastapi import APIRouter
 from sqlalchemy import text
 
+from app.api.v1.ally.chat.router import router as ally_router
 from app.api.v1.auth.routes import router as auth_router
+from app.api.v1.dashboard.routes import router as dashboard_router
 from app.api.v1.diagnosis.router import router as diagnosis_router
 from app.api.v1.discovery.routes import router as discovery_router
 from app.api.v1.intelligence.routes import router as intelligence_router
@@ -23,6 +25,8 @@ api_router.include_router(notifications_router)
 api_router.include_router(knowledge_router)
 api_router.include_router(intelligence_router)
 api_router.include_router(reference_router)
+api_router.include_router(dashboard_router)
+api_router.include_router(ally_router)
 
 
 @api_router.get("/health")

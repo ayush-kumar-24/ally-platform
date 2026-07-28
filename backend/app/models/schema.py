@@ -112,29 +112,6 @@ class BusinessDimensions(Base):
     updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
 
 
-class FounderDimensions(Base):
-    __tablename__ = 'founder_dimensions'
-    __table_args__ = (
-        CheckConstraint("dimension_type::text = ANY (ARRAY['categorical'::character varying, 'narrative'::character varying, 'behavioral_inferred'::character varying]::text[])", name='founder_dimensions_dimension_type_check'),
-        PrimaryKeyConstraint('dimension_id', name='founder_dimensions_pkey'),
-        UniqueConstraint('dimension_code', name='founder_dimensions_dimension_code_key'),
-    )
-
-    dimension_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    dimension_code: Mapped[str] = mapped_column(String(20), nullable=False)
-    dimension_name: Mapped[str] = mapped_column(String(100), nullable=False)
-    description: Mapped[str] = mapped_column(Text, nullable=False)
-    scoring_rubric: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
-    display_order: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text('0'))
-    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
-    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
-    dimension_type: Mapped[Optional[str]] = mapped_column(String(20))
-    why_it_matters: Mapped[Optional[str]] = mapped_column(Text)
-
-    visual_question_bank: Mapped[list['VisualQuestionBank']] = relationship('VisualQuestionBank', back_populates='primary_dimension')
-    founder_dimension_profile: Mapped[list['FounderDimensionProfile']] = relationship('FounderDimensionProfile', back_populates='dimension')
-
-
 class FounderStages(Base):
     __tablename__ = 'founder_stages'
     __table_args__ = (
@@ -413,7 +390,6 @@ class Founders(Base):
     data_deletion_requests: Mapped['DataDeletionRequests'] = relationship('DataDeletionRequests', uselist=False, back_populates='founder')
     discovery_calls: Mapped[list['DiscoveryCalls']] = relationship('DiscoveryCalls', back_populates='founder')
     founder_context: Mapped['FounderContext'] = relationship('FounderContext', uselist=False, back_populates='founder')
-    founder_dimension_profile: Mapped[list['FounderDimensionProfile']] = relationship('FounderDimensionProfile', back_populates='founder')
     founder_visual_choices: Mapped[list['FounderVisualChoices']] = relationship('FounderVisualChoices', back_populates='founder')
     notifications: Mapped[list['Notifications']] = relationship('Notifications', back_populates='founder')
     privacy_requests: Mapped[list['PrivacyRequests']] = relationship('PrivacyRequests', back_populates='founder')
@@ -520,7 +496,6 @@ class VisualQuestionBank(Base):
     __tablename__ = 'visual_question_bank'
     __table_args__ = (
         CheckConstraint("primary_stage_group::text = ANY (ARRAY['Stage 0'::character varying, 'Stage 0→1'::character varying, 'Stage 1→10+'::character varying]::text[])", name='visual_question_bank_primary_stage_group_check'),
-        ForeignKeyConstraint(['primary_dimension_id'], ['founder_dimensions.dimension_id'], name='visual_question_bank_primary_dimension_id_fkey'),
         PrimaryKeyConstraint('visual_question_id', name='visual_question_bank_pkey'),
         UniqueConstraint('visual_question_code', name='visual_question_bank_visual_question_code_key'),
     )
@@ -540,7 +515,6 @@ class VisualQuestionBank(Base):
     primary_dimension_id: Mapped[Optional[int]] = mapped_column(Integer)
     primary_stage_group: Mapped[Optional[str]] = mapped_column(String(20))
 
-    primary_dimension: Mapped[Optional['FounderDimensions']] = relationship('FounderDimensions', back_populates='visual_question_bank')
     founder_visual_choices: Mapped[list['FounderVisualChoices']] = relationship('FounderVisualChoices', back_populates='visual_question')
 
 
@@ -734,32 +708,6 @@ class FounderContext(Base):
     updated_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True), server_default=text('now()'))
 
     founder: Mapped['Founders'] = relationship('Founders', back_populates='founder_context')
-
-
-class FounderDimensionProfile(Base):
-    __tablename__ = 'founder_dimension_profile'
-    __table_args__ = (
-        CheckConstraint("source::text = ANY (ARRAY['onboarding'::character varying, 'settings_update'::character varying, 'behavioral_tracking'::character varying, 'diagnosis_session'::character varying]::text[])", name='founder_dimension_profile_source_check'),
-        ForeignKeyConstraint(['dimension_id'], ['founder_dimensions.dimension_id'], name='founder_dimension_profile_dimension_id_fkey'),
-        ForeignKeyConstraint(['founder_id'], ['founders.founder_id'], ondelete='CASCADE', name='founder_dimension_profile_founder_id_fkey'),
-        PrimaryKeyConstraint('profile_id', name='founder_dimension_profile_pkey'),
-        Index('idx_fdp_current', 'founder_id', 'dimension_id', postgresql_where='(is_current = true)'),
-        Index('idx_fdp_founder', 'founder_id'),
-    )
-
-    profile_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    founder_id: Mapped[int] = mapped_column(Integer, nullable=False)
-    dimension_id: Mapped[int] = mapped_column(Integer, nullable=False)
-    is_current: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text('true'))
-    recorded_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
-    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
-    internal_score: Mapped[Optional[decimal.Decimal]] = mapped_column(Numeric(5, 2))
-    display_value: Mapped[Optional[str]] = mapped_column(Text)
-    confidence_score: Mapped[Optional[decimal.Decimal]] = mapped_column(Numeric(4, 3))
-    source: Mapped[Optional[str]] = mapped_column(String(30))
-
-    dimension: Mapped['FounderDimensions'] = relationship('FounderDimensions', back_populates='founder_dimension_profile')
-    founder: Mapped['Founders'] = relationship('Founders', back_populates='founder_dimension_profile')
 
 
 class FounderVisualChoices(Base):
