@@ -78,6 +78,7 @@ class ReportDetail(BaseModel):
     generated_at: datetime
 
     insights: list | dict | None = None
+    founder_dna: dict | None = None
     top_root_causes: list[RootCauseRef]
     recommended_interventions: list[InterventionRef]
     confirm_actions: list = []
