@@ -20,8 +20,7 @@ from sqlalchemy.orm import Session
 
 from app.api.v1.ally.context.builder import AllyContextBuilder
 from app.api.v1.ally.context.repository import AllyContextRepository
-from app.api.v1.ally.execution.provider import MockLLMProvider
-from app.api.v1.ally.execution.service import build_execution_service
+from app.integrations.llm.routing import build_failover_execution
 from app.api.v1.ally.kg.repository import InMemoryKnowledgeGraphRepository
 from app.api.v1.ally.kg.service import build_knowledge_graph_service
 from app.api.v1.ally.memory.repository import InMemoryMemoryRepository
@@ -59,12 +58,15 @@ class Container:
     # --- Provider registry ------------------------------------------------
 
     def _build_execution(self):
-        """Wire the LLM execution service. Today: MockLLMProvider (offline). To go
-        live, register real LLMProvider implementations by name here (e.g.
-        {"openai": OpenAIProvider(...), "anthropic": AnthropicProvider(...),
-        "gemini": GeminiProvider(...)}) and let settings pick the default -- the
-        router, orchestrator and DTOs never change."""
-        return build_execution_service({"mock": MockLLMProvider()})
+        """Wire the LLM execution service from environment + routing configuration.
+
+        `mock` is always registered (deterministic/offline default and the final
+        fallback link); OpenAI, Claude and Gemini are registered only when their API
+        key is present. LLMRoutingConfig declares the default provider + ordered
+        fallback chain; a FailoverLLMProvider (registered as "auto") tries them in
+        order, preferring healthy providers. The AIRouter is used unchanged.
+        """
+        return build_failover_execution()
 
     # --- Subsystem accessors (seams for future backends) ------------------
 
