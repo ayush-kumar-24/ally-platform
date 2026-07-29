@@ -10,9 +10,9 @@ from __future__ import annotations
 import re
 
 from app.ai_chat.links.errors import InvalidLinkError
-from app.ai_chat.links.metadata import build_metadata, detect_type
+from app.ai_chat.links.metadata import build_metadata
 from app.ai_chat.links.schemas import Link, LinkType
-from app.ai_chat.links.validators import is_valid_url, normalize_url
+from app.ai_chat.links.validators import is_valid_url
 
 _URL_FINDER = re.compile(r"https?://[^\s<>\"']+", re.IGNORECASE)
 _TRAILING = ".,;:!?)]}>\"'"

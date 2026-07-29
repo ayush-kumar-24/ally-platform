@@ -38,7 +38,6 @@ from app.ai_chat.schemas.conversation import (
     ConversationSummary,
     MessageRole,
     MessageTokenUsage,
-    TokenStats,
 )
 
 _ACTIVE = ConversationStatus.ACTIVE
