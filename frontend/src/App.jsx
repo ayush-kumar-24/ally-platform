@@ -34,6 +34,7 @@ import Report from './pages/Report';
 import Billing from './pages/Billing';
 import HelpSupport from './pages/HelpSupport';
 import Toast from './components/ui/Toast';
+import CookieBanner from './components/CookieBanner';
 
 // Show splash only once per session (won't replay on route changes)
 const splashShown = sessionStorage.getItem('splashShown') === 'true';
@@ -90,6 +91,7 @@ export default function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       <Toast message={toast} />
+      <CookieBanner />
     </>
   );
 }

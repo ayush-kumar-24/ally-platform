@@ -1305,5 +1305,293 @@ img,svg,video,canvas{max-width:100%}
   }
 }
 
+/* ==========================================
+   Cookie Consent Banner Styles
+   ========================================== */
+.cookie-banner-overlay {
+  position: fixed;
+  bottom: 24px;
+  left: 24px;
+  right: 24px;
+  z-index: 9999;
+  display: flex;
+  justify-content: center;
+  pointer-events: none; /* Let clicks pass through overlay background */
+}
+
+.cookie-banner-card {
+  pointer-events: auto; /* Re-enable pointer events for the card */
+  max-width: 960px;
+  width: 100%;
+  background: radial-gradient(circle at top left, rgba(14, 42, 28, 0.95), rgba(6, 20, 13, 0.98));
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(52, 211, 153, 0.22);
+  border-radius: 20px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.65), 0 0 30px rgba(52, 211, 153, 0.04);
+  padding: 24px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  animation: cookieSlideUp 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+  color: #fff;
+}
+
+.cookie-banner-header {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.cookie-banner-icon-wrapper {
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  background: rgba(52, 211, 153, 0.08);
+  border: 1px solid rgba(52, 211, 153, 0.25);
+  display: grid;
+  place-items: center;
+  color: var(--emerald-bright);
+  flex-shrink: 0;
+  box-shadow: 0 0 15px rgba(52, 211, 153, 0.1);
+}
+
+.cookie-banner-title-area {
+  flex: 1;
+}
+
+.cookie-banner-title-area h3 {
+  margin: 0 0 6px 0;
+  font-family: var(--serif);
+  font-size: 20px;
+  font-weight: 500;
+  color: #fff;
+  letter-spacing: 0.2px;
+}
+
+.cookie-banner-desc {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--on-dark-muted);
+}
+
+.cookie-banner-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 16px;
+  gap: 16px;
+}
+
+.cookie-banner-left-actions {
+  display: flex;
+}
+
+.cookie-banner-right-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.cookie-btn {
+  padding: 10px 22px;
+  border-radius: 10px;
+  font-size: 13.5px;
+  font-weight: 600;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.cookie-btn-emerald {
+  background: #fff;
+  color: #16241c;
+  border: none;
+  box-shadow: 0 4px 12px rgba(255, 255, 255, 0.08);
+}
+
+.cookie-btn-emerald:hover {
+  background: #f0f0f0;
+  transform: translateY(-1.5px);
+  box-shadow: 0 6px 18px rgba(255, 255, 255, 0.15);
+}
+
+.cookie-btn-outline {
+  background: transparent;
+  color: var(--on-dark);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.cookie-btn-outline:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.25);
+  transform: translateY(-1.5px);
+}
+
+.cookie-btn-link {
+  background: transparent;
+  color: var(--on-dark-dim);
+  border: none;
+  text-decoration: underline;
+  padding: 0;
+  font-size: 13px;
+}
+
+.cookie-btn-link:hover {
+  color: #fff;
+}
+
+/* Customize Panel options */
+.cookie-customize-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px 20px;
+  background: rgba(255, 255, 255, 0.015);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 14px;
+  margin-top: 4px;
+  animation: scaleIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.cookie-option {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+}
+
+.cookie-option-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cookie-option-name {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.cookie-option-desc {
+  font-size: 12px;
+  color: var(--on-dark-muted);
+  line-height: 1.4;
+}
+
+/* Custom switch slider styling */
+.cookie-switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.cookie-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.cookie-slider {
+  position: absolute;
+  cursor: pointer;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  transition: 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  border-radius: 34px;
+}
+
+.cookie-slider:before {
+  position: absolute;
+  content: "";
+  height: 16px;
+  width: 16px;
+  left: 3px;
+  bottom: 3px;
+  background: var(--on-dark-dim);
+  transition: 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  border-radius: 50%;
+}
+
+.cookie-switch input:checked + .cookie-slider {
+  background: rgba(52, 211, 153, 0.15);
+  border-color: rgba(52, 211, 153, 0.4);
+}
+
+.cookie-switch input:checked + .cookie-slider:before {
+  transform: translateX(20px);
+  background: var(--emerald-bright);
+  box-shadow: 0 0 8px rgba(52, 211, 153, 0.5);
+}
+
+.cookie-switch.disabled {
+  opacity: 0.5;
+}
+
+.cookie-switch.disabled .cookie-slider {
+  cursor: not-allowed;
+}
+
+@keyframes cookieSlideUp {
+  from {
+    transform: translateY(50px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Responsive configurations */
+@media (max-width: 768px) {
+  .cookie-banner-overlay {
+    left: 16px;
+    right: 16px;
+    bottom: 16px;
+  }
+
+  .cookie-banner-card {
+    padding: 20px;
+    gap: 16px;
+  }
+
+  .cookie-banner-header {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .cookie-banner-icon-wrapper {
+    width: 40px;
+    height: 40px;
+  }
+
+  .cookie-banner-actions {
+    flex-direction: column-reverse;
+    align-items: stretch;
+    gap: 16px;
+  }
+
+  .cookie-banner-right-actions {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .cookie-btn {
+    width: 100%;
+  }
+
+  .cookie-banner-left-actions {
+    justify-content: center;
+  }
+}
+
+
 
 
