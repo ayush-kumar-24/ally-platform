@@ -137,6 +137,11 @@ export default function LandingPage() {
   const [timelineActiveIndex, setTimelineActiveIndex] = useState(-1);
   const [timelineHeight, setTimelineHeight] = useState(0);
   const [showAuthTransition, setShowAuthTransition] = useState(false); // kept for legacy, unused
+  const [showDrawer, setShowDrawer] = useState(false);
+  const [selectedProvider, setSelectedProvider] = useState(null);
+  const [agreeTerms, setAgreeTerms] = useState(false);
+  const [agreeDiagnosis, setAgreeDiagnosis] = useState(false);
+  const [validationError, setValidationError] = useState('');
 
   const demoPanelRef = useRef(null);
   const timelineRef = useRef(null);
@@ -373,13 +378,32 @@ export default function LandingPage() {
   };
 
   const handleLogin = (provider) => {
+    setSelectedProvider(provider);
+    setShowDrawer(true);
+    setValidationError('');
+  };
+
+  const submitLogin = () => {
+    if (!agreeTerms) {
+      setValidationError('Please agree to the Terms of Service and Privacy Policy to continue.');
+      return;
+    }
+    setValidationError('');
     setUser(prev => ({
       ...prev,
-      authProvider: provider,
+      authProvider: selectedProvider,
       name: 'Ayush Sharma',
-      email: provider === 'linkedin' ? 'ayush.sharma@brightloom.in' : 'ayush@brightloom.in',
-      initials: 'AS'
+      email: selectedProvider === 'linkedin' ? 'ayush.sharma@brightloom.in' : 'ayush@brightloom.in',
+      initials: 'AS',
+      consents: {
+        termsAccepted: true,
+        termsVersion: '1.0',
+        privacyVersion: '1.0',
+        diagnosisConsent: agreeDiagnosis,
+        consentedAt: new Date().toISOString()
+      }
     }));
+    setShowDrawer(false);
     navigate('/guided/welcome');
   };
 
@@ -448,7 +472,6 @@ export default function LandingPage() {
           <div className="j-eye"><span className="lv"></span> GoXL &middot; Ally</div>
           <h1>Meet Ally, your <em>Companion</em></h1>
           <p className="lp-hero-sub">In about 20 minutes, Ally learns how you lead and finds what's really holding you and your business back. You'll leave with a clarity report and your next move.</p>
-
           <div className="lp-auth" role="group" aria-label="Login options">
             <button className="lp-auth-btn" onClick={() => handleLogin('google')} type="button">
               <svg className="g" viewBox="0 0 48 48" aria-hidden="true">
@@ -915,6 +938,88 @@ export default function LandingPage() {
           </div>
         </div>
       </footer>
+
+      {showDrawer && (
+        <div className="drawer-overlay" role="dialog" aria-modal="true" aria-labelledby="drawer-title" onClick={() => setShowDrawer(false)}>
+          <div className="drawer-panel" onClick={(e) => e.stopPropagation()}>
+            <button className="drawer-close-btn" onClick={() => setShowDrawer(false)} type="button" aria-label="Close dialog">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M18 6 6 18M6 6l12 12"/>
+              </svg>
+            </button>
+            <div className="drawer-header">
+              <h2 className="drawer-title" id="drawer-title">Consent Required</h2>
+              <p className="drawer-subtitle">
+                To continue with <strong style={{ textTransform: 'capitalize' }}>{selectedProvider}</strong>, please review and accept our data terms.
+              </p>
+            </div>
+
+            <div className="drawer-body">
+              {validationError && (
+                <div className="consent-error" style={{ margin: '0 0 16px' }} role="alert">
+                  {validationError}
+                </div>
+              )}
+
+              <div className="drawer-consent-box">
+                <label className="consent-item">
+                  <input 
+                    type="checkbox" 
+                    id="consent-terms-drawer"
+                    checked={agreeTerms} 
+                    onChange={(e) => {
+                      setAgreeTerms(e.target.checked);
+                      if (e.target.checked) setValidationError('');
+                    }} 
+                  />
+                  <span className="consent-text" style={{ color: 'var(--on-dark-muted)' }}>
+                    I agree to the <a href="/terms" target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>Terms of Service</a> and <a href="/privacy" target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>Privacy Policy</a> <span className="version-tag">v1.0</span> <span className="req">*</span>
+                  </span>
+                </label>
+                
+                <label className="consent-item">
+                  <input 
+                    type="checkbox" 
+                    id="consent-diagnosis-drawer"
+                    checked={agreeDiagnosis} 
+                    onChange={(e) => setAgreeDiagnosis(e.target.checked)} 
+                  />
+                  <span className="consent-text" style={{ color: 'var(--on-dark-muted)' }}>
+                    I consent to the collection and processing of my business's diagnostic information as described in the Privacy Policy.
+                  </span>
+                </label>
+              </div>
+            </div>
+
+            <div className="drawer-footer">
+              <button 
+                className={`drawer-action-btn ${selectedProvider === 'google' ? 'submit-google' : 'submit-linkedin'}`} 
+                onClick={submitLogin}
+                disabled={!agreeTerms}
+              >
+                {selectedProvider === 'google' ? (
+                  <>
+                    <svg className="g" viewBox="0 0 48 48" style={{ width: '19px', height: '19px' }} aria-hidden="true">
+                      <path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.6l6.8-6.8C35.6 2.4 30.1 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.2 17.7 9.5 24 9.5z" />
+                      <path fill="#4285F4" d="M46.1 24.6c0-1.6-.1-3.1-.4-4.6H24v9.1h12.4c-.5 2.9-2.1 5.3-4.6 7l7.1 5.5c4.2-3.9 6.6-9.6 6.6-16.4z" />
+                      <path fill="#FBBC05" d="M10.5 28.3c-.5-1.4-.7-2.9-.7-4.3s.3-3 .7-4.3l-7.9-6.1C1 16.7 0 20.2 0 24s1 7.3 2.6 10.4l7.9-6.1z" />
+                      <path fill="#34A853" d="M24 48c6.1 0 11.3-2 15-5.5l-7.1-5.5c-2 1.4-4.6 2.2-7.9 2.2-6.3 0-11.6-3.7-13.5-9.1l-7.9 6.1C6.5 42.6 14.6 48 24 48z" />
+                    </svg>
+                    Continue with Google
+                  </>
+                ) : (
+                  <>
+                    <svg className="g" viewBox="0 0 24 24" fill="#fff" style={{ width: '19px', height: '19px' }} aria-hidden="true">
+                      <path d="M4.98 3.5A2.5 2.5 0 1 0 5 8.5a2.5 2.5 0 0 0-.02-5zM3 9h4v12H3zM9 9h3.8v1.7h.05c.53-1 1.83-2.05 3.77-2.05 4.03 0 4.78 2.65 4.78 6.1V21H19.6v-5.3c0-1.26-.02-2.9-1.77-2.9-1.77 0-2.04 1.38-2.04 2.8V21H9z" />
+                    </svg>
+                    Continue with LinkedIn
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
