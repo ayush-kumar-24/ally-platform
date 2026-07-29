@@ -39,6 +39,12 @@ from app.ai_chat.attachments.service import AttachmentService
 from app.ai_chat.links.extractor import LinkExtractor
 from app.ai_chat.suggestions.repository import InMemorySuggestionRepository
 from app.ai_chat.suggestions.service import SuggestionService
+from app.settings.repository import SqlAlchemySettingsRepository
+from app.settings.service import SettingsService
+from app.admin.audit import InMemoryAuditRepository
+from app.admin.permissions import AdminRegistry
+from app.admin.repository import InMemoryAdminRepository, InMemoryAnnouncementRepository
+from app.admin.service import AdminService
 
 
 class Container:
@@ -89,6 +95,14 @@ class Container:
         # rule-based; composes chat artifacts, never executes actions or calls an LLM.
         self._suggestion_repository = InMemorySuggestionRepository()
         self._suggestion_service = SuggestionService(self._suggestion_repository)
+
+        # --- Phase 12 admin & operations (independent) -- process-level in-memory
+        # repositories (a production adapter reads the DB + ai_chat stores). The admin
+        # registry (email -> role allowlist) is loaded from the environment.
+        self._admin_repository = InMemoryAdminRepository()
+        self._announcement_repository = InMemoryAnnouncementRepository()
+        self._audit_repository = InMemoryAuditRepository()
+        self._admin_registry = AdminRegistry()
 
     # --- Provider registry ------------------------------------------------
 
@@ -179,6 +193,25 @@ class Container:
 
     def suggestion_service(self) -> SuggestionService:
         return self._suggestion_service
+
+    # --- Phase 11 settings (DB-backed, per-request) -----------------------
+
+    def settings_service(self, db: Session) -> SettingsService:
+        """Request-scoped SettingsService over the SQLAlchemy repository. Tests
+        override the endpoint dependency with an in-memory-backed service."""
+        return SettingsService(SqlAlchemySettingsRepository(db))
+
+    # --- Phase 12 admin accessors -----------------------------------------
+
+    def admin_registry(self) -> AdminRegistry:
+        return self._admin_registry
+
+    def admin_service(self) -> AdminService:
+        return AdminService(
+            admin_repository=self._admin_repository,
+            announcement_repository=self._announcement_repository,
+            audit_repository=self._audit_repository,
+        )
 
 
 # Application-wide container instance. Import and use `container.orchestrator(db)`.
