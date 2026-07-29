@@ -45,6 +45,8 @@ from app.admin.audit import InMemoryAuditRepository
 from app.admin.permissions import AdminRegistry
 from app.admin.repository import InMemoryAdminRepository, InMemoryAnnouncementRepository
 from app.admin.service import AdminService
+from app.planning.db_repository import SqlAlchemyPlanningRepository
+from app.planning.service import PlanningService
 
 
 class Container:
@@ -212,6 +214,13 @@ class Container:
             announcement_repository=self._announcement_repository,
             audit_repository=self._audit_repository,
         )
+
+    # --- Planning accessor (DB-backed, per-request) -----------------------
+
+    def planning_service(self, db: Session) -> PlanningService:
+        """Request-scoped PlanningService over the SQLAlchemy repository. Tests
+        override the endpoint dependency with an in-memory-backed service."""
+        return PlanningService(SqlAlchemyPlanningRepository(db))
 
 
 # Application-wide container instance. Import and use `container.orchestrator(db)`.
