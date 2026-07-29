@@ -6,11 +6,11 @@ import { useApp } from '../../context/AppContext';
    Faithful port of #v-profile from ally-platform-main.html. */
 const PROFILE_Q = [
   /* BUSINESS DNA */
-  { k: 'stage', g: 'business', lbl: 'Entrepreneurial Stage', q: 'First — which stage best describes where you are right now?', opts: ['Idea', 'Early traction', 'Scaling', 'Plateau'], def: 'Early traction' },
+  { k: 'stage', g: 'business', lbl: 'Entrepreneurial Stage', q: 'First — which stage best describes where you are right now?', opts: ['Ideation', 'Validation', 'Prototype / MVP', 'Early Traction', 'Growth / Scaling', 'Expansion', 'Maturity', 'Exit'], def: 'Early Traction' },
   { k: 'building', g: 'business', lbl: "What You're Building", q: 'In one line — what are you building?', ph: 'e.g. an AI copilot that prevents SaaS churn', def: 'An AI copilot that helps SaaS teams prevent churn' },
   { k: 'problem', g: 'business', lbl: 'Problem Statement', q: "What's the core problem you take away for people?", ph: 'The pain you solve…', def: "Teams lose customers to churn they can't see coming" },
   { k: 'customer', g: 'business', lbl: 'Customer Segment', q: 'Who is this really for? Describe your ideal customer.', ph: 'e.g. B2B SaaS teams, 6–50 people', def: 'B2B SaaS product & growth teams' },
-  { k: 'industry', g: 'business', lbl: 'Industry', q: 'Which industry feels closest to home?', opts: ['SaaS / B2B', 'D2C / Consumer', 'Fintech', 'Healthtech', 'Marketplace', 'AI / ML', 'Services'], def: 'SaaS / B2B' },
+  { k: 'industry', g: 'business', lbl: 'Industry', q: 'Which industry feels closest to home?', opts: ['Technology & SaaS', 'Services & Consulting', 'Manufacturing & D2C', 'Social Impact & NGO'], def: 'Technology & SaaS' },
   { k: 'challenges', g: 'business', lbl: 'Biggest Challenges', q: "What's the biggest thing holding you back right now?", opts: ['Retention', 'Acquisition', 'Activation', 'Pricing', 'Hiring', 'Focus', 'Cash flow'], def: 'Retention' },
   { k: 'goal90', g: 'business', lbl: '90-Day Goal', q: 'Fast-forward 90 days — what has to be true for you to feel it went well?', ph: 'Your next 90 days…', def: 'Lift 30-day retention by 10 points' },
   { k: 'vision', g: 'business', lbl: 'One-Year Vision', q: 'Now zoom out — where do you want this to be in a year?', ph: 'A year from now…', def: 'The default way SaaS teams predict and prevent churn' },
@@ -23,10 +23,14 @@ const PROFILE_Q = [
 ];
 
 const PQ_ADAPT = {
-  Idea: 'What belief are you betting everything on?',
-  'Early traction': 'What early signal tells you this is working?',
-  Scaling: 'What has to break for you to reach the next level?',
-  Plateau: 'What are you no longer willing to tolerate?',
+  Ideation: 'What belief are you betting everything on?',
+  Validation: 'What early signal would prove people actually want this?',
+  'Prototype / MVP': 'What is the one thing your MVP has to get right?',
+  'Early Traction': 'What early signal tells you this is working?',
+  'Growth / Scaling': 'What has to break for you to reach the next level?',
+  Expansion: 'What new bet are you making to grow beyond today?',
+  Maturity: 'What got you here that might not get you further?',
+  Exit: 'What has to be true for this to be worth handing on?',
 };
 
 const GROUPS = [

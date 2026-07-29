@@ -37,10 +37,15 @@ _HEADINGS = {
     "acknowledgement": "Before we begin",
     "support_recommendation": "A first step for you",
     "hedge": "A note on certainty",
+    "discovery_cta": "Your next move with Ally",
 }
 
 # Frontend sections with NO backend source -- surfaced empty, never fabricated.
-UNPOPULATED_SECTIONS = ("supporting_evidence", "recommended_roadmap", "why_steps")
+# "expected_impact" covers the two frontend boxes (Expected Business / Founder Impact);
+# it was previously missing here, so it went absent SILENTLY instead of being declared.
+UNPOPULATED_SECTIONS = (
+    "supporting_evidence", "recommended_roadmap", "why_steps", "expected_impact",
+)
 
 
 @dataclass(frozen=True)
@@ -84,20 +89,25 @@ class ReportNarrativeGenerator:
         *,
         session_framing: str | None = None,
         distress_protocol: str | None = None,
-        separate_identity: bool = False,
+        separate_identity: bool | None = None,
     ) -> ReportNarrative:
         tone = ToneGuidance(
             persona=payload.tone_persona,
             session_framing=session_framing,
             distress_protocol=distress_protocol,
         )
+        # Identity-fusion separation language is driven by the payload's chronic-state
+        # derivation unless a caller overrides it explicitly.
+        sep_identity = payload.separate_identity if separate_identity is None else separate_identity
         variant = select_variant(payload)
         order = self._section_order(payload, variant)
 
         sections: list[Section] = []
         sources: list[str] = []
         for key in order:
-            slots, facts = self._slots_and_facts(key, payload, separate_identity)
+            slots, facts = self._slots_and_facts(key, payload, sep_identity)
+            if key == "business_dna" and variant is ReportVariant.DISTRESS:
+                slots = {**slots, "brief": True}  # de-prioritise business under distress
             prose, source = self._narrate(key, slots, tone)
             if not prose and not facts:
                 continue  # missing value -> omit the section, never guess
@@ -138,6 +148,7 @@ class ReportNarrativeGenerator:
 
         if variant is ReportVariant.DISTRESS:
             # Acknowledgement FIRST; a support recommendation BEFORE any business.
+            # NO discovery CTA -- no sales/discovery content reaches a distressed founder.
             head = ["acknowledgement", "support_recommendation"]
             body = ["founder_dna", "business_dna", "problem_path", "priority_actions"]
             if show_psych:
@@ -159,6 +170,10 @@ class ReportNarrativeGenerator:
         if show_psych:
             insert_at = 2 if p.psychology_flagged else order.index("business_dna") + 1
             order.insert(insert_at, "psychological_note")
+
+        # Discovery CTA is the last section on every NON-distress variant (it is how
+        # GoXL converts, and the frontend renders it last).
+        order.append("discovery_cta")
         return order
 
     # --- slots + facts per section ---------------------------------------
@@ -192,7 +207,8 @@ class ReportNarrativeGenerator:
             section_h_text = fr.band_description if (fr and critical_gap) else None
             note = fr.red_flag_note if fr else None
             slots = {"section_h_text": section_h_text, "red_flag_note": note,
-                     "separate_identity": separate_identity}
+                     "separate_identity": separate_identity,
+                     "psychology_flagged": p.psychology_flagged}
             facts = {
                 "section": "H" if critical_gap else None,
                 "trigger": ("founder_readiness_critical_gap" if critical_gap
@@ -252,10 +268,12 @@ class ReportNarrativeGenerator:
             return slots, facts
 
         if key == "acknowledgement":
-            return {"framing": p.session_state_framing if hasattr(p, "session_state_framing") else None}, {}
+            return {}, {"wellbeing_first": True}
         if key == "support_recommendation":
             return {}, {"wellbeing_first": True}
         if key == "hedge":
             return {}, {"provisional": True}
+        if key == "discovery_cta":
+            return {"cta": True}, {"cta": True}
 
         return {}, {}

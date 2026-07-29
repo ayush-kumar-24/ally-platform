@@ -91,6 +91,13 @@ class ReportPayload:
     cat_risk_threshold: float = 0.30
     generate_report_min: float = 80.0
 
+    # Chronic-state adjustment (chronic_state_inference). The engine detects the
+    # chronic state; the report applies its recommended_report_adjustment. The
+    # adjustment text is GUIDANCE for the narrator -- it is never rendered.
+    chronic_state: str | None = None
+    chronic_adjustment: str | None = None
+    separate_identity: bool = False
+
     @property
     def psychology_flagged(self) -> bool:
         """Founder Psychology takes narrative precedence when the psychology
@@ -188,6 +195,21 @@ def build_report_payload(db: Session, report) -> ReportPayload:
     )
     red_flag_pillars = tuple(p for p in pillars if p.red_flag_triggered)
 
+    # --- chronic state (engine writes it onto founder_dna; report applies it) ---
+    # Detection of the chronic state is the psychological engine's job; the report
+    # only CONSUMES it. recommended_report_adjustment steers the narrator and is never
+    # printed. Identity Fusion additionally turns on the separation language.
+    chronic_state = (report.founder_dna or {}).get("chronic_state")
+    chronic_adjustment = None
+    separate_identity = False
+    if chronic_state:
+        chronic_adjustment = db.execute(
+            text("select recommended_report_adjustment from chronic_state_inference "
+                 "where chronic_state = :c"),
+            {"c": chronic_state},
+        ).scalar()
+        separate_identity = chronic_state.startswith("Identity Fusion")
+
     # --- archetype (from founder_dna) ---
     archetype = None
     a = (report.founder_dna or {}).get("archetype")
@@ -236,4 +258,6 @@ def build_report_payload(db: Session, report) -> ReportPayload:
         category_risk_scores=dict(sess.get("category_risk_scores") or {}),
         cat_risk_threshold=float(thresholds.get("CAT_RISK_THRESHOLD", Decimal("0.30"))),
         generate_report_min=float(thresholds.get("CONFIDENCE_GENERATE_REPORT_MIN", Decimal("80"))),
+        chronic_state=chronic_state, chronic_adjustment=chronic_adjustment,
+        separate_identity=separate_identity,
     )

@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./styles/tokens.css";
 @import "./styles/platform.css";
 @import "./styles/founder-dna.css";
 @import "./styles/report.css";
@@ -44,51 +45,16 @@
   /* ── Lines ── */
   --color-line: rgba(255,255,255,.08);
   --color-line-2: rgba(255,255,255,.13);
-  /* ── Fonts ── */
-  --font-display: 'Montserrat', 'Inter Tight', 'Inter', system-ui, sans-serif;
-  --font-body: 'Inter', system-ui, sans-serif;
-  --font-serif: 'Fraunces', 'Georgia', serif;
+  /* ── Fonts ── self-hosted variable faces first (see main.jsx @fontsource
+     imports); plain names kept as graceful fallback; then generic. ── */
+  --font-display: 'Montserrat Variable', 'Montserrat', 'Inter Tight Variable', 'Inter Tight', system-ui, sans-serif;
+  --font-body: 'Inter Variable', 'Inter', system-ui, sans-serif;
+  --font-serif: 'Fraunces Variable', 'Fraunces', 'Georgia', serif;
 }
 
-/* ── CSS custom properties (consumed by platform.css) ── */
-:root {
-  --sb: 248px;
-  --rail: 68px;
-  --on-dark: #eaf3ee;
-  --on-dark-muted: #a7c0b4;
-  --on-dark-dim: #7d9488;
-  --forest: #1B4332;
-  --forest-deep: #0E2A1C;
-  --forest-night: #06140d;
-  --emerald: #10B981;
-  --emerald-bright: #34d399;
-  --emerald-glow: #5eead4;
-  --lime-edge: #A8D94A;
-  --clay: #b7895f;
-  --ink: #16241c;
-  --muted: #556458;
-  --muted-2: #6c7a70;
-  --ivory: #f7f1eb;
-  --ivory-2: #fbf7f2;
-  --ivory-3: #efe6d9;
-  --bd: #e7e0d6;
-  --bd-2: #d8cfc2;
-  --line: rgba(255,255,255,.08);
-  --line-2: rgba(255,255,255,.13);
-  --line-dark: rgba(255,255,255,.08);
-  --line-dark-2: rgba(255,255,255,.13);
-  --glass-dark: rgba(255,255,255,.04);
-  --shadow-card: 0 1px 2px -1px rgba(6,20,13,.14),0 6px 16px -6px rgba(6,20,13,.18);
-  --shadow-dark: 0 2px 6px -2px rgba(0,0,0,.4),0 24px 60px -20px rgba(0,0,0,.55);
-  --display: 'Montserrat', 'Inter Tight', 'Inter', system-ui, sans-serif;
-  --body: 'Inter', system-ui, sans-serif;
-  --serif: 'Fraunces', 'Georgia', serif;
-  --primary: cubic-bezier(.22,1,.3,1);
-  --secondary: cubic-bezier(.2,.7,.2,1);
-  --micro: cubic-bezier(.34,1.4,.5,1);
-  --ease: cubic-bezier(.22,1,.3,1);
-  --ease-spring: cubic-bezier(.34,1.4,.5,1);
-}
+/* CSS custom properties (colours, type, spacing, radii, shadows, easings) now
+   live in ./styles/tokens.css — the single source both the app and the PDF
+   print layout read. Imported at the top of this file. */
 
 /* ── Global resets ── */
 *, *::before, *::after { box-sizing: border-box; }
