@@ -15,9 +15,12 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_founder_record
 from app.api.v1.reports.generator import ReportNarrativeGenerator
+from app.api.v1.reports.gotenberg import GotenbergError, render_pdf
 from app.api.v1.reports.payload import build_report_payload
 from app.api.v1.reports.pdf import build_report_pdf
+from app.api.v1.reports.print_html import build_report_html
 from app.api.v1.reports.repository import reports_repository
+from app.core.config import settings
 from app.api.v1.reports.schemas import (
     InsightsView, ReportView, SectionOut, SectionSlice, ShareCreated,
     SharedReportView, SharedSection,
@@ -129,10 +132,21 @@ async def recommendations(report_id: int, founder: Founder = Depends(get_founder
 async def export_pdf(report_id: int, founder: Founder = Depends(get_founder_record),
                      db: Session = Depends(get_db)) -> Response:
     n = _build_narrative(db, _owned_report(db, founder, report_id))
-    pdf = build_report_pdf(n)
+    # Screen-parity path: print HTML -> Gotenberg. Fall back to reportlab if the
+    # sidecar is unreachable, and FLAG which renderer produced the PDF so a
+    # degraded (non-parity) export is never silent.
+    try:
+        pdf = render_pdf(build_report_html(n), base_url=settings.GOTENBERG_URL)
+        renderer = "gotenberg"
+    except GotenbergError:
+        pdf = build_report_pdf(n)
+        renderer = "reportlab-fallback"
     return Response(
         content=pdf, media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="clarity-report-{report_id}.pdf"'},
+        headers={
+            "Content-Disposition": f'attachment; filename="clarity-report-{report_id}.pdf"',
+            "X-PDF-Renderer": renderer,
+        },
     )
 
 
