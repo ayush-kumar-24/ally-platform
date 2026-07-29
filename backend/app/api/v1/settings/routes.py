@@ -6,6 +6,8 @@
     GET  /settings/notifications  notification preferences
     PATCH /settings/notifications partial update (merges, doesn't replace)
     GET  /settings/security       security overview
+    GET  /settings/privacy        list the founder's privacy / data-rights requests
+    POST /settings/privacy        submit a new privacy request (queued for admin review)
 
 Note on scope: **profile settings** live on `/profile` (name + the 13 fields), so
 they are not duplicated here. **Password management** does not exist -- this is
@@ -13,14 +15,19 @@ social login only (Google/LinkedIn), so credentials, password reset and 2FA are
 owned by the identity provider, surfaced read-only under /settings/security.
 """
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_founder_record
 from app.core.auth import AuthUser, get_current_founder
 from app.db.session import get_db
 from app.models import Founder
-from app.repositories import founder_repository
+from app.repositories import founder_repository, privacy_request_repository
+from app.schemas.privacy import (
+    PrivacyRequestCreate,
+    PrivacyRequestListResponse,
+    PrivacyRequestRead,
+)
 from app.schemas.settings import (
     AccountSettingsRead,
     AccountSettingsUpdate,
@@ -97,3 +104,40 @@ async def update_notifications(
 async def read_security(auth_user: AuthUser = Depends(get_current_founder)):
     """Social login only -- no password. Credentials are provider-managed."""
     return _security(auth_user)
+
+
+# --- privacy center (data rights) ------------------------------------------
+
+@router.post("/privacy", response_model=PrivacyRequestRead, status_code=status.HTTP_201_CREATED)
+async def submit_privacy_request(
+    payload: PrivacyRequestCreate,
+    founder: Founder = Depends(get_founder_record),
+    db: Session = Depends(get_db),
+):
+    """Queue a data-rights request for admin review.
+
+    Allowed types (enforced by DB constraint): view_data, download_data,
+    correct_data, withdraw_consent, restrict_processing, portability.
+    The row is created with status='pending' and routed to admins for fulfilment.
+    """
+    return privacy_request_repository.submit(
+        db,
+        founder_id=founder.founder_id,
+        request_type=payload.request_type,
+        request_details=payload.request_details,
+    )
+
+
+@router.get("/privacy", response_model=PrivacyRequestListResponse)
+async def list_privacy_requests(
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    founder: Founder = Depends(get_founder_record),
+    db: Session = Depends(get_db),
+):
+    """Return all privacy/data-rights requests submitted by the signed-in founder."""
+    items = privacy_request_repository.list_for_founder(
+        db, founder.founder_id, limit=limit, offset=offset
+    )
+    total = privacy_request_repository.count_for_founder(db, founder.founder_id)
+    return PrivacyRequestListResponse(items=items, total=total)

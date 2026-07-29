@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useApp } from './context/AppContext';
+import ErrorBoundary from './components/ErrorBoundary';
 import SplashScreen from './components/SplashScreen';
 import PlatformLayout from './layouts/PlatformLayout';
 import GuidedLayout from './layouts/GuidedLayout';
@@ -33,7 +34,10 @@ import PlanYourDay from './pages/PlanYourDay';
 import Report from './pages/Report';
 import Billing from './pages/Billing';
 import HelpSupport from './pages/HelpSupport';
+import TermsOfService from './pages/TermsOfService';
+import PrivacyPolicy from './pages/PrivacyPolicy';
 import Toast from './components/ui/Toast';
+import CookieBanner from './components/CookieBanner';
 
 // Show splash only once per session (won't replay on route changes)
 const splashShown = sessionStorage.getItem('splashShown') === 'true';
@@ -51,10 +55,33 @@ export default function App() {
     <>
       {showSplash && <SplashScreen onDone={handleSplashDone} />}
       <Routes>
-        <Route element={<LandingLayout />}>
+        {/* ── Landing ── */}
+        <Route element={
+          <ErrorBoundary label="Landing" fallbackPath="/">
+            <LandingLayout />
+          </ErrorBoundary>
+        }>
           <Route path="/" element={<LandingPage />} />
         </Route>
-        <Route path="/guided" element={<GuidedLayout />}>
+
+        {/* ── Legal pages ── */}
+        <Route path="/terms" element={
+          <ErrorBoundary label="Terms of Service" fallbackPath="/">
+            <TermsOfService />
+          </ErrorBoundary>
+        } />
+        <Route path="/privacy" element={
+          <ErrorBoundary label="Privacy Policy" fallbackPath="/">
+            <PrivacyPolicy />
+          </ErrorBoundary>
+        } />
+
+        {/* ── Guided onboarding ── */}
+        <Route path="/guided" element={
+          <ErrorBoundary label="Guided Onboarding" fallbackPath="/">
+            <GuidedLayout />
+          </ErrorBoundary>
+        }>
           <Route index element={<Navigate to="login" replace />} />
           <Route path="login" element={<Login />} />
           <Route path="resume" element={<Resume />} />
@@ -72,7 +99,13 @@ export default function App() {
           <Route path="report" element={<GuidedReport />} />
           <Route path="*" element={<Navigate to="/guided/login" replace />} />
         </Route>
-        <Route path="/app" element={<PlatformLayout />}>
+
+        {/* ── Main platform ── */}
+        <Route path="/app" element={
+          <ErrorBoundary label="Platform" fallbackPath="/app">
+            <PlatformLayout />
+          </ErrorBoundary>
+        }>
           <Route index element={<Dashboard />} />
           <Route path="ally-chat" element={<AllyChat />} />
           <Route path="diagnosis" element={<DiagnosisChat />} />
@@ -87,9 +120,11 @@ export default function App() {
           <Route path="billing" element={<Billing />} />
           <Route path="help" element={<HelpSupport />} />
         </Route>
+
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       <Toast message={toast} />
+      <CookieBanner />
     </>
   );
 }
