@@ -41,7 +41,11 @@ _HEADINGS = {
 }
 
 # Frontend sections with NO backend source -- surfaced empty, never fabricated.
-UNPOPULATED_SECTIONS = ("supporting_evidence", "recommended_roadmap", "why_steps")
+# "expected_impact" covers the two frontend boxes (Expected Business / Founder Impact);
+# it was previously missing here, so it went absent SILENTLY instead of being declared.
+UNPOPULATED_SECTIONS = (
+    "supporting_evidence", "recommended_roadmap", "why_steps", "expected_impact",
+)
 
 
 @dataclass(frozen=True)
