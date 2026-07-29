@@ -1,24 +1,15 @@
 import { useApp } from '../context/AppContext';
 import { useNavigate } from 'react-router-dom';
 
+/* The six readiness_pillars (backend-canonical business dimensions). Scores and
+   descriptions here are placeholder mock content; 4c wires them to the real
+   business_dna snapshot (per-pillar band + description). */
 const DIMENSIONS = [
   {
-    key: 'retention',
-    title: 'Retention',
+    key: 'founder-readiness',
+    title: 'Founder Readiness',
     score: 44,
-    desc: 'Week two drop confirmed. First value moment not reached.',
-    icon: (
-      <svg viewBox="0 0 24 24">
-        <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-        <path d="M3 3v5h5" />
-      </svg>
-    )
-  },
-  {
-    key: 'acquisition',
-    title: 'Acquisition',
-    score: 62,
-    desc: 'Spend rising, efficiency falling — churn is the tax.',
+    desc: 'Drive is high, but strain is showing — decisions turning reactive under pressure.',
     icon: (
       <svg viewBox="0 0 24 24">
         <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
@@ -29,34 +20,23 @@ const DIMENSIONS = [
     )
   },
   {
-    key: 'product',
-    title: 'Product',
+    key: 'market-clarity',
+    title: 'Market Clarity',
+    score: 58,
+    desc: 'A general sense of the customer, but not yet sharp on who actually pays.',
+    icon: (
+      <svg viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="10" />
+        <circle cx="12" cy="12" r="6" />
+        <circle cx="12" cy="12" r="2" />
+      </svg>
+    )
+  },
+  {
+    key: 'revenue-maturity',
+    title: 'Revenue Maturity',
     score: 66,
-    desc: 'Core loop works. Onboarding sequence is weak.',
-    icon: (
-      <svg viewBox="0 0 24 24">
-        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-        <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
-        <line x1="12" y1="22.08" x2="12" y2="12" />
-      </svg>
-    )
-  },
-  {
-    key: 'sales',
-    title: 'Sales pipeline',
-    score: 78,
-    desc: 'Strong intent. Qualification gap at demo stage.',
-    icon: (
-      <svg viewBox="0 0 24 24">
-        <path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z" />
-      </svg>
-    )
-  },
-  {
-    key: 'cash',
-    title: 'Cash flow',
-    score: 70,
-    desc: 'Healthy runway. Timing of collections could tighten.',
+    desc: 'Some sales, but no repeatable process; pricing is set by instinct.',
     icon: (
       <svg viewBox="0 0 24 24">
         <rect x="2" y="6" width="20" height="12" rx="2" />
@@ -67,10 +47,23 @@ const DIMENSIONS = [
     )
   },
   {
-    key: 'team',
-    title: 'Team',
+    key: 'product-execution',
+    title: 'Product & Execution',
+    score: 70,
+    desc: 'Core loop works; the onboarding sequence is the weak link.',
+    icon: (
+      <svg viewBox="0 0 24 24">
+        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+        <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+        <line x1="12" y1="22.08" x2="12" y2="12" />
+      </svg>
+    )
+  },
+  {
+    key: 'team-leadership',
+    title: 'Team & Leadership',
     score: 61,
-    desc: 'Capable hires. Ownership of outcomes not yet distributed.',
+    desc: 'Capable hires; ownership of outcomes not yet distributed.',
     icon: (
       <svg viewBox="0 0 24 24">
         <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
@@ -81,27 +74,13 @@ const DIMENSIONS = [
     )
   },
   {
-    key: 'strategy',
-    title: 'Strategy',
+    key: 'strategic-clarity',
+    title: 'Strategic Clarity',
     score: 58,
     desc: 'Ten priorities competing for the same energy.',
     icon: (
       <svg viewBox="0 0 24 24">
-        <circle cx="12" cy="12" r="10" />
-        <circle cx="12" cy="12" r="6" />
-        <circle cx="12" cy="12" r="2" />
-      </svg>
-    )
-  },
-  {
-    key: 'pricing',
-    title: 'Pricing',
-    score: 74,
-    desc: 'Competitive and defensible. Not the constraint.',
-    icon: (
-      <svg viewBox="0 0 24 24">
-        <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
-        <line x1="7" y1="7" x2="7.01" y2="7" />
+        <path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z" />
       </svg>
     )
   }
