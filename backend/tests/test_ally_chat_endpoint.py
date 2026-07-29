@@ -57,9 +57,17 @@ def test_request_validation():
 def test_to_response_happy_path():
     r = _to_response(_resp(ok=True))
     assert r.ok and r.answer == "hello"
-    assert r.confidence == 0.8 and r.citations == ["rc:10"] and r.error is None
-    assert r.trace.metrics.total_tokens == 15 and r.trace.metrics.retrieval_hits == 3
-    assert r.trace.provider == "mock" and r.trace.completed_steps == ["build_context", "execute_ai"]
+    assert r.citations == ["rc:10"] and r.error is None
+
+
+def test_to_response_hides_confidence_and_internal_trace():
+    # Scores are never shown mid-session; internal orchestration detail never leaks.
+    r = _to_response(_resp(ok=True))
+    fields = r.model_dump()
+    assert "confidence" not in fields
+    assert "trace" not in fields and "metrics" not in fields
+    for leak in ("provider", "model", "total_tokens", "memory_reads", "prompt_version"):
+        assert leak not in fields
 
 
 def test_failure_response_hides_internal_error():

@@ -68,6 +68,26 @@ def test_assigns_visionary_from_mission_language():
     assert m is not None and m.name == "Visionary Builder"
 
 
+def test_thin_margin_is_not_confident():
+    # Two archetypes essentially tied -> assign the top one but flag NOT confident
+    # (a near-tie must never be presented as a definite archetype).
+    from decimal import Decimal
+    from app.api.v1.reasoning.engines.archetype import ArchetypeEngine
+
+    rows = [
+        _Row(1, "A-1", "Operator",
+             {"core_motivation": "Mastery"},
+             'Frequently says: "I\'ll just do it." optimize systems processes bottlenecks'),
+        _Row(2, "A-2", "Twin",
+             {"core_motivation": "Mastery"},
+             'Frequently says: "I\'ll just do it." optimize systems processes bottlenecks'),
+    ]
+    eng = ArchetypeEngine(_Repo(rows), min_margin=Decimal("0.05"))
+    m = eng.assign(["I'll just do it and optimize our systems, processes and bottlenecks."])
+    assert m is not None
+    assert m.is_confident is False        # identical criteria -> zero margin
+
+
 def test_no_answers_returns_none():
     assert _engine().assign([]) is None
     assert _engine().assign(["", "   "]) is None
