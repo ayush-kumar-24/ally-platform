@@ -37,6 +37,8 @@ from app.ai_chat.streaming.service import StreamingChatService
 from app.ai_chat.attachments.repository import InMemoryAttachmentRepository
 from app.ai_chat.attachments.service import AttachmentService
 from app.ai_chat.links.extractor import LinkExtractor
+from app.ai_chat.suggestions.repository import InMemorySuggestionRepository
+from app.ai_chat.suggestions.service import SuggestionService
 
 
 class Container:
@@ -82,6 +84,11 @@ class Container:
         self._attachment_repository = InMemoryAttachmentRepository()
         self._attachment_service = AttachmentService(self._attachment_repository)
         self._link_extractor = LinkExtractor()
+
+        # --- Phase 6 AI suggestions (Milestone 5) -- additive, deterministic,
+        # rule-based; composes chat artifacts, never executes actions or calls an LLM.
+        self._suggestion_repository = InMemorySuggestionRepository()
+        self._suggestion_service = SuggestionService(self._suggestion_repository)
 
     # --- Provider registry ------------------------------------------------
 
@@ -169,6 +176,9 @@ class Container:
 
     def link_extractor(self) -> LinkExtractor:
         return self._link_extractor
+
+    def suggestion_service(self) -> SuggestionService:
+        return self._suggestion_service
 
 
 # Application-wide container instance. Import and use `container.orchestrator(db)`.
