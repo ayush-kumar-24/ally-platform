@@ -262,6 +262,13 @@ def test_business_dna_is_brief_under_distress():
     assert "it can wait" in biz.lower()
     assert desc.strip() not in biz  # full six-pillar audit is NOT dumped under distress
 
+def test_expected_impact_is_declared_unpopulated_not_silently_missing():
+    n = _gen(_payload())
+    assert "expected_impact" in n.unpopulated_sections
+    # and it is genuinely empty, not fabricated into a rendered section
+    assert "expected_impact" not in [s.key for s in n.sections]
+
+
 def test_identity_fusion_separation_language_wired_from_payload():
     fr = _pillar("Founder Readiness", 30, flag=True, band="Critical Gap",
                  desc="Burnout and isolation are active blockers.")
