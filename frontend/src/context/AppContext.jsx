@@ -16,6 +16,7 @@ export function AppProvider({ children }) {
   const [guidedProgress, setGuidedProgress] = useState(0);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [toast, setToast] = useState(null);
+  const [tourOpen, setTourOpen] = useState(false);
 
   // Sync sidebar collapsed state → body.sb-collapsed class
   useEffect(() => {
@@ -74,6 +75,9 @@ export function AppProvider({ children }) {
     setNotifications([]);
   }, []);
 
+  const startTour = useCallback(() => setTourOpen(true), []);
+  const endTour = useCallback(() => setTourOpen(false), []);
+
   useEffect(() => {
     const saved = localStorage.getItem('ally_founder');
     if (saved) {
@@ -101,6 +105,7 @@ export function AppProvider({ children }) {
       toast, showToast,
       startGuided, exitGuided,
       navigate,
+      tourOpen, startTour, endTour,
     }}>
       {children}
     </AppContext.Provider>
