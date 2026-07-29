@@ -1,0 +1,80 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   PRINT / PDF paged-media rules for the founder report.
+
+   Design-system artifact. The Phase-4 print layout includes this, and it also
+   doubles as the on-screen browser Print (Ctrl+P) stylesheet — everything is
+   wrapped in @media print, so it is inert on screen.
+
+   Goal: sections never split mid-block and headings are never orphaned at a
+   page foot. Selectors target the report's real class names (rep-*), which the
+   print layout reuses.
+   ───────────────────────────────────────────────────────────────────────── */
+@media print {
+  /* A4 with comfortable margins. Running header/footer are drawn by the
+     layout, not declared here. */
+  @page {
+    size: A4;
+    margin: 16mm 14mm;
+  }
+
+  /* Preserve the report's colours, gradients and backgrounds in print — the
+     whole point is parity with the dark-themed screen, not an ink-saving
+     recolour. */
+  *,
+  *::before,
+  *::after {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* A heading must never be the last thing on a page — keep it with what
+     follows. */
+  .rep-sec-head,
+  .rep-wc-title,
+  .rep-rm-kicker,
+  .rep-cta-title,
+  h1, h2, h3 {
+    break-after: avoid-page;
+    page-break-after: avoid; /* legacy alias for older engines */
+  }
+
+  /* Cards / blocks must not be split across a page boundary. */
+  .rep-ev-card,
+  .rep-impact-box,
+  .rep-wc-wrap,
+  .rep-wc-item,
+  .rep-rm-card,
+  .rep-rm-item,
+  .rep-act-list,
+  .rep-rc-banner,
+  .rep-cta-card {
+    break-inside: avoid;
+    page-break-inside: avoid; /* legacy alias */
+  }
+
+  /* Charts stay intact: the progress ring and the root-cause fill bar. */
+  .rep-ring-c,
+  .rep-ring,
+  .rep-rc-progress-wrap {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* Grids may break BETWEEN their children, but each child stays whole (the
+     rule above guarantees that). */
+  .rep-ev-grid,
+  .rep-rm-grid,
+  .rep-impact-boxes {
+    break-inside: auto;
+  }
+
+  /* No stranded single lines at the top or bottom of a page. */
+  p, li,
+  .rep-rc-text,
+  .rep-intro-text,
+  .rep-summary-text,
+  .rep-impact-desc {
+    orphans: 3;
+    widows: 3;
+  }
+}
