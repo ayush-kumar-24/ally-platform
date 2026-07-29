@@ -20,9 +20,6 @@ import Reveal from './pages/guided/Reveal';
 import RootCause from './pages/guided/RootCause';
 import Conclusion from './pages/guided/Conclusion';
 import GuidedReport from './pages/guided/GuidedReport';
-import Recommend from './pages/guided/Recommend';
-import Discovery from './pages/guided/Discovery';
-import Success from './pages/guided/Success';
 import Dashboard from './pages/Dashboard';
 import AllyChat from './pages/AllyChat';
 import DiagnosisChat from './pages/DiagnosisChat';
@@ -73,9 +70,7 @@ export default function App() {
           <Route path="root-cause" element={<RootCause />} />
           <Route path="conclusion" element={<Conclusion />} />
           <Route path="report" element={<GuidedReport />} />
-          <Route path="recommend" element={<Recommend />} />
-          <Route path="discovery" element={<Discovery />} />
-          <Route path="success" element={<Success />} />
+          <Route path="*" element={<Navigate to="/guided/login" replace />} />
         </Route>
         <Route path="/app" element={<PlatformLayout />}>
           <Route index element={<Dashboard />} />
@@ -92,6 +87,7 @@ export default function App() {
           <Route path="billing" element={<Billing />} />
           <Route path="help" element={<HelpSupport />} />
         </Route>
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       <Toast message={toast} />
     </>
