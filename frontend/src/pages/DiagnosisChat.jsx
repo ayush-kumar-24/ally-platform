@@ -6,9 +6,9 @@ const DIM_CHIPS = ['All', 'Revenue', 'Strategy', 'Team', 'Operations', 'Finance'
 const DIAG_MESSAGES = [
   { role: 'ally', text: 'Welcome to your diagnosis session. I\'ll ask you structured questions across 10 founder and business dimensions. Ready to start?', time: '2 min ago' },
   { role: 'me', text: 'Yes, let\'s do it. I want to understand what\'s holding us back from crossing ₹10Cr ARR.', time: '2 min ago' },
-  { role: 'ally', text: 'Let\'s start with revenue. Looking at your data: MRR is ₹58L, growing at 8% MoM. But your net revenue retention is 91% — slightly below the 110% benchmark for your stage. Where do you feel the biggest drag?', time: '1 min ago', confidence: 84 },
+  { role: 'ally', text: 'Let\'s start with revenue. Looking at your data: MRR is ₹58L, growing at 8% MoM. But your net revenue retention is 91% — slightly below the 110% benchmark for your stage. Where do you feel the biggest drag?', time: '1 min ago' },
   { role: 'me', text: 'I think it\'s churn from SME segment. Enterprise seems fine.', time: '1 min ago' },
-  { role: 'ally', text: 'That pattern is important. I\'m now cross-referencing your founder DNA — you show a strong "builder" pattern with lower sales instinct scores. This often creates a gap in SME customer success investment.', time: 'Just now', confidence: 91 },
+  { role: 'ally', text: 'That pattern is important. I\'m now cross-referencing your founder DNA — you show a strong "builder" pattern with lower sales instinct scores. This often creates a gap in SME customer success investment.', time: 'Just now' },
 ];
 
 export default function DiagnosisChat() {
@@ -45,7 +45,6 @@ export default function DiagnosisChat() {
               <div className={`m-av ${m.role}`}>{m.role === 'ally' ? '🤝' : 'RV'}</div>
               <div>
                 <div className="bubble">{m.text}</div>
-                {m.confidence && <ConfBar pct={m.confidence} />}
                 <div className="m-meta">{m.time}</div>
               </div>
             </div>
@@ -108,24 +107,10 @@ export default function DiagnosisChat() {
           <div className="kg-legend">
             <div className="kg-leg"><span className="d" style={{ background: 'rgba(255,255,255,.3)' }} /> Symptoms you described</div>
             <div className="kg-leg"><span className="d" style={{ background: '#34d399' }} /> Mechanism Ally inferred</div>
-            <div className="kg-leg"><span className="d" style={{ background: '#A8D94A' }} /> Root cause · 92% confidence</div>
+            <div className="kg-leg"><span className="d" style={{ background: '#A8D94A' }} /> Root cause</div>
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-function ConfBar({ pct }) {
-  const ref = useRef(null);
-  useEffect(() => {
-    if (ref.current) setTimeout(() => { if (ref.current) ref.current.style.width = `${pct}%`; }, 300);
-  }, [pct]);
-  return (
-    <div className="conf">
-      <div className="l">Confidence</div>
-      <div className="bar"><i ref={ref} /></div>
-      <div className="pct">{pct}%</div>
     </div>
   );
 }
