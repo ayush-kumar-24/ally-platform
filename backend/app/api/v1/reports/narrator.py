@@ -54,32 +54,50 @@ class TemplateNarrator:
         arch = s.get("archetype")
         if not arch or not arch.get("name"):
             return ""
+        # Archetype names already begin with "The" -- do not prepend an article.
         name, motiv = arch["name"], arch.get("core_motivation")
         motiv_txt = f", driven by {motiv.lower()}" if motiv else ""
         if arch.get("is_confident"):
-            return f"Your founder pattern reads clearly as the {name}{motiv_txt}."
+            opener = {"Validator": "Your answers point clearly to",
+                      "Auditor": "The pattern the data supports is"}.get(
+                          tone.persona, "Your founder pattern reads clearly as")
+            return f"{opener} {name}{motiv_txt}."
         return (
-            f"Your answers lean toward the {name} pattern{motiv_txt}, but the signal is "
+            f"Your answers lean toward {name}{motiv_txt}, but the signal is "
             "mixed -- treat this as a starting hypothesis to test, not a fixed label."
         )
 
     def _psychological_note(self, s, tone):
-        # Section H content is the Critical Gap band description; fall back to the
-        # red-flag note / session framing only if that is absent.
-        body = s.get("section_h_text") or s.get("red_flag_note") or tone.session_framing
-        if not body:
-            return ""
-        base = "A note on where you are right now, before anything about the business. "
+        # Founder-facing sources ONLY: the Section H band description or the pillar
+        # red-flag note (both authored for founders in readiness_pillars). Never
+        # tone.session_framing -- that is a system directive, not founder-facing prose.
+        body = s.get("section_h_text") or s.get("red_flag_note")
         sep = s.get("separate_identity")
         sep_txt = " The business has challenges. You are not those challenges." if sep else ""
-        return base + body + sep_txt
+        base = "A note on where you are right now, before anything about the business. "
+        if body:
+            return base + body + sep_txt
+        if s.get("psychology_flagged"):
+            return (base + "How you are doing as a founder is shaping how this session "
+                    "went, and it is worth attending to first." + sep_txt)
+        return ""
 
     def _business_dna(self, s, tone):
         # Bands + written descriptions -- never raw numbers.
-        parts = []
         band = s.get("overall_band")
+        # Under distress, business content is de-prioritised: a single gentle line,
+        # no six-pillar audit at a moment the founder should not be pushed on it.
+        if s.get("brief"):
+            if not band:
+                return ""
+            return (f'A brief note on the business: overall it reads as "{band}". '
+                    "There is more detail when you are ready for it -- it can wait.")
+        parts = []
         if band:
-            parts.append(f'Across the six readiness pillars, your business health reads as "{band}".')
+            lead = {"Auditor": "Across the six readiness pillars, business health reads as",
+                    "Validator": "Across the six readiness pillars, where you stand reads as"
+                    }.get(tone.persona, "Across the six readiness pillars, your business health reads as")
+            parts.append(f'{lead} "{band}".')
         pillars = s.get("pillars", [])
         strong = [p for p in pillars if p.get("band") == "Strong"]
         if strong:
@@ -94,6 +112,9 @@ class TemplateNarrator:
         return " ".join(parts)
 
     def _problem_path(self, s, tone):
+        intro = {"Validator": "What your answers point to: ",
+                 "Auditor": "The diagnostic picture: ",
+                 "Compass": "Here is the through-line: "}.get(tone.persona, "")
         lines = []
         for rc in s.get("root_causes", []):
             nm, status = rc.get("name"), rc.get("confirmation_status")
@@ -105,7 +126,9 @@ class TemplateNarrator:
                 lines.append(f"{nm} surfaced but eased when probed -- a secondary consideration, not a settled finding.")
             else:  # not_tested
                 lines.append(f"{nm} is a possibility we did not directly test this session -- an area to explore, not a conclusion.")
-        return " ".join(lines)
+        if not lines:
+            return ""
+        return intro + " ".join(lines)
 
     def _areas_to_monitor(self, s, tone):
         cats = [c for c, _ in s.get("categories", [])]
@@ -117,18 +140,21 @@ class TemplateNarrator:
         )
 
     def _acknowledgement(self, s, tone):
-        ack = tone.distress_protocol or s.get("framing") or (
-            "This sounds like a genuinely hard stretch."
+        # Founder-facing copy that FOLLOWS the distress protocol -- it never quotes it.
+        # tone.distress_protocol is a system directive and must not reach the founder.
+        return (
+            "Before we look at anything about the business: what you are carrying right "
+            "now matters more than any diagnosis. There is no obligation to continue "
+            "today -- you can stop here and come back when you have the capacity. How you "
+            "are doing comes first."
         )
-        # Keep only the first sentence of the protocol text as the acknowledgement.
-        first = ack.split(". ")[0].strip().rstrip(".")
-        return f"{first}. Before anything about the business -- how you are doing comes first."
 
     def _support_recommendation(self, s, tone):
         return (
-            "A first step that has nothing to do with the business: reconnect with one "
-            "person you trust, and give yourself permission to pause the diagnostic and "
-            "come back to it when you have capacity."
+            "One first step, and it has nothing to do with the business: reach out to "
+            "someone who can help with the weight of it -- a person you trust, or a "
+            "professional -- not a business advisor. Give yourself permission to pause "
+            "and pick this back up when you are ready."
         )
 
     def _hedge(self, s, tone):
@@ -138,10 +164,32 @@ class TemplateNarrator:
         )
 
     def _priority_actions(self, s, tone):
-        n = len(s.get("confirm_actions", [])) + len(s.get("solve_actions", []))
-        if not n:
+        def steps(items):
+            out = []
+            for a in items:
+                out.extend(a.get("next_actions", []))
+            return [x for x in out if x]
+        confirm = steps(s.get("confirm_actions", []))
+        solve = steps(s.get("solve_actions", []))
+        if not confirm and not solve:
             return ""
-        return "Your next steps, grouped into what to confirm first and what to start solving:"
+        lead = {"Auditor": "Recommended next steps.",
+                "Validator": "Here is what to do next."}.get(tone.persona, "Your next steps.")
+        out = [lead]
+        if confirm:
+            out.append("First, confirm: " + "; ".join(confirm) + ".")
+        if solve:
+            out.append(("Then start on: " if confirm else "Start on: ") + "; ".join(solve) + ".")
+        return " ".join(out)
+
+    def _discovery_cta(self, s, tone):
+        # Fixed conversion CTA. Suppressed entirely under distress by the generator,
+        # so it never reaches a founder in distress.
+        return (
+            "When you are ready to act on this, a short discovery call with the Ally "
+            "team turns this diagnosis into a concrete plan. You can book one whenever "
+            "the timing is right for you."
+        )
 
 
 class LLMSectionNarrator:
