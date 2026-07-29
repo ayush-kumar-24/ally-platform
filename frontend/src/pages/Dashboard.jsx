@@ -68,7 +68,7 @@ function Pill({ children, active = false }) {
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { user } = useApp();
+  const { user, startTour } = useApp();
   const [showBanner, setShowBanner] = useState(true);
 
   const firstName = (user?.name || 'Ayush Sharma').split(' ')[0];
@@ -88,7 +88,14 @@ export default function Dashboard() {
                 become your daily thinking partner.
               </p>
               <div className="dash-banner-actions">
-                <button className="btn btn-em" type="button" onClick={() => navigate('/app/ally-chat')}>
+                <button
+                  className="btn btn-em"
+                  type="button"
+                  onClick={() => {
+                    setShowBanner(false);
+                    startTour();
+                  }}
+                >
                   <IconArrowRight />
                   Take a 60-second Product Tour
                 </button>

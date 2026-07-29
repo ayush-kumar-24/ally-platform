@@ -6,6 +6,7 @@ import App from './App';
 import './index.css';
 import './styles/onboarding-supplement.css';
 import './styles/animations.css';
+import './styles/tour.css';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

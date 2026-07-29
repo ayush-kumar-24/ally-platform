@@ -1,6 +1,7 @@
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { useState, useRef, useEffect } from 'react';
+import ProductTour from '../components/ProductTour';
 import {
   IconDashboard,
   IconMessageSquare,
@@ -267,6 +268,7 @@ export default function PlatformLayout() {
           </div>
         </div>
       </div>
+      <ProductTour />
     </div>
   );
 }
