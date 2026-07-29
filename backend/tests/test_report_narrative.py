@@ -212,3 +212,60 @@ def test_llm_fallback_is_visible_not_silent():
     n = ReportNarrativeGenerator(LLMSectionNarrator(boom)).generate(_payload())
     assert n.narrator_provenance["degraded"] is True
     assert n.narrator_provenance["by_source"].get("llm_fallback_template", 0) > 0
+
+
+# ---- Phase 1 blocking-bug regressions -----------------------------------
+_PROTOCOL = ("STOP the diagnostic immediately — do not continue to business questions. "
+             "Do not offer solutions. Do not validate the catastrophic thinking.")
+
+def test_distress_ack_never_quotes_the_internal_protocol():
+    n = _gen(_payload(distress_acknowledged_first=True), distress_protocol=_PROTOCOL)
+    ack = next(s for s in n.sections if s.key == "acknowledgement").prose
+    for leaked in ("STOP the diagnostic", "Do not offer solutions",
+                   "Do not validate", "catastrophic thinking"):
+        assert leaked not in ack
+    assert "how you are doing comes first" in ack.lower()
+
+def test_psychological_note_never_prints_session_framing():
+    # psychology flagged by category only (no Section H, no red flag) -> must not
+    # fall back to the report_framing_adjustment directive.
+    framing = "Report is de-prioritised. Lead with acknowledgement of difficulty."
+    p = _payload(category_risk_scores={"Founder Psychology": 0.5, "Sales & Revenue": 0.9},
+                 pillars=(_pillar("Founder Readiness", 60),), red_flag_pillars=())
+    n = _gen(p, session_framing=framing)
+    note = next(s for s in n.sections if s.key == "psychological_note").prose
+    assert "de-prioritised" not in note and "Lead with acknowledgement" not in note
+    assert note  # still produces founder-facing copy
+
+def test_priority_actions_lists_the_actual_actions():
+    n = _gen(_payload())
+    pa = next(s for s in n.sections if s.key == "priority_actions").prose
+    assert "Confirm your ICP" in pa and "Build a pipeline tracker" in pa
+
+def test_no_double_the_article():
+    n = _gen(_payload(archetype=ArchetypeFinding("The Operator", "ARCH-002", "Mastery", True, 0.3)))
+    fd = next(s for s in n.sections if s.key == "founder_dna").prose
+    assert "the The" not in fd and "The Operator" in fd
+
+def test_discovery_cta_present_in_standard_absent_in_distress():
+    std = _gen(_payload())
+    assert std.sections[-1].key == "discovery_cta"
+    dis = _gen(_payload(distress_acknowledged_first=True), distress_protocol=_PROTOCOL)
+    assert "discovery_cta" not in [s.key for s in dis.sections]
+
+def test_business_dna_is_brief_under_distress():
+    desc = "The founder is making some sales but does not have a repeatable process. " * 2
+    p = _payload(distress_acknowledged_first=True,
+                 pillars=(_pillar("Revenue Maturity", 40, band="Needs Attention", desc=desc),))
+    n = _gen(p, distress_protocol=_PROTOCOL)
+    biz = next(s for s in n.sections if s.key == "business_dna").prose
+    assert "it can wait" in biz.lower()
+    assert desc.strip() not in biz  # full six-pillar audit is NOT dumped under distress
+
+def test_identity_fusion_separation_language_wired_from_payload():
+    fr = _pillar("Founder Readiness", 30, flag=True, band="Critical Gap",
+                 desc="Burnout and isolation are active blockers.")
+    p = _payload(pillars=(fr,), red_flag_pillars=(fr,), separate_identity=True)
+    n = _gen(p)  # no explicit separate_identity kwarg -> must come from payload
+    note = next(s for s in n.sections if s.key == "psychological_note").prose
+    assert "You are not those challenges" in note
