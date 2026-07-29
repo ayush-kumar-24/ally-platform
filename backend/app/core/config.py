@@ -96,6 +96,12 @@ class Settings(BaseSettings):
     # --- CORS ---
     CORS_ORIGINS: str = "http://localhost:3000"
 
+    # --- PDF rendering (Gotenberg headless-Chromium sidecar) ---
+    # The report PDF is rendered from the print HTML for screen parity. When the
+    # service is unreachable, export falls back to the reportlab renderer and
+    # flags it via the X-PDF-Renderer response header (visible degradation).
+    GOTENBERG_URL: str = "http://localhost:3000"
+
     # --- Observability ---
     SENTRY_DSN: str = ""
     LOG_LEVEL: str = "INFO"
