@@ -2,7 +2,7 @@ export const MOCK_FOUNDER = {
   name: 'Rahul Varma',
   initials: 'RV',
   email: 'rahul@example.com',
-  stage: 'Seed',
+  stage: 'Early Traction',
   role: 'CEO & Co-founder',
   company: 'Nexus Robotics',
   location: 'Mumbai, India',
