@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
-import AuthTransition from '../components/AuthTransition';
 
 
 const DIMS = [
@@ -137,7 +136,7 @@ export default function LandingPage() {
   const [scrolled, setScrolled] = useState(false);
   const [timelineActiveIndex, setTimelineActiveIndex] = useState(-1);
   const [timelineHeight, setTimelineHeight] = useState(0);
-  const [showAuthTransition, setShowAuthTransition] = useState(false);
+  const [showAuthTransition, setShowAuthTransition] = useState(false); // kept for legacy, unused
 
   const demoPanelRef = useRef(null);
   const timelineRef = useRef(null);
@@ -381,17 +380,11 @@ export default function LandingPage() {
       email: provider === 'linkedin' ? 'ayush.sharma@brightloom.in' : 'ayush@brightloom.in',
       initials: 'AS'
     }));
-    setShowAuthTransition(true);
+    navigate('/guided/welcome');
   };
 
   return (
     <div id="landing-page" ref={containerRef} className="scrollbar-thin">
-      {showAuthTransition && (
-        <AuthTransition
-          onNavigate={() => navigate('/guided/welcome')}
-          onComplete={() => setShowAuthTransition(false)}
-        />
-      )}
       {/* ── STICKY NAV ────────────────────────────────────────────── */}
       <nav className={`lp-nav ${scrolled ? 'lp-scrolled' : ''}`} aria-label="Main navigation">
         <a href="#lp-hero" onClick={(e) => { e.preventDefault(); containerRef.current?.scrollTo({ top: 0, behavior: 'smooth' }); }} className="lp-nav-logo" aria-label="GoXL Ally — go to top">
@@ -453,8 +446,8 @@ export default function LandingPage() {
         <div className="lp-hero-inner">
           <div className="j-avatar"><img src="/ally-logo.png" alt="" /></div>
           <div className="j-eye"><span className="lv"></span> GoXL &middot; Ally</div>
-          <h1>Meet Ally, your <em>founder DNA</em> engine.</h1>
-          <p className="lp-hero-sub">In about 20 minutes, Ally learns how you lead and finds what's really holding your business back. You'll leave with a clarity report and your next move.</p>
+          <h1>Meet Ally, your <em>Companion</em></h1>
+          <p className="lp-hero-sub">In about 20 minutes, Ally learns how you lead and finds what's really holding you and your business back. You'll leave with a clarity report and your next move.</p>
 
           <div className="lp-auth" role="group" aria-label="Login options">
             <button className="lp-auth-btn" onClick={() => handleLogin('google')} type="button">

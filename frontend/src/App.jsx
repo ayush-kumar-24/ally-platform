@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useApp } from './context/AppContext';
+import SplashScreen from './components/SplashScreen';
 import PlatformLayout from './layouts/PlatformLayout';
 import GuidedLayout from './layouts/GuidedLayout';
 import LandingLayout from './layouts/LandingLayout';
@@ -36,11 +38,21 @@ import Billing from './pages/Billing';
 import HelpSupport from './pages/HelpSupport';
 import Toast from './components/ui/Toast';
 
+// Show splash only once per session (won't replay on route changes)
+const splashShown = sessionStorage.getItem('splashShown') === 'true';
+
 export default function App() {
   const { toast } = useApp();
+  const [showSplash, setShowSplash] = useState(!splashShown);
+
+  const handleSplashDone = () => {
+    sessionStorage.setItem('splashShown', 'true');
+    setShowSplash(false);
+  };
 
   return (
     <>
+      {showSplash && <SplashScreen onDone={handleSplashDone} />}
       <Routes>
         <Route element={<LandingLayout />}>
           <Route path="/" element={<LandingPage />} />
