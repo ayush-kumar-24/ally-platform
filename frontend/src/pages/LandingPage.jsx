@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 
 
@@ -934,7 +934,7 @@ export default function LandingPage() {
           </div>
           <div className="footer-bottom">
             <span>&copy; 2026 GoXL Consulting Solutions Pvt. Ltd. All rights reserved.</span>
-            <span><a href="mailto:info@goxl.in">Privacy</a><a href="mailto:info@goxl.in">Terms</a></span>
+            <span><Link to="/privacy">Privacy Policy</Link><Link to="/terms">Terms of Service</Link></span>
           </div>
         </div>
       </footer>

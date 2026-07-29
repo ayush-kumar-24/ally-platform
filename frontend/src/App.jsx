@@ -33,6 +33,8 @@ import PlanYourDay from './pages/PlanYourDay';
 import Report from './pages/Report';
 import Billing from './pages/Billing';
 import HelpSupport from './pages/HelpSupport';
+import TermsOfService from './pages/TermsOfService';
+import PrivacyPolicy from './pages/PrivacyPolicy';
 import Toast from './components/ui/Toast';
 import CookieBanner from './components/CookieBanner';
 
@@ -55,6 +57,8 @@ export default function App() {
         <Route element={<LandingLayout />}>
           <Route path="/" element={<LandingPage />} />
         </Route>
+        <Route path="/terms" element={<TermsOfService />} />
+        <Route path="/privacy" element={<PrivacyPolicy />} />
         <Route path="/guided" element={<GuidedLayout />}>
           <Route index element={<Navigate to="login" replace />} />
           <Route path="login" element={<Login />} />
