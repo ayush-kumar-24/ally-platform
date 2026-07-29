@@ -11,6 +11,7 @@ from app.repositories.founder import FounderRepository, founder_repository
 from app.repositories.founder_context import FounderContextRepository, founder_context_repository
 from app.repositories.intelligence import IntelligenceRepository, intelligence_repository
 from app.repositories.notification import NotificationRepository, notification_repository
+from app.repositories.privacy import PrivacyRequestRepository, privacy_request_repository
 from app.repositories.reference import ReferenceRepository, reference_repository
 
 __all__ = [
@@ -25,6 +26,8 @@ __all__ = [
     "notification_repository",
     "IntelligenceRepository",
     "intelligence_repository",
+    "PrivacyRequestRepository",
+    "privacy_request_repository",
     "ReferenceRepository",
     "reference_repository",
 ]
