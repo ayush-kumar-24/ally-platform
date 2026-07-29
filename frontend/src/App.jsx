@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useApp } from './context/AppContext';
+import SplashScreen from './components/SplashScreen';
 import PlatformLayout from './layouts/PlatformLayout';
 import GuidedLayout from './layouts/GuidedLayout';
 import LandingLayout from './layouts/LandingLayout';
@@ -18,9 +20,6 @@ import Reveal from './pages/guided/Reveal';
 import RootCause from './pages/guided/RootCause';
 import Conclusion from './pages/guided/Conclusion';
 import GuidedReport from './pages/guided/GuidedReport';
-import Recommend from './pages/guided/Recommend';
-import Discovery from './pages/guided/Discovery';
-import Success from './pages/guided/Success';
 import Dashboard from './pages/Dashboard';
 import AllyChat from './pages/AllyChat';
 import DiagnosisChat from './pages/DiagnosisChat';
@@ -36,11 +35,21 @@ import Billing from './pages/Billing';
 import HelpSupport from './pages/HelpSupport';
 import Toast from './components/ui/Toast';
 
+// Show splash only once per session (won't replay on route changes)
+const splashShown = sessionStorage.getItem('splashShown') === 'true';
+
 export default function App() {
   const { toast } = useApp();
+  const [showSplash, setShowSplash] = useState(!splashShown);
+
+  const handleSplashDone = () => {
+    sessionStorage.setItem('splashShown', 'true');
+    setShowSplash(false);
+  };
 
   return (
     <>
+      {showSplash && <SplashScreen onDone={handleSplashDone} />}
       <Routes>
         <Route element={<LandingLayout />}>
           <Route path="/" element={<LandingPage />} />
@@ -61,9 +70,7 @@ export default function App() {
           <Route path="root-cause" element={<RootCause />} />
           <Route path="conclusion" element={<Conclusion />} />
           <Route path="report" element={<GuidedReport />} />
-          <Route path="recommend" element={<Recommend />} />
-          <Route path="discovery" element={<Discovery />} />
-          <Route path="success" element={<Success />} />
+          <Route path="*" element={<Navigate to="/guided/login" replace />} />
         </Route>
         <Route path="/app" element={<PlatformLayout />}>
           <Route index element={<Dashboard />} />
@@ -80,6 +87,7 @@ export default function App() {
           <Route path="billing" element={<Billing />} />
           <Route path="help" element={<HelpSupport />} />
         </Route>
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       <Toast message={toast} />
     </>

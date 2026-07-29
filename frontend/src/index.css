@@ -45,7 +45,7 @@
   --color-line: rgba(255,255,255,.08);
   --color-line-2: rgba(255,255,255,.13);
   /* ── Fonts ── */
-  --font-display: 'Inter Tight', 'Inter', system-ui, sans-serif;
+  --font-display: 'Montserrat', 'Inter Tight', 'Inter', system-ui, sans-serif;
   --font-body: 'Inter', system-ui, sans-serif;
   --font-serif: 'Fraunces', 'Georgia', serif;
 }
@@ -80,7 +80,7 @@
   --glass-dark: rgba(255,255,255,.04);
   --shadow-card: 0 1px 2px -1px rgba(6,20,13,.14),0 6px 16px -6px rgba(6,20,13,.18);
   --shadow-dark: 0 2px 6px -2px rgba(0,0,0,.4),0 24px 60px -20px rgba(0,0,0,.55);
-  --display: 'Inter Tight', 'Inter', system-ui, sans-serif;
+  --display: 'Montserrat', 'Inter Tight', 'Inter', system-ui, sans-serif;
   --body: 'Inter', system-ui, sans-serif;
   --serif: 'Fraunces', 'Georgia', serif;
   --primary: cubic-bezier(.22,1,.3,1);

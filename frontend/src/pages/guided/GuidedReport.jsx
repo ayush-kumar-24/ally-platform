@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 const FOUNDER_DIMS = [
@@ -220,6 +220,15 @@ export default function GuidedReport() {
   const navigate = useNavigate();
   const ringRef = useRef(null);
   const rcFillRef = useRef(null);
+  const [goingToDashboard, setGoingToDashboard] = useState(false);
+
+  const goToDashboard = () => setGoingToDashboard(true);
+
+  useEffect(() => {
+    if (!goingToDashboard) return;
+    const t = setTimeout(() => navigate('/app'), 1400);
+    return () => clearTimeout(t);
+  }, [goingToDashboard, navigate]);
 
   useEffect(() => {
     if (ringRef.current) {
@@ -257,7 +266,7 @@ export default function GuidedReport() {
               <button
                 className="btn btn-em"
                 style={{ padding: '9px 16px', borderRadius: 10, fontSize: 13 }}
-                onClick={() => navigate('/guided/recommend')}
+                onClick={goToDashboard}
               >
                 <svg
                   viewBox="0 0 24 24"
@@ -517,7 +526,7 @@ export default function GuidedReport() {
             </p>
           </div>
           <button
-            onClick={() => navigate('/guided/recommend')}
+            onClick={goToDashboard}
             className="rep-cta-btn"
             type="button"
           >
@@ -568,9 +577,9 @@ export default function GuidedReport() {
             border: 'none',
             cursor: 'pointer'
           }}
-          onClick={() => navigate('/guided/recommend')}
+          onClick={goToDashboard}
         >
-          What GoXL recommends
+          To user's dashboard
           <svg
             viewBox="0 0 24 24"
             fill="none"
@@ -582,6 +591,38 @@ export default function GuidedReport() {
           </svg>
         </button>
       </div>
+
+      {goingToDashboard && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 999,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 18,
+            background: 'rgba(6, 20, 13, 0.92)',
+            backdropFilter: 'blur(6px)',
+          }}
+        >
+          <div
+            style={{
+              width: 44,
+              height: 44,
+              borderRadius: '50%',
+              border: '3px solid rgba(52, 211, 153, 0.25)',
+              borderTopColor: '#34d399',
+              animation: 'gr-spin 0.8s linear infinite',
+            }}
+          />
+          <span style={{ color: '#a7c0b4', fontSize: 13, fontWeight: 500, fontFamily: 'var(--body)' }}>
+            Taking you to your dashboard…
+          </span>
+          <style>{`@keyframes gr-spin { to { transform: rotate(360deg); } }`}</style>
+        </div>
+      )}
     </div>
   );
 }
