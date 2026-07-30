@@ -168,14 +168,22 @@ class SqlMemoryEventRepository(MemoryEventRepository):
         return tuple(self._row_to_event(r) for r in rows)
 
 
-def build_db_memory_service(db: Session):
+def build_db_memory_service(db: Session, *, resilient: bool = True):
     """A MemoryService backed by the durable Postgres repositories.
 
     The wiring point for an orchestrator: same MemoryService, DB-persisted stores.
+    By default the repositories are wrapped so a DB failure DEGRADES (logged) rather
+    than breaking the founder's conversation; pass resilient=False for the raw,
+    fail-loud repositories (used by the repo tests).
     """
+    from app.api.v1.ally.memory.resilient import (
+        ResilientMemoryEventRepository, ResilientMemoryRepository,
+    )
     from app.api.v1.ally.memory.service import MemoryService
 
-    return MemoryService(
-        SqlMemoryRepository(db),
-        events=SqlMemoryEventRepository(db),
-    )
+    items = SqlMemoryRepository(db)
+    events = SqlMemoryEventRepository(db)
+    if resilient:
+        items = ResilientMemoryRepository(items, db)
+        events = ResilientMemoryEventRepository(events, db)
+    return MemoryService(items, events=events)
