@@ -235,9 +235,11 @@ class QuestionTags(Base):
 class RagDocuments(Base):
     __tablename__ = 'rag_documents'
     __table_args__ = (
-        CheckConstraint("document_type::text = ANY (ARRAY['client_report'::character varying, 'case_study'::character varying, 'consultant_note'::character varying, 'playbook'::character varying]::text[])", name='rag_documents_document_type_check'),
+        CheckConstraint("document_type::text = ANY (ARRAY['client_report'::character varying, 'case_study'::character varying, 'consultant_note'::character varying, 'playbook'::character varying, 'service_offering'::character varying, 'external_insight'::character varying]::text[])", name='rag_documents_document_type_check'),
+        CheckConstraint("knowledge_domain IS NULL OR knowledge_domain::text = ANY (ARRAY['founder_knowledge'::character varying, 'goxl_knowledge'::character varying, 'business_resources'::character varying, 'learning_content'::character varying]::text[])", name='rag_documents_knowledge_domain_check'),
         CheckConstraint("review_status::text = ANY (ARRAY['pending'::character varying, 'approved'::character varying, 'rejected'::character varying]::text[])", name='rag_documents_review_status_check'),
         PrimaryKeyConstraint('document_id', name='rag_documents_pkey'),
+        Index('ix_rag_documents_knowledge_domain', 'knowledge_domain'),
     )
 
     document_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -249,6 +251,8 @@ class RagDocuments(Base):
     content_summary: Mapped[Optional[str]] = mapped_column(Text)
     industry_tag: Mapped[Optional[str]] = mapped_column(String(100))
     stage_relevance: Mapped[Optional[str]] = mapped_column(String(50))
+    # Coarse routing bucket for the agentic RAG router (nullable until backfilled).
+    knowledge_domain: Mapped[Optional[str]] = mapped_column(Text)
     reviewed_by: Mapped[Optional[str]] = mapped_column(String(100))
     created_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True), server_default=text('now()'))
     updated_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True), server_default=text('now()'))
