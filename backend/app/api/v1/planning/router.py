@@ -17,7 +17,10 @@ from app.api.v1.planning.responses import (
     GoalWithTasksResponse,
     PlanDetailResponse,
     PlanListResponse,
+    PlanProgressResponse,
     PlanResponse,
+    ReminderListResponse,
+    ReminderResponse,
     TaskListResponse,
     TaskResponse,
 )
@@ -26,6 +29,7 @@ from app.api.v1.planning.schemas import (
     GoalUpdate,
     PlanCreate,
     PlanUpdate,
+    ReminderCreate,
     TaskCreate,
     TaskUpdate,
 )
@@ -63,6 +67,13 @@ def list_plans(include_archived: bool = False, founder_id: int = Depends(get_cur
 def get_plan(plan_id: str, founder_id: int = Depends(get_current_founder_id),
              service: PlanningService = Depends(get_planning_service)) -> PlanDetailResponse:
     return PlanDetailResponse.from_domain(service.get_plan_detail(founder_id, plan_id))
+
+
+@router.get("/plans/{plan_id}/progress", response_model=PlanProgressResponse,
+            summary="Plan progress (task/goal completion, derived)")
+def plan_progress(plan_id: str, founder_id: int = Depends(get_current_founder_id),
+                  service: PlanningService = Depends(get_planning_service)) -> PlanProgressResponse:
+    return PlanProgressResponse.from_domain(service.plan_progress(founder_id, plan_id))
 
 
 @router.patch("/plans/{plan_id}", response_model=PlanResponse, summary="Update a plan")
@@ -141,3 +152,28 @@ def update_task(task_id: str, payload: TaskUpdate, founder_id: int = Depends(get
     fields = {k: v for k, v in payload.model_dump(exclude_unset=True).items() if k != "due_date"}
     fields.update(_date_kwargs(payload, "due_date", "clear_due_date"))
     return TaskResponse.from_domain(service.update_task(founder_id, task_id, **fields))
+
+
+# --- reminders --------------------------------------------------------------
+
+
+@router.post("/tasks/{task_id}/reminders", response_model=ReminderResponse, status_code=201,
+             summary="Schedule a reminder for a task")
+def schedule_reminder(task_id: str, payload: ReminderCreate,
+                      founder_id: int = Depends(get_current_founder_id),
+                      service: PlanningService = Depends(get_planning_service)) -> ReminderResponse:
+    return ReminderResponse.from_domain(service.schedule_reminder(
+        founder_id, task_id, remind_at=payload.remind_at, channel=payload.channel, note=payload.note))
+
+
+@router.get("/reminders", response_model=ReminderListResponse, summary="List my reminders")
+def list_reminders(task_id: str | None = None, founder_id: int = Depends(get_current_founder_id),
+                   service: PlanningService = Depends(get_planning_service)) -> ReminderListResponse:
+    items = service.list_reminders(founder_id, task_id=task_id)
+    return ReminderListResponse(reminders=[ReminderResponse.from_domain(r) for r in items], total=len(items))
+
+
+@router.delete("/reminders/{reminder_id}", response_model=ReminderResponse, summary="Cancel a reminder")
+def cancel_reminder(reminder_id: str, founder_id: int = Depends(get_current_founder_id),
+                    service: PlanningService = Depends(get_planning_service)) -> ReminderResponse:
+    return ReminderResponse.from_domain(service.cancel_reminder(founder_id, reminder_id))

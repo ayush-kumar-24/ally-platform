@@ -87,6 +87,45 @@ class PlanDetailResponse(BaseModel):
                    goals=[GoalWithTasksResponse.from_domain(g) for g in detail.goals])
 
 
+class ProgressCountsResponse(BaseModel):
+    total: int
+    todo: int
+    in_progress: int
+    done: int
+    percent_complete: int
+
+    @classmethod
+    def from_domain(cls, c) -> "ProgressCountsResponse":
+        return cls(total=c.total, todo=c.todo, in_progress=c.in_progress,
+                   done=c.done, percent_complete=c.percent_complete)
+
+
+class GoalProgressResponse(BaseModel):
+    goal_id: str
+    title: str
+    status: str
+    tasks: ProgressCountsResponse
+
+    @classmethod
+    def from_domain(cls, g) -> "GoalProgressResponse":
+        return cls(goal_id=g.goal_id, title=g.title, status=g.status.value,
+                   tasks=ProgressCountsResponse.from_domain(g.tasks))
+
+
+class PlanProgressResponse(BaseModel):
+    plan_id: str
+    tasks: ProgressCountsResponse            # across every task in the plan
+    goals: ProgressCountsResponse            # the goals, counted by status
+    per_goal: list[GoalProgressResponse]
+
+    @classmethod
+    def from_domain(cls, p) -> "PlanProgressResponse":
+        return cls(plan_id=p.plan_id,
+                   tasks=ProgressCountsResponse.from_domain(p.tasks),
+                   goals=ProgressCountsResponse.from_domain(p.goals),
+                   per_goal=[GoalProgressResponse.from_domain(g) for g in p.per_goal])
+
+
 class PlanListResponse(BaseModel):
     plans: list[PlanResponse]
     total: int
@@ -99,4 +138,26 @@ class GoalListResponse(BaseModel):
 
 class TaskListResponse(BaseModel):
     tasks: list[TaskResponse]
+    total: int
+
+
+class ReminderResponse(BaseModel):
+    reminder_id: str
+    task_id: str
+    plan_id: str
+    remind_at: datetime
+    channel: str
+    status: str
+    note: str
+    sent_at: datetime | None = None
+
+    @classmethod
+    def from_domain(cls, r) -> "ReminderResponse":
+        return cls(reminder_id=r.reminder_id, task_id=r.task_id, plan_id=r.plan_id,
+                   remind_at=r.remind_at, channel=r.channel.value, status=r.status.value,
+                   note=r.note, sent_at=r.sent_at)
+
+
+class ReminderListResponse(BaseModel):
+    reminders: list[ReminderResponse]
     total: int
