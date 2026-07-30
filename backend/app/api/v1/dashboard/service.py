@@ -20,6 +20,34 @@ from app.schemas.dashboard import (
 )
 
 
+def business_health_from_report(report) -> BusinessHealthSummary:
+    """Bands only, from the persisted snapshot. Shared by the overview AND the
+    /business-health endpoint so both founder-facing surfaces disclose the same
+    thing -- never a raw score. `available` is False (band None) until a snapshot
+    exists, so a brand-new founder is never shown a grade."""
+    snap = report.business_dna if report is not None else None
+    if not snap:
+        return BusinessHealthSummary(available=False)
+    band = snap.get("band")
+    return BusinessHealthSummary(
+        available=True,
+        band=band,
+        fill_pct=BAND_FILL.get(band),
+        red_flags=list(snap.get("red_flags") or []),
+        pillars=[
+            PillarBand(
+                pillar_id=p.get("pillar_id"),
+                pillar_name=p.get("pillar_name"),
+                band=p.get("band"),  # None preserved -> "no data", never 0
+                red_flag_triggered=bool(p.get("red_flag_triggered")),
+            )
+            for p in (snap.get("pillars") or [])
+        ],
+        report_id=report.report_id,
+        generated_at=report.generated_at,
+    )
+
+
 def _state(profile_completed, has_report, in_progress, completed, reports_count):
     if not profile_completed:
         return DashboardState.NEW
@@ -50,28 +78,7 @@ def build_overview(db: Session, founder) -> DashboardOverview:
     state = _state(profile_completed, has_report, in_progress, completed, reports_count)
 
     # --- business health: bands only, from the persisted snapshot (NULL if none) ---
-    snap = report.business_dna if report is not None else None
-    if snap:
-        band = snap.get("band")
-        business_health = BusinessHealthSummary(
-            available=True,
-            band=band,
-            fill_pct=BAND_FILL.get(band),
-            red_flags=list(snap.get("red_flags") or []),
-            pillars=[
-                PillarBand(
-                    pillar_id=p.get("pillar_id"),
-                    pillar_name=p.get("pillar_name"),
-                    band=p.get("band"),  # None preserved -> "no data", never 0
-                    red_flag_triggered=bool(p.get("red_flag_triggered")),
-                )
-                for p in (snap.get("pillars") or [])
-            ],
-            report_id=report.report_id,
-            generated_at=report.generated_at,
-        )
-    else:
-        business_health = BusinessHealthSummary(available=False)
+    business_health = business_health_from_report(report)
 
     # --- latest diagnosis: cached prose only, never regenerated ---
     if report is not None:

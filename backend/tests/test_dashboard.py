@@ -133,6 +133,15 @@ def test_dashboard_source_makes_no_llm_calls():
                 assert call not in line, f"{path.name} calls {call}"
 
 
+def test_welcome_banner_hidden_once_tour_seen(monkeypatch):
+    from datetime import datetime, timezone
+    _mock_repo(monkeypatch)
+    seen = build_overview(None, _founder(tour_seen_at=datetime.now(timezone.utc)))
+    assert seen.welcome.show_tour is False and seen.welcome.show_banner is False
+    unseen = build_overview(None, _founder(tour_seen_at=None))
+    assert unseen.welcome.show_tour is True and unseen.welcome.show_banner is True
+
+
 def test_overview_type(monkeypatch):
     _mock_repo(monkeypatch, report=_report(), counts={"reports": 1})
     assert isinstance(build_overview(None, _founder()), DashboardOverview)
