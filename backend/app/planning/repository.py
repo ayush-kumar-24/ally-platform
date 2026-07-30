@@ -10,7 +10,7 @@ from __future__ import annotations
 import abc
 import threading
 
-from app.planning.models import Goal, Plan, PlanStatus, Task
+from app.planning.models import Goal, Plan, PlanStatus, Reminder, ReminderStatus, Task
 
 
 class PlanningRepository(abc.ABC):
@@ -53,12 +53,29 @@ class PlanningRepository(abc.ABC):
     @abc.abstractmethod
     def list_tasks(self, goal_id: str) -> tuple[Task, ...]: ...
 
+    # reminders
+    @abc.abstractmethod
+    def add_reminder(self, reminder: "Reminder") -> "Reminder": ...
+
+    @abc.abstractmethod
+    def get_reminder(self, reminder_id: str) -> "Reminder | None": ...
+
+    @abc.abstractmethod
+    def replace_reminder(self, reminder: "Reminder") -> "Reminder": ...
+
+    @abc.abstractmethod
+    def list_reminders(self, founder_id: int, *, task_id: str | None = None) -> "tuple[Reminder, ...]": ...
+
+    @abc.abstractmethod
+    def due_reminders(self, before) -> "tuple[Reminder, ...]": ...
+
 
 class InMemoryPlanningRepository(PlanningRepository):
     def __init__(self) -> None:
         self._plans: dict[str, Plan] = {}
         self._goals: dict[str, Goal] = {}
         self._tasks: dict[str, Task] = {}
+        self._reminders: dict[str, Reminder] = {}
         self._lock = threading.RLock()
 
     # plans
@@ -123,4 +140,33 @@ class InMemoryPlanningRepository(PlanningRepository):
         with self._lock:
             items = [t for t in self._tasks.values() if t.goal_id == goal_id]
         items.sort(key=lambda t: (t.created_at, t.task_id))
+        return tuple(items)
+
+    # reminders
+    def add_reminder(self, reminder):
+        with self._lock:
+            self._reminders[reminder.reminder_id] = reminder
+        return reminder
+
+    def get_reminder(self, reminder_id):
+        with self._lock:
+            return self._reminders.get(reminder_id)
+
+    def replace_reminder(self, reminder):
+        with self._lock:
+            self._reminders[reminder.reminder_id] = reminder
+        return reminder
+
+    def list_reminders(self, founder_id, *, task_id=None):
+        with self._lock:
+            items = [r for r in self._reminders.values()
+                     if r.founder_id == founder_id and (task_id is None or r.task_id == task_id)]
+        items.sort(key=lambda r: (r.remind_at, r.reminder_id))
+        return tuple(items)
+
+    def due_reminders(self, before):
+        with self._lock:
+            items = [r for r in self._reminders.values()
+                     if r.status == ReminderStatus.SCHEDULED and r.remind_at <= before]
+        items.sort(key=lambda r: (r.remind_at, r.reminder_id))
         return tuple(items)

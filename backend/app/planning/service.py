@@ -17,24 +17,45 @@ from typing import Callable, Sequence
 from app.planning.defaults import DEFAULT_PLAN_STATUS, DEFAULT_PRIORITY, DEFAULT_PROGRESS
 from app.planning.errors import (
     GoalNotFoundError,
+    InvalidPlanningInputError,
     PlanNotFoundError,
+    ReminderNotFoundError,
     TaskNotFoundError,
 )
 from app.planning.models import (
     Goal,
+    GoalProgress,
     GoalWithTasks,
     ItemSource,
     Plan,
     PlanDetail,
+    PlanProgress,
     PlanStatus,
     Priority,
+    ProgressCounts,
     ProgressStatus,
+    Reminder,
+    ReminderChannel,
+    ReminderStatus,
     Task,
 )
 from app.planning.repository import PlanningRepository
 from app.planning.validators import validate_description, validate_title
 
 _ACTIVE_STATUSES = (PlanStatus.ACTIVE, PlanStatus.COMPLETED)
+
+
+def _count_progress(statuses) -> ProgressCounts:
+    """Deterministic completion counts from a sequence of ProgressStatus."""
+    statuses = list(statuses)
+    total = len(statuses)
+    done = sum(1 for s in statuses if s == ProgressStatus.DONE)
+    in_progress = sum(1 for s in statuses if s == ProgressStatus.IN_PROGRESS)
+    todo = sum(1 for s in statuses if s == ProgressStatus.TODO)
+    return ProgressCounts(
+        total=total, todo=todo, in_progress=in_progress, done=done,
+        percent_complete=round(done / total * 100) if total else 0,
+    )
 
 
 class PlanningService:
@@ -87,6 +108,26 @@ class PlanningService:
         return PlanDetail(
             plan=plan,
             goals=tuple(GoalWithTasks(goal=g, tasks=self.repository.list_tasks(g.goal_id)) for g in goals))
+
+    def plan_progress(self, founder_id: int, plan_id: str) -> PlanProgress:
+        """Completion of a plan, DERIVED from task/goal status (never stored). Empty
+        plan -> all zeros, 0% (not an error, not misleading)."""
+        detail = self.get_plan_detail(founder_id, plan_id)   # enforces ownership
+        per_goal = tuple(
+            GoalProgress(
+                goal_id=gwt.goal.goal_id, title=gwt.goal.title, status=gwt.goal.status,
+                tasks=_count_progress(t.status for t in gwt.tasks),
+            )
+            for gwt in detail.goals
+        )
+        all_task_statuses = [t.status for gwt in detail.goals for t in gwt.tasks]
+        goal_statuses = [gwt.goal.status for gwt in detail.goals]
+        return PlanProgress(
+            plan_id=plan_id,
+            tasks=_count_progress(all_task_statuses),
+            goals=_count_progress(goal_statuses),
+            per_goal=per_goal,
+        )
 
     # --- goals -----------------------------------------------------------
 
@@ -162,6 +203,51 @@ class PlanningService:
             due_date=None if clear_due_date else (task.due_date if due_date is None else due_date),
             completed_at=self._completion(task.completed_at, new_status, now), updated_at=now)
         return self.repository.replace_task(updated)
+
+    # --- reminders -------------------------------------------------------
+
+    def schedule_reminder(self, founder_id: int, task_id: str, *, remind_at: datetime,
+                          channel: ReminderChannel = ReminderChannel.IN_APP,
+                          note: str = "") -> Reminder:
+        """Schedule a nudge for a task. Ownership of the task is enforced; the time
+        must be in the future. Delivery is a worker's job (see due_reminders)."""
+        task = self.get_task(founder_id, task_id)          # ownership + existence
+        now = self._now()
+        if remind_at <= now:
+            raise InvalidPlanningInputError("remind_at", "must be in the future")
+        reminder = Reminder(
+            reminder_id=self._new_id(), task_id=task_id, plan_id=task.plan_id,
+            founder_id=founder_id, remind_at=remind_at, channel=channel,
+            status=ReminderStatus.SCHEDULED, note=note.strip(),
+            created_at=now, updated_at=now,
+        )
+        return self.repository.add_reminder(reminder)
+
+    def list_reminders(self, founder_id: int, *, task_id: str | None = None) -> tuple[Reminder, ...]:
+        if task_id is not None:
+            self.get_task(founder_id, task_id)              # ownership of the filter target
+        return self.repository.list_reminders(founder_id, task_id=task_id)
+
+    def cancel_reminder(self, founder_id: int, reminder_id: str) -> Reminder:
+        reminder = self.repository.get_reminder(reminder_id)
+        if reminder is None or reminder.founder_id != founder_id:
+            raise ReminderNotFoundError(reminder_id)
+        updated = replace(reminder, status=ReminderStatus.CANCELLED, updated_at=self._now())
+        return self.repository.replace_reminder(updated)
+
+    def due_reminders(self, *, before: datetime | None = None) -> tuple[Reminder, ...]:
+        """Scheduled reminders whose time has arrived -- the queue a delivery worker
+        polls. NOT founder-scoped (system/worker use)."""
+        return self.repository.due_reminders(before or self._now())
+
+    def mark_reminder_sent(self, reminder_id: str) -> Reminder:
+        """Worker call after delivery. Idempotent-ish: unknown id fails closed."""
+        reminder = self.repository.get_reminder(reminder_id)
+        if reminder is None:
+            raise ReminderNotFoundError(reminder_id)
+        now = self._now()
+        return self.repository.replace_reminder(
+            replace(reminder, status=ReminderStatus.SENT, sent_at=now, updated_at=now))
 
     # --- diagnosis seeding (compose, read-only) --------------------------
 

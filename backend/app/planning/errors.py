@@ -24,6 +24,11 @@ class TaskNotFoundError(PlanningError):
         super().__init__(f"Task '{task_id}' was not found.", status_code=status.HTTP_404_NOT_FOUND)
 
 
+class ReminderNotFoundError(PlanningError):
+    def __init__(self, reminder_id: str):
+        super().__init__(f"Reminder '{reminder_id}' was not found.", status_code=status.HTTP_404_NOT_FOUND)
+
+
 class InvalidPlanningInputError(PlanningError):
     def __init__(self, field: str, reason: str):
         super().__init__(f"Invalid {field}: {reason}.", status_code=422)

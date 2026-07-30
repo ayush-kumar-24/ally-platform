@@ -2,11 +2,18 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.planning.models import PlanStatus, Priority, ProgressStatus
+from app.planning.models import PlanStatus, Priority, ProgressStatus, ReminderChannel
+
+
+class ReminderCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    remind_at: datetime
+    channel: ReminderChannel = ReminderChannel.IN_APP
+    note: str = Field(default="", max_length=500)
 
 
 class PlanCreate(BaseModel):
