@@ -1,22 +1,37 @@
 """Dashboard display-layer endpoints (read-only, founder-scoped).
 
-Serves pre-computed snapshots for the founder dashboard. The #8 Business Health
-tile reads the structured business-health snapshot persisted on the founder's
-latest report (`founder_reports.business_dna`) -- no recomputation here.
+Pure aggregation: everything is read from the database or computed arithmetically.
+NO LLM, NO generation, NO report triggering. The founder is derived from the
+authenticated identity (get_founder_record) -- never from a request parameter --
+so a founder can only ever see their own dashboard.
 
-    GET /dashboard/business-health   overall score + per-pillar breakdown
+    GET /dashboard/overview          the full aggregated dashboard (primary)
+    GET /dashboard/business-health   detailed per-pillar health (scores; internal)
 """
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_founder_record
+from app.api.v1.dashboard.service import build_overview
 from app.db.session import get_db
 from app.models import Founder
 from app.repositories import intelligence_repository
-from app.schemas.dashboard import BusinessHealthDashboard, PillarHealth
+from app.schemas.dashboard import (
+    BusinessHealthDashboard, DashboardOverview, PillarHealth,
+)
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
+
+
+@router.get("/overview", response_model=DashboardOverview)
+async def overview(
+    founder: Founder = Depends(get_founder_record),
+    db: Session = Depends(get_db),
+) -> DashboardOverview:
+    """The founder's whole dashboard in one call. Bands (not raw scores), no
+    confidence, empty states distinguished by `state` + per-section `available`."""
+    return build_overview(db, founder)
 
 
 @router.get("/business-health", response_model=BusinessHealthDashboard)
@@ -24,11 +39,9 @@ async def business_health(
     founder: Founder = Depends(get_founder_record),
     db: Session = Depends(get_db),
 ) -> BusinessHealthDashboard:
-    """The founder's current Business Health, from their latest active report.
-
-    Returns `available=False` (empty) until a report with a business-health
-    snapshot exists, so the UI can render an empty state without special-casing.
-    """
+    """Detailed Business Health from the latest report snapshot (no recomputation).
+    Returns `available=False` until a snapshot exists. NOTE: this endpoint carries
+    raw pillar scores; the founder-facing overview shows bands only."""
     report = intelligence_repository.get_latest_active_report(db, founder.founder_id)
     snapshot = report.business_dna if report is not None else None
     if not snapshot:
