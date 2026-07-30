@@ -38,6 +38,10 @@ def passes_filters(chunk: KnowledgeChunk, f: RetrievalFilters) -> bool:
     DIFFERENT stage, industry, category or an unrelated root cause."""
     if chunk.similarity < f.min_similarity:
         return False
+    # Safety gate (not relevance): sales collateral / recommendation-only content
+    # is dropped unless the caller explicitly opted in. Fail-closed.
+    if chunk.is_restricted and not f.allow_sales_collateral:
+        return False
     if f.stages and chunk.stage is not None and chunk.stage not in f.stages:
         return False
     if f.industry and chunk.industry is not None and chunk.industry != f.industry:
