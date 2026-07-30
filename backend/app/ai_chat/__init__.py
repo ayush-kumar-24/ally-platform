@@ -12,15 +12,28 @@ Reserved for later milestones (not yet implemented): streaming/, attachments/,
 links/, suggestions/, api/.
 """
 
+from app.ai_chat.builders.context_window import ContextWindowBuilder, ContextWindowConfig
 from app.ai_chat.errors import (
     ChatError,
     ConversationNotFoundError,
     InvalidConversationStateError,
     InvalidMessageError,
 )
+from app.ai_chat.execution.chat_execution import (
+    ChatExecutionService,
+    build_chat_execution_service,
+)
 from app.ai_chat.repositories.conversation import (
     ConversationRepository,
     InMemoryConversationRepository,
+)
+from app.ai_chat.schemas.chat import (
+    ChatMetrics,
+    ChatRequest,
+    ChatResponse,
+    ConversationContextWindow,
+    ConversationExecutionTrace,
+    GroundingRequest,
 )
 from app.ai_chat.schemas.conversation import (
     Conversation,
@@ -38,7 +51,7 @@ from app.ai_chat.services.conversation import (
 )
 
 __all__ = [
-    # schemas
+    # M1 conversation schemas
     "Conversation",
     "ConversationMessage",
     "ConversationSummary",
@@ -47,12 +60,23 @@ __all__ = [
     "MessageRole",
     "TokenStats",
     "MessageTokenUsage",
+    # M2 chat-flow schemas
+    "ChatRequest",
+    "ChatResponse",
+    "ConversationContextWindow",
+    "ConversationExecutionTrace",
+    "ChatMetrics",
+    "GroundingRequest",
     # repository
     "ConversationRepository",
     "InMemoryConversationRepository",
-    # service
+    # services / builders
     "ConversationService",
     "build_conversation_service",
+    "ContextWindowBuilder",
+    "ContextWindowConfig",
+    "ChatExecutionService",
+    "build_chat_execution_service",
     # errors
     "ChatError",
     "ConversationNotFoundError",

@@ -10,6 +10,7 @@ import '@fontsource-variable/montserrat';
 import '@fontsource-variable/fraunces';
 import '@fontsource-variable/fraunces/wght-italic.css';    // serif hero <em> italic
 import { AppProvider } from './context/AppContext';
+import ErrorBoundary from './components/ErrorBoundary';
 import App from './App';
 import './index.css';
 import './styles/onboarding-supplement.css';
@@ -18,10 +19,13 @@ import './styles/tour.css';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <BrowserRouter>
-      <AppProvider>
-        <App />
-      </AppProvider>
-    </BrowserRouter>
+    {/* Root-level catch-all — last resort if all inner boundaries fail */}
+    <ErrorBoundary label="Application" fallbackPath="/">
+      <BrowserRouter>
+        <AppProvider>
+          <App />
+        </AppProvider>
+      </BrowserRouter>
+    </ErrorBoundary>
   </React.StrictMode>
 );

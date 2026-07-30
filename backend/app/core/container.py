@@ -29,6 +29,24 @@ from app.api.v1.ally.orchestrator import AgentOrchestrator, OrchestratorService
 from app.api.v1.ally.prompts.library import default_prompt_manager
 from app.api.v1.ally.rag.repository import InMemoryVectorRetrievalRepository
 from app.api.v1.ally.rag.service import build_retrieval_service
+from app.api.v1.ally.prompts.grounding import default_grounded_prompt_manager
+from app.ai_chat.builders.context_window import ContextWindowBuilder
+from app.ai_chat.execution.chat_execution import ChatExecutionService
+from app.ai_chat.services.conversation import build_conversation_service
+from app.ai_chat.streaming.service import StreamingChatService
+from app.ai_chat.attachments.repository import InMemoryAttachmentRepository
+from app.ai_chat.attachments.service import AttachmentService
+from app.ai_chat.links.extractor import LinkExtractor
+from app.ai_chat.suggestions.repository import InMemorySuggestionRepository
+from app.ai_chat.suggestions.service import SuggestionService
+from app.settings.repository import SqlAlchemySettingsRepository
+from app.settings.service import SettingsService
+from app.admin.audit import InMemoryAuditRepository
+from app.admin.permissions import AdminRegistry
+from app.admin.repository import InMemoryAdminRepository, InMemoryAnnouncementRepository
+from app.admin.service import AdminService
+from app.planning.db_repository import SqlAlchemyPlanningRepository
+from app.planning.service import PlanningService
 
 
 class Container:
@@ -54,6 +72,39 @@ class Container:
         # --- Prompt library + LLM execution (register real providers here) ---
         self._prompt_manager = default_prompt_manager()
         self._execution_service = self._build_execution()
+
+        # --- Phase 6 AI Chat flow (Milestone 2) -- additive, composes the frozen
+        # foundation. The orchestrator wiring above is untouched. Conversations are
+        # a process-level store (swap for a DB repository later); the grounded
+        # prompt manager is separate from the orchestrator's standard manager.
+        self._conversation_service = build_conversation_service()
+        self._grounded_prompt_manager = default_grounded_prompt_manager()
+        self._context_window_builder = ContextWindowBuilder(
+            conversation_service=self._conversation_service,
+            memory=self._memory_service,
+            retrieval=self._retrieval_service,
+            knowledge_graph=self._kg_service,
+        )
+
+        # --- Phase 6 attachments + links (Milestone 4) -- additive, metadata only.
+        # Attachments are a process-level store (swap for a DB repository later); the
+        # link extractor is pure/stateless.
+        self._attachment_repository = InMemoryAttachmentRepository()
+        self._attachment_service = AttachmentService(self._attachment_repository)
+        self._link_extractor = LinkExtractor()
+
+        # --- Phase 6 AI suggestions (Milestone 5) -- additive, deterministic,
+        # rule-based; composes chat artifacts, never executes actions or calls an LLM.
+        self._suggestion_repository = InMemorySuggestionRepository()
+        self._suggestion_service = SuggestionService(self._suggestion_repository)
+
+        # --- Phase 12 admin & operations (independent) -- process-level in-memory
+        # repositories (a production adapter reads the DB + ai_chat stores). The admin
+        # registry (email -> role allowlist) is loaded from the environment.
+        self._admin_repository = InMemoryAdminRepository()
+        self._announcement_repository = InMemoryAnnouncementRepository()
+        self._audit_repository = InMemoryAuditRepository()
+        self._admin_registry = AdminRegistry()
 
     # --- Provider registry ------------------------------------------------
 
@@ -101,6 +152,75 @@ class Container:
             execution=self.execution(),
         )
         return OrchestratorService(agent)
+
+    # --- Phase 6 chat flow accessors --------------------------------------
+
+    def conversation_service(self):
+        return self._conversation_service
+
+    def context_window_builder(self):
+        return self._context_window_builder
+
+    def grounded_prompt_manager(self):
+        return self._grounded_prompt_manager
+
+    def chat_execution(self, db: Session) -> ChatExecutionService:
+        """Assemble a request-scoped ChatExecutionService: the per-request context
+        builder (needs the DB session) over the process-level conversation store,
+        context-window builder, grounded prompt manager and execution service."""
+        return ChatExecutionService(
+            context_builder=self.context_builder(db),
+            conversation_service=self._conversation_service,
+            context_window_builder=self._context_window_builder,
+            prompt_manager=self._grounded_prompt_manager,
+            execution=self._execution_service,
+        )
+
+    def streaming_chat(self, db: Session) -> StreamingChatService:
+        """Assemble a request-scoped StreamingChatService that wraps the chat flow.
+        Additive: it composes the existing ChatExecutionService and the shared
+        conversation store; no existing service is changed."""
+        return StreamingChatService(
+            chat_service=self.chat_execution(db),
+            conversation_service=self._conversation_service,
+        )
+
+    # --- Phase 6 attachments + links accessors ----------------------------
+
+    def attachment_service(self) -> AttachmentService:
+        return self._attachment_service
+
+    def link_extractor(self) -> LinkExtractor:
+        return self._link_extractor
+
+    def suggestion_service(self) -> SuggestionService:
+        return self._suggestion_service
+
+    # --- Phase 11 settings (DB-backed, per-request) -----------------------
+
+    def settings_service(self, db: Session) -> SettingsService:
+        """Request-scoped SettingsService over the SQLAlchemy repository. Tests
+        override the endpoint dependency with an in-memory-backed service."""
+        return SettingsService(SqlAlchemySettingsRepository(db))
+
+    # --- Phase 12 admin accessors -----------------------------------------
+
+    def admin_registry(self) -> AdminRegistry:
+        return self._admin_registry
+
+    def admin_service(self) -> AdminService:
+        return AdminService(
+            admin_repository=self._admin_repository,
+            announcement_repository=self._announcement_repository,
+            audit_repository=self._audit_repository,
+        )
+
+    # --- Planning accessor (DB-backed, per-request) -----------------------
+
+    def planning_service(self, db: Session) -> PlanningService:
+        """Request-scoped PlanningService over the SQLAlchemy repository. Tests
+        override the endpoint dependency with an in-memory-backed service."""
+        return PlanningService(SqlAlchemyPlanningRepository(db))
 
 
 # Application-wide container instance. Import and use `container.orchestrator(db)`.

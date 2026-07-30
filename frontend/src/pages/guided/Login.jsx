@@ -7,14 +7,29 @@ export default function Login() {
   const navigate = useNavigate();
   const { setUser } = useApp();
   const [showAuthTransition, setShowAuthTransition] = useState(false);
+  const [agreeTerms, setAgreeTerms] = useState(false);
+  const [agreeDiagnosis, setAgreeDiagnosis] = useState(false);
+  const [validationError, setValidationError] = useState('');
 
   const handleAuth = (provider) => {
+    if (!agreeTerms) {
+      setValidationError('Please agree to the Terms of Service and Privacy Policy to continue.');
+      return;
+    }
+    setValidationError('');
     setUser(prev => ({
       ...prev,
       authProvider: provider,
       name: 'Ayush Sharma',
       email: provider === 'linkedin' ? 'ayush.sharma@brightloom.in' : 'ayush@brightloom.in',
-      initials: 'AS'
+      initials: 'AS',
+      consents: {
+        termsAccepted: true,
+        termsVersion: '1.0',
+        privacyVersion: '1.0',
+        diagnosisConsent: agreeDiagnosis,
+        consentedAt: new Date().toISOString()
+      }
     }));
     setShowAuthTransition(true);
   };
@@ -32,6 +47,42 @@ export default function Login() {
         <div className="j-eye"><span className="lv"></span> GoXL &middot; Ally</div>
         <h1 className="j-title">Meet Ally, your <em>founder DNA</em> engine.</h1>
         <p className="j-sub">In about 20 minutes, Ally learns how you lead and finds what's really holding your business back. You'll leave with a clarity report and your next move.</p>
+        
+        {validationError && (
+          <div className="consent-error" role="alert">
+            {validationError}
+          </div>
+        )}
+
+        <div className="consent-container">
+          <label className="consent-item">
+            <input 
+              type="checkbox" 
+              id="consent-terms"
+              checked={agreeTerms} 
+              onChange={(e) => {
+                setAgreeTerms(e.target.checked);
+                if (e.target.checked) setValidationError('');
+              }} 
+            />
+            <span className="consent-text">
+              I agree to the <a href="/terms" target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>Terms of Service</a> and <a href="/privacy" target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>Privacy Policy</a> <span className="version-tag">v1.0</span> <span className="req">*</span>
+            </span>
+          </label>
+          
+          <label className="consent-item">
+            <input 
+              type="checkbox" 
+              id="consent-diagnosis"
+              checked={agreeDiagnosis} 
+              onChange={(e) => setAgreeDiagnosis(e.target.checked)} 
+            />
+            <span className="consent-text">
+              I consent to the collection and processing of my business's diagnostic information as described in the Privacy Policy.
+            </span>
+          </label>
+        </div>
+
         <div className="j-auth">
           <button className="auth-btn" onClick={() => handleAuth('google')} type="button">
             <svg className="g" viewBox="0 0 48 48" aria-hidden="true">
