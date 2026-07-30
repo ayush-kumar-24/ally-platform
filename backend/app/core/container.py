@@ -23,8 +23,7 @@ from app.api.v1.ally.context.repository import AllyContextRepository
 from app.integrations.llm.routing import build_failover_execution
 from app.api.v1.ally.kg.repository import InMemoryKnowledgeGraphRepository
 from app.api.v1.ally.kg.service import build_knowledge_graph_service
-from app.api.v1.ally.memory.repository import InMemoryMemoryRepository
-from app.api.v1.ally.memory.service import build_memory_service
+from app.api.v1.ally.memory.sql_repository import build_db_memory_service
 from app.api.v1.ally.orchestrator import AgentOrchestrator, OrchestratorService
 from app.api.v1.ally.prompts.library import default_prompt_manager
 from app.api.v1.ally.rag.repository import InMemoryVectorRetrievalRepository
@@ -60,12 +59,12 @@ class Container:
 
     def __init__(self):
         # --- Repositories / stores (swap these for Redis / Postgres / pgvector) ---
-        self._memory_repository = InMemoryMemoryRepository()
+        # Founder memory is DB-backed and REQUEST-SCOPED (see memory(db)); it needs
+        # the request's session, so it is NOT built here as a held singleton.
         self._retrieval_repository = InMemoryVectorRetrievalRepository([])
         self._kg_repository = InMemoryKnowledgeGraphRepository([], [])
 
         # --- Services built over those stores (stateless wrappers) ---
-        self._memory_service = build_memory_service(self._memory_repository)
         self._retrieval_service = build_retrieval_service(self._retrieval_repository)
         self._kg_service = build_knowledge_graph_service(self._kg_repository)
 
@@ -79,12 +78,9 @@ class Container:
         # prompt manager is separate from the orchestrator's standard manager.
         self._conversation_service = build_conversation_service()
         self._grounded_prompt_manager = default_grounded_prompt_manager()
-        self._context_window_builder = ContextWindowBuilder(
-            conversation_service=self._conversation_service,
-            memory=self._memory_service,
-            retrieval=self._retrieval_service,
-            knowledge_graph=self._kg_service,
-        )
+        # The context-window builder reads founder memory, so it too is built
+        # PER-REQUEST (see context_window_builder(db)) -- never a held singleton
+        # that would pin the old in-memory store after the DB swap.
 
         # --- Phase 6 attachments + links (Milestone 4) -- additive, metadata only.
         # Attachments are a process-level store (swap for a DB repository later); the
@@ -121,8 +117,11 @@ class Container:
 
     # --- Subsystem accessors (seams for future backends) ------------------
 
-    def memory(self):
-        return self._memory_service
+    def memory(self, db: Session):
+        """Request-scoped, DB-backed founder memory -- persists to founder_memory /
+        founder_memory_events. Resilient: a DB failure degrades + logs (see
+        build_db_memory_service) rather than failing the founder's conversation."""
+        return build_db_memory_service(db)
 
     def retrieval(self):
         return self._retrieval_service
@@ -145,7 +144,7 @@ class Container:
         """Assemble a request-scoped OrchestratorService from the owned subsystems."""
         agent = AgentOrchestrator(
             context_builder=self.context_builder(db),
-            memory=self.memory(),
+            memory=self.memory(db),
             retrieval=self.retrieval(),
             knowledge_graph=self.knowledge_graph(),
             prompt_manager=self.prompt_manager(),
@@ -158,8 +157,16 @@ class Container:
     def conversation_service(self):
         return self._conversation_service
 
-    def context_window_builder(self):
-        return self._context_window_builder
+    def context_window_builder(self, db: Session):
+        """Request-scoped: the builder reads founder memory, so it is assembled with
+        the request's DB-backed memory instance -- not a held singleton pinning the
+        old in-memory store."""
+        return ContextWindowBuilder(
+            conversation_service=self._conversation_service,
+            memory=self.memory(db),
+            retrieval=self._retrieval_service,
+            knowledge_graph=self._kg_service,
+        )
 
     def grounded_prompt_manager(self):
         return self._grounded_prompt_manager
@@ -171,7 +178,7 @@ class Container:
         return ChatExecutionService(
             context_builder=self.context_builder(db),
             conversation_service=self._conversation_service,
-            context_window_builder=self._context_window_builder,
+            context_window_builder=self.context_window_builder(db),
             prompt_manager=self._grounded_prompt_manager,
             execution=self._execution_service,
         )
