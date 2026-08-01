@@ -52,8 +52,15 @@ class AnthropicLLMProvider(BaseHTTPLLMProvider):
         payload: dict = {
             "model": self.model,
             "max_tokens": request.max_tokens or _DEFAULT_MAX_TOKENS,
-            "temperature": request.temperature,
             "messages": conversation,
+            # No sampling params: current Claude models (Sonnet 5 / Opus 5 / 4.7+)
+            # reject a non-default `temperature`/`top_p`/`top_k` with a 400, and the
+            # classifier requests temperature=0. Determinism now comes from the task
+            # shape, not sampling. Thinking is disabled: this is a fast, high-volume
+            # Green/Amber/Red classifier returning a small JSON object -- adaptive
+            # thinking (on by default on the 5-series) would add latency and cost and
+            # compete with max_tokens for the response budget.
+            "thinking": {"type": "disabled"},
         }
         if system_text:
             payload["system"] = system_text
