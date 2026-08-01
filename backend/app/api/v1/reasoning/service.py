@@ -38,6 +38,7 @@ from app.api.v1.reasoning.engines.psychological_state import (
     PsychologicalStateSignalScorer,
 )
 from app.api.v1.reasoning.engines.diagnosis import DeterministicDiagnosisEngine
+from app.api.v1.reasoning.engines.distress_language import build_distress_assessment
 from app.api.v1.reasoning.errors import (
     FeatureDisabledError,
     ReasoningError,
@@ -101,6 +102,8 @@ class ReasoningService:
         recommendation_engine: RecommendationEngine,
         report_generator: ReportGenerator | None = None,
         retrieval_enabled: bool = False,
+        consistency_detector=None,
+        distress_detector=None,
     ):
         self.db = db
         self.repository = repository
@@ -111,6 +114,12 @@ class ReasoningService:
         self.recommendation_engine = recommendation_engine
         self.report_generator = report_generator or ReportGenerator()
         self.retrieval_enabled = retrieval_enabled
+        # Answer-consistency detector (input (c) of the confidence score). None =>
+        # unmeasured => excluded + renormalised by the confidence strategy.
+        self.consistency_detector = consistency_detector
+        # Distress language detector (#11). None => deterministic proxy. When set,
+        # it REPLACES the proxy and fails CLOSED (error -> high distress).
+        self.distress_detector = distress_detector
         self.business_health_scorer = BusinessHealthScorer(repository)
         self.psychological_state_engine = PsychologicalStateEngine(
             repository,
@@ -196,15 +205,35 @@ class ReasoningService:
         # High-Distress override. Deterministic proxy until the LLM signal
         # detector is wired; see PsychologicalStateEngine.
         start = time.perf_counter()
-        distress = self.psychological_state_engine.assess_from_diagnosis(
-            list(diagnosis.classifications), questions
-        )
+        if self.distress_detector is not None:
+            # Real LLM language detection over the founder's words. FAILS CLOSED:
+            # a detector error maps to high distress + override (never a clean
+            # "no signals"), so the session routes to wellbeing support.
+            catalog = self.repository.get_distress_signals_catalog()
+            det_result = await self.distress_detector.detect([a.answer_text for a in answers])
+            distress = build_distress_assessment(
+                det_result, catalog,
+                scorer=self.psychological_state_engine.scorer,
+                high_distress_score=self.config.distress.high_distress_score,
+                empathy_lookup=self.repository.get_empathy_protocol,
+            )
+            self._log_stage(
+                "distress_detection", session_id, start,
+                detector_status=det_result.status,
+                signals_present=len(det_result.present_ids),
+                session_distress_score=str(distress.session_distress_score),
+                high_distress=distress.is_high_distress,
+            )
+        else:
+            distress = self.psychological_state_engine.assess_from_diagnosis(
+                list(diagnosis.classifications), questions
+            )
+            self._log_stage(
+                "psychological_state", session_id, start,
+                session_distress_score=str(distress.session_distress_score),
+                high_distress=distress.is_high_distress,
+            )
         session.session_distress_score = distress.session_distress_score
-        self._log_stage(
-            "psychological_state", session_id, start,
-            session_distress_score=str(distress.session_distress_score),
-            high_distress=distress.is_high_distress,
-        )
 
         # --- Root Cause (+ retrieval enrichment inside the engine) ---
         start = time.perf_counter()
@@ -220,11 +249,24 @@ class ReasoningService:
         # --- Confidence ---
         start = time.perf_counter()
         scored = self.confidence_model.score_and_rank(detections, context)
+        # Answer consistency (input (c)). Runs only when a detector is wired; a
+        # detector failure returns an UNAVAILABLE result, which the confidence
+        # strategy excludes and renormalises around (never a false 1.0).
+        consistency = None
+        if self.consistency_detector is not None:
+            consistency = await self.consistency_detector.assess(answers, questions)
+            self._log_stage(
+                "answer_consistency", session_id, start,
+                available=consistency.available,
+                score=(str(consistency.score) if consistency.score is not None else None),
+                contradictions=len(consistency.contradictions),
+            )
         confidence_inputs = self.confidence_model.build_confidence_inputs(
             diagnosis=diagnosis,
             scored=scored,
             questions_answered=len(answers),
             context=context,
+            consistency=consistency,
         )
         overall_confidence = self.confidence_model.overall_confidence(
             confidence_inputs, context
@@ -509,6 +551,9 @@ class ReasoningService:
                 "empathy_protocol": distress_assessment.empathy_protocol_code,
                 "guidance": distress_assessment.empathy_protocol_text,
                 "distress_red_count": distress_assessment.distress_red_count,
+                # "error" => distress detector failed and we failed CLOSED; this
+                # session's high-distress state was assumed, not measured.
+                "detector_status": distress_assessment.detector_status,
             })
         return InternalIntelligenceReport(
             founder_id=founder.founder_id,

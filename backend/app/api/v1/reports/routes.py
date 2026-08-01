@@ -41,13 +41,33 @@ def _owned_report(db: Session, founder: Founder, report_id: int) -> FounderRepor
     return report
 
 
+def _report_narrator(db: Session):
+    """LLM section narrator when REPORT_NARRATIVE_LLM is on and a provider is
+    available; otherwise None (the generator defaults to the template). Each
+    section still degrades to the template + records it, so quality is never
+    silently variable. Provider-build failure (no key/routing) => template."""
+    from app.core.config import settings
+    if not settings.REPORT_NARRATIVE_LLM:
+        return None
+    try:
+        from app.api.v1.reports.narrator import LLMSectionNarrator
+        from app.services.llm import LLMTask, provider_for_task
+        from app.services.llm.text import make_sync_text
+        provider = provider_for_task(db, LLMTask.REPORT_NARRATIVE)
+        return LLMSectionNarrator(make_sync_text(provider, max_tokens=400))
+    except Exception:  # no key / no routing -> template (recorded as 'template')
+        from app.core.logger import logger
+        logger.warning("report narrative LLM unavailable; using template narrator")
+        return None
+
+
 def _build_narrative(db: Session, report: FounderReport):
     payload = build_report_payload(db, report)
     framing = reports_repository.session_state_framing(db, report.session_state_at_generation)
     distress = None
     if report.distress_acknowledged_first or report.session_state_at_generation == "high_distress":
         distress = reports_repository.distress_protocol_text(db)
-    return ReportNarrativeGenerator().generate(
+    return ReportNarrativeGenerator(narrator=_report_narrator(db)).generate(
         payload, session_framing=framing, distress_protocol=distress,
     )
 

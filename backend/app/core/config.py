@@ -124,6 +124,20 @@ class Settings(BaseSettings):
     ADAPTIVE_SHORTLIST_SIZE: int = 8
     ADAPTIVE_TIMEOUT_SECONDS: float = 20.0
 
+    # Report narrative prose via LLM (report_narrative task). Off => deterministic
+    # template. Each section degrades to the template on failure and records it
+    # (narrator_provenance), so template-generated sections are never invisible.
+    REPORT_NARRATIVE_LLM: bool = False
+
+    # Answer-consistency detector (input (c) of confidence). Off => the signal stays
+    # UNAVAILABLE and confidence renormalises over the other four inputs, as before.
+    ANSWER_CONSISTENCY_LLM: bool = False
+
+    # Distress LANGUAGE detection (#11). Off => the deterministic distress proxy
+    # (distress-tagged Red answers). On => the LLM reads the founder's words and
+    # FAILS CLOSED (a detector error routes the session to wellbeing support).
+    DISTRESS_LLM: bool = False
+
     # --- Tier-1 Reasoning: retrieval / embeddings ---
     RETRIEVAL_ENABLED: bool = False
     EMBEDDING_PROVIDER: str = ""      # openai | gemini

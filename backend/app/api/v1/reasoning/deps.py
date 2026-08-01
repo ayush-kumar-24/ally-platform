@@ -39,6 +39,8 @@ from app.api.v1.reasoning.engines import (
     SymptomDetector,
     WeightedConfidenceModel,
 )
+from app.api.v1.reasoning.engines.consistency import LLMConsistencyDetector
+from app.api.v1.reasoning.engines.distress_language import LLMDistressDetector
 from app.api.v1.reasoning.engines.psychological_state import PsychologicalStateSignalScorer
 from app.api.v1.reasoning.enrichment import RetrievalRootCauseEnricher
 from app.api.v1.reasoning.interfaces import AnswerClassifier, RootCauseEnricher
@@ -47,7 +49,7 @@ from app.api.v1.reasoning.service import ReasoningService
 from app.core.config import settings
 from app.db.session import get_db
 from app.services import embeddings
-from app.services.llm import get_provider
+from app.services.llm import LLMTask, get_provider, provider_for_task
 from app.services.retrieval import RetrievalEngine
 
 
@@ -106,17 +108,18 @@ def get_reasoning_config(
     )
 
 
-def get_answer_classifier() -> AnswerClassifier:
+def get_answer_classifier(db: Session | None = None) -> AnswerClassifier:
     """Select the active answer classifier from configuration.
 
-    ANSWER_CLASSIFIER="llm" activates the provider-driven classifier (with the
-    deterministic stored-score classifier as its runtime fallback); anything else
-    uses the deterministic classifier directly. Default is deterministic, so the
-    pipeline needs no LLM provider.
+    ANSWER_CLASSIFIER="llm" activates the provider-driven classifier (model chosen
+    by DB task->model routing for `answer_interpretation`, with the deterministic
+    stored-score classifier as its runtime fallback); anything else uses the
+    deterministic classifier directly. Falls back to deterministic when no db is
+    available to resolve routing.
     """
-    if settings.ANSWER_CLASSIFIER == "llm":
+    if settings.ANSWER_CLASSIFIER == "llm" and db is not None:
         return LLMAnswerClassifier(
-            get_provider(settings.LLM_PROVIDER),
+            provider_for_task(db, LLMTask.ANSWER_INTERPRETATION),
             fallback=StoredScoreAnswerClassifier(),
             max_retries=settings.LLM_CLASSIFIER_MAX_RETRIES,
             timeout_seconds=settings.LLM_CLASSIFIER_TIMEOUT_SECONDS,
@@ -126,10 +129,11 @@ def get_answer_classifier() -> AnswerClassifier:
 
 
 def get_diagnosis_engine(
+    db: Session = Depends(get_db),
     repository: ReasoningRepository = Depends(get_reasoning_repository),
 ) -> DeterministicDiagnosisEngine:
     return DeterministicDiagnosisEngine(
-        category_engine=StandardDiagnosticEngine(get_answer_classifier()),
+        category_engine=StandardDiagnosticEngine(get_answer_classifier(db)),
         stage_detector=StageDetector(repository),
         symptom_detector=SymptomDetector(repository),
     )
@@ -184,7 +188,7 @@ def build_reasoning_service(db: Session) -> ReasoningService:
         distress_scorer=PsychologicalStateSignalScorer(repository),
     )
     diagnosis_engine = DeterministicDiagnosisEngine(
-        category_engine=StandardDiagnosticEngine(get_answer_classifier()),
+        category_engine=StandardDiagnosticEngine(get_answer_classifier(db)),
         stage_detector=StageDetector(repository),
         symptom_detector=SymptomDetector(repository),
     )
@@ -199,6 +203,31 @@ def build_reasoning_service(db: Session) -> ReasoningService:
         confidence_model=WeightedConfidenceModel(repository),
         recommendation_engine=StandardRecommendationEngine(repository),
         retrieval_enabled=settings.RETRIEVAL_ENABLED,
+        consistency_detector=_build_consistency_detector(db),
+        distress_detector=_build_distress_detector(db, repository),
+    )
+
+
+def _build_consistency_detector(db: Session):
+    """LLM answer-consistency detector (answer_consistency task), or None when off.
+    None keeps the confidence score on its prior four-input renormalised path."""
+    if not settings.ANSWER_CONSISTENCY_LLM:
+        return None
+    return LLMConsistencyDetector(
+        provider_for_task(db, LLMTask.ANSWER_CONSISTENCY),
+        timeout_seconds=settings.LLM_CLASSIFIER_TIMEOUT_SECONDS,
+    )
+
+
+def _build_distress_detector(db: Session, repository: ReasoningRepository):
+    """LLM distress language detector (distress_detection task), or None when off.
+    None keeps the deterministic distress proxy. The catalogue is loaded once here."""
+    if not settings.DISTRESS_LLM:
+        return None
+    return LLMDistressDetector(
+        provider_for_task(db, LLMTask.DISTRESS_DETECTION),
+        repository.get_distress_signals_catalog(),
+        timeout_seconds=settings.LLM_CLASSIFIER_TIMEOUT_SECONDS,
     )
 
 
