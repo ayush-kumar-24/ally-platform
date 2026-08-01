@@ -115,6 +115,15 @@ class Settings(BaseSettings):
     LLM_CLASSIFIER_TIMEOUT_SECONDS: float = 30.0
     LLM_CLASSIFIER_TEMPERATURE: float = 0.0
 
+    # --- Adaptive questioning (Hybrid) ---
+    # When true, the live answer-submit path asks the LLM to read the answer, score
+    # it Green/Amber/Red, and re-rank the deterministic shortlist to pick the most
+    # informative next question. Falls back to the deterministic pick if the LLM is
+    # off, errors, or returns an out-of-shortlist id. Uses LLM_PROVIDER / LLM_MODEL.
+    ADAPTIVE_QUESTIONS: bool = False
+    ADAPTIVE_SHORTLIST_SIZE: int = 8
+    ADAPTIVE_TIMEOUT_SECONDS: float = 20.0
+
     # --- Tier-1 Reasoning: retrieval / embeddings ---
     RETRIEVAL_ENABLED: bool = False
     EMBEDDING_PROVIDER: str = ""      # openai | gemini
