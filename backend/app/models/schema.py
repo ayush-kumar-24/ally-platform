@@ -1208,7 +1208,7 @@ class Sessions(Base):
     __table_args__ = (
         CheckConstraint("data_quality_status::text = ANY (ARRAY['unreviewed'::character varying, 'approved'::character varying, 'rejected'::character varying]::text[])", name='sessions_data_quality_status_check'),
         CheckConstraint('overall_confidence_score >= 0::numeric AND overall_confidence_score <= 100::numeric', name='sessions_overall_confidence_score_check'),
-        CheckConstraint("routing_state::text = ANY (ARRAY['continue'::character varying, 'validate'::character varying, 'generate_report'::character varying]::text[])", name='sessions_routing_state_check'),
+        CheckConstraint("routing_state::text = ANY (ARRAY['continue'::character varying, 'validate'::character varying, 'generate_report'::character varying, 'distress_support'::character varying]::text[])", name='sessions_routing_state_check'),
         CheckConstraint("session_state::text = ANY (ARRAY['stable'::character varying, 'significantly_guarded'::character varying, 'high_distress'::character varying]::text[])", name='sessions_session_state_check'),
         CheckConstraint("status::text = ANY (ARRAY['in_progress'::character varying, 'completed'::character varying, 'abandoned'::character varying]::text[])", name='sessions_status_check'),
         ForeignKeyConstraint(['current_question_id'], ['questions.question_id'], name='sessions_current_question_id_fkey'),
