@@ -6,6 +6,7 @@ from app.api.v1.chat.router import router as chat_api_router
 from app.api.v1.admin.router import router as admin_router
 from app.api.v1.planning.router import router as planning_router
 from app.api.v1.auth.routes import router as auth_router
+from app.api.v1.consents.router import router as consents_router
 from app.api.v1.dashboard.routes import router as dashboard_router
 from app.api.v1.diagnosis.router import router as diagnosis_router
 from app.api.v1.discovery.routes import router as discovery_router
@@ -37,6 +38,7 @@ api_router.include_router(reports_router)
 api_router.include_router(chat_api_router)
 api_router.include_router(admin_router)
 api_router.include_router(planning_router)
+api_router.include_router(consents_router)
 
 
 @api_router.get("/health")
