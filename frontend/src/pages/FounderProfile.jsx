@@ -1,9 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
+import { get, post } from '../services/api';
 
 // --- Privacy Center helpers ------------------------------------------------
-
-const API_BASE = import.meta.env.VITE_API_BASE ?? '/api/v1';
 
 const PRIVACY_ACTIONS = [
   {
@@ -133,11 +132,8 @@ export default function FounderProfile() {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch(`${API_BASE}/settings/privacy`);
-        if (res.ok) {
-          const data = await res.json();
-          setPrivacyRequests(data.items ?? []);
-        }
+        const data = await get('/settings/privacy');
+        setPrivacyRequests(data.items ?? []);
       } catch (_) {
         // Backend not running — silently skip
       } finally {
@@ -150,19 +146,14 @@ export default function FounderProfile() {
     if (!pendingAction || submitting) return;
     setSubmitting(true);
     try {
-      const res = await fetch(`${API_BASE}/settings/privacy`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ request_type: pendingAction.type }),
-      });
-      if (res.ok) {
-        const created = await res.json();
-        setPrivacyRequests(prev => [created, ...prev]);
-        showToast(`${TYPE_LABELS[pendingAction.type]} request submitted ✓`);
-      } else {
+      const created = await post('/settings/privacy', { request_type: pendingAction.type });
+      setPrivacyRequests(prev => [created, ...prev]);
+      showToast(`${TYPE_LABELS[pendingAction.type]} request submitted ✓`);
+    } catch (err) {
+      if (!err.isNetwork) {
         showToast('Could not submit request — please try again.');
+        return; // real server rejection — don't mock success
       }
-    } catch (_) {
       // If backend is offline, mock success so the UI still responds
       const mock = {
         request_id: Date.now(),
