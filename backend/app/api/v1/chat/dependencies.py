@@ -28,20 +28,20 @@ def get_current_founder_id(founder: Founder = Depends(get_founder_record)) -> in
     return founder.founder_id
 
 
-def get_conversation_service() -> ConversationService:
-    return container.conversation_service()
+def get_conversation_service(db: Session = Depends(get_db)) -> ConversationService:
+    return container.conversation_service(db)
 
 
-def get_attachment_service() -> AttachmentService:
-    return container.attachment_service()
+def get_attachment_service(db: Session = Depends(get_db)) -> AttachmentService:
+    return container.attachment_service(db)
 
 
 def get_link_extractor() -> LinkExtractor:
     return container.link_extractor()
 
 
-def get_suggestion_service() -> SuggestionService:
-    return container.suggestion_service()
+def get_suggestion_service(db: Session = Depends(get_db)) -> SuggestionService:
+    return container.suggestion_service(db)
 
 
 def get_chat_service(db: Session = Depends(get_db)) -> ChatExecutionService:

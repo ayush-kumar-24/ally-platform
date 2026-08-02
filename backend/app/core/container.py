@@ -31,13 +31,14 @@ from app.api.v1.ally.rag.service import build_retrieval_service
 from app.api.v1.ally.prompts.grounding import default_grounded_prompt_manager
 from app.ai_chat.builders.context_window import ContextWindowBuilder
 from app.ai_chat.execution.chat_execution import ChatExecutionService
+from app.ai_chat.repositories.sql_conversation import SqlConversationRepository
 from app.ai_chat.services.conversation import build_conversation_service
 from app.ai_chat.streaming.service import StreamingChatService
-from app.ai_chat.attachments.repository import InMemoryAttachmentRepository
 from app.ai_chat.attachments.service import AttachmentService
+from app.ai_chat.attachments.sql_repository import SqlAttachmentRepository
 from app.ai_chat.links.extractor import LinkExtractor
-from app.ai_chat.suggestions.repository import InMemorySuggestionRepository
 from app.ai_chat.suggestions.service import SuggestionService
+from app.ai_chat.suggestions.sql_repository import SqlSuggestionRepository
 from app.settings.repository import SqlAlchemySettingsRepository
 from app.settings.service import SettingsService
 from app.admin.audit import InMemoryAuditRepository
@@ -74,25 +75,27 @@ class Container:
 
         # --- Phase 6 AI Chat flow (Milestone 2) -- additive, composes the frozen
         # foundation. The orchestrator wiring above is untouched. Conversations are
-        # a process-level store (swap for a DB repository later); the grounded
-        # prompt manager is separate from the orchestrator's standard manager.
-        self._conversation_service = build_conversation_service()
+        # DB-backed and REQUEST-SCOPED (see conversation_service(db)) -- they persist
+        # to conversations/messages, so they must never be held as a process-level
+        # singleton (that would pin one DB session for the process lifetime, and is
+        # exactly the bug this replaced: an in-memory store that lost every founder's
+        # chat history on restart / could not be shared across worker processes).
         self._grounded_prompt_manager = default_grounded_prompt_manager()
         # The context-window builder reads founder memory, so it too is built
         # PER-REQUEST (see context_window_builder(db)) -- never a held singleton
         # that would pin the old in-memory store after the DB swap.
 
         # --- Phase 6 attachments + links (Milestone 4) -- additive, metadata only.
-        # Attachments are a process-level store (swap for a DB repository later); the
-        # link extractor is pure/stateless.
-        self._attachment_repository = InMemoryAttachmentRepository()
-        self._attachment_service = AttachmentService(self._attachment_repository)
+        # Attachments are DB-backed and REQUEST-SCOPED (see attachment_service(db)) --
+        # same reasoning as conversations: a process-level singleton would lose every
+        # attachment's metadata on restart. The link extractor is pure/stateless.
         self._link_extractor = LinkExtractor()
 
         # --- Phase 6 AI suggestions (Milestone 5) -- additive, deterministic,
         # rule-based; composes chat artifacts, never executes actions or calls an LLM.
-        self._suggestion_repository = InMemorySuggestionRepository()
-        self._suggestion_service = SuggestionService(self._suggestion_repository)
+        # DB-backed and REQUEST-SCOPED (see suggestion_service(db)) -- same reasoning
+        # as conversations/attachments: a process-level singleton would lose every
+        # suggestion and every founder's feedback on restart.
 
         # --- Phase 12 admin & operations (independent) -- process-level in-memory
         # repositories (a production adapter reads the DB + ai_chat stores). The admin
@@ -154,15 +157,18 @@ class Container:
 
     # --- Phase 6 chat flow accessors --------------------------------------
 
-    def conversation_service(self):
-        return self._conversation_service
+    def conversation_service(self, db: Session):
+        """Request-scoped, DB-backed conversation store -- persists to
+        conversations / messages. Fails loud on error (no resilient-degrade
+        wrapper): this repository IS the founder's message storage, so a silent
+        degrade would mean 'your message was sent' while it was actually lost."""
+        return build_conversation_service(SqlConversationRepository(db))
 
     def context_window_builder(self, db: Session):
-        """Request-scoped: the builder reads founder memory, so it is assembled with
-        the request's DB-backed memory instance -- not a held singleton pinning the
-        old in-memory store."""
+        """Request-scoped: the builder reads founder memory and the DB-backed
+        conversation store, so it is assembled entirely from the request's session."""
         return ContextWindowBuilder(
-            conversation_service=self._conversation_service,
+            conversation_service=self.conversation_service(db),
             memory=self.memory(db),
             retrieval=self._retrieval_service,
             knowledge_graph=self._kg_service,
@@ -173,11 +179,11 @@ class Container:
 
     def chat_execution(self, db: Session) -> ChatExecutionService:
         """Assemble a request-scoped ChatExecutionService: the per-request context
-        builder (needs the DB session) over the process-level conversation store,
-        context-window builder, grounded prompt manager and execution service."""
+        builder, DB-backed conversation store, context-window builder, grounded
+        prompt manager and execution service."""
         return ChatExecutionService(
             context_builder=self.context_builder(db),
-            conversation_service=self._conversation_service,
+            conversation_service=self.conversation_service(db),
             context_window_builder=self.context_window_builder(db),
             prompt_manager=self._grounded_prompt_manager,
             execution=self._execution_service,
@@ -185,23 +191,29 @@ class Container:
 
     def streaming_chat(self, db: Session) -> StreamingChatService:
         """Assemble a request-scoped StreamingChatService that wraps the chat flow.
-        Additive: it composes the existing ChatExecutionService and the shared
-        conversation store; no existing service is changed."""
+        Additive: it composes the existing ChatExecutionService and the same
+        request's DB-backed conversation store; no existing service is changed."""
         return StreamingChatService(
             chat_service=self.chat_execution(db),
-            conversation_service=self._conversation_service,
+            conversation_service=self.conversation_service(db),
         )
 
     # --- Phase 6 attachments + links accessors ----------------------------
 
-    def attachment_service(self) -> AttachmentService:
-        return self._attachment_service
+    def attachment_service(self, db: Session) -> AttachmentService:
+        """Request-scoped, DB-backed attachment metadata store -- persists to
+        file_uploads. Fails loud on error, same reasoning as conversation_service:
+        this repository IS the attachment metadata storage."""
+        return AttachmentService(SqlAttachmentRepository(db))
 
     def link_extractor(self) -> LinkExtractor:
         return self._link_extractor
 
-    def suggestion_service(self) -> SuggestionService:
-        return self._suggestion_service
+    def suggestion_service(self, db: Session) -> SuggestionService:
+        """Request-scoped, DB-backed suggestion store -- persists to suggestions /
+        suggestion_feedback. Fails loud on error, same reasoning as the other
+        chat repositories: this IS the suggestion/feedback storage."""
+        return SuggestionService(SqlSuggestionRepository(db))
 
     # --- Phase 11 settings (DB-backed, per-request) -----------------------
 
