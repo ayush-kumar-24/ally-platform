@@ -15,6 +15,7 @@ import '../../styles/admin.css';
 const LINKS = [
   { to: '/admin', label: 'Dashboard', end: true, capability: 'view_users' },
   { to: '/admin/users', label: 'Users', capability: 'view_users' },
+  { to: '/admin/usage', label: 'Usage', capability: 'view_users' },
   { to: '/admin/audit', label: 'Audit Log', capability: 'view_audit' },
   { to: '/admin/system', label: 'System', capability: 'view_users' },
 ];

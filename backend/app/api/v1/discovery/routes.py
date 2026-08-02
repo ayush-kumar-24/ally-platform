@@ -24,6 +24,11 @@ from app.repositories import discovery_call_repository
 from app.schemas.discovery import BookingRequest, CallRead, SlotsResponse
 from app.services.calendar import DEFAULT_TIMEZONE, available_slots, create_meeting
 from app.services.discovery_notifications import send_booking_confirmation
+from app.api.v1.plans.dependencies import enforcement_enabled
+from app.core.container import container
+from app.plans.catalog import CALL_PRICE_INR
+from app.plans.errors import NoFreeCallsRemainingError
+from app.plans.usage import period_month
 
 router = APIRouter(prefix="/discovery", tags=["discovery"])
 
@@ -61,7 +66,40 @@ async def book_call(
     if scheduled <= datetime.now(timezone.utc):
         raise SlotInPastError()
 
-    meeting = create_meeting(founder.founder_id, scheduled, founder_email=founder.email)
+    # --- entitlement ------------------------------------------------------
+    # Everyone may book; only whether it is free differs by plan. The free call is
+    # CLAIMED BEFORE the booking is created, because the claim is the thing that
+    # must not be raced -- two simultaneous bookings must not both take the last
+    # free call. If anything after this point fails, the claim is released so a
+    # transient calendar error never silently eats a founder's monthly allowance.
+    claimed_free = False
+    if enforcement_enabled():
+        entitlements = container.entitlement_service(db)
+        quote = entitlements.quote_call(founder.founder_id, getattr(founder, "plan_type", None))
+        if quote.is_free:
+            entitlements.consume_free_call(founder.founder_id, getattr(founder, "plan_type", None))
+            claimed_free = True
+        elif not payload.payment_reference:
+            # No free calls left and no proof of payment -- refuse with the price
+            # rather than booking something nobody paid for.
+            raise NoFreeCallsRemainingError(
+                used=entitlements.usage.get_calls(
+                    founder.founder_id, period_month(datetime.now(timezone.utc))
+                ).free_calls_used,
+                allowance=entitlements.plan_for(
+                    getattr(founder, "plan_type", None)).free_calls_per_month,
+                price=CALL_PRICE_INR,
+            )
+
+    try:
+        meeting = create_meeting(founder.founder_id, scheduled, founder_email=founder.email)
+    except Exception:
+        if claimed_free:
+            entitlements.usage.release_free_call(
+                founder.founder_id, period_month(datetime.now(timezone.utc)),
+                at=datetime.now(timezone.utc))
+        raise
+
     data = {
         "founder_id": founder.founder_id,
         "scheduled_at": scheduled,
@@ -73,7 +111,14 @@ async def book_call(
     }
     if payload.timezone:
         data["timezone"] = payload.timezone
-    call = discovery_call_repository.create(db, data)
+    try:
+        call = discovery_call_repository.create(db, data)
+    except Exception:
+        if claimed_free:
+            entitlements.usage.release_free_call(
+                founder.founder_id, period_month(datetime.now(timezone.utc)),
+                at=datetime.now(timezone.utc))
+        raise
 
     if founder.email:
         background.add_task(

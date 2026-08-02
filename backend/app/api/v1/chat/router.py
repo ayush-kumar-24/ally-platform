@@ -40,6 +40,8 @@ from app.api.v1.chat.schemas import (
     StreamRequest,
 )
 
+from app.api.v1.plans.dependencies import ChatGate, chat_gate
+
 router = APIRouter(prefix="/chat", tags=["chat"])
 
 
@@ -49,34 +51,70 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 @router.post("/message", response_model=ApiChatResponse, summary="Send a chat message")
 def post_message(
     payload: MessageRequest,
-    founder_id: int = Depends(get_current_founder_id),
+    gate: ChatGate = Depends(chat_gate),
     service=Depends(get_chat_service),
 ) -> ApiChatResponse:
+    # `chat_gate` has already enforced plan / daily-token / credit limits before we
+    # get here, so the frozen ChatExecutionService below is untouched.
     result = service.send_message(ChatRequest(
-        founder_id=founder_id, message=payload.message, conversation_id=payload.conversation_id,
+        founder_id=gate.founder_id, message=payload.message,
+        conversation_id=payload.conversation_id,
         session_id=payload.session_id, language=payload.language,
         response_category=payload.response_category, request_id=payload.request_id,
     ))
+
+    # Charge for real usage, not an estimate -- the true token count only exists
+    # once the model has replied.
+    usage = getattr(getattr(result, "metrics", None), "token_usage", None)
+    tokens = (getattr(usage, "prompt_tokens", 0) or 0) + (getattr(usage, "completion_tokens", 0) or 0)
+    if tokens:
+        gate.record(tokens)
+
     return ApiChatResponse.from_domain(result)
 
 
 @router.post("/stream", summary="Stream a chat response (Server-Sent Events)")
 def post_stream(
     payload: StreamRequest,
-    founder_id: int = Depends(get_current_founder_id),
+    gate: ChatGate = Depends(chat_gate),
     service=Depends(get_streaming_service),
 ) -> StreamingResponse:
+    # Same gate as /message. Without it, streaming would be a complete bypass of
+    # plan limits -- and it is the path the app is moving to, so an ungated
+    # /stream would mean the limits stop applying to almost everybody.
     request = StreamingChatRequest(
-        founder_id=founder_id, message=payload.message, conversation_id=payload.conversation_id,
+        founder_id=gate.founder_id, message=payload.message,
+        conversation_id=payload.conversation_id,
         session_id=payload.session_id, language=payload.language,
         response_category=payload.response_category, request_id=payload.request_id,
         max_chunk_size=payload.max_chunk_size, timeout_seconds=payload.timeout_seconds,
     )
     return StreamingResponse(
-        sse_event_stream(service.stream(request)),
+        sse_event_stream(metered_stream(service.stream(request), gate)),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+def metered_stream(events, gate: ChatGate):
+    """Pass events through, then charge once the stream finishes.
+
+    Charging can only happen at the end -- the token count is not known until the
+    last chunk. The charge is in a `finally` so a client that disconnects mid-stream
+    is still billed for what the provider actually generated; otherwise hanging up
+    early would be a free-usage loophole.
+    """
+    tokens = 0
+    try:
+        for event in events:
+            usage = getattr(getattr(event, "metrics", None), "token_usage", None)
+            if usage is not None:
+                tokens = ((getattr(usage, "prompt_tokens", 0) or 0)
+                          + (getattr(usage, "completion_tokens", 0) or 0)) or tokens
+            yield event
+    finally:
+        if tokens:
+            gate.record(tokens, source="stream", reason="Ally chat (streamed)")
 
 
 # --- conversations ----------------------------------------------------------

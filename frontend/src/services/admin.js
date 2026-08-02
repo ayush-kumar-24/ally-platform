@@ -134,3 +134,18 @@ export function createBroadcast(payload) {
 export function deactivateBroadcast(id) {
   return del(`/admin/broadcasts/${id}`);
 }
+
+/** System-wide token usage, estimated cost and the unbilled backlog. */
+export function getUsage(days = 30) {
+  return get('/admin/usage', { params: { days } });
+}
+
+/** One founder's usage and remaining credits. */
+export function getUserUsage(id, days = 30) {
+  return get(`/admin/users/${id}/usage`, { params: { days } });
+}
+
+/** Replay unbilled usage against the ledger. Super Admin only. */
+export function reconcileUsage() {
+  return post('/admin/usage/reconcile', {});
+}

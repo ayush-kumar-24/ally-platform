@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
+import PlanGate from '../components/PlanGate';
+import { FEATURES } from '../services/plans';
 
 const INITIAL_ACTIVE = [
   {
@@ -51,7 +53,7 @@ const CHIP_SUGGESTIONS = [
   'Book hotel'
 ];
 
-export default function PlanYourDay() {
+function PlanYourDayInner() {
   const { user } = useApp();
   const [activeTab, setActiveTab] = useState('ally');
   const [inputText, setInputText] = useState('');
@@ -471,5 +473,24 @@ export default function PlanYourDay() {
         </div>
       </div>
     </div>
+  );
+}
+
+
+/**
+ * Plan Your Day is a paid feature (Starter and above). The gate here is a
+ * courtesy so a Free founder sees an explanation instead of a broken page --
+ * the backend refuses the underlying calls either way.
+ */
+export default function PlanYourDay() {
+  return (
+    <PlanGate
+      feature={FEATURES.PLAN_YOUR_DAY}
+      requiredPlan="Starter"
+      title="Plan Your Day is a Starter feature"
+      message="Upgrade to Starter to turn Ally's next steps into a daily plan."
+    >
+      <PlanYourDayInner />
+    </PlanGate>
   );
 }

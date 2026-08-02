@@ -259,3 +259,71 @@ def deactivate_broadcast(broadcast_id: str, ip: str | None = Depends(client_ip),
                          resource=f"broadcast:{broadcast_id}", ip_address=ip,
                          new_value={"active": False})
     return {"broadcast_id": broadcast_id, "active": bool(b and b.active)}
+
+
+# --- usage dashboard --------------------------------------------------------
+
+@router.get("/usage", response_model=dict, summary="System-wide usage and estimated cost")
+def system_usage(days: int = Query(default=30, ge=1, le=90),
+                 admin: PanelAdmin = Depends(get_panel_admin), db=Depends(get_db)) -> dict:
+    require(admin.role, Capability.VIEW_USERS)
+    from app.admin.usage_metrics import UsageMetricsService, cost_per_1k
+    svc = UsageMetricsService(db)
+    s = svc.summary()
+    return {
+        "summary": {
+            "tokens_today": s.tokens_today,
+            "tokens_month": s.tokens_month,
+            "requests_month": s.requests_month,
+            "avg_tokens_per_request": s.avg_tokens_per_request,
+            # Labelled "estimated" everywhere: it is tokens x a blended rate, not a
+            # provider invoice, and must never be reconciled against a real bill.
+            "estimated_cost_today_usd": s.estimated_cost_today_usd,
+            "estimated_cost_month_usd": s.estimated_cost_month_usd,
+            "cost_basis_per_1k_usd": cost_per_1k(),
+            "unbilled_tokens": s.unbilled_tokens,
+            "unbilled_credits": s.unbilled_credits,
+        },
+        "daily": svc.daily_series(days=days),
+        "top_consumers": svc.top_consumers(limit=10),
+    }
+
+
+@router.get("/users/{founder_id}/usage", response_model=dict,
+            summary="One founder's usage and remaining credits")
+def founder_usage(founder_id: int, days: int = Query(default=30, ge=1, le=90),
+                  admin: PanelAdmin = Depends(get_panel_admin), db=Depends(get_db)) -> dict:
+    require(admin.role, Capability.VIEW_USERS)
+    from app.admin.usage_metrics import UsageMetricsService
+    svc = UsageMetricsService(db)
+    s = svc.summary(founder_id)
+    return {
+        "founder_id": founder_id,
+        "tokens_today": s.tokens_today,
+        "tokens_month": s.tokens_month,
+        "requests_month": s.requests_month,
+        "avg_tokens_per_request": s.avg_tokens_per_request,
+        "credits_remaining": s.credits_remaining,
+        "estimated_cost_today_usd": s.estimated_cost_today_usd,
+        "estimated_cost_month_usd": s.estimated_cost_month_usd,
+        "unbilled_tokens": s.unbilled_tokens,
+        "daily": svc.daily_series(founder_id, days=days),
+    }
+
+
+@router.post("/usage/reconcile", response_model=dict,
+             summary="Replay unbilled usage against the ledger (Super Admin)")
+def reconcile_usage(admin: PanelAdmin = Depends(get_panel_admin),
+                    service=Depends(get_panel_service), db=Depends(get_db)) -> dict:
+    require(admin.role, Capability.TRANSFER_CREDITS)
+    from app.plans.reconciliation import (
+        ReconciliationService,
+        SqlAlchemyReconciliationRepository,
+    )
+    recon = ReconciliationService(SqlAlchemyReconciliationRepository(db),
+                                  credit_service=container.credit_service(db))
+    before = recon.pending()
+    result = recon.replay()
+    service.audit.record(admin=admin, action="usage.reconcile", resource="unbilled_usage",
+                         old_value=before, new_value=result)
+    return {"before": before, "result": result, "after": recon.pending()}

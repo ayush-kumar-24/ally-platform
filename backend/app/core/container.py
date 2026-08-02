@@ -285,6 +285,15 @@ class Container:
         )
         return FeatureFlagService(SqlAlchemyFeatureFlagRepository(db))
 
+    def entitlement_service(self, db: Session):
+        """Plan gate for one request. Composed with the credit service so the
+        chat guard can check features, the daily ceiling and the balance in one
+        place."""
+        from app.plans.service import EntitlementService
+        from app.plans.usage import SqlAlchemyUsageRepository
+        return EntitlementService(SqlAlchemyUsageRepository(db),
+                                  credit_service=self.credit_service(db))
+
     def broadcast_service(self, db: Session):
         from app.admin.broadcasts import BroadcastService, SqlAlchemyBroadcastRepository
         return BroadcastService(SqlAlchemyBroadcastRepository(db))
