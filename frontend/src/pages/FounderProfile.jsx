@@ -1,12 +1,27 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { get, post } from '../services/api';
+import {
+  deleteAccount,
+  downloadExport,
+  exportData,
+  getPrivacyStatus,
+  restrictProcessing,
+  withdrawConsent,
+} from '../services/privacy';
 
 // --- Privacy Center helpers ------------------------------------------------
 
+// `kind` decides which right is exercised, and therefore which endpoint runs:
+//   export   -> GET    /privacy/export    (served immediately, downloads a file)
+//   restrict -> POST   /privacy/restrict  (reversible pause)
+//   withdraw -> POST   /privacy/withdraw  (revokes consent, keeps the account)
+//   delete   -> DELETE /privacy/account   (schedules erasure)
+//   queued   -> POST   /settings/privacy  (needs a human; goes on the review queue)
 const PRIVACY_ACTIONS = [
   {
     type: 'download_data',
+    kind: 'export',
     label: 'Download my data',
     desc: 'Get a full export (JSON) of all data Ally holds about you — founder profile, sessions, and diagnosis history.',
     icon: (
@@ -16,13 +31,14 @@ const PRIVACY_ACTIONS = [
         <line x1="12" y1="15" x2="12" y2="3" />
       </svg>
     ),
-    confirmTitle: 'Request data download?',
-    confirmDesc: 'Ally will compile a full copy of your data. You\'ll receive it within 30 days.',
+    confirmTitle: 'Download your data?',
+    confirmDesc: 'Ally will assemble a full copy of your data and download it to this device now.',
     confirmColor: '#4338ca',
     confirmBg: '#f0f4ff',
   },
   {
     type: 'view_data',
+    kind: 'queued',
     label: 'View data summary',
     desc: 'Request a summary of what personal and business data Ally currently holds for your account.',
     icon: (
@@ -38,6 +54,7 @@ const PRIVACY_ACTIONS = [
   },
   {
     type: 'correct_data',
+    kind: 'queued',
     label: 'Request data correction',
     desc: 'Ask us to fix inaccurate or incomplete personal information in your profile or stored records.',
     icon: (
@@ -53,6 +70,7 @@ const PRIVACY_ACTIONS = [
   },
   {
     type: 'portability',
+    kind: 'export',
     label: 'Export for portability',
     desc: 'Download a machine-readable copy of your data in a portable format (JSON/CSV) to take to another service.',
     icon: (
@@ -63,13 +81,14 @@ const PRIVACY_ACTIONS = [
         <line x1="15" y1="15" x2="21" y2="21" />
       </svg>
     ),
-    confirmTitle: 'Request data portability?',
-    confirmDesc: 'Ally will prepare a portable, machine-readable export of your data within 30 days.',
+    confirmTitle: 'Export your data?',
+    confirmDesc: 'Ally will prepare a portable, machine-readable copy and download it now.',
     confirmColor: '#4338ca',
     confirmBg: '#f0f4ff',
   },
   {
     type: 'restrict_processing',
+    kind: 'restrict',
     label: 'Restrict data processing',
     desc: 'Pause AI analysis and profiling of your data. Your account stays active but Ally won\'t generate new insights.',
     icon: (
@@ -85,8 +104,25 @@ const PRIVACY_ACTIONS = [
   },
   {
     type: 'withdraw_consent',
-    label: 'Withdraw consent & erase data',
-    desc: 'Revoke your consent and request full account and data deletion. This action is irreversible once processed.',
+    kind: 'withdraw',
+    label: 'Withdraw consent',
+    desc: 'Revoke your consent to AI analysis. Processing pauses immediately and your account stays active — this does not delete anything.',
+    icon: (
+      <svg viewBox="0 0 24 24">
+        <path d="M18.36 6.64A9 9 0 1 1 5.64 6.64" />
+        <line x1="12" y1="2" x2="12" y2="12" />
+      </svg>
+    ),
+    confirmTitle: 'Withdraw your consent?',
+    confirmDesc: 'Ally will stop analysing your data straight away. Your account and existing records stay intact, and you can give consent again later.',
+    confirmColor: '#92400e',
+    confirmBg: '#fffbeb',
+  },
+  {
+    type: 'delete_account',
+    kind: 'delete',
+    label: 'Delete my account',
+    desc: 'Request full erasure of your account and all associated data. Scheduled with a 30-day recovery window before it becomes permanent.',
     icon: (
       <svg viewBox="0 0 24 24">
         <polyline points="3 6 5 6 21 6" />
@@ -95,8 +131,8 @@ const PRIVACY_ACTIONS = [
         <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
       </svg>
     ),
-    confirmTitle: 'Withdraw consent & request erasure?',
-    confirmDesc: 'This queues a full account deletion. Once processed by our team, your data cannot be recovered.',
+    confirmTitle: 'Delete your account?',
+    confirmDesc: 'Erasure will be scheduled 30 days from now. Contact support within that window to cancel — after it passes, your data cannot be recovered.',
     confirmColor: '#991b1b',
     confirmBg: '#fff1f2',
   },
@@ -108,7 +144,8 @@ const TYPE_LABELS = {
   correct_data: 'Data correction',
   portability: 'Data portability export',
   restrict_processing: 'Restrict processing',
-  withdraw_consent: 'Withdraw consent & erase',
+  withdraw_consent: 'Withdraw consent',
+  delete_account: 'Account deletion',
 };
 
 function fmtDate(iso) {
@@ -125,17 +162,27 @@ export default function FounderProfile() {
   // Privacy Center state
   const [pendingAction, setPendingAction] = useState(null); // the action object being confirmed
   const [submitting, setSubmitting] = useState(false);
+  const [progress, setProgress] = useState('');             // what's happening right now
   const [privacyRequests, setPrivacyRequests] = useState([]);
   const [requestsLoaded, setRequestsLoaded] = useState(false);
+  const [privacyState, setPrivacyState] = useState(null);   // restriction / deletion standing
+  // Ref, not state: state updates are async, so two clicks in the same tick would
+  // both see submitting === false. The ref flips synchronously.
+  const inFlight = useRef(false);
 
-  // Load existing privacy requests on mount (fire-and-forget; graceful if backend is down)
+  // Load privacy standing + request history on mount (graceful if backend is down)
   useEffect(() => {
     (async () => {
       try {
-        const data = await get('/settings/privacy');
-        setPrivacyRequests(data.items ?? []);
+        const status = await getPrivacyStatus();
+        setPrivacyState(status.state ?? null);
+        setPrivacyRequests(status.requests ?? []);
       } catch (_) {
-        // Backend not running — silently skip
+        // Fall back to the legacy queue endpoint so the history still renders.
+        try {
+          const data = await get('/settings/privacy');
+          setPrivacyRequests(data.items ?? []);
+        } catch (_) { /* backend down — leave empty */ }
       } finally {
         setRequestsLoaded(true);
       }
@@ -143,32 +190,84 @@ export default function FounderProfile() {
   }, []);
 
   const handleSubmitPrivacyRequest = useCallback(async () => {
-    if (!pendingAction || submitting) return;
+    if (!pendingAction || inFlight.current) return;
+    inFlight.current = true;
     setSubmitting(true);
+
+    const label = TYPE_LABELS[pendingAction.type] ?? pendingAction.label;
     try {
-      const created = await post('/settings/privacy', { request_type: pendingAction.type });
-      setPrivacyRequests(prev => [created, ...prev]);
-      showToast(`${TYPE_LABELS[pendingAction.type]} request submitted ✓`);
-    } catch (err) {
-      if (!err.isNetwork) {
-        showToast('Could not submit request — please try again.');
-        return; // real server rejection — don't mock success
+      switch (pendingAction.kind) {
+        case 'export': {
+          setProgress('Assembling your data…');
+          const bundle = await exportData();
+          setProgress('Preparing download…');
+          downloadExport(bundle, `ally-data-export-${new Date().toISOString().slice(0, 10)}.json`);
+          setPrivacyRequests(prev => [bundle.request, ...prev]);
+          showToast(`Export ready — ${bundle.record_count} records downloaded ✓`);
+          break;
+        }
+        case 'restrict': {
+          setProgress('Pausing processing…');
+          const res = await restrictProcessing(true);
+          setPrivacyState(res.state);
+          setPrivacyRequests(prev => [res.request, ...prev]);
+          showToast(res.message);
+          break;
+        }
+        case 'withdraw': {
+          setProgress('Withdrawing consent…');
+          const res = await withdrawConsent();
+          setPrivacyState(res.state);
+          setPrivacyRequests(prev => [res.request, ...prev]);
+          showToast(res.message);
+          break;
+        }
+        case 'delete': {
+          setProgress('Scheduling erasure…');
+          const res = await deleteAccount();
+          setPrivacyState(res.state);
+          setPrivacyRequests(prev => [res.request, ...prev]);
+          showToast(res.message);
+          break;
+        }
+        default: {
+          // Rights that need a human to action — queued for review.
+          setProgress('Submitting request…');
+          const created = await post('/settings/privacy', { request_type: pendingAction.type });
+          setPrivacyRequests(prev => [created, ...prev]);
+          showToast(`${label} request submitted ✓`);
+        }
       }
-      // If backend is offline, mock success so the UI still responds
-      const mock = {
-        request_id: Date.now(),
-        request_type: pendingAction.type,
-        status: 'pending',
-        requested_at: new Date().toISOString(),
-        created_at: new Date().toISOString(),
-      };
-      setPrivacyRequests(prev => [mock, ...prev]);
-      showToast(`${TYPE_LABELS[pendingAction.type]} request submitted ✓`);
+    } catch (err) {
+      // A server rejection is real and must surface — never fake success for a
+      // right the user believes they just exercised.
+      showToast(err.detail || `Could not complete "${label}" — please try again.`);
     } finally {
+      inFlight.current = false;
       setSubmitting(false);
+      setProgress('');
       setPendingAction(null);
     }
-  }, [pendingAction, submitting, showToast]);
+  }, [pendingAction, showToast]);
+
+  const handleResumeProcessing = useCallback(async () => {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setSubmitting(true);
+    setProgress('Resuming processing…');
+    try {
+      const res = await restrictProcessing(false);
+      setPrivacyState(res.state);
+      setPrivacyRequests(prev => [res.request, ...prev]);
+      showToast(res.message);
+    } catch (err) {
+      showToast(err.detail || 'Could not lift the restriction — please try again.');
+    } finally {
+      inFlight.current = false;
+      setSubmitting(false);
+      setProgress('');
+    }
+  }, [showToast]);
 
 
   // Form Fields
@@ -234,7 +333,9 @@ export default function FounderProfile() {
                 type="button"
                 style={{ background: pendingAction.confirmColor }}
               >
-                {submitting ? 'Submitting…' : 'Confirm Request'}
+                {submitting
+                  ? (progress || 'Working…')
+                  : (pendingAction.kind === 'export' ? 'Download now' : 'Confirm')}
               </button>
             </div>
           </div>
@@ -730,6 +831,44 @@ export default function FounderProfile() {
       </div>
 
       <div className="pr-card stagger d5">
+        {/* Current standing — only rendered when something is actually in effect,
+            so the common case stays uncluttered. */}
+        {privacyState?.deletion_pending && (
+          <div className="pr-privacy-banner" role="status" style={{
+            background: '#fff1f2', border: '1px solid #fecdd3', borderRadius: 10,
+            padding: '12px 14px', marginBottom: 14, color: '#991b1b', fontSize: 13,
+          }}>
+            <strong>Account deletion scheduled.</strong>{' '}
+            Your data will be erased on {fmtDate(privacyState.deletion_scheduled_at)}. Contact
+            support before then to cancel.
+          </div>
+        )}
+        {privacyState?.processing_restricted && !privacyState?.deletion_pending && (
+          <div className="pr-privacy-banner" role="status" style={{
+            background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10,
+            padding: '12px 14px', marginBottom: 14, color: '#92400e', fontSize: 13,
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+          }}>
+            <span>
+              <strong>Processing is paused.</strong>{' '}
+              Ally isn&apos;t generating new insights
+              {privacyState.processing_restricted_at
+                ? ` (since ${fmtDate(privacyState.processing_restricted_at)})`
+                : ''}.
+            </span>
+            <button
+              className="pr-privacy-btn"
+              onClick={handleResumeProcessing}
+              disabled={submitting}
+              type="button"
+              id="privacy-btn-resume"
+              style={{ flexShrink: 0 }}
+            >
+              {submitting ? (progress || 'Working…') : 'Resume'}
+            </button>
+          </div>
+        )}
+
         {PRIVACY_ACTIONS.map((action) => (
           <div className="pr-privacy-action" key={action.type}>
             <div className="pr-privacy-action-info">
@@ -748,11 +887,19 @@ export default function FounderProfile() {
               onClick={() => setPendingAction(action)}
               type="button"
               id={`privacy-btn-${action.type}`}
+              disabled={
+                submitting ||
+                (action.kind === 'restrict' && privacyState?.processing_restricted) ||
+                (action.kind === 'delete' && privacyState?.deletion_pending)
+              }
             >
               <svg viewBox="0 0 24 24">
                 <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
               </svg>
-              Request
+              {action.kind === 'restrict' && privacyState?.processing_restricted ? 'Paused'
+                : action.kind === 'delete' && privacyState?.deletion_pending ? 'Scheduled'
+                : action.kind === 'export' ? 'Download'
+                : 'Request'}
             </button>
           </div>
         ))}
