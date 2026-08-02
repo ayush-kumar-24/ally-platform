@@ -77,8 +77,24 @@ The schema already exists — 56 logical tables (plus 36 monthly partitions),
 created by Supabase migrations, with `founders` as the hub that 66 other tables
 reference.
 
-**Alembic owns all schema changes from here on.** Do not alter schema through the
-Supabase SQL editor, or the two will drift.
+> ### 🔒 THE RULE — Alembic owns every schema change. No exceptions.
+>
+> **No schema change happens outside Alembic. No direct DDL — `CREATE`,
+> `ALTER`, `DROP`, indexes, constraints, RLS — through the Supabase SQL
+> editor, the Supabase MCP tool, `psql`, or any other path, by anyone
+> (human or agent).** The only sanctioned way to change the schema is an
+> Alembic revision that is reviewed and then applied with `alembic upgrade head`.
+>
+> Why this is non-negotiable: doing DDL out-of-band creates tables the
+> migration chain has no record of, so `alembic upgrade` later tries to
+> re-`CREATE` them and fails — the exact drift we had to reconcile (the live
+> DB sat at `055fcff2b6b5` with ~19 tables Alembic never recorded, while head
+> was `c3d1f0a2b7e4`). An empty migration history is indistinguishable from a
+> correct one until the day it breaks a deploy.
+>
+> If you truly must adopt objects that already exist (e.g. created before this
+> rule), do it deliberately: write/autogenerate a revision that represents them
+> and `alembic stamp` the DB to it — never leave the two out of sync.
 
 ```bash
 alembic revision --autogenerate -m "what changed"   # review the file before applying

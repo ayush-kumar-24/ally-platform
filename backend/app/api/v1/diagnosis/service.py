@@ -12,8 +12,10 @@ from fastapi import status
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from app.api.v1.diagnosis.advisor import AnswerInsight, NextQuestionAdvisor, resolve_next
 from app.api.v1.diagnosis.engine import QuestionSelectionEngine
 from app.api.v1.diagnosis.repository import DiagnosisRepository
+from app.core.config import settings
 from app.core.logger import logger
 from app.middleware.error_handler import AppError
 from app.models import (
@@ -57,10 +59,12 @@ def _utcnow() -> datetime:
 
 
 class DiagnosisService:
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, *, advisor: NextQuestionAdvisor | None = None):
         self.db = db
         self.repository = DiagnosisRepository(db)
         self.engine = QuestionSelectionEngine(self.repository)
+        # Optional adaptive next-question advisor (Hybrid). None => deterministic.
+        self.advisor = advisor
 
     # --- Public API ---
 
@@ -140,7 +144,7 @@ class DiagnosisService:
 
         return session, self._current_question_for(session, founder)
 
-    def submit_answer(
+    async def submit_answer(
         self,
         founder: Founder,
         question_id: int,
@@ -150,6 +154,11 @@ class DiagnosisService:
 
         Returns (session, next_question). `next_question` is None once the bank
         is exhausted, at which point the session is marked completed.
+
+        Adaptive (Hybrid): when an advisor is wired, the LLM reads the answer,
+        scores it (persisted on the answer), and re-ranks the deterministic
+        shortlist to pick the next question. It fails open to the deterministic
+        pick on any error, so the flow always progresses.
         """
         session = self.repository.get_active_session_for_founder(founder.founder_id)
         if session is None:
@@ -180,17 +189,18 @@ class DiagnosisService:
             is_distress_flagged=False,
             answered_at=_utcnow(),
         )
+        self.repository.add_answer(answer)
+
+        # Choose the next question BEFORE opening the write transaction's commit:
+        # the advisor call is network I/O and must not fail the answer save. It
+        # returns the deterministic pick on any problem.
+        next_question = await self._choose_next_question(session, founder, question, answer)
 
         try:
-            self.repository.add_answer(answer)
-
             session.questions_answered_count += 1
             session.last_activity_at = _utcnow()
             session.updated_at = _utcnow()
-
-            next_question = self.engine.select_next_question(session, founder)
             self._attach_question(session, next_question)
-
             self.db.commit()
         except IntegrityError as exc:
             self.db.rollback()
@@ -211,6 +221,50 @@ class DiagnosisService:
 
         self.db.refresh(session)
         return session, next_question
+
+    async def _choose_next_question(
+        self, session: DiagnosisSession, founder: Founder, answered: Question, answer: Answer
+    ) -> Question | None:
+        """Deterministic pick, optionally overridden by the LLM advisor.
+
+        Never raises: an advisor failure or an out-of-shortlist recommendation
+        falls back to the deterministic head, so the assessment always advances.
+        """
+        candidates = self.engine.candidate_questions(session, founder)
+        if not candidates:
+            return None  # bank exhausted -> completion
+
+        ordered = self.engine.order_candidates(candidates)
+        if self.advisor is None:
+            return ordered[0]
+
+        shortlist = ordered[: settings.ADAPTIVE_SHORTLIST_SIZE]
+        history = self.repository.recent_qa(session.session_id, limit=5)
+        insight: AnswerInsight | None = None
+        try:
+            insight = await self.advisor.analyze(
+                answered_question=answered,
+                answer_text=answer.answer_text,
+                shortlist=shortlist,
+                history=history,
+            )
+        except Exception as exc:  # advisor must never break the flow
+            logger.warning(
+                "adaptive advisor raised; using deterministic pick",
+                extra={"founder_id": founder.founder_id, "stage": "adaptive_questions"},
+                exc_info=exc,
+            )
+
+        if insight is not None:
+            self._apply_insight(answer, insight)
+        return resolve_next(ordered, shortlist, insight)
+
+    def _apply_insight(self, answer: Answer, insight: AnswerInsight) -> None:
+        """Persist the LLM's Green/Amber/Red read on the answer, so the reasoning
+        pipeline reuses it (via the stored-score classifier) instead of re-scoring."""
+        if insight.score_label is not None:
+            answer.score_label = insight.score_label
+            answer.score = insight.score
 
     # --- Internals ---
 

@@ -276,3 +276,57 @@ def test_top_k_caps_results():
     result = svc(chunks).retrieve(make_ctx(), "q", top_k=3)
     assert len(result.items) == 3
     assert [r.rank for r in result.items] == [1, 2, 3]
+
+
+# --- Sales-collateral gate (content governance, not relevance) --------------
+
+def _restricted(cid="sc1", *, sim="0.99", content_class="sales_collateral",
+                retrieval_scope="recommendation_only"):
+    return KnowledgeChunk(
+        chunk_id=cid, source="rag_chunks", source_id=cid, content="GoXL offering pitch",
+        similarity=D(sim), content_class=content_class, retrieval_scope=retrieval_scope,
+    )
+
+
+def test_is_restricted_flags_either_tag():
+    assert _restricted(content_class="sales_collateral", retrieval_scope=None).is_restricted
+    assert _restricted(content_class=None, retrieval_scope="recommendation_only").is_restricted
+    assert not _restricted(content_class=None, retrieval_scope=None).is_restricted
+
+
+def test_sales_collateral_excluded_by_default():
+    # A high-similarity offering chunk must not beat an ordinary one -- it's gone.
+    result = svc([_restricted(sim="0.99"), chunk("ok", sim=0.4)]).retrieve(make_ctx(), "hiring")
+    ids = [it.chunk.chunk_id for it in result.items]
+    assert "sc1" not in ids and "ok" in ids
+
+
+def test_sales_collateral_excluded_even_in_distress():
+    # The exact failure mode: a founder in distress must never be pitched to.
+    result = svc([_restricted()]).retrieve(make_ctx(distress=True), "i'm overwhelmed")
+    assert result.is_empty
+
+
+def test_sales_collateral_included_only_when_opted_in():
+    result = svc([_restricted()]).retrieve(make_ctx(), "recommend an offering",
+                                           allow_sales_collateral=True)
+    assert [it.chunk.chunk_id for it in result.items] == ["sc1"]
+
+
+def test_passes_filters_is_the_gate():
+    from app.api.v1.ally.rag.repository import passes_filters
+    from app.api.v1.ally.rag.schemas import RetrievalFilters
+    r = _restricted()
+    assert not passes_filters(r, RetrievalFilters())                        # default drops
+    assert passes_filters(r, RetrievalFilters(allow_sales_collateral=True))  # opt-in keeps
+
+
+def test_gate_holds_even_if_repository_ignores_prefilter():
+    # A repository that returns restricted chunks anyway (e.g. a future DB wrapper)
+    # is still caught by the service-level safety net.
+    class LeakyRepo(RetrievalRepository):
+        def search(self, request):
+            return (_restricted(),)
+
+    result = build_retrieval_service(LeakyRepo()).retrieve(make_ctx(), "q")
+    assert result.is_empty

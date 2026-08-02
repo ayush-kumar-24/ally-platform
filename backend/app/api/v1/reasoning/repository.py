@@ -194,6 +194,19 @@ class ReasoningRepository:
         ).all()
         return {int(r[0]): Decimal(r[1]) for r in rows if r[1] is not None}
 
+    def get_distress_signals_catalog(self) -> list[dict]:
+        """The full active psychological_state_signals catalogue for the LLM
+        language detector: id, state, type, observable indicator, example phrases,
+        and per-instance score. Ordered by signal_id for a stable prompt."""
+        rows = self.db.execute(
+            text(
+                "select signal_id, state_code, signal_type, observable_indicator, "
+                "example_phrases, score_per_instance from psychological_state_signals "
+                "where is_active is true order by signal_id"
+            )
+        ).mappings().all()
+        return [dict(r) for r in rows]
+
     def get_empathy_protocol(self, prompt_code: str) -> str | None:
         """The distress empathy-protocol text from prompt_library (category
         'distress') for a State A/B/C/D protocol code. None if unseeded/inactive."""

@@ -85,6 +85,12 @@ class BaseHTTPLLMProvider(LLMProvider):
 
     # --- Public contract --------------------------------------------------
 
+    def with_model(self, model_id: str) -> "BaseHTTPLLMProvider":
+        """Pin this provider instance to a specific model (task->model routing).
+        Safe because the registry builds a fresh instance per resolve."""
+        self.model = model_id
+        return self
+
     async def generate(self, request: LLMRequest) -> LLMResponse:
         payload = self._build_payload(request)
         data = await self._post_with_retries(self._endpoint(), self._headers(), payload)

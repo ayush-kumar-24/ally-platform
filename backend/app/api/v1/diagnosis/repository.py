@@ -94,3 +94,16 @@ class DiagnosisRepository:
         self.db.add(answer)
         self.db.flush()
         return answer
+
+    def recent_qa(self, session_id: int, limit: int = 5) -> list[tuple[str, str]]:
+        """The last `limit` (question_text, answer_text) pairs, oldest-first, for
+        adaptive next-question context. Ordered by answer time."""
+        stmt = (
+            select(Question.question_text, Answer.answer_text)
+            .join(Answer, Answer.question_id == Question.question_id)
+            .where(Answer.session_id == session_id)
+            .order_by(Answer.answered_at.desc())
+            .limit(limit)
+        )
+        rows = self.db.execute(stmt).all()
+        return [(qt, at) for qt, at in reversed(rows)]

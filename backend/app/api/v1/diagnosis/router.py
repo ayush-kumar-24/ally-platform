@@ -17,6 +17,8 @@ from app.api.v1.diagnosis.schemas import (
     SubmitAnswerRequest,
     SubmitAnswerResponse,
 )
+from app.api.v1.diagnosis.advisor import NextQuestionAdvisor
+from app.api.v1.diagnosis.deps import get_next_question_advisor
 from app.api.v1.diagnosis.notifications import (
     SessionCompletionNotifier,
     get_session_completion_notifier,
@@ -60,15 +62,16 @@ def get_current_question(
     response_model=SubmitAnswerResponse,
     summary="Submit an answer and receive the next question",
 )
-def submit_answer(
+async def submit_answer(
     payload: SubmitAnswerRequest,
     db: Session = Depends(get_db),
     founder: Founder = Depends(get_current_founder),
     completion_notifier: SessionCompletionNotifier = Depends(
         get_session_completion_notifier
     ),
+    advisor: NextQuestionAdvisor | None = Depends(get_next_question_advisor),
 ) -> SubmitAnswerResponse:
-    session, next_question = DiagnosisService(db).submit_answer(
+    session, next_question = await DiagnosisService(db, advisor=advisor).submit_answer(
         founder=founder,
         question_id=payload.question_id,
         answer_text=payload.answer_text,

@@ -144,7 +144,14 @@ class ReportNarrativeGenerator:
 
     # --- ordering (hard rules 1 + distress) -------------------------------
     def _section_order(self, p: ReportPayload, variant: ReportVariant) -> list[str]:
-        show_psych = p.psychology_flagged or bool(p.red_flag_pillars)
+        # Section H is Founder-Readiness-specific (see _slots_and_facts below) --
+        # a red flag on an UNRELATED pillar (e.g. Financial Runway) must not
+        # trigger it. Business DNA already surfaces those pillars' own bands and
+        # notes. Gating on "any red_flag_pillars" here handed the LLM narrator an
+        # empty-content section for a non-psychology red flag, and it fabricated
+        # a claim to fill it -- so this must match the Founder-Readiness check
+        # _slots_and_facts actually uses, not any red flag.
+        show_psych = p.psychology_flagged or self._founder_readiness_flagged(p)
 
         if variant is ReportVariant.DISTRESS:
             # Acknowledgement FIRST; a support recommendation BEFORE any business.
@@ -176,6 +183,19 @@ class ReportNarrativeGenerator:
         order.append("discovery_cta")
         return order
 
+    @staticmethod
+    def _founder_readiness_state(p: ReportPayload):
+        """The Founder Readiness pillar and whether it is in the Critical Gap
+        state (band or explicit red flag) -- the single source of truth for
+        Section H, so ordering and content agree on the same trigger."""
+        fr = next((pl for pl in p.pillars if pl.name == "Founder Readiness"), None)
+        critical_gap = bool(fr and (fr.band == "Critical Gap" or fr.red_flag_triggered))
+        return fr, critical_gap
+
+    def _founder_readiness_flagged(self, p: ReportPayload) -> bool:
+        _, critical_gap = self._founder_readiness_state(p)
+        return critical_gap
+
     # --- slots + facts per section ---------------------------------------
     def _slots_and_facts(self, key: str, p: ReportPayload, separate_identity: bool):
         if key == "founder_summary":
@@ -202,8 +222,7 @@ class ReportNarrativeGenerator:
             # triggered when Founder Readiness is in the Critical Gap band (0-35).
             # Its content is that band's written description. It surfaces regardless
             # of the overall score. Identity fusion -> separation language.
-            fr = next((pl for pl in p.pillars if pl.name == "Founder Readiness"), None)
-            critical_gap = bool(fr and (fr.band == "Critical Gap" or fr.red_flag_triggered))
+            fr, critical_gap = self._founder_readiness_state(p)
             section_h_text = fr.band_description if (fr and critical_gap) else None
             note = fr.red_flag_note if fr else None
             slots = {"section_h_text": section_h_text, "red_flag_note": note,
@@ -217,7 +236,12 @@ class ReportNarrativeGenerator:
                 "red_flag_pillars": [rp.name for rp in p.red_flag_pillars],
                 "founder_readiness_band": fr.band if fr else None,
             }
-            if not section_h_text and not note and not p.psychology_flagged and not p.red_flag_pillars:
+            # Belt-and-suspenders: skip if there is truly no content to narrate --
+            # matches the Founder-Readiness-only trigger in _section_order, not
+            # any red flag, so an unrelated pillar's flag never renders this
+            # section with empty slots (which is what caused the LLM to fabricate
+            # a claim to fill it).
+            if not section_h_text and not note and not p.psychology_flagged and not critical_gap:
                 return {}, {}
             return slots, facts
 
@@ -249,8 +273,12 @@ class ReportNarrativeGenerator:
             return ({"root_causes": rcs}, {"root_causes": rcs}) if rcs else ({}, {})
 
         if key == "areas_to_monitor":
-            cats = p.top_sub_threshold_categories
-            return {"categories": cats}, {"categories": [c for c, _ in cats]}
+            # Names ONLY -- never the raw category-risk score. The score is an
+            # internal 0..1 number, and handing it to the LLM in slots let it
+            # surface as "(scoring 0.2 and 0.18)" in prose, which is exactly the
+            # raw-number leak the bands-not-numbers report rule exists to prevent.
+            names = [c for c, _ in p.top_sub_threshold_categories]
+            return {"categories": names}, {"categories": names}
 
         if key == "priority_actions":
             confirm = [{"next_actions": list(a.next_actions), "priority": a.priority}
