@@ -8,6 +8,8 @@ from app.api.v1.planning.router import router as planning_router
 from app.api.v1.auth.routes import router as auth_router
 from app.api.v1.consents.router import router as consents_router
 from app.api.v1.privacy.router import router as privacy_router
+from app.api.v1.admin.panel_router import router as admin_panel_router
+from app.api.v1.admin.panel_router_v2 import router as admin_panel_router_v2
 from app.api.v1.dashboard.routes import router as dashboard_router
 from app.api.v1.diagnosis.router import router as diagnosis_router
 from app.api.v1.discovery.routes import router as discovery_router
@@ -41,6 +43,10 @@ api_router.include_router(admin_router)
 api_router.include_router(planning_router)
 api_router.include_router(consents_router)
 api_router.include_router(privacy_router)
+# Registered after the Phase 12 admin router; paths are distinct (/admin/users,
+# /admin/credits, /admin/audit vs /admin/founders, /admin/announcements).
+api_router.include_router(admin_panel_router)
+api_router.include_router(admin_panel_router_v2)
 
 
 @api_router.get("/health")

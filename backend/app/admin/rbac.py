@@ -1,0 +1,94 @@
+"""Role-based access control for the Admin Panel.
+
+Three roles, one explicit capability matrix. Authorization is decided *here* and
+enforced in the endpoint dependency -- never in the frontend. The UI hiding a button
+is a usability nicety; the only thing that actually stops an action is this module.
+
+Why a matrix instead of rank comparison: the existing Phase 12 roles were a simple
+ladder (read_only < operator < admin), which works when every permission nests. The
+requested roles do NOT nest cleanly -- Support may view chats while Admin's listed
+duties don't mention it, and only Super Admin may touch credits regardless of how
+"senior" another role looks. An explicit matrix states each answer rather than
+inferring it from an ordering that doesn't hold.
+
+Fails closed twice over: an unknown role has no capability set, and an unknown
+capability is not granted to anybody.
+"""
+
+from __future__ import annotations
+
+from enum import Enum
+
+from app.admin.errors import AdminForbiddenError
+
+
+class PanelRole(str, Enum):
+    SUPER_ADMIN = "super_admin"
+    ADMIN = "admin"
+    SUPPORT = "support"
+
+
+class Capability(str, Enum):
+    # --- read -----------------------------------------------------------
+    VIEW_USERS = "view_users"
+    VIEW_REPORTS = "view_reports"
+    VIEW_CHATS = "view_chats"
+    VIEW_AUDIT = "view_audit"
+    # --- admin-level mutations ------------------------------------------
+    EDIT_USER_PROFILE = "edit_user_profile"
+    RESET_DIAGNOSIS = "reset_diagnosis"
+    RESET_CONVERSATIONS = "reset_conversations"
+    # --- super-admin-only mutations -------------------------------------
+    TRANSFER_CREDITS = "transfer_credits"
+    MODIFY_SUBSCRIPTION = "modify_subscription"
+    SUSPEND_USER = "suspend_user"
+    DELETE_USER = "delete_user"
+    CHANGE_USER_ROLE = "change_user_role"
+    SYSTEM_SETTINGS = "system_settings"
+
+
+_SUPPORT: frozenset[Capability] = frozenset({
+    Capability.VIEW_USERS,
+    Capability.VIEW_REPORTS,
+    Capability.VIEW_CHATS,
+})
+
+_ADMIN: frozenset[Capability] = frozenset({
+    Capability.VIEW_USERS,
+    Capability.VIEW_REPORTS,
+    Capability.VIEW_AUDIT,
+    Capability.EDIT_USER_PROFILE,
+    Capability.RESET_DIAGNOSIS,
+    Capability.RESET_CONVERSATIONS,
+})
+
+# Super Admin holds every capability -- stated as "all of them" so a capability
+# added later is automatically granted here and nowhere else by default.
+_SUPER_ADMIN: frozenset[Capability] = frozenset(Capability)
+
+CAPABILITIES: dict[PanelRole, frozenset[Capability]] = {
+    PanelRole.SUPPORT: _SUPPORT,
+    PanelRole.ADMIN: _ADMIN,
+    PanelRole.SUPER_ADMIN: _SUPER_ADMIN,
+}
+
+
+def has_capability(role: PanelRole | None, capability: Capability) -> bool:
+    """Never raises -- use for shaping a response (e.g. telling the UI what to show)."""
+    if role is None:
+        return False
+    return capability in CAPABILITIES.get(role, frozenset())
+
+
+def require(role: PanelRole | None, capability: Capability) -> None:
+    """Enforce a capability. Raises AdminForbiddenError (403) when absent."""
+    if not has_capability(role, capability):
+        raise AdminForbiddenError(role.value if role else "anonymous", capability.value)
+
+
+def capabilities_for(role: PanelRole | None) -> list[str]:
+    """The role's capabilities, sorted -- returned to the UI so it can hide controls
+    the backend would reject anyway."""
+    if role is None:
+        return []
+    return sorted(c.value for c in CAPABILITIES.get(role, frozenset()))

@@ -38,6 +38,14 @@ import TermsOfService from './pages/TermsOfService';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import Toast from './components/ui/Toast';
 import CookieBanner from './components/CookieBanner';
+// Admin Panel — internal only. Access is decided by the backend (/admin/me);
+// AdminLayout renders an access error for anyone the server does not recognise.
+import AdminLayout from './pages/admin/AdminLayout';
+import AdminDashboard from './pages/admin/AdminDashboard';
+import AdminUsers from './pages/admin/AdminUsers';
+import AdminUserDetail from './pages/admin/AdminUserDetail';
+import AdminAuditLog from './pages/admin/AdminAuditLog';
+import AdminSystem from './pages/admin/AdminSystem';
 
 // Show splash only once per session (won't replay on route changes)
 const splashShown = sessionStorage.getItem('splashShown') === 'true';
@@ -119,6 +127,19 @@ export default function App() {
           <Route path="report" element={<Report />} />
           <Route path="billing" element={<Billing />} />
           <Route path="help" element={<HelpSupport />} />
+        </Route>
+
+        {/* ── Admin Panel (internal) ── */}
+        <Route path="/admin" element={
+          <ErrorBoundary label="Admin" fallbackPath="/admin">
+            <AdminLayout />
+          </ErrorBoundary>
+        }>
+          <Route index element={<AdminDashboard />} />
+          <Route path="users" element={<AdminUsers />} />
+          <Route path="users/:id" element={<AdminUserDetail />} />
+          <Route path="audit" element={<AdminAuditLog />} />
+          <Route path="system" element={<AdminSystem />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />
