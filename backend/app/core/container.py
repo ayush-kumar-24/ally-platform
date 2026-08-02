@@ -46,6 +46,10 @@ from app.admin.repository import InMemoryAdminRepository, InMemoryAnnouncementRe
 from app.admin.service import AdminService
 from app.planning.db_repository import SqlAlchemyPlanningRepository
 from app.planning.service import PlanningService
+from app.consents.db_repository import SqlAlchemyConsentRepository
+from app.consents.service import ConsentService
+from app.privacy.db_repository import SqlAlchemyPrivacyRepository
+from app.privacy.service import PrivacyService
 
 
 class Container:
@@ -228,6 +232,23 @@ class Container:
         """Request-scoped PlanningService over the SQLAlchemy repository. Tests
         override the endpoint dependency with an in-memory-backed service."""
         return PlanningService(SqlAlchemyPlanningRepository(db))
+
+    # --- Consents accessor (DB-backed, per-request) -----------------------
+
+    def consent_service(self, db: Session) -> ConsentService:
+        """Request-scoped ConsentService over the SQLAlchemy repository. Tests
+        override the endpoint dependency with an in-memory-backed service."""
+        return ConsentService(SqlAlchemyConsentRepository(db))
+
+    # --- Privacy Center accessor (DB-backed, per-request) ------------------
+
+    def privacy_service(self, db: Session) -> PrivacyService:
+        """Request-scoped PrivacyService. Composed with the consent service so a
+        withdrawal is written to the consent ledger as well as the privacy log."""
+        return PrivacyService(
+            SqlAlchemyPrivacyRepository(db),
+            consent_service=self.consent_service(db),
+        )
 
 
 # Application-wide container instance. Import and use `container.orchestrator(db)`.
