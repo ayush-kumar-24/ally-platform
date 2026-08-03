@@ -18,7 +18,8 @@ Deterministic: no token counting, no summarization LLM, stable formatting/orderi
 
 from __future__ import annotations
 
-from app.ai_chat.attachments.schemas import AttachmentType
+from app.ai_chat.attachments.extraction import extract_docx_text, extract_pdf_text
+from app.ai_chat.attachments.schemas import AttachmentType, SupportedMimeType
 from app.ai_chat.schemas.chat import ConversationContextWindow, GroundingRequest
 from app.ai_chat.schemas.conversation import Conversation, ConversationContext, MessageRole
 from app.api.v1.ally.memory.schemas import MemorySearchRequest
@@ -27,10 +28,14 @@ from app.core.logger import logger
 
 _SPEAKER = {MessageRole.USER: "Founder", MessageRole.ASSISTANT: "Ally", MessageRole.SYSTEM: "System"}
 
-# Attachment types whose bytes can be decoded as text and read into the prompt.
-# Everything else (images, PDFs, docx) is referenced by name only -- nothing in
-# this codebase decodes binary formats into text yet.
+# Attachment types whose bytes are decoded as plain UTF-8 text and read into the
+# prompt as-is. PDF/DOCX go through dedicated extraction (extraction.py) instead --
+# see _extract_text. Images are the only type nothing decodes yet (named-only).
 _TEXT_READABLE = frozenset({AttachmentType.TEXT, AttachmentType.SPREADSHEET})
+_EXTRACTABLE_MIME = {
+    SupportedMimeType.PDF: extract_pdf_text,
+    SupportedMimeType.DOCX: extract_docx_text,
+}
 
 
 class ContextWindowConfig:
@@ -150,12 +155,29 @@ class ContextWindowBuilder:
 
     def _read_entry(self, attachment) -> tuple[str, str, int, str | None]:
         meta = attachment.metadata
-        text = None
-        if meta.attachment_type in _TEXT_READABLE:
+        return meta.filename, meta.attachment_type.value, meta.size_bytes, self._extract_text(attachment)
+
+    def _extract_text(self, attachment) -> str | None:
+        """Best-effort text for one attachment. Isolated per-attachment: a failure
+        here (bad decode, corrupted PDF) returns None -- the caller lists the file
+        by name only -- rather than dropping the whole attachments block."""
+        meta = attachment.metadata
+        extractor = _EXTRACTABLE_MIME.get(getattr(meta, "mime_type", None))
+        is_text_readable = meta.attachment_type in _TEXT_READABLE
+        if extractor is None and not is_text_readable:
+            return None
+        try:
             content = self.attachments.get_content(attachment.attachment_id)
-            if content is not None:
-                text = content.decode("utf-8", errors="replace")
-        return meta.filename, meta.attachment_type.value, meta.size_bytes, text
+            if content is None:
+                return None
+            if extractor is not None:
+                return extractor(content)
+            return content.decode("utf-8", errors="replace")
+        except Exception as exc:  # noqa: BLE001 -- one bad file must not sink the turn
+            logger.warning("ai_chat: attachment text extraction failed; naming only",
+                            extra={"stage": "extract_attachment_text",
+                                   "attachment_id": attachment.attachment_id, "error": str(exc)})
+            return None
 
     # --- message composition ---------------------------------------------
 

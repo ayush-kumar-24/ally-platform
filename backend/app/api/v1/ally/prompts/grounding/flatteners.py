@@ -98,10 +98,11 @@ _MAX_ATTACHMENT_TEXT = 1500
 
 def attachments_block(entries: tuple[tuple[str, str, int, str | None], ...]) -> str:
     """Format uploaded-file entries (filename, attachment_type, size_bytes,
-    text_content_or_None) into a readable block. Text-bearing files (already
-    decoded by the caller) get their content inlined and clamped; binary types
-    (images, PDFs, docx -- nothing decodes those yet) are listed by name only,
-    so the model is told a file exists without fabricating what's in it."""
+    text_content_or_None) into a readable block. Files with extracted/decoded
+    text (txt, csv, pdf, docx -- see ContextWindowBuilder._extract_text) get
+    their content inlined and clamped; everything else (images; scanned PDFs
+    with no text layer; extraction failures) is listed by name only, so the
+    model is told a file exists without fabricating what's in it."""
     if not entries:
         return ""
     lines: list[str] = []

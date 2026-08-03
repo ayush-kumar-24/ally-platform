@@ -12,7 +12,7 @@ from itertools import count
 from types import SimpleNamespace
 
 from app.ai_chat import ContextWindowBuilder, ContextWindowConfig, MessageRole, build_conversation_service
-from app.ai_chat.attachments.schemas import AttachmentType
+from app.ai_chat.attachments.schemas import AttachmentType, SupportedMimeType
 from app.api.v1.ally.context.schemas import (
     AllyContext,
     DiagnosisContext,
@@ -186,10 +186,11 @@ def test_graph_failure_degrades():
 
 
 class FakeAttachment:
-    def __init__(self, attachment_id, filename, attachment_type, size_bytes):
+    def __init__(self, attachment_id, filename, attachment_type, size_bytes, mime_type=None):
         self.attachment_id = attachment_id
         self.metadata = SimpleNamespace(
             filename=filename, attachment_type=attachment_type, size_bytes=size_bytes,
+            mime_type=mime_type,
         )
 
 
@@ -230,6 +231,56 @@ def test_binary_attachment_is_named_not_fabricated():
     c = _conv_with(conv, (U, "hi"))
     w = builder.build(ally_context=make_ctx(), conversation=c, current_message="hi")
     assert "deck.pdf" in w.attachments_text
+    assert "cannot be read yet" in w.attachments_text
+
+
+def test_pdf_attachment_text_is_extracted_and_inlined():
+    from reportlab.pdfgen import canvas
+
+    buf = __import__("io").BytesIO()
+    c = canvas.Canvas(buf)
+    c.drawString(100, 750, "Runway is eleven months")
+    c.save()
+    pdf_bytes = buf.getvalue()
+
+    att = FakeAttachment("att-3", "board-deck.pdf", AttachmentType.DOCUMENT, len(pdf_bytes),
+                          mime_type=SupportedMimeType.PDF)
+    attachments = FakeAttachments(items=(att,), content={"att-3": pdf_bytes})
+    conv, builder = setup(attachments=attachments)
+    c2 = _conv_with(conv, (U, "hi"))
+    w = builder.build(ally_context=make_ctx(), conversation=c2, current_message="hi")
+    assert "board-deck.pdf" in w.attachments_text
+    assert "Runway is eleven months" in w.attachments_text
+
+
+def test_docx_attachment_text_is_extracted_and_inlined():
+    from docx import Document
+
+    buf = __import__("io").BytesIO()
+    doc = Document()
+    doc.add_paragraph("We are hiring two engineers this quarter.")
+    doc.save(buf)
+    docx_bytes = buf.getvalue()
+
+    att = FakeAttachment("att-4", "hiring-plan.docx", AttachmentType.DOCUMENT, len(docx_bytes),
+                          mime_type=SupportedMimeType.DOCX)
+    attachments = FakeAttachments(items=(att,), content={"att-4": docx_bytes})
+    conv, builder = setup(attachments=attachments)
+    c2 = _conv_with(conv, (U, "hi"))
+    w = builder.build(ally_context=make_ctx(), conversation=c2, current_message="hi")
+    assert "hiring-plan.docx" in w.attachments_text
+    assert "hiring two engineers" in w.attachments_text
+
+
+def test_corrupted_pdf_attachment_is_named_not_fabricated():
+    att = FakeAttachment("att-5", "corrupt.pdf", AttachmentType.DOCUMENT, 4,
+                          mime_type=SupportedMimeType.PDF)
+    attachments = FakeAttachments(items=(att,), content={"att-5": b"nope"})
+    conv, builder = setup(attachments=attachments)
+    c2 = _conv_with(conv, (U, "hi"))
+    w = builder.build(ally_context=make_ctx(), conversation=c2, current_message="hi")
+    assert w.attachments_injected is True  # the block itself still renders
+    assert "corrupt.pdf" in w.attachments_text
     assert "cannot be read yet" in w.attachments_text
 
 
