@@ -39,6 +39,7 @@ from app.api.v1.reasoning.engines import (
     SymptomDetector,
     WeightedConfidenceModel,
 )
+from app.api.v1.ally.memory.sql_repository import build_db_memory_service
 from app.api.v1.reasoning.engines.consistency import LLMConsistencyDetector
 from app.api.v1.reasoning.engines.distress_language import LLMDistressDetector
 from app.api.v1.reasoning.engines.psychological_state import PsychologicalStateSignalScorer
@@ -205,6 +206,10 @@ def build_reasoning_service(db: Session) -> ReasoningService:
         retrieval_enabled=settings.RETRIEVAL_ENABLED,
         consistency_detector=_build_consistency_detector(db),
         distress_detector=_build_distress_detector(db, repository),
+        # Records the completed diagnosis into founder memory (best-effort, see
+        # ReasoningService._record_diagnosis_memory) so chat's memory_summary
+        # block carries it too, not only the session-scoped AllyContext.diagnosis.
+        memory=build_db_memory_service(db),
     )
 
 

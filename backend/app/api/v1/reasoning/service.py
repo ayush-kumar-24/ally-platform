@@ -30,6 +30,7 @@ from decimal import Decimal
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from app.api.v1.ally.memory.schemas import MemoryType
 from app.api.v1.reasoning.config import ReasoningConfig
 from app.api.v1.reasoning.engines.archetype import ArchetypeEngine
 from app.api.v1.reasoning.engines.business_health import BusinessHealthScorer
@@ -104,6 +105,7 @@ class ReasoningService:
         retrieval_enabled: bool = False,
         consistency_detector=None,
         distress_detector=None,
+        memory=None,
     ):
         self.db = db
         self.repository = repository
@@ -114,6 +116,11 @@ class ReasoningService:
         self.recommendation_engine = recommendation_engine
         self.report_generator = report_generator or ReportGenerator()
         self.retrieval_enabled = retrieval_enabled
+        # Founder memory (M6), optional -- when supplied, a completed diagnosis is
+        # also recorded as a memory item so the chat section's memory_summary block
+        # carries it, not just the (session-only) AllyContext.diagnosis. None =>
+        # diagnosis stays visible to chat only via AllyContext, same as before.
+        self.memory = memory
         # Answer-consistency detector (input (c) of the confidence score). None =>
         # unmeasured => excluded + renormalised by the confidence strategy.
         self.consistency_detector = consistency_detector
@@ -384,6 +391,30 @@ class ReasoningService:
             self.report_generator.internal_report(bundle),
         )
 
+    def _record_diagnosis_memory(self, founder: Founder, session, founder_report) -> None:
+        """Record the completed diagnosis as founder memory (best-effort). Runs
+        AFTER the report transaction has committed, on its own failure path: a
+        memory-write error must never undo or fail an already-persisted diagnosis.
+        Upserts by the fixed key `diagnosis_summary`, so a later diagnosis replaces
+        the memory item rather than accumulating one per session."""
+        if self.memory is None:
+            return
+        try:
+            self.memory.store(
+                founder.founder_id,
+                MemoryType.STRATEGIC,
+                founder_report.executive_summary,
+                importance=90,
+                key="diagnosis_summary",
+                session_id=session.session_id,
+                actor="system",
+            )
+        except Exception as exc:  # noqa: BLE001 -- best-effort, never fail the caller
+            logger.warning(
+                "reasoning: failed to record diagnosis summary as founder memory",
+                extra={"session_id": session.session_id, "stage": "persist", "error": str(exc)},
+            )
+
     # --- Persistence ------------------------------------------------------
 
     def _persist(
@@ -469,6 +500,7 @@ class ReasoningService:
             raise ReasoningPersistenceError()
 
         self.db.refresh(session)
+        self._record_diagnosis_memory(founder, session, founder_report)
         self._log_stage(
             "persist", session.session_id, start,
             detected_root_causes=len(scored), report_id=report.report_id,
