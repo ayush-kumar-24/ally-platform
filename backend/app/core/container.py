@@ -1,12 +1,12 @@
 """Composition root for the Ally AI stack.
 
 One place that owns the long-lived subsystem instances (repositories, prompt
-library, LLM execution) and assembles a per-request AgentOrchestrator from the
-FROZEN M1-M7 public interfaces. It modifies no subsystem -- it only wires them.
+library, LLM execution) and assembles per-request services from the FROZEN M1-M7
+public interfaces. It modifies no subsystem -- it only wires them.
 
 Why this exists: as real backends arrive (Redis, PostgreSQL, pgvector,
 OpenAI/Claude/Gemini) the wiring grows. Keeping it here means every caller stays a
-single line -- `container.orchestrator(db)` -- and swapping a backend (e.g. an
+single line -- `container.chat_execution(db)` -- and swapping a backend (e.g. an
 in-memory repository for a durable one, or MockLLMProvider for a real provider) is
 a change in exactly one file, driven by settings.
 
@@ -26,7 +26,6 @@ from app.integrations.llm.routing import build_failover_execution
 from app.api.v1.ally.kg.repository import InMemoryKnowledgeGraphRepository
 from app.api.v1.ally.kg.service import build_knowledge_graph_service
 from app.api.v1.ally.memory.sql_repository import build_db_memory_service
-from app.api.v1.ally.orchestrator import AgentOrchestrator, OrchestratorService
 from app.api.v1.ally.prompts.library import default_prompt_manager
 from app.api.v1.ally.rag.repository import InMemoryVectorRetrievalRepository
 from app.api.v1.ally.rag.service import build_retrieval_service
@@ -167,20 +166,6 @@ class Container:
     def context_builder(self, db: Session):
         return AllyContextBuilder(AllyContextRepository(db))
 
-    # --- Composition ------------------------------------------------------
-
-    def orchestrator(self, db: Session) -> OrchestratorService:
-        """Assemble a request-scoped OrchestratorService from the owned subsystems."""
-        agent = AgentOrchestrator(
-            context_builder=self.context_builder(db),
-            memory=self.memory(db),
-            retrieval=self.retrieval(db),
-            knowledge_graph=self.knowledge_graph(),
-            prompt_manager=self.prompt_manager(),
-            execution=self.execution(),
-        )
-        return OrchestratorService(agent)
-
     # --- Phase 6 chat flow accessors --------------------------------------
 
     def conversation_service(self, db: Session):
@@ -287,5 +272,5 @@ class Container:
         )
 
 
-# Application-wide container instance. Import and use `container.orchestrator(db)`.
+# Application-wide container instance. Import and use `container.chat_execution(db)`.
 container = Container()
