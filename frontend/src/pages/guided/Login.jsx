@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import AuthTransition from '../../components/AuthTransition';
+import { CURRENT_VERSIONS, recordConsent, savePendingConsent } from '../../services/consents';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -10,13 +11,40 @@ export default function Login() {
   const [agreeTerms, setAgreeTerms] = useState(false);
   const [agreeDiagnosis, setAgreeDiagnosis] = useState(false);
   const [validationError, setValidationError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  // Ref, not state: state updates are async, so two clicks in the same tick would
+  // both see `submitting === false` and both fire. The ref flips synchronously.
+  const inFlight = useRef(false);
 
-  const handleAuth = (provider) => {
+  const handleAuth = async (provider) => {
+    if (inFlight.current) return;
     if (!agreeTerms) {
       setValidationError('Please agree to the Terms of Service and Privacy Policy to continue.');
       return;
     }
+    inFlight.current = true;
+    setSubmitting(true);
     setValidationError('');
+
+    const choices = { agreeTerms: true, agreeDiagnosis };
+    let stored = null;
+    try {
+      stored = await recordConsent(choices);
+    } catch (err) {
+      // A 422 means the server rejected the consent itself (bad version, terms not
+      // accepted) — that is a real failure and must not be waved through.
+      if (err.status === 422) {
+        setValidationError(err.detail || 'We could not record your consent. Please try again.');
+        inFlight.current = false;
+        setSubmitting(false);
+        return;
+      }
+      // Anything else (offline, or no session yet because sign-in is still
+      // simulated) — hold the consent locally and flush it once a session exists,
+      // so the user's actual choice is never silently lost.
+      savePendingConsent(choices);
+    }
+
     setUser(prev => ({
       ...prev,
       authProvider: provider,
@@ -25,12 +53,17 @@ export default function Login() {
       initials: 'AS',
       consents: {
         termsAccepted: true,
-        termsVersion: '1.0',
-        privacyVersion: '1.0',
-        diagnosisConsent: agreeDiagnosis,
-        consentedAt: new Date().toISOString()
+        termsVersion: stored?.terms_version ?? CURRENT_VERSIONS.terms,
+        privacyVersion: stored?.privacy_version ?? CURRENT_VERSIONS.privacy,
+        diagnosisConsent: stored?.agree_diagnosis ?? agreeDiagnosis,
+        // Server-stamped when persisted; only falls back to client time when the
+        // record is still pending sync.
+        consentedAt: stored?.consented_at ?? new Date().toISOString(),
+        consentId: stored?.consent_id ?? null,
+        synced: stored !== null,
       }
     }));
+    setSubmitting(false);
     setShowAuthTransition(true);
   };
 
@@ -59,14 +92,15 @@ export default function Login() {
             <input 
               type="checkbox" 
               id="consent-terms"
-              checked={agreeTerms} 
+              checked={agreeTerms}
+              disabled={submitting}
               onChange={(e) => {
                 setAgreeTerms(e.target.checked);
                 if (e.target.checked) setValidationError('');
-              }} 
+              }}
             />
             <span className="consent-text">
-              I agree to the <a href="/terms" target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>Terms of Service</a> and <a href="/privacy" target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>Privacy Policy</a> <span className="version-tag">v1.0</span> <span className="req">*</span>
+              I agree to the <a href="/terms" target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>Terms of Service</a> and <a href="/privacy" target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>Privacy Policy</a> <span className="version-tag">v{CURRENT_VERSIONS.terms}</span> <span className="req">*</span>
             </span>
           </label>
           
@@ -74,8 +108,9 @@ export default function Login() {
             <input 
               type="checkbox" 
               id="consent-diagnosis"
-              checked={agreeDiagnosis} 
-              onChange={(e) => setAgreeDiagnosis(e.target.checked)} 
+              checked={agreeDiagnosis}
+              disabled={submitting}
+              onChange={(e) => setAgreeDiagnosis(e.target.checked)}
             />
             <span className="consent-text">
               I consent to the collection and processing of my business's diagnostic information as described in the Privacy Policy.
@@ -84,7 +119,8 @@ export default function Login() {
         </div>
 
         <div className="j-auth">
-          <button className="auth-btn" onClick={() => handleAuth('google')} type="button">
+          <button className="auth-btn" onClick={() => handleAuth('google')} type="button"
+                  disabled={submitting} aria-busy={submitting}>
             <svg className="g" viewBox="0 0 48 48" aria-hidden="true">
               <path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.6l6.8-6.8C35.6 2.4 30.1 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.2 17.7 9.5 24 9.5z" />
               <path fill="#4285F4" d="M46.1 24.6c0-1.6-.1-3.1-.4-4.6H24v9.1h12.4c-.5 2.9-2.1 5.3-4.6 7l7.1 5.5c4.2-3.9 6.6-9.6 6.6-16.4z" />
@@ -93,7 +129,8 @@ export default function Login() {
             </svg>
             Continue with Google
           </button>
-          <button className="auth-btn li" onClick={() => handleAuth('linkedin')} type="button">
+          <button className="auth-btn li" onClick={() => handleAuth('linkedin')} type="button"
+                  disabled={submitting} aria-busy={submitting}>
             <svg className="g" viewBox="0 0 24 24" fill="#fff" aria-hidden="true">
               <path d="M4.98 3.5A2.5 2.5 0 1 0 5 8.5a2.5 2.5 0 0 0-.02-5zM3 9h4v12H3zM9 9h3.8v1.7h.05c.53-1 1.83-2.05 3.77-2.05 4.03 0 4.78 2.65 4.78 6.1V21H19.6v-5.3c0-1.26-.02-2.9-1.77-2.9-1.77 0-2.04 1.38-2.04 2.8V21H9z" />
             </svg>

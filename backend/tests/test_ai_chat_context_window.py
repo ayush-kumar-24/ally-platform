@@ -284,6 +284,26 @@ def test_corrupted_pdf_attachment_is_named_not_fabricated():
     assert "cannot be read yet" in w.attachments_text
 
 
+def test_attachment_byte_budget_falls_back_to_name_only_past_the_cap():
+    big = FakeAttachment("att-6", "huge.txt", AttachmentType.TEXT, 1000)
+    small = FakeAttachment("att-7", "small.txt", AttachmentType.TEXT, 10)
+    attachments = FakeAttachments(
+        items=(big, small),
+        content={"att-6": b"x" * 1000, "att-7": b"tiny note"},
+    )
+    conv, builder = setup(
+        attachments=attachments,
+        config=ContextWindowConfig(attachment_byte_budget=1),
+    )
+    c2 = _conv_with(conv, (U, "hi"))
+    w = builder.build(ally_context=make_ctx(), conversation=c2, current_message="hi")
+    # first file is within budget (spent starts at 0) -> extracted
+    assert "x" * 1000 in w.attachments_text
+    # second file pushes past the tiny budget -> name-only, not fabricated
+    assert "small.txt" in w.attachments_text
+    assert "tiny note" not in w.attachments_text
+
+
 def test_attachments_failure_degrades():
     conv, builder = setup(attachments=Boom())
     c = _conv_with(conv, (U, "hi"))

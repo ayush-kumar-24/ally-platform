@@ -38,12 +38,23 @@ _EXTRACTABLE_MIME = {
 }
 
 
+_DEFAULT_ATTACHMENT_BYTE_BUDGET = 5_000_000  # total bytes READ+extracted per turn
+
+
 class ContextWindowConfig:
     def __init__(self, *, max_history_messages: int = 20, memory_limit: int = 5,
-                 attachment_limit: int = 5):
+                 attachment_limit: int = 5,
+                 attachment_byte_budget: int = _DEFAULT_ATTACHMENT_BYTE_BUDGET):
         self.max_history_messages = max_history_messages
         self.memory_limit = memory_limit
+        # attachment_limit bounds how many files are even considered; byte_budget
+        # additionally bounds how many of THOSE get their content read/extracted --
+        # 5 files under the count cap could still be 5x25 MiB (the per-file upload
+        # cap) of extraction work, so the count cap alone doesn't bound cost. Once
+        # the running total exceeds the budget, remaining files fall back to
+        # name-only (same as an unreadable format), never fail the turn.
         self.attachment_limit = attachment_limit
+        self.attachment_byte_budget = attachment_byte_budget
 
 
 class ContextWindowBuilder:
@@ -146,16 +157,22 @@ class ContextWindowBuilder:
         try:
             items = self.attachments.list_attachments(conversation_id)
             recent = items[-self.config.attachment_limit:]
-            entries = tuple(self._read_entry(a) for a in recent)
-            return attachments_block(entries), True
+            entries = []
+            spent = 0
+            for a in recent:
+                within_budget = spent < self.config.attachment_byte_budget
+                entries.append(self._read_entry(a, extract=within_budget))
+                spent += a.metadata.size_bytes
+            return attachments_block(tuple(entries)), True
         except Exception as exc:  # noqa: BLE001 -- degrade, never fail the turn
             logger.warning("ai_chat: attachment injection failed; continuing",
                            extra={"stage": "inject_attachments", "error": str(exc)})
             return "", False
 
-    def _read_entry(self, attachment) -> tuple[str, str, int, str | None]:
+    def _read_entry(self, attachment, *, extract: bool) -> tuple[str, str, int, str | None]:
         meta = attachment.metadata
-        return meta.filename, meta.attachment_type.value, meta.size_bytes, self._extract_text(attachment)
+        text = self._extract_text(attachment) if extract else None
+        return meta.filename, meta.attachment_type.value, meta.size_bytes, text
 
     def _extract_text(self, attachment) -> str | None:
         """Best-effort text for one attachment. Isolated per-attachment: a failure
