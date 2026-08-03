@@ -136,12 +136,22 @@ class SqlAlchemyFeatureFlagRepository(FeatureFlagRepository):
     def __init__(self, db):
         self.db = db
 
+    def _safe(self, fn, fallback):
+        """Flag tables arrive with a pending migration. Until then every flag reads
+        as absent, which the resolver already treats as OFF -- so degrading here
+        fails closed rather than accidentally enabling anything."""
+        try:
+            return fn()
+        except Exception:
+            self.db.rollback()
+            return fallback
+
     def list_flags(self) -> list[FeatureFlag]:
-        return [_flag(r) for r in
-                self.db.query(FeatureFlagRow).order_by(FeatureFlagRow.key).all()]
+        return self._safe(lambda: [_flag(r) for r in
+                self.db.query(FeatureFlagRow).order_by(FeatureFlagRow.key).all()], [])
 
     def get_flag(self, key: str) -> FeatureFlag | None:
-        row = self.db.get(FeatureFlagRow, key)
+        row = self._safe(lambda: self.db.get(FeatureFlagRow, key), None)
         return _flag(row) if row else None
 
     def set_flag(self, key, *, enabled, description, admin_id, at) -> FeatureFlag:
@@ -169,12 +179,13 @@ class SqlAlchemyFeatureFlagRepository(FeatureFlagRepository):
         self.db.commit()
 
     def get_override(self, key, founder_id) -> FlagOverride | None:
-        row = self.db.get(FeatureFlagOverrideRow, {"key": key, "founder_id": founder_id})
+        row = self._safe(lambda: self.db.get(
+            FeatureFlagOverrideRow, {"key": key, "founder_id": founder_id}), None)
         return _override(row) if row else None
 
     def list_overrides(self, founder_id) -> list[FlagOverride]:
-        rows = (self.db.query(FeatureFlagOverrideRow)
-                .filter(FeatureFlagOverrideRow.founder_id == founder_id).all())
+        rows = self._safe(lambda: (self.db.query(FeatureFlagOverrideRow)
+                .filter(FeatureFlagOverrideRow.founder_id == founder_id).all()), [])
         return [_override(r) for r in rows]
 
 

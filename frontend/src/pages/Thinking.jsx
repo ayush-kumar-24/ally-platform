@@ -1,13 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MOCK_DIMENSIONS } from '../data/mockData';
-
-const HYPOS = [
-  { label: 'Sales-founder mismatch', sub: 'Founder DNA · Revenue', verdict: 'keep', on: true },
-  { label: 'SME churn structural gap', sub: 'Revenue · Team', verdict: 'keep', on: true },
-  { label: 'Pricing strategy misalignment', sub: 'Strategy · Market', verdict: null, on: false },
-  { label: 'Product velocity vs. market fit', sub: 'Product · Market', verdict: null, on: false },
-];
+import { getBusinessPillars } from '../services/reference';
+import { getLatestReport } from '../services/reports';
 
 const TIMELINE = [
   { label: 'Founder DNA mapped', done: true },
@@ -17,28 +11,54 @@ const TIMELINE = [
   { label: 'Generating clarity report', done: false },
 ];
 
-const SCANS = [
-  { name: 'Revenue', status: 'ok', pct: 76 },
-  { name: 'Product', status: 'ok', pct: 62 },
-  { name: 'Team', status: 'busy', pct: 48 },
-  { name: 'Operations', status: 'ok', pct: 70 },
-  { name: 'Finance', status: 'busy', pct: 55 },
-  { name: 'Market', status: 'ok', pct: 80 },
-];
 
 export default function Thinking() {
+  // Pillar names come from reference data so this screen names the same
+  // dimensions the diagnosis actually scans.
+  const [dimensions, setDimensions] = useState([]);
+  const [waited, setWaited] = useState(0);
+
+  useEffect(() => {
+    getBusinessPillars()
+      .then(res => setDimensions((res.pillars ?? res.items ?? []).map(p => p.name ?? p.label ?? p)))
+      .catch(() => setDimensions([]));
+  }, []);
+
   const navigate = useNavigate();
   const [confidence, setConfidence] = useState(0);
+  // This screen is the wait between the last answer and the report existing, so
+  // it polls for the real thing rather than running a fixed-length animation and
+  // hoping the report arrived. Gives up after ~2 minutes rather than spinning
+  // forever with nothing to show.
+  useEffect(() => {
+    let stop = false;
+    const tick = async () => {
+      if (stop) return;
+      try {
+        const report = await getLatestReport();
+        if (report && !stop) { navigate('/app/report'); return; }
+      } catch { /* keep waiting */ }
+      if (!stop) {
+        setWaited(w => w + 1);
+        setTimeout(tick, 4000);
+      }
+    };
+    const t = setTimeout(tick, 3000);
+    return () => { stop = true; clearTimeout(t); };
+  }, [navigate]);
+
+  const stalled = waited > 30;
+
   const confRef = useRef(null);
   const scanRefs = useRef([]);
 
   useEffect(() => {
-    const t1 = setTimeout(() => setConfidence(73), 600);
+    // Indeterminate progress: the real work happens server-side and does not
+    // report a percentage, so showing a specific number would be theatre.
     scanRefs.current.forEach((el, i) => {
-      if (el) setTimeout(() => { el.style.width = `${SCANS[i].pct}%`; }, 400 + i * 150);
+      if (el) setTimeout(() => { el.style.width = '100%'; }, 400 + i * 150);
     });
-    return () => clearTimeout(t1);
-  }, []);
+  }, [dimensions.length]);
 
   return (
     <div className="think">
@@ -61,16 +81,11 @@ export default function Thinking() {
                 Hypothesis Stream
               </h3>
               <div className="hypo">
-                {HYPOS.map((h, i) => (
-                  <div key={i} className={`hypo-item${h.on ? ' on' : ''}`}>
-                    <div className="hypo-ic">{i + 1}</div>
-                    <div>
-                      <div className="h-t">{h.label}</div>
-                      <div className="h-s">{h.sub}</div>
-                      {h.verdict && <div className={`h-verdict ${h.verdict}`}>{h.verdict === 'keep' ? '✓ Retained' : '✗ Dropped'}</div>}
-                    </div>
-                  </div>
-                ))}
+                <p className="kp-sub" style={{ margin: 0 }}>
+                  {stalled
+                    ? "This is taking longer than usual. Your answers are saved — you can close this and check your report later."
+                    : "Ally is working through your answers. This usually takes under a minute."}
+                </p>
               </div>
             </div>
 
@@ -95,7 +110,7 @@ export default function Thinking() {
             <div className="panel">
               <h3>Dimension Scan</h3>
               <div className="scan">
-                {SCANS.map((s, i) => (
+                {dimensions.map((s, i) => (
                   <div key={i} className={`scan-c${s.status === 'busy' ? ' busy' : ' ok'}`}>
                     <div className="s-top">
                       <span className="s-n">{s.name}</span>
@@ -114,7 +129,7 @@ export default function Thinking() {
                 <div className="ce-track">
                   <div className="ce-fill" style={{ width: `${confidence}%`, transition: 'width 1.4s cubic-bezier(.22,1,.3,1)' }} />
                 </div>
-                <div className="ce-note">Based on {SCANS.filter(s => s.status === 'ok').length} scanned dimensions · 2 still processing</div>
+                <div className="ce-note">Based on {dimensions.length} scanned dimensions · 2 still processing</div>
               </div>
             </div>
 

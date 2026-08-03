@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { get, post } from '../services/api';
+import { getProfile, updateProfile } from '../services/profile';
 import {
   deleteAccount,
   downloadExport,
@@ -270,14 +271,30 @@ export default function FounderProfile() {
   }, [showToast]);
 
 
-  // Form Fields
+  // Form fields. These were seeded with a fabricated person, so every founder
+  // opened their profile and saw someone else's name, email and phone.
   const [form, setForm] = useState({
-    name: 'Ayush Sharma',
-    email: 'ayush@brightloom.in',
-    phone: '+91 98765 43210',
-    linkedin: 'linkedin.com/in/ayush-sharma',
-    location: 'Bengaluru, India'
+    name: '', email: '', phone: '', linkedin: '', location: '',
   });
+  const [profileLoaded, setProfileLoaded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    getProfile()
+      .then((p) => {
+        if (cancelled || !p) return;
+        setForm({
+          name: p.full_name || '',
+          email: p.email || '',
+          phone: p.phone || '',
+          linkedin: p.linkedin_url || '',
+          location: p.location || '',
+        });
+      })
+      .catch(() => { /* leave the fields empty rather than inventing values */ })
+      .finally(() => { if (!cancelled) setProfileLoaded(true); });
+    return () => { cancelled = true; };
+  }, []);
 
   // Preferences Switches
   const [switches, setSwitches] = useState({
@@ -291,14 +308,33 @@ export default function FounderProfile() {
     setSwitches(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
-  const handleSave = () => {
-    setEditing(false);
-    setUser(prev => ({
-      ...prev,
-      name: form.name,
-      location: form.location
-    }));
-    showToast('Profile settings saved ✓');
+  const [savingProfile, setSavingProfile] = useState(false);
+
+  /**
+   * Persist the profile. This previously only wrote to React context and always
+   * claimed success, so an edit survived until the next reload and then vanished.
+   *
+   * Only the fields PATCH /profile actually accepts are sent. Email is owned by
+   * the identity provider, and phone/location have no field on the API at all --
+   * see the note beside those inputs.
+   */
+  const handleSave = async () => {
+    if (savingProfile) return;
+    setSavingProfile(true);
+    try {
+      await updateProfile({
+        full_name: form.name.trim(),
+        linkedin_url: form.linkedin.trim(),
+      });
+      setUser(prev => ({ ...prev, name: form.name.trim() }));
+      setEditing(false);
+      showToast('Profile saved ✓');
+    } catch (err) {
+      // Stay in edit mode so the founder does not lose what they typed.
+      showToast(err?.message || 'Could not save your profile. Please try again.');
+    } finally {
+      setSavingProfile(false);
+    }
   };
 
   return (
@@ -391,9 +427,12 @@ export default function FounderProfile() {
           <div style={{ minWidth: 0, textAlign: 'left' }}>
             <div className="fd-hero-kicker" style={{ marginBottom: '6px' }}>Founder Profile · Read by Ally</div>
             <h2 className="fd-hero-title" style={{ fontSize: '24px', margin: '0 0 2px' }}>{form.name}</h2>
-            <div style={{ fontSize: '13.5px', color: 'var(--on-dark-muted)', marginBottom: '10px' }}>
-              Founder & CEO - BrightLoom
-            </div>
+            {/* Was hardcoded to "Founder & CEO - BrightLoom" for every founder. */}
+            {form.email && (
+              <div style={{ fontSize: '13.5px', color: 'var(--on-dark-muted)', marginBottom: '10px' }}>
+                {form.email}
+              </div>
+            )}
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
               <span className="fp-hchip" style={{ fontSize: '11px', padding: '4px 9px' }}>
                 <svg viewBox="0 0 24 24" style={{ width: 12, height: 12, fill: 'none', stroke: '#34d399', strokeWidth: 2, marginRight: 4 }}>
@@ -465,9 +504,10 @@ export default function FounderProfile() {
                 className="pr-row-btn"
                 style={{ background: 'var(--emerald, #10B981)', color: '#06231a', borderColor: 'transparent' }}
                 onClick={handleSave}
+                disabled={savingProfile}
                 type="button"
               >
-                Save
+                {savingProfile ? 'Saving…' : 'Save'}
               </button>
             </div>
           ) : (
@@ -500,28 +540,16 @@ export default function FounderProfile() {
 
           <div className="pr-field">
             <div className="pr-lbl">Email</div>
-            {editing ? (
-              <input
-                className="pr-input"
-                value={form.email}
-                onChange={e => setForm({ ...form, email: e.target.value })}
-              />
-            ) : (
-              <div className="pr-val">{form.email}</div>
-            )}
+            {/* Email comes from the Google/LinkedIn identity, so it is not editable
+                here -- offering an input implied a change we cannot persist. */}
+            <div className="pr-val">{form.email || '—'}</div>
           </div>
 
           <div className="pr-field">
             <div className="pr-lbl">Phone</div>
-            {editing ? (
-              <input
-                className="pr-input"
-                value={form.phone}
-                onChange={e => setForm({ ...form, phone: e.target.value })}
-              />
-            ) : (
-              <div className="pr-val">{form.phone}</div>
-            )}
+            {/* Not yet persisted anywhere: PATCH /profile has no phone field. Kept
+                read-only so an edit is never silently dropped on save. */}
+            <div className="pr-val">{form.phone || 'Not set'}</div>
           </div>
 
           <div className="pr-field">
@@ -539,15 +567,9 @@ export default function FounderProfile() {
 
           <div className="pr-field" style={{ gridColumn: '1 / -1' }}>
             <div className="pr-lbl">Location</div>
-            {editing ? (
-              <input
-                className="pr-input"
-                value={form.location}
-                onChange={e => setForm({ ...form, location: e.target.value })}
-              />
-            ) : (
-              <div className="pr-val">{form.location}</div>
-            )}
+            {/* Not yet persisted anywhere: PATCH /profile has no location field. Kept
+                read-only so an edit is never silently dropped on save. */}
+            <div className="pr-val">{form.location || 'Not set'}</div>
           </div>
         </div>
       </div>

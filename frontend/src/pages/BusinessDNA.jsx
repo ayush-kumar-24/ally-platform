@@ -1,100 +1,14 @@
-import { useApp } from '../context/AppContext';
+import { useCallback, useEffect, useState } from 'react';
+import { factList, loadDna } from '../services/reports';
+import { DnaError, DnaLoading, DnaNoReport, DnaNoSection } from '../components/DnaState';
 import { useNavigate } from 'react-router-dom';
 
 /* The six readiness_pillars (backend-canonical business dimensions). Scores and
    descriptions here are placeholder mock content; 4c wires them to the real
    business_dna snapshot (per-pillar band + description). */
-const DIMENSIONS = [
-  {
-    key: 'founder-readiness',
-    title: 'Founder Readiness',
-    score: 44,
-    desc: 'Drive is high, but strain is showing — decisions turning reactive under pressure.',
-    icon: (
-      <svg viewBox="0 0 24 24">
-        <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-        <circle cx="9" cy="7" r="4" />
-        <line x1="19" y1="8" x2="19" y2="14" />
-        <line x1="16" y1="11" x2="22" y2="11" />
-      </svg>
-    )
-  },
-  {
-    key: 'market-clarity',
-    title: 'Market Clarity',
-    score: 58,
-    desc: 'A general sense of the customer, but not yet sharp on who actually pays.',
-    icon: (
-      <svg viewBox="0 0 24 24">
-        <circle cx="12" cy="12" r="10" />
-        <circle cx="12" cy="12" r="6" />
-        <circle cx="12" cy="12" r="2" />
-      </svg>
-    )
-  },
-  {
-    key: 'revenue-maturity',
-    title: 'Revenue Maturity',
-    score: 66,
-    desc: 'Some sales, but no repeatable process; pricing is set by instinct.',
-    icon: (
-      <svg viewBox="0 0 24 24">
-        <rect x="2" y="6" width="20" height="12" rx="2" />
-        <circle cx="12" cy="12" r="3" />
-        <line x1="6" y1="12" x2="6.01" y2="12" />
-        <line x1="18" y1="12" x2="18.01" y2="12" />
-      </svg>
-    )
-  },
-  {
-    key: 'product-execution',
-    title: 'Product & Execution',
-    score: 70,
-    desc: 'Core loop works; the onboarding sequence is the weak link.',
-    icon: (
-      <svg viewBox="0 0 24 24">
-        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-        <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
-        <line x1="12" y1="22.08" x2="12" y2="12" />
-      </svg>
-    )
-  },
-  {
-    key: 'team-leadership',
-    title: 'Team & Leadership',
-    score: 61,
-    desc: 'Capable hires; ownership of outcomes not yet distributed.',
-    icon: (
-      <svg viewBox="0 0 24 24">
-        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-        <circle cx="9" cy="7" r="4" />
-        <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-      </svg>
-    )
-  },
-  {
-    key: 'strategic-clarity',
-    title: 'Strategic Clarity',
-    score: 58,
-    desc: 'Ten priorities competing for the same energy.',
-    icon: (
-      <svg viewBox="0 0 24 24">
-        <path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z" />
-      </svg>
-    )
-  }
-];
-
-export default function BusinessDNA() {
-  const { user } = useApp();
+function BusinessDNAView({ section, report }) {
   const navigate = useNavigate();
 
-  const getColorClass = (score) => {
-    if (score >= 70) return 'fd-cat-green';
-    if (score >= 52) return 'fd-cat-orange';
-    return 'fd-cat-red';
-  };
 
   return (
     <div className="fd-container">
@@ -103,17 +17,15 @@ export default function BusinessDNA() {
         <div className="fd-hero-content">
           <div className="fd-hero-kicker">Business DNA</div>
           <h2 className="fd-hero-title">
-            Ten dimensions, weighed together.
+            {section?.heading || 'Your business profile'}
           </h2>
-          <p className="fd-hero-desc">
-            Each dimension read through your founder profile — an advisor
-            holding your whole business in their head at once, not a checklist.
-          </p>
+          <p className="fd-hero-desc">{section?.prose}</p>
         </div>
-        <div className="fd-hero-score-wrap">
-          <div className="fd-hero-score">64</div>
-          <div className="fd-hero-label">Business</div>
-        </div>
+        {report?.report_id && (
+          <div className="fd-hero-score-wrap">
+            <div className="fd-hero-label">From report #{report.report_id}</div>
+          </div>
+        )}
       </div>
 
       {/* Section Head */}
@@ -141,31 +53,48 @@ export default function BusinessDNA() {
         </button>
       </div>
 
-      {/* Dimensions Grid */}
+      {/* `facts` is an open object -- rendered generically rather than assuming
+          a fixed set of ten dimensions that this report may not contain. */}
       <div className="fd-grid stagger d3">
-        {DIMENSIONS.map((dim) => (
-          <div key={dim.key} className={`fd-card ${getColorClass(dim.score)}`}>
+        {factList(section?.facts).map((f) => (
+          <div key={f.label} className="fd-card">
             <div className="fd-card-top">
               <div className="fd-card-info">
-                <div className="fd-card-icon">{dim.icon}</div>
                 <div className="fd-card-title-wrap">
-                  <h4 className="fd-card-title">{dim.title}</h4>
+                  <h4 className="fd-card-title">{f.label}</h4>
                 </div>
               </div>
-              <div className="fd-card-score">{dim.score}</div>
             </div>
-
-            <div className="fd-progress-track">
-              <div
-                className="fd-progress-bar"
-                style={{ width: `${dim.score}%` }}
-              />
-            </div>
-
-            <p className="fd-card-desc">{dim.desc}</p>
+            <p className="fd-card-desc">{f.value}</p>
           </div>
         ))}
       </div>
     </div>
   );
+}
+
+
+/**
+ * Resolves the founder's latest report before rendering.
+ *
+ * The four states are distinct on purpose: "no diagnosis yet" and "report has no
+ * Business DNA section" need different advice, and neither is an error. Previously
+ * this page rendered a hardcoded archetype for everyone, which read as real.
+ */
+export default function BusinessDNA() {
+  const [state, setState] = useState({ status: 'loading' });
+
+  const load = useCallback(() => {
+    setState({ status: 'loading' });
+    loadDna('business').then(setState);
+  }, []);
+
+  useEffect(load, [load]);
+
+  if (state.status === 'loading') return <DnaLoading label="Loading your Business DNA…" />;
+  if (state.status === 'no-report') return <DnaNoReport kind="Business DNA" />;
+  if (state.status === 'no-section') return <DnaNoSection kind="Business" />;
+  if (state.status === 'error') return <DnaError onRetry={load} />;
+
+  return <BusinessDNAView section={state.section} report={state.report} />;
 }

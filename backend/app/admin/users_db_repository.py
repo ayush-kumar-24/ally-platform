@@ -42,9 +42,39 @@ _UPDATABLE = {"full_name", "email", "phone", "business_name", "status",
               "admin_notes", "plan_type"}
 
 
+#: Columns the admin list wants that arrive with a pending migration. Selecting one
+#: that does not exist fails the whole query, so the SELECT is built from what the
+#: database actually has and the rest read as empty.
+_OPTIONAL_COLUMNS = ("phone", "business_name", "status", "credits_balance",
+                     "last_active_at", "admin_notes")
+
+
 class SqlAlchemyAdminUserRepository(AdminUserRepository):
     def __init__(self, db):
         self.db = db
+        self._cols: set[str] | None = None
+
+    def _available(self) -> set[str]:
+        """Column names present on `founders`, cached per request."""
+        if self._cols is None:
+            try:
+                from sqlalchemy import inspect
+                self._cols = {c["name"] for c in inspect(self.db.get_bind())
+                              .get_columns("founders")}
+            except Exception:
+                self._cols = set()
+        return self._cols
+
+    def _select_list(self, prefix: str = "f.") -> str:
+        """Always-present columns plus whichever optional ones exist; the missing
+        ones are selected as NULL so the row shape stays constant."""
+        have = self._available()
+        parts = [f"{prefix}founder_id", f"{prefix}full_name", f"{prefix}email",
+                 f"{prefix}created_at", f"{prefix}diagnosis_locked_at",
+                 f"{prefix}consent_version", f"{prefix}plan_type"]
+        for col in _OPTIONAL_COLUMNS:
+            parts.append(f"{prefix}{col}" if col in have else f"null as {col}")
+        return ", ".join(parts)
 
     # --- search ---------------------------------------------------------
 
@@ -53,12 +83,16 @@ class SqlAlchemyAdminUserRepository(AdminUserRepository):
         where, params = ["1=1"], {}
 
         if filters.search:
-            where.append("""(f.full_name ilike :q or f.email ilike :q
-                             or f.phone ilike :q or f.business_name ilike :q
-                             or cast(f.founder_id as text) = :q_exact)""")
+            # Only search columns that exist -- phone/business_name arrive with a
+            # pending migration, and naming an absent column fails the whole query.
+            have = self._available()
+            terms = ["f.full_name ilike :q", "f.email ilike :q",
+                     "cast(f.founder_id as text) = :q_exact"]
+            terms += [f"f.{c} ilike :q" for c in ("phone", "business_name") if c in have]
+            where.append("(" + " or ".join(terms) + ")")
             params["q"] = f"%{filters.search.strip()}%"
             params["q_exact"] = filters.search.strip()
-        if filters.status is not None:
+        if filters.status is not None and "status" in self._available():
             where.append("f.status = :status")
             params["status"] = filters.status.value
         if filters.subscription is not None:
@@ -70,7 +104,7 @@ class SqlAlchemyAdminUserRepository(AdminUserRepository):
         if filters.registered_before is not None:
             where.append("f.created_at <= :reg_before")
             params["reg_before"] = filters.registered_before
-        if filters.active_since is not None:
+        if filters.active_since is not None and "last_active_at" in self._available():
             where.append("f.last_active_at >= :active_since")
             params["active_since"] = filters.active_since
         if filters.diagnosis_completed is not None:
@@ -82,14 +116,14 @@ class SqlAlchemyAdminUserRepository(AdminUserRepository):
             text(f"select count(*) from founders f where {clause}"), params).scalar() or 0
 
         order = _SORT_COLUMNS.get(sort_by, "f.created_at")
+        if order.split(".")[-1] not in self._available():
+            order = "f.created_at"          # fall back rather than ORDER BY a ghost
         direction = "desc" if descending else "asc"
         params["lim"] = page_size
         params["off"] = max(0, (page - 1) * page_size)
 
         rows = self.db.execute(text(f"""
-            select f.founder_id, f.full_name, f.email, f.phone, f.business_name,
-                   f.status, f.plan_type, f.credits_balance, f.created_at,
-                   f.last_active_at, f.diagnosis_locked_at, f.consent_version
+            select {self._select_list()}
               from founders f
              where {clause}
              order by {order} {direction} nulls last, f.founder_id asc
@@ -101,10 +135,8 @@ class SqlAlchemyAdminUserRepository(AdminUserRepository):
     # --- reads ----------------------------------------------------------
 
     def get_summary(self, founder_id: int) -> UserSummary | None:
-        row = self.db.execute(text("""
-            select founder_id, full_name, email, phone, business_name, status,
-                   plan_type, credits_balance, created_at, last_active_at,
-                   diagnosis_locked_at, consent_version
+        row = self.db.execute(text(f"""
+            select {self._select_list("")}
               from founders where founder_id = :fid"""),
             {"fid": founder_id}).mappings().first()
         return _to_summary(row) if row else None
@@ -151,14 +183,13 @@ class SqlAlchemyAdminUserRepository(AdminUserRepository):
             subscription=subs[0] if subs else None,
             credits={"balance": f.get("credits_balance", 0), "recent_transactions": txs},
             consent=consents[0] if consents else None,
-            reports=section("""select * from reports where founder_id = :fid
+            reports=section("""select * from founder_reports where founder_id = :fid
                                order by created_at desc limit 20""", []),
             chat_count=int(chat_rows[0]["n"]) if chat_rows else 0,
-            diagnosis_history=section("""select * from diagnosis_sessions
+            diagnosis_history=section("""select * from sessions
                                           where founder_id = :fid
-                                          order by created_at desc limit 20""", []),
-            login_history=section("""select * from login_history where founder_id = :fid
-                                     order by created_at desc limit 20""", []),
+                                          order by started_at desc limit 20""", []),
+            login_history=[],   # no login_history table in this schema
             privacy_requests=section("""select request_id, request_type, status,
                                                requested_at, due_by
                                           from privacy_requests where founder_id = :fid

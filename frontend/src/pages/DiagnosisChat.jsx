@@ -1,21 +1,18 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { normalise, resumeOrStart, submitAnswer } from '../services/diagnosis';
 
 const DIM_CHIPS = ['All', 'Revenue', 'Strategy', 'Team', 'Operations', 'Finance', 'Market'];
-
-const DIAG_MESSAGES = [
-  { role: 'ally', text: 'Welcome to your diagnosis session. I\'ll ask you structured questions across 10 founder and business dimensions. Ready to start?', time: '2 min ago' },
-  { role: 'me', text: 'Yes, let\'s do it. I want to understand what\'s holding us back from crossing ₹10Cr ARR.', time: '2 min ago' },
-  { role: 'ally', text: 'Let\'s start with revenue. Looking at your data: MRR is ₹58L, growing at 8% MoM. But your net revenue retention is 91% — slightly below the 110% benchmark for your stage. Where do you feel the biggest drag?', time: '1 min ago' },
-  { role: 'me', text: 'I think it\'s churn from SME segment. Enterprise seems fine.', time: '1 min ago' },
-  { role: 'ally', text: 'That pattern is important. I\'m now cross-referencing your founder DNA — you show a strong "builder" pattern with lower sales instinct scores. This often creates a gap in SME customer success investment.', time: 'Just now' },
-];
 
 export default function DiagnosisChat() {
   const navigate = useNavigate();
   const [activeDim, setActiveDim] = useState('All');
-  const [messages] = useState(DIAG_MESSAGES);
+  const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
+  const [question, setQuestion] = useState(null);
+  const [sessionId, setSessionId] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
   const [kgVisible, setKgVisible] = useState(true);
   const kgRef = useRef(null);
   const scrollRef = useRef(null);
@@ -23,7 +20,63 @@ export default function DiagnosisChat() {
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     if (kgRef.current) setTimeout(() => kgRef.current?.classList.add('draw'), 800);
+  }, [messages]);
+
+  // Resume if a session is in progress, otherwise start one. The server owns the
+  // progress, which is what makes closing the tab mid-diagnosis safe.
+  useEffect(() => {
+    let cancelled = false;
+    resumeOrStart()
+      .then((session) => {
+        if (cancelled) return;
+        setSessionId(session.sessionId);
+        setQuestion(session.question);
+        if (session.question?.text) {
+          setMessages([{ role: 'ally', text: session.question.text, time: 'now' }]);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setMessages([{ role: 'ally', time: 'now',
+            text: "I couldn't start your diagnosis just now. Please refresh to try again." }]);
+        }
+      });
+    return () => { cancelled = true; };
   }, []);
+
+  const answer = async (text) => {
+    if (!text.trim() || busy || done) return;
+    setMessages(prev => [...prev, { role: 'me', text, time: 'now' }]);
+    setInput('');
+    setBusy(true);
+    try {
+      const res = await submitAnswer({ questionId: question?.id, answer: text });
+      const state = normalise(res, true);
+      const next = state.question;
+      // Trust the explicit is_complete flag over "no next question": a transient
+      // gap must not be mistaken for the end of the diagnosis.
+      if (next?.text && !state.complete) {
+        setQuestion(next);
+        setMessages(prev => [...prev, { role: 'ally', time: 'now', text: next.text }]);
+      } else {
+        setDone(true);
+        setMessages(prev => [...prev, {
+          role: 'ally', time: 'now',
+          text: 'That completes your diagnosis. I am building your report now.',
+        }]);
+        // The report is generated after the last answer, so hand off to the
+        // interstitial rather than dropping the founder on an empty report page.
+        setTimeout(() => navigate('/app/thinking'), 1200);
+      }
+    } catch {
+      setMessages(prev => [...prev, {
+        role: 'ally', time: 'now',
+        text: "That didn't save. Your answer wasn't lost — try sending it again.",
+      }]);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <div className="chat" style={{ height: 'calc(100vh - 64px)' }}>
@@ -66,13 +119,22 @@ export default function DiagnosisChat() {
               placeholder="Answer Ally's question or ask anything..."
               value={input}
               onChange={e => setInput(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) e.preventDefault(); }}
+              disabled={busy || done}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); answer(input); }
+              }}
             />
-            <button className="ci-btn send" title="Send">
+            <button className="ci-btn send" title="Send" type="button"
+                    disabled={busy || done || !input.trim()}
+                    onClick={() => answer(input)}>
               <svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
             </button>
           </div>
-          <div className="ci-hint">Structured diagnosis · 10 dimensions · Est. 15 min</div>
+          <div className="ci-hint">
+            {done ? 'Diagnosis complete — building your report…'
+                  : busy ? 'Saving your answer…'
+                  : 'Structured diagnosis · your progress is saved as you go'}
+          </div>
         </div>
       </div>
 

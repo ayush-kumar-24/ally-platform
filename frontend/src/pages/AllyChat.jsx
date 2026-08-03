@@ -1,6 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { MOCK_CHAT_HISTORY, MOCK_MESSAGES } from '../data/mockData';
+import {
+  createConversation,
+  getConversation,
+  listConversations,
+  sendMessage,
+  toUiMessage,
+} from '../services/chat';
+import { explainLimit, getMyPlan } from '../services/plans';
 
 const PROMPT_CARDS = [
   { t: 'Help me increase revenue', s: 'Find the highest-leverage growth lever' },
@@ -11,14 +18,7 @@ const PROMPT_CARDS = [
   { t: 'Create a GTM strategy', s: 'A go-to-market plan for launch' },
 ];
 
-const REPLIES = [
-  "Great question. Let's break it into the few moves that actually move the needle — then I'll give you a concrete first step you can take this week.",
-  "Here's how I'd think about it: start from the constraint, not the tactic. What's the one thing that, if it changed, would make everything else easier?",
-  "Good instinct to ask now. There are three ways founders usually approach this — let me lay them out with the trade-offs so you can pick with clear eyes.",
-  'Let\'s make this concrete. Tell me one number — your current baseline — and I\'ll show you the realistic range of what "good" looks like from here.',
-];
 
-const CHAT_LIMIT = 20;
 
 function greeting() {
   const h = new Date().getHours();
@@ -32,14 +32,37 @@ export default function AllyChat() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [typing, setTyping] = useState(false);
-  const [used, setUsed] = useState(18);
-  const [replyIdx, setReplyIdx] = useState(0);
+  const [conversations, setConversations] = useState([]);
+  const [limitNotice, setLimitNotice] = useState(null);
+  const [sending, setSending] = useState(false);
+  const [plan, setPlan] = useState(null);
   const scrollRef = useRef(null);
   const taRef = useRef(null);
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages, typing]);
+
+  // Conversations are server-owned, so history survives a reload.
+  useEffect(() => {
+    listConversations()
+      .then(res => setConversations(res.conversations ?? []))
+      .catch(() => setConversations([]));
+    // Real allowance, so the counter reflects the founder's actual plan rather
+    // than an invented cap.
+    getMyPlan().then(setPlan).catch(() => setPlan(null));
+  }, []);
+
+  const openConversation = async (id) => {
+    setHistOpen(false);
+    setActiveConv(id);
+    try {
+      const conv = await getConversation(id);
+      setMessages((conv.messages ?? []).map(toUiMessage));
+    } catch {
+      setMessages([]);
+    }
+  };
 
   const sizeTa = () => {
     const ta = taRef.current;
@@ -48,31 +71,70 @@ export default function AllyChat() {
     ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
   };
 
-  const send = (text) => {
-    if (!text.trim()) return;
-    if (activeConv === null) {
-      // first message of a fresh conversation
-    }
+  const send = async (text) => {
+    if (!text.trim() || sending) return;
+    setLimitNotice(null);
     setMessages(prev => [...prev, { role: 'me', text, time: 'Just now' }]);
     setInput('');
     sizeTa();
-    setUsed(u => Math.min(CHAT_LIMIT, u + 1));
     setTyping(true);
-    setTimeout(() => {
+    setSending(true);
+
+    try {
+      // Create the conversation lazily, on the first message, so an abandoned
+      // "New chat" click never leaves an empty thread in the founder's history.
+      let convId = activeConv;
+      if (!convId) {
+        const created = await createConversation(text.slice(0, 60));
+        convId = created.conversation_id;
+        setActiveConv(convId);
+        setConversations(prev => [created, ...prev]);
+      }
+
+      const res = await sendMessage({ message: text, conversationId: convId });
+
+      // The API answers with `ok: false` and an empty `answer` when it cannot
+      // ground a reply -- most often because this founder has no diagnosis yet, so
+      // there is no root-cause context to reason from. Rendering the empty string
+      // would leave a blank bubble and look broken; say what actually happened.
+      const reply = (res.answer ?? '').trim();
+      if (res.ok === false || !reply) {
+        const needsDiagnosis = String(res.error || '').includes('executive_summary')
+          || String(res.error || '').includes('top_root_causes');
+        setMessages(prev => [...prev, {
+          role: 'ally', time: 'Just now',
+          text: needsDiagnosis
+            ? "I can't answer properly yet — I ground every reply in your diagnosis, and you haven't completed one. Run the Founder Diagnosis and I'll have real context to work from."
+            : "I couldn't put together a grounded answer just then. Try rephrasing, or ask me something else.",
+        }]);
+      } else {
+        setMessages(prev => [...prev, { role: 'ally', text: reply, time: 'Just now' }]);
+      }
+    } catch (err) {
+      // 403/402/429 are the plan gate doing its job -- show what it means and
+      // what to do about it, rather than a generic failure.
+      const limit = explainLimit(err);
+      if (limit) {
+        setLimitNotice(limit);
+      } else {
+        setMessages(prev => [...prev, {
+          role: 'ally',
+          text: "I couldn't reach the server just then. Your message wasn't lost — try sending it again.",
+          time: 'Just now',
+        }]);
+      }
+    } finally {
       setTyping(false);
-      setMessages(prev => [...prev, {
-        role: 'ally',
-        text: REPLIES[replyIdx % REPLIES.length],
-        time: 'Just now',
-      }]);
-      setReplyIdx(i => i + 1);
-    }, 1300);
+      setSending(false);
+    }
   };
 
-  const remaining = Math.max(0, CHAT_LIMIT - used);
-  const near = remaining <= Math.max(2, Math.round(CHAT_LIMIT * 0.15));
+  const dailyLimit = plan?.daily_token_limit ?? 0;
+  const dailyLeft = plan?.daily_tokens_remaining ?? 0;
+  const usedPct = dailyLimit ? Math.min(100, Math.round(((dailyLimit - dailyLeft) / dailyLimit) * 100)) : 0;
+  const near = dailyLimit > 0 && dailyLeft <= dailyLimit * 0.15;
   const isEmpty = messages.length === 0;
-  const firstName = (user.name || 'Ayush Sharma').split(' ')[0];
+  const firstName = (user?.name || '').split(' ')[0] || 'there';
 
   const startNew = () => {
     setActiveConv(null);
@@ -97,15 +159,19 @@ export default function AllyChat() {
         </button>
         <div className="ac-hist-lbl">Recent conversations</div>
         <div className="ac-list">
-          {MOCK_CHAT_HISTORY.map(conv => (
-            <button key={conv.id} className={`ac-item${activeConv === conv.id ? ' on' : ''}`}
-              onClick={() => { setActiveConv(conv.id); setMessages(MOCK_MESSAGES[conv.id] || []); setHistOpen(false); }}>
+          {conversations.map(conv => (
+            // Was `conv.id`, a field that doesn't exist on this shape (only
+            // `conversation_id` does) -- so the key was always undefined (React's
+            // "unique key" warning) and this highlight never lit up, ever, since
+            // `activeConv === undefined` is only true before any conversation opens.
+            <button key={conv.conversation_id} className={`ac-item${activeConv === conv.conversation_id ? ' on' : ''}`}
+              onClick={() => openConversation(conv.conversation_id)}>
               <div className="ai-ic">
                 <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
               </div>
               <div className="ai-body">
                 <div className="ai-t">{conv.title}</div>
-                <div className="ai-w">{conv.time} · {conv.messages} msgs</div>
+                <div className="ai-w">{conv.message_count ?? 0} msgs</div>
               </div>
             </button>
           ))}
@@ -123,7 +189,7 @@ export default function AllyChat() {
             <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg>
           </button>
           <div className="ac-ttl">
-            <div className="t">{isEmpty ? 'New conversation' : (MOCK_CHAT_HISTORY.find(c => c.id === activeConv)?.title || 'New conversation')}</div>
+            <div className="t">{isEmpty ? 'New conversation' : (conversations.find(c => c.conversation_id === activeConv)?.title || 'Conversation')}</div>
             <div className="s">General consultation · always on</div>
           </div>
           <button className="ac-barnew" onClick={startNew}>
@@ -134,6 +200,21 @@ export default function AllyChat() {
 
         {/* Scroll area */}
         <div className="ac-scroll" ref={scrollRef}>
+          {limitNotice && (
+            <div className="ac-limit-notice" role="alert" style={{
+              margin: '12px 16px', padding: '12px 14px', borderRadius: 10,
+              background: '#fffbeb', border: '1px solid #fde68a', color: '#92400e',
+              fontSize: 13, lineHeight: 1.55,
+            }}>
+              <strong>{limitNotice.title}.</strong> {limitNotice.message}{' '}
+              {limitNotice.kind !== 'wait' && (
+                <a href="/app/billing" style={{ color: '#92400e', fontWeight: 700 }}>
+                  See plans
+                </a>
+              )}
+            </div>
+          )}
+
           {isEmpty ? (
             <div className="ac-empty">
               <div className="ac-av">✦</div>
@@ -180,8 +261,12 @@ export default function AllyChat() {
         <div className="ac-input">
           <div style={{ maxWidth: 800, margin: '0 auto 8px', textAlign: 'center' }}>
             <span className={`ac-remain${near ? ' near' : ''}`}>
-              <span>{remaining} of {CHAT_LIMIT} chats left this month</span>
-              <span className="arm-bar"><i style={{ width: `${Math.min(100, Math.round((used / CHAT_LIMIT) * 100))}%` }} /></span>
+              <span>
+                {plan
+                  ? `${dailyLeft.toLocaleString('en-IN')} of ${dailyLimit.toLocaleString('en-IN')} tokens left today`
+                  : 'Usage'}
+              </span>
+              <span className="arm-bar"><i style={{ width: `${usedPct}%` }} /></span>
             </span>
           </div>
           <div className="ci-row">

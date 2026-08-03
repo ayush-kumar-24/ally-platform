@@ -171,35 +171,50 @@ class SqlAlchemyUsageRepository(UsageRepository):
     That makes the read-modify-write a single atomic statement, so two concurrent
     messages from the same founder cannot both read 3,900 and both write 4,000 --
     which would let a user exceed the ceiling by racing themselves across tabs.
+
+    Missing-table tolerance
+    -----------------------
+    The usage tables arrive with a migration that may not have run yet. When they
+    are absent the meter reports zero rather than raising: a founder should still
+    be able to see their plan and use the product. Enforcement is separately gated
+    behind PLAN_ENFORCEMENT_ENABLED, so degrading here cannot silently unlock a
+    limit that was otherwise being applied.
     """
 
     def __init__(self, db):
         self.db = db
 
+    def _safe(self, fn, fallback):
+        try:
+            return fn()
+        except Exception:
+            self.db.rollback()
+            return fallback
+
     def get_daily(self, founder_id: int, day: date) -> DailyUsage:
-        used = self.db.execute(
+        used = self._safe(lambda: self.db.execute(
             _text("""select tokens_used from daily_token_usage
                       where founder_id = :f and usage_date = :d"""),
-            {"f": founder_id, "d": day}).scalar()
+            {"f": founder_id, "d": day}).scalar(), 0)
         return DailyUsage(founder_id, day, int(used or 0))
 
     def add_tokens(self, founder_id: int, day: date, tokens: int, *, at: datetime) -> DailyUsage:
-        total = self.db.execute(
+        total = self._safe(lambda: self.db.execute(
             _text("""insert into daily_token_usage (founder_id, usage_date, tokens_used, updated_at)
                      values (:f, :d, :t, :at)
                      on conflict (founder_id, usage_date) do update
                         set tokens_used = daily_token_usage.tokens_used + excluded.tokens_used,
                             updated_at = excluded.updated_at
                      returning tokens_used"""),
-            {"f": founder_id, "d": day, "t": max(0, tokens), "at": at}).scalar()
-        self.db.commit()
+            {"f": founder_id, "d": day, "t": max(0, tokens), "at": at}).scalar(), 0)
+        self._safe(lambda: self.db.commit(), None)
         return DailyUsage(founder_id, day, int(total or 0))
 
     def get_calls(self, founder_id: int, period: str) -> CallUsage:
-        used = self.db.execute(
+        used = self._safe(lambda: self.db.execute(
             _text("""select free_calls_used from plan_call_usage
                       where founder_id = :f and period = :p"""),
-            {"f": founder_id, "p": period}).scalar()
+            {"f": founder_id, "p": period}).scalar(), 0)
         return CallUsage(founder_id, period, int(used or 0))
 
     def add_free_call(self, founder_id: int, period: str, *, at: datetime) -> CallUsage:

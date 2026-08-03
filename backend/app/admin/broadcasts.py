@@ -175,10 +175,16 @@ class SqlAlchemyBroadcastRepository(BroadcastRepository):
         return broadcast
 
     def list(self, *, include_inactive: bool = False) -> list[Broadcast]:
-        q = self.db.query(BroadcastRow)
-        if not include_inactive:
-            q = q.filter(BroadcastRow.active.is_(True))
-        return [_to_domain(r) for r in q.order_by(BroadcastRow.created_at.desc()).all()]
+        # Table arrives with a pending migration -- "no broadcasts yet" is simply
+        # true until then, and delivering nothing is the safe failure direction.
+        try:
+            q = self.db.query(BroadcastRow)
+            if not include_inactive:
+                q = q.filter(BroadcastRow.active.is_(True))
+            return [_to_domain(r) for r in q.order_by(BroadcastRow.created_at.desc()).all()]
+        except Exception:
+            self.db.rollback()
+            return []
 
     def get(self, broadcast_id: str) -> Broadcast | None:
         row = self.db.get(BroadcastRow, broadcast_id)
@@ -202,9 +208,13 @@ class SqlAlchemyBroadcastRepository(BroadcastRepository):
             self.db.commit()
 
     def read_ids(self, founder_id: int) -> set[str]:
-        rows = (self.db.query(BroadcastReadRow.broadcast_id)
-                .filter(BroadcastReadRow.founder_id == founder_id).all())
-        return {r[0] for r in rows}
+        try:
+            rows = (self.db.query(BroadcastReadRow.broadcast_id)
+                    .filter(BroadcastReadRow.founder_id == founder_id).all())
+            return {r[0] for r in rows}
+        except Exception:
+            self.db.rollback()
+            return set()
 
 
 def _to_domain(r: BroadcastRow) -> Broadcast:

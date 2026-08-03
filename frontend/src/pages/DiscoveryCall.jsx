@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { bookCall, getSlots, listCalls } from '../services/discovery';
+import { getCallQuote } from '../services/plans';
 import { useApp } from '../context/AppContext';
 
 const DAYS = [
@@ -17,7 +19,7 @@ const TIMES = [
   '6:00 PM'
 ];
 
-export default function DiscoveryCall() {
+function DiscoveryCallView(props) {
   const { showToast } = useApp();
   const [selectedDay, setSelectedDay] = useState('wed');
   const [selectedTime, setSelectedTime] = useState('4:30 PM');
@@ -138,5 +140,46 @@ export default function DiscoveryCall() {
         </div>
       </div>
     </div>
+  );
+}
+
+
+/**
+ * Booking is entitlement-gated server-side. The quote is fetched first so the
+ * button can state the true price -- free, or Rs 300 once the plan's monthly
+ * allowance is used -- rather than discovering it after the founder commits.
+ */
+export default function DiscoveryCall() {
+  const [slots, setSlots] = useState([]);
+  const [quote, setQuote] = useState(null);
+  const [calls, setCalls] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    Promise.all([
+      getSlots().catch(() => null),
+      getCallQuote().catch(() => null),
+      listCalls().catch(() => []),
+    ])
+      .then(([s, q, c]) => { setSlots(s?.slots ?? []); setQuote(q); setCalls(c ?? []); })
+      .catch(setError)
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(load, [load]);
+
+  const book = async (scheduledAt, notes) => {
+    const created = await bookCall({ scheduledAt, notes });
+    load();
+    return created;
+  };
+
+  return (
+    <DiscoveryCallView
+      slots={slots} quote={quote} calls={calls}
+      loading={loading} error={error} onBook={book} onReload={load}
+    />
   );
 }

@@ -8,7 +8,12 @@ export default defineConfig({
     // Proxy API calls to the FastAPI backend so the browser talks same-origin
     // (no CORS in dev). With this, VITE_API_URL can be the relative "/api/v1".
     proxy: {
-      '/api': { target: 'http://localhost:8000', changeOrigin: true },
+      // Target is env-driven so the port can move without editing this file
+      // (port 8000 is taken by another local project on some machines).
+      '/api': {
+        target: process.env.VITE_BACKEND_URL || 'http://localhost:8000',
+        changeOrigin: true,
+      },
     },
   },
 })

@@ -1,49 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useApp } from '../context/AppContext';
 import PlanGate from '../components/PlanGate';
+import { addGoal, addTask, ensureActivePlan, flattenTasks, setTaskStatus } from '../services/planning';
 import { FEATURES } from '../services/plans';
-
-const INITIAL_ACTIVE = [
-  {
-    id: 'act-1',
-    text: 'Finish the landing page',
-    priority: 'high',
-    time: '11:00 AM',
-    duration: '45 mins'
-  },
-  {
-    id: 'act-2',
-    text: 'Review pricing strategy',
-    priority: 'medium',
-    time: '2:00 PM',
-    duration: '30 mins'
-  },
-  {
-    id: 'act-3',
-    text: 'Draft the Q3 roadmap',
-    priority: 'medium',
-    time: '4:00 PM',
-    duration: '1 hr'
-  }
-];
-
-const INITIAL_COMPLETED = [
-  {
-    id: 'done-1',
-    text: 'Reply to the investor update',
-    time: '9:52 AM'
-  },
-  {
-    id: 'done-2',
-    text: 'Team standup',
-    time: '10:18 AM'
-  },
-  {
-    id: 'done-3',
-    text: 'Ship pricing page copy',
-    time: '8:38 AM'
-  }
-];
 
 const CHIP_SUGGESTIONS = [
   'Investor meeting at 10',
@@ -53,12 +12,61 @@ const CHIP_SUGGESTIONS = [
   'Book hotel'
 ];
 
+/** Render a server timestamp as a short local time; fall back to the raw value. */
+function formatDue(value) {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return String(value);
+  return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+}
+
 function PlanYourDayInner() {
   const { user } = useApp();
   const [activeTab, setActiveTab] = useState('ally');
   const [inputText, setInputText] = useState('');
-  const [activeGoals, setActiveGoals] = useState(INITIAL_ACTIVE);
-  const [completedGoals, setCompletedGoals] = useState(INITIAL_COMPLETED);
+  const [plan, setPlan] = useState(null);
+  const [planLoading, setPlanLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  // The plan lives on the server, so a founder's day survives a reload and is the
+  // same on every device. Nothing here keeps a second copy.
+  const reloadPlan = useCallback(() => {
+    setPlanLoading(true);
+    ensureActivePlan()
+      .then(setPlan)
+      .catch(() => setPlan(null))
+      .finally(() => setPlanLoading(false));
+  }, []);
+
+  useEffect(reloadPlan, [reloadPlan]);
+
+  const tasks = flattenTasks(plan);
+  const activeGoals = tasks.filter(t => t.status !== 'done');
+  const completedGoals = tasks.filter(t => t.status === 'done');
+
+  const toggleTask = async (taskId, done) => {
+    // Optimistic: the checkbox must feel instant. A failure reloads from the
+    // server rather than leaving the UI asserting something untrue.
+    setPlan(prev => prev && ({
+      ...prev,
+      goals: prev.goals.map(g => ({
+        ...g,
+        tasks: g.tasks.map(t => t.task_id === taskId ? { ...t, status: done ? 'done' : 'todo' } : t),
+      })),
+    }));
+    try {
+      await setTaskStatus(taskId, done);
+    } catch {
+      reloadPlan();
+    }
+  };
+
+  const addFromInput = async (text) => {
+    if (!text.trim() || !plan) return;
+    const goalId = plan.goals?.[0]?.goal_id
+      ?? (await addGoal(plan.plan_id, { title: 'Today' })).goal_id;
+    await addTask(goalId, { title: text.trim() });
+    reloadPlan();
+  };
 
   const [dateString, setDateString] = useState('');
 
@@ -68,44 +76,22 @@ function PlanYourDayInner() {
     setDateString(new Date().toLocaleDateString('en-US', options));
   }, []);
 
-  const handleToggleActive = (goal) => {
-    setActiveGoals(prev => prev.filter(g => g.id !== goal.id));
-    const now = new Date();
-    const hours = now.getHours();
-    const minutes = now.getMinutes();
-    const ampm = hours >= 12 ? 'PM' : 'AM';
-    const formattedTime = `${hours % 12 || 12}:${minutes < 10 ? '0' : ''}${minutes} ${ampm}`;
-    setCompletedGoals(prev => [
-      ...prev,
-      { id: goal.id, text: goal.text, time: formattedTime }
-    ]);
-  };
+  // The three handlers below used to drive local `activeGoals`/`completedGoals`
+  // state. That state is gone -- the lists are derived from the server plan now --
+  // so they delegate to the real mutations instead of writing a second copy.
+  const handleToggleActive = (task) => toggleTask(task.task_id, true);
+  const handleToggleCompleted = (task) => toggleTask(task.task_id, false);
 
-  const handleToggleCompleted = (goal) => {
-    setCompletedGoals(prev => prev.filter(g => g.id !== goal.id));
-    setActiveGoals(prev => [
-      ...prev,
-      {
-        id: goal.id,
-        text: goal.text,
-        priority: 'medium',
-        time: '5:00 PM',
-        duration: '30 mins'
-      }
-    ]);
-  };
-
-  const handlePlanMyDay = () => {
-    if (!inputText.trim()) return;
-    const newGoal = {
-      id: `custom-${Date.now()}`,
-      text: inputText.trim(),
-      priority: 'high',
-      time: '12:00 PM',
-      duration: '30 mins'
-    };
-    setActiveGoals(prev => [newGoal, ...prev]);
-    setInputText('');
+  const handlePlanMyDay = async () => {
+    const text = inputText.trim();
+    if (!text || saving) return;
+    setSaving(true);
+    try {
+      await addFromInput(text);
+      setInputText('');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleChipClick = (chip) => {
@@ -117,7 +103,11 @@ function PlanYourDayInner() {
   const strokeDashoffset = 308 - (completionPct / 100) * 308;
 
   const nextReminder = activeGoals.length > 0 ? activeGoals[0] : null;
-  const firstName = (user?.name || 'Ayush Sharma').split(' ')[0];
+  // Time-derived, matching the dashboard. This greeting was hardcoded to
+  // "Good evening" and fell back to a hardcoded person's name.
+  const firstName = (user?.name || '').split(' ')[0] || 'there';
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
 
   return (
     <div className="pad plan-wrap">
@@ -125,7 +115,7 @@ function PlanYourDayInner() {
       <div className="plan-head stagger d1">
         <div style={{ textSelf: 'flex-start' }}>
           <div className="pl-input-hint" style={{ fontSize: '15px', fontWeight: 650, color: '#b7895f', marginBottom: '8px' }}>
-            Good evening, {firstName} 👋
+            {greeting}, {firstName} 👋
           </div>
           <h1 className="plan-title" style={{ fontFamily: 'var(--display)', fontSize: '32px', fontWeight: 800, color: 'var(--forest, #1b4332)', margin: '0 0 6px' }}>Plan Your Day</h1>
           <p className="plan-sub" style={{ fontFamily: 'var(--body)', fontSize: '13.5px', color: 'var(--muted, #556458)', margin: 0 }}>
@@ -245,8 +235,9 @@ function PlanYourDayInner() {
                   <span className="dot" />
                   I'll sort priority, time & grouping.
                 </div>
-                <button className="pl-plan-btn" onClick={handlePlanMyDay}>
-                  Plan my day
+                <button className="pl-plan-btn" onClick={handlePlanMyDay}
+                        disabled={saving || !inputText.trim()}>
+                  {saving ? 'Adding…' : 'Plan my day'}
                 </button>
               </div>
             </div>
@@ -269,8 +260,9 @@ function PlanYourDayInner() {
                   className="pl-plan-btn"
                   style={{ height: '40px', padding: '0 20px', flexShrink: 0 }}
                   onClick={handlePlanMyDay}
+                  disabled={saving || !inputText.trim()}
                 >
-                  Add task
+                  {saving ? 'Adding…' : 'Add task'}
                 </button>
               </div>
             </div>
@@ -287,42 +279,53 @@ function PlanYourDayInner() {
           </div>
 
           <div className="pl-goal-list" style={{ marginBottom: 32 }}>
-            {activeGoals.length === 0 ? (
+            {planLoading ? (
+              <div className="plan-empty" style={{ background: '#ffffff', padding: '24px', borderRadius: '14px', border: '1px solid var(--bd)' }}>
+                <p style={{ fontSize: '12.5px', color: 'var(--muted)', margin: 0 }}>Loading your plan…</p>
+              </div>
+            ) : activeGoals.length === 0 ? (
               <div className="plan-empty" style={{ background: '#ffffff', padding: '24px', borderRadius: '14px', border: '1px solid var(--bd)' }}>
                 <h3 style={{ fontSize: '15px', fontWeight: 700, margin: '0 0 4px' }}>All caught up!</h3>
                 <p style={{ fontSize: '12.5px', color: 'var(--muted)', margin: 0 }}>No active tasks remaining for today.</p>
               </div>
             ) : (
-              activeGoals.map((goal) => (
-                <div key={goal.id} className="pl-goal-row">
+              activeGoals.map((task) => (
+                <div key={task.task_id} className="pl-goal-row">
                   <button
                     className="pl-checkbox"
-                    onClick={() => handleToggleActive(goal)}
+                    aria-label={`Mark "${task.title}" complete`}
+                    onClick={() => handleToggleActive(task)}
                   >
                     <svg viewBox="0 0 12 12">
                       <polyline points="2 6 5 9 10 3" />
                     </svg>
                   </button>
                   <div className="pl-goal-content">
-                    <h4 className="pl-goal-title">{goal.text}</h4>
+                    <h4 className="pl-goal-title">{task.title}</h4>
                     <div className="pl-goal-badges">
-                      <span className={`pl-badge ${goal.priority}`}>
-                        {goal.priority}
-                      </span>
-                      <span className="pl-meta-item">
-                        <svg viewBox="0 0 24 24">
-                          <circle cx="12" cy="12" r="10" />
-                          <polyline points="12 6 12 12 16 14" />
-                        </svg>
-                        {goal.time}
-                      </span>
-                      <span className="pl-meta-item">
-                        <svg viewBox="0 0 24 24">
-                          <circle cx="12" cy="12" r="10" />
-                          <line x1="8" y1="12" x2="16" y2="12" />
-                        </svg>
-                        {goal.duration}
-                      </span>
+                      {task.priority && (
+                        <span className={`pl-badge ${task.priority}`}>
+                          {task.priority}
+                        </span>
+                      )}
+                      {task.due_date && (
+                        <span className="pl-meta-item">
+                          <svg viewBox="0 0 24 24">
+                            <circle cx="12" cy="12" r="10" />
+                            <polyline points="12 6 12 12 16 14" />
+                          </svg>
+                          {formatDue(task.due_date)}
+                        </span>
+                      )}
+                      {task.goalTitle && (
+                        <span className="pl-meta-item">
+                          <svg viewBox="0 0 24 24">
+                            <circle cx="12" cy="12" r="10" />
+                            <line x1="8" y1="12" x2="16" y2="12" />
+                          </svg>
+                          {task.goalTitle}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -346,11 +349,16 @@ function PlanYourDayInner() {
                 <p style={{ fontSize: '12.5px', color: 'var(--muted)', margin: 0 }}>No tasks completed yet. Start checking off goals!</p>
               </div>
             ) : (
-              completedGoals.map((goal) => (
+              completedGoals.map((task) => (
                 <div
-                  key={goal.id}
+                  key={task.task_id}
                   className="pl-completed-row"
-                  onClick={() => handleToggleCompleted(goal)}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Reopen "${task.title}"`}
+                  onClick={() => handleToggleCompleted(task)}
+                  onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') &&
+                    (e.preventDefault(), handleToggleCompleted(task))}
                   style={{ cursor: 'pointer' }}
                 >
                   <div className="pl-checkbox">
@@ -359,9 +367,11 @@ function PlanYourDayInner() {
                     </svg>
                   </div>
                   <div className="pl-completed-content">
-                    <h4 className="pl-completed-title">{goal.text}</h4>
+                    <h4 className="pl-completed-title">{task.title}</h4>
                     <span className="pl-completed-time">
-                      Completed at {goal.time}
+                      {task.completed_at
+                        ? `Completed at ${formatDue(task.completed_at)}`
+                        : 'Completed'}
                     </span>
                   </div>
                 </div>
@@ -374,16 +384,20 @@ function PlanYourDayInner() {
         <div className="plan-aside">
           {/* Progress Card */}
           <div className="pl-prog-card">
-            <defs>
-              <linearGradient id="plGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="#10B981" />
-                <stop offset="100%" stopColor="#A8D94A" />
-              </linearGradient>
-            </defs>
             <div className="pl-prog-title">Today's progress</div>
 
             <div className="pl-prog-ring">
+              {/* The gradient must live inside the <svg>. It previously sat directly
+                  in the surrounding <div>, so the browser never registered it (the
+                  ring fell back to a flat stroke) and React logged an "unrecognized
+                  tag" error for every one of defs/linearGradient/stop on each render. */}
               <svg viewBox="0 0 110 110">
+                <defs>
+                  <linearGradient id="plGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" stopColor="#10B981" />
+                    <stop offset="100%" stopColor="#A8D94A" />
+                  </linearGradient>
+                </defs>
                 <circle className="bg" cx="55" cy="55" r="49" />
                 <circle
                   className="fg"
@@ -436,10 +450,10 @@ function PlanYourDayInner() {
             </div>
             <div className="pl-reminder-content">
               <span className="pl-reminder-time">
-                {nextReminder ? nextReminder.time : '--:--'}
+                {nextReminder?.due_date ? formatDue(nextReminder.due_date) : '--:--'}
               </span>
               <span className="pl-reminder-title">
-                {nextReminder ? nextReminder.text : 'No upcoming goals'}
+                {nextReminder ? nextReminder.title : 'No upcoming goals'}
               </span>
             </div>
           </div>

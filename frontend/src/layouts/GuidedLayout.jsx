@@ -1,6 +1,8 @@
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { useEffect } from 'react';
+import { getAccessToken } from '../services/api';
+import { getProfile } from '../services/profile';
 
 const STEP_LABELS = {
   '/guided/login': { stage: 'Sign In', step: '1 / 14', pct: 7 },
@@ -12,10 +14,6 @@ const STEP_LABELS = {
   '/guided/summary': { stage: 'Founder summary', step: '5 / 14', pct: 36 },
   '/guided/validate': { stage: 'A quick check', step: '6 / 14', pct: 43 },
   '/guided/problem': { stage: 'The perceived problem', step: '7 / 14', pct: 50 },
-  '/guided/reveal': { stage: 'Adaptive diagnosis', step: '8 / 14', pct: 57 },
-  '/guided/root-cause': { stage: 'Root-cause detection', step: '9 / 14', pct: 64 },
-  '/guided/conclusion': { stage: 'A conclusion', step: '10 / 14', pct: 71 },
-  '/guided/report': { stage: 'Founder Report', step: '11 / 14', pct: 79 },
   '/guided/recommend': { stage: 'Recommendation', step: '12 / 14', pct: 86 },
   '/guided/discovery': { stage: 'Discovery call', step: '13 / 14', pct: 93 },
   '/guided/success': { stage: 'All set', step: '14 / 14', pct: 100 },
@@ -31,6 +29,30 @@ export default function GuidedLayout() {
     setIsGuided(true);
     return () => setIsGuided(false);
   }, [setIsGuided]);
+
+  /**
+   * A founder who already finished onboarding used to be forced through this
+   * entire 14-step sequence again on every login -- nothing anywhere checked
+   * whether they'd already done it. `profile_completed` only becomes true once
+   * every required field (including the problem statement from the last guided
+   * step) is filled, so by the time it flips, a founder who is still legitimately
+   * on a guided page hasn't finished it yet -- this can only fire for someone
+   * returning to /guided/* after already completing it.
+   */
+  useEffect(() => {
+    if (!getAccessToken()) return;
+    let cancelled = false;
+    getProfile()
+      .then((p) => {
+        if (!cancelled && p?.profile_completed) navigate('/app', { replace: true });
+      })
+      .catch(() => { /* not signed in, or offline -- let onboarding proceed as normal */ });
+    return () => { cancelled = true; };
+    // Runs once per mount of the guided shell, not on every step -- re-checking on
+    // every pathname change would refetch the profile on each of the 10 clicks
+    // through a normal first-time onboarding for no benefit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     const isAuth = location.pathname === '/guided/login' || location.pathname === '/guided/welcome';
@@ -65,14 +87,7 @@ export default function GuidedLayout() {
         </div>
       </div>
 
-      <nav 
-        className="guided-nav" 
-        style={location.pathname === '/guided/report' ? {
-          position: 'relative',
-          pointerEvents: 'auto',
-          width: '100%',
-        } : {}}
-      >
+      <nav className="guided-nav">
         <a className="gn-logo" href="/" onClick={e => { e.preventDefault(); handleExit(); }}>
           <span className="gn-logo-text">Go<span className="x">XL</span></span>
           <span className="al">· Ally</span>

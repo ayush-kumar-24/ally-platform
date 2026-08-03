@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
+import { saveOnboardingProfile } from '../../services/profile';
 
 /* 13 questions — Ally builds a live Founder DNA, grouped Business / Founder.
    Faithful port of #v-profile from ally-platform-main.html. */
@@ -151,6 +152,22 @@ export default function ProfileBuild() {
 
   const finish = useCallback(() => {
     setSuggs([]);
+
+    // Persist what the founder just spent ten minutes telling us. Fire-and-report
+    // rather than blocking the closing message: the answers are already captured,
+    // and making someone wait on a network round trip to hear "that's everything
+    // I need" would be the wrong trade.
+    saveOnboardingProfile(profileRef.current)
+      .then((result) => {
+        if (!result.ok) {
+          addAlly("I've got your answers, though a few didn't save just now. " +
+                  'You can review them any time in your profile.');
+        }
+      })
+      .catch(() => {
+        addAlly("I've got your answers here, but I couldn't save them to your " +
+                "profile just now. They'll be there when the connection recovers.");
+      });
     bumpUnd(100, 'Founder DNA complete');
     setComplete(true);
     setUser((prev) => ({

@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
+import { completionPercent, loadDashboard } from '../services/dashboard';
 import {
   IconArrowRight,
   IconChat,
@@ -70,19 +71,49 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const { user, startTour } = useApp();
   const [showBanner, setShowBanner] = useState(true);
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  const firstName = (user?.name || 'Ayush Sharma').split(' ')[0];
+  const load = useCallback(() => {
+    setLoading(true);
+    loadDashboard()
+      .then(setData)
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(load, [load]);
+
+  // Server name wins; the context value is the optimistic one set at login.
+  const fullName = data?.profile?.full_name || user?.name || '';
+  const firstName = fullName.split(' ')[0] || 'there';
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+
+  // `available: false` means "no diagnosis yet" — a real answer, not a failure.
+  // Distinguishing it from a fetch error is what lets a new founder see an honest
+  // empty state instead of a fabricated score.
+  const health = data?.health;
+  const hasHealth = Boolean(health?.available);
+  const score = hasHealth ? Math.round(health.overall_score ?? 0) : null;
+  const pillars = health?.pillars ?? [];
+  const redFlags = health?.red_flags ?? [];
+
+  const profilePct = completionPercent(data?.progress);
+  const summary = data?.summary;
+  const sessions = summary?.completed_sessions ?? 0;
+  const reports = summary?.total_reports ?? 0;
+
+  // The onboarding banner is only truthful once the profile really is complete.
+  const profileComplete = profilePct === 100;
 
   return (
     <div className="dash-page">
       <div className="dash-inner">
-        {showBanner && (
+        {showBanner && profileComplete && (
           <section className="dash-banner">
             <div className="dash-banner-ic">🎉</div>
             <div className="dash-banner-body">
-              <h3>Congratulations, Ayush. Your Founder Profile is now complete.</h3>
+              <h3>Congratulations, {firstName}. Your Founder Profile is now complete.</h3>
               <p>
                 You've unlocked the complete Ally experience. Beyond diagnosis, Ally can now
                 become your daily thinking partner.
@@ -183,7 +214,7 @@ export default function Dashboard() {
               </button>
             </div>
           </div>
-          <ScoreRing score={74} />
+          <ScoreRing score={score ?? 0} />
         </section>
 
         <section className="dash-progress">
@@ -192,19 +223,31 @@ export default function Dashboard() {
           </div>
 
           <div className="dash-pills">
-            <Pill active>Founder profile</Pill>
-            <Pill active>Conversation</Pill>
-            <Pill active>Diagnosis</Pill>
-            <Pill active={false}>Report</Pill>
-            <Pill active={false}>Next steps</Pill>
+            <Pill active={profilePct === 100}>Founder profile</Pill>
+            <Pill active={sessions > 0}>Conversation</Pill>
+            <Pill active={sessions > 0}>Diagnosis</Pill>
+            <Pill active={reports > 0}>Report</Pill>
+            <Pill active={hasHealth}>Next steps</Pill>
             <Pill active={false}>Discovery call</Pill>
           </div>
 
           <div className="dash-stats">
-            <StatCard icon={<IconCheck />} label="Founder clarity" value={74} unit="/100" sub="+9 since last session" progress={74} />
-            <StatCard icon={<IconTrendingUp />} label="Dimensions scanned" value={10} unit="of 10" sub="Full scan complete" progress={100} />
-            <StatCard icon={<IconLightbulb />} label="Root cause" value={1} unit="found" sub="92% confidence" progress={92} />
-            <StatCard icon={<IconDocument />} label="Actions in play" value={3} unit="/9" sub="2 in progress" progress={33} />
+            <StatCard icon={<IconCheck />} label="Founder clarity"
+                      value={score ?? '—'} unit={score === null ? '' : '/100'}
+                      sub={hasHealth ? (health.band || 'Scored') : 'Run a diagnosis to see this'}
+                      progress={score ?? 0} />
+            <StatCard icon={<IconTrendingUp />} label="Dimensions scanned"
+                      value={pillars.length} unit={pillars.length ? 'scanned' : ''}
+                      sub={pillars.length ? 'From your latest diagnosis' : 'No diagnosis yet'}
+                      progress={pillars.length ? 100 : 0} />
+            <StatCard icon={<IconLightbulb />} label="Red flags"
+                      value={redFlags.length} unit={redFlags.length === 1 ? 'found' : 'found'}
+                      sub={redFlags.length ? 'Needs attention' : 'None detected'}
+                      progress={redFlags.length ? 100 : 0} />
+            <StatCard icon={<IconDocument />} label="Reports"
+                      value={reports} unit={reports === 1 ? 'report' : 'reports'}
+                      sub={sessions ? `${sessions} session${sessions === 1 ? '' : 's'} completed` : 'No sessions yet'}
+                      progress={reports ? 100 : 0} />
           </div>
         </section>
 

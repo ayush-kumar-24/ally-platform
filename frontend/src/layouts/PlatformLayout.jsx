@@ -71,6 +71,13 @@ const NAV_GROUPS = [
 
 export default function PlatformLayout() {
   const { user, sidebarCollapsed, toggleSidebar, sidebarOpen, openSidebar, closeSidebar, notifications, clearNotifications } = useApp();
+
+  // Both of these read "Ally Free" as literal text, so a paying founder was shown
+  // the free badge everywhere. `user.plan` is hydrated from the server profile.
+  const planTier = (user?.plan || 'free').toLowerCase();
+  const planLabel = { free: 'Ally Free', starter: 'Ally Starter', pro: 'Ally Pro' }[planTier]
+    || `Ally ${planTier.charAt(0).toUpperCase()}${planTier.slice(1)}`;
+  const onTopTier = planTier === 'pro';
   const nav = useNavigate();
   const location = useLocation();
   const [npOpen, setNpOpen] = useState(false);
@@ -96,7 +103,7 @@ export default function PlatformLayout() {
 
   const currentLabel = NAV_GROUPS.flatMap(g => g.items).find(i => isActive(i.path))?.label || 'Dashboard';
   const isDashboard = location.pathname === '/app' || location.pathname === '/app/';
-  const firstName = (user?.name || 'Ayush Sharma').split(' ')[0];
+  const firstName = (user?.name || '').split(' ')[0] || 'there';
 
   return (
     <div className="platform" style={{ '--sb': sidebarCollapsed ? '68px' : '248px' }}>
@@ -147,13 +154,13 @@ export default function PlatformLayout() {
         </nav>
 
         <div className="nav-upsell">
-          <div className="nu-t">* <span>Ally Free</span></div>
+          <div className="nu-t">* <span>{planLabel}</span></div>
           <div className="nu-s">Unlock deeper diagnosis, unlimited chat and Founder MRI.</div>
           <button className="nu-btn" onClick={() => handleNav('/app/billing')}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M12 19V5M5 12l7-7 7 7" />
             </svg>
-            Upgrade plan
+            {onTopTier ? 'Manage plan' : 'Upgrade plan'}
           </button>
         </div>
 
@@ -161,7 +168,7 @@ export default function PlatformLayout() {
           <button className="sb-user" onClick={() => handleNav('/app/profile')}>
             <div className="sb-av">{user.initials || 'RV'}</div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div className="u-name">{user.name || 'Rahul Varma'}</div>
+              <div className="u-name">{user?.name || 'Your account'}</div>
               <div className="u-stage">Growth stage - founder</div>
             </div>
             <svg className="u-cog" viewBox="0 0 24 24" fill="none" strokeWidth="1.7">
@@ -205,7 +212,7 @@ export default function PlatformLayout() {
           <div className="tb-right">
             <button className="tb-pill" type="button" onClick={() => handleNav('/app/billing')}>
               <span className="tb-pill-dot" />
-              Ally Free
+              {planLabel}
             </button>
             <button className="tb-icon" type="button" aria-label="Search">
               <IconSearch />
