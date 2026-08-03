@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { MOCK_FOUNDER, MOCK_NOTIFICATIONS } from '../data/mockData';
+import { get } from '../services/api';
 
 const AppContext = createContext(null);
 
@@ -83,6 +84,29 @@ export function AppProvider({ children }) {
     if (saved) {
       try { setUser(JSON.parse(saved)); } catch (e) {}
     }
+  }, []);
+
+  // Real plan_type from the backend -- the source of truth for plan-gated
+  // features (e.g. voice input in chat). Merged onto the existing user object
+  // rather than replacing it: most of `user` today (stage, company, clarityScore,
+  // ...) still comes from mock data / other screens, and isn't part of this fetch.
+  useEffect(() => {
+    get('/profile')
+      .then((profile) => {
+        setUser((prev) => ({
+          ...prev,
+          founder_id: profile.founder_id,
+          plan_type: profile.plan_type,
+          name: profile.full_name || prev?.name,
+        }));
+      })
+      .catch(() => {
+        // No session yet / backend unreachable -- keep whatever's in `user`
+        // (mock or localStorage). If plan_type ends up missing, the UI-level
+        // gate (canUseVoiceInChat) can't pre-block, but the backend's own
+        // check on POST /voice/transcribe is the real authority and still
+        // enforces the free-plan restriction regardless of frontend state.
+      });
   }, []);
 
   useEffect(() => {

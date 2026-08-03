@@ -1,6 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { MOCK_CHAT_HISTORY, MOCK_MESSAGES } from '../data/mockData';
+import { post, ApiError } from '../services/api';
+import { canUseVoiceInChat } from '../services/voice';
+import { useVoiceInput } from '../hooks/useVoiceInput';
 
 const PROMPT_CARDS = [
   { t: 'Help me increase revenue', s: 'Find the highest-leverage growth lever' },
@@ -11,13 +14,6 @@ const PROMPT_CARDS = [
   { t: 'Create a GTM strategy', s: 'A go-to-market plan for launch' },
 ];
 
-const REPLIES = [
-  "Great question. Let's break it into the few moves that actually move the needle — then I'll give you a concrete first step you can take this week.",
-  "Here's how I'd think about it: start from the constraint, not the tactic. What's the one thing that, if it changed, would make everything else easier?",
-  "Good instinct to ask now. There are three ways founders usually approach this — let me lay them out with the trade-offs so you can pick with clear eyes.",
-  'Let\'s make this concrete. Tell me one number — your current baseline — and I\'ll show you the realistic range of what "good" looks like from here.',
-];
-
 const CHAT_LIMIT = 20;
 
 function greeting() {
@@ -25,17 +21,22 @@ function greeting() {
   return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
 }
 
+function nowLabel() {
+  return 'Just now';
+}
+
 export default function AllyChat() {
-  const { user } = useApp();
+  const { user, showToast } = useApp();
   const [histOpen, setHistOpen] = useState(false);
   const [activeConv, setActiveConv] = useState(null);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [typing, setTyping] = useState(false);
   const [used, setUsed] = useState(18);
-  const [replyIdx, setReplyIdx] = useState(0);
+  const [uploading, setUploading] = useState(false);
   const scrollRef = useRef(null);
   const taRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -48,25 +49,88 @@ export default function AllyChat() {
     ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
   };
 
-  const send = (text) => {
-    if (!text.trim()) return;
-    if (activeConv === null) {
-      // first message of a fresh conversation
-    }
-    setMessages(prev => [...prev, { role: 'me', text, time: 'Just now' }]);
+  const send = async (text) => {
+    if (!text.trim() || typing) return;
+    setMessages(prev => [...prev, { role: 'me', text, time: nowLabel() }]);
     setInput('');
     sizeTa();
     setUsed(u => Math.min(CHAT_LIMIT, u + 1));
     setTyping(true);
-    setTimeout(() => {
-      setTyping(false);
+    try {
+      const result = await post('/chat/message', {
+        message: text,
+        conversation_id: activeConv,
+      });
+      if (!activeConv) setActiveConv(result.conversation_id);
       setMessages(prev => [...prev, {
         role: 'ally',
-        text: REPLIES[replyIdx % REPLIES.length],
-        time: 'Just now',
+        text: result.ok ? result.answer : "I couldn't put together an answer just now — try asking again in a moment.",
+        time: nowLabel(),
+        confidence: result.confidence != null ? Math.round(result.confidence * 100) : undefined,
       }]);
-      setReplyIdx(i => i + 1);
-    }, 1300);
+    } catch (err) {
+      setMessages(prev => [...prev, {
+        role: 'ally',
+        text: err instanceof ApiError && err.isNetwork
+          ? "I couldn't reach the server — check your connection and try again."
+          : "Something went wrong sending that. Please try again.",
+        time: nowLabel(),
+      }]);
+    } finally {
+      setTyping(false);
+    }
+  };
+
+  // A conversation is created lazily by the first /chat/message call (backend
+  // auto-creates when conversation_id is null). Attachments need an existing
+  // conversation_id up front, so this creates one on demand if there isn't one
+  // yet (e.g. attaching a file before typing anything).
+  const ensureConversation = async () => {
+    if (activeConv) return activeConv;
+    const conv = await post('/chat/conversations', {});
+    setActiveConv(conv.conversation_id);
+    return conv.conversation_id;
+  };
+
+  const handleAttachClick = () => fileInputRef.current?.click();
+
+  const handleFileSelected = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-selecting the same file later
+    if (!file) return;
+    setUploading(true);
+    try {
+      const conversationId = await ensureConversation();
+      const form = new FormData();
+      form.append('conversation_id', conversationId);
+      form.append('file', file);
+      await post('/chat/attachments', form, { headers: { 'Content-Type': undefined } });
+      showToast(`Attached "${file.name}" — mention it in your message and I'll take it into account.`);
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.detail : 'Could not attach that file — please try again.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const voice = useVoiceInput({
+    context: 'chat',
+    onTranscribed: (text) => {
+      setInput(prev => (prev ? `${prev} ${text}` : text));
+      sizeTa();
+    },
+    onUpgradeRequired: () => showToast(
+      'Voice chat is a paid-plan feature. Voice input is available for free during your diagnosis.'
+    ),
+    onError: () => showToast('Could not access the microphone — check your browser permissions.'),
+  });
+
+  const handleMicClick = () => {
+    if (!canUseVoiceInChat(user)) {
+      showToast('Voice chat is a paid-plan feature. Voice input is available for free during your diagnosis.');
+      return;
+    }
+    voice.toggle();
   };
 
   const remaining = Math.max(0, CHAT_LIMIT - used);
@@ -185,7 +249,18 @@ export default function AllyChat() {
             </span>
           </div>
           <div className="ci-row">
-            <button className="ci-btn" title="Attach a file or image">
+            <input
+              ref={fileInputRef}
+              type="file"
+              style={{ display: 'none' }}
+              onChange={handleFileSelected}
+            />
+            <button
+              className="ci-btn"
+              title="Attach a file or image"
+              disabled={uploading}
+              onClick={handleAttachClick}
+            >
               <svg viewBox="0 0 24 24"><path d="M21.4 11.05 12.25 20.2a5.5 5.5 0 01-7.78-7.78l9.19-9.19a3.5 3.5 0 114.95 4.95l-9.2 9.19a1.5 1.5 0 01-2.12-2.12l8.49-8.49"/></svg>
             </button>
             <textarea
@@ -196,7 +271,13 @@ export default function AllyChat() {
               onChange={e => { setInput(e.target.value); sizeTa(); }}
               onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(input); } }}
             />
-            <button className="ci-btn" title="Voice input" aria-pressed="false">
+            <button
+              className={`ci-btn${voice.status === 'recording' ? ' recording' : ''}`}
+              title={canUseVoiceInChat(user) ? 'Voice input' : 'Voice input (paid plan)'}
+              aria-pressed={voice.status === 'recording'}
+              disabled={voice.status === 'transcribing'}
+              onClick={handleMicClick}
+            >
               <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/></svg>
             </button>
             <button className="ci-btn send" onClick={() => send(input)} title="Send">
