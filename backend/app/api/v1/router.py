@@ -18,6 +18,7 @@ from app.api.v1.reference.routes import router as reference_router
 from app.api.v1.reports.routes import router as reports_router
 from app.api.v1.settings.routes import router as settings_router
 from app.api.v1.settings.router import router as settings_preferences_router
+from app.api.v1.voice.router import router as voice_router
 from app.db.session import engine
 
 api_router = APIRouter(prefix="/api/v1")
@@ -39,6 +40,7 @@ api_router.include_router(admin_router)
 api_router.include_router(planning_router)
 api_router.include_router(consents_router)
 api_router.include_router(privacy_router)
+api_router.include_router(voice_router)
 
 
 @api_router.get("/health")
