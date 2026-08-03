@@ -55,6 +55,11 @@ from app.privacy.db_repository import SqlAlchemyPrivacyRepository
 from app.privacy.service import PrivacyService
 from app.core.config import settings
 from app.services import embeddings
+from app.admin.panel_audit import AuditRecorder, SqlAlchemyPanelAuditRepository
+from app.admin.panel_service import AdminPanelService
+from app.admin.users_db_repository import SqlAlchemyAdminUserRepository
+from app.credits.db_repository import SqlAlchemyCreditRepository
+from app.credits.service import CreditService
 
 
 class Container:
@@ -112,6 +117,8 @@ class Container:
         self._announcement_repository = InMemoryAnnouncementRepository()
         self._audit_repository = InMemoryAuditRepository()
         self._admin_registry = AdminRegistry()
+        # Admin Panel allowlist -- built lazily so tests can set the env var first.
+        self._panel_registry = None
 
     # --- Provider registry ------------------------------------------------
 
@@ -270,6 +277,54 @@ class Container:
             SqlAlchemyPrivacyRepository(db),
             consent_service=self.consent_service(db),
         )
+
+    # --- Admin Panel (DB-backed, per-request) -----------------------------
+
+    def panel_registry(self):
+        """email -> PanelRole allowlist. Built once; empty unless granted via env."""
+        if self._panel_registry is None:
+            from app.api.v1.admin.panel_dependencies import PanelRegistry
+            self._panel_registry = PanelRegistry()
+        return self._panel_registry
+
+    def credit_service(self, db: Session) -> CreditService:
+        return CreditService(SqlAlchemyCreditRepository(db))
+
+    def admin_panel_service(self, db: Session) -> AdminPanelService:
+        """Request-scoped panel service. The audit repository is DB-backed so the
+        trail survives restarts."""
+        from app.admin.conversations import SqlAlchemyConversationReadRepository
+        return AdminPanelService(
+            SqlAlchemyAdminUserRepository(db),
+            credits=self.credit_service(db),
+            audit=AuditRecorder(SqlAlchemyPanelAuditRepository(db)),
+            conversations=SqlAlchemyConversationReadRepository(db),
+            report_regenerator=None,   # wire once the generator exposes a re-run entry point
+        )
+
+    def insights_service(self, db: Session):
+        from app.admin.insights import InsightsService, SqlAlchemyInsightsRepository
+        return InsightsService(SqlAlchemyInsightsRepository(db))
+
+    def feature_flag_service(self, db: Session):
+        from app.admin.feature_flags import (
+            FeatureFlagService,
+            SqlAlchemyFeatureFlagRepository,
+        )
+        return FeatureFlagService(SqlAlchemyFeatureFlagRepository(db))
+
+    def entitlement_service(self, db: Session):
+        """Plan gate for one request. Composed with the credit service so the
+        chat guard can check features, the daily ceiling and the balance in one
+        place."""
+        from app.plans.service import EntitlementService
+        from app.plans.usage import SqlAlchemyUsageRepository
+        return EntitlementService(SqlAlchemyUsageRepository(db),
+                                  credit_service=self.credit_service(db))
+
+    def broadcast_service(self, db: Session):
+        from app.admin.broadcasts import BroadcastService, SqlAlchemyBroadcastRepository
+        return BroadcastService(SqlAlchemyBroadcastRepository(db))
 
 
 # Application-wide container instance. Import and use `container.chat_execution(db)`.

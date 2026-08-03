@@ -1,26 +1,30 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MOCK_PLANS, MOCK_FOUNDER } from '../data/mockData';
+import { getCatalog } from '../services/plans';
 
 /* ─── Static data ─── */
+/** Keys must match the plan tiers (free / starter / pro) served by GET /plans. */
 const COMPARE_ROWS = [
-  { label: 'Diagnoses / month', free: '2', pro: '10', proplus: '25', max: 'Unlimited' },
-  { label: 'Founder DNA assessment', free: true, pro: true, proplus: true, max: true },
-  { label: 'Business DNA mapping', free: false, pro: true, proplus: true, max: true },
-  { label: 'Ally Chat sessions', free: '1/week', pro: 'Unlimited', proplus: 'Unlimited', max: 'Unlimited' },
-  { label: 'Clarity Reports', free: false, pro: true, proplus: true, max: true },
-  { label: 'Action Plans', free: false, pro: true, proplus: true, max: true },
-  { label: 'Team accounts', free: false, pro: false, proplus: '3 members', max: 'Unlimited' },
-  { label: 'Dedicated coach', free: false, pro: false, proplus: true, max: true },
-  { label: 'API access', free: false, pro: false, proplus: true, max: true },
-  { label: 'White-label reports', free: false, pro: false, proplus: false, max: true },
+  { label: 'Credits', free: '120 (once)', starter: '180 / month', pro: '240 / month' },
+  { label: 'Tokens per day', free: '4,000', starter: '6,000', pro: '8,000' },
+  { label: 'First diagnosis', free: 'Free', starter: 'Free', pro: 'Free' },
+  { label: 'Founder DNA', free: true, starter: true, pro: true },
+  { label: 'Business DNA', free: true, starter: true, pro: true },
+  { label: 'Clarity Reports', free: true, starter: true, pro: true },
+  { label: 'Voice in Diagnosis', free: true, starter: true, pro: true },
+  { label: 'Voice in Ally Chat', free: false, starter: true, pro: true },
+  { label: 'Plan Your Day', free: false, starter: true, pro: true },
+  { label: 'Know My Energy', free: false, starter: false, pro: true },
+  { label: 'Free calls / month', free: '—', starter: '1', pro: '2' },
+  { label: 'Extra calls', free: '₹300 / 30 min', starter: '₹300 / 30 min', pro: '₹300 / 30 min' },
 ];
 
 const MOCK_INVOICES = [
-  { id: 'INV-2026-007', date: 'Jul 1, 2026', plan: 'Pro', amount: '₹2,499', status: 'Paid' },
-  { id: 'INV-2026-006', date: 'Jun 1, 2026', plan: 'Pro', amount: '₹2,499', status: 'Paid' },
-  { id: 'INV-2026-005', date: 'May 1, 2026', plan: 'Pro', amount: '₹2,499', status: 'Paid' },
-  { id: 'INV-2026-004', date: 'Apr 1, 2026', plan: 'Starter', amount: '₹999', status: 'Paid' },
+  { id: 'INV-2026-007', date: 'Jul 1, 2026', plan: 'Pro', amount: '₹999', status: 'Paid' },
+  { id: 'INV-2026-006', date: 'Jun 1, 2026', plan: 'Pro', amount: '₹999', status: 'Paid' },
+  { id: 'INV-2026-005', date: 'May 1, 2026', plan: 'Starter', amount: '₹450', status: 'Paid' },
+  { id: 'INV-2026-004', date: 'Apr 1, 2026', plan: 'Starter', amount: '₹450', status: 'Paid' },
 ];
 
 /* ─── Helpers ─── */
@@ -64,7 +68,55 @@ function UsageBar({ used, total, color = '#10B981' }) {
 /* ═══════════════════════════════════════════
    VIEW 1 — Plans (existing, enhanced)
 ═══════════════════════════════════════════ */
+/**
+ * Load the live plan catalog, falling back to MOCK_PLANS until it arrives.
+ *
+ * The backend is the source of truth: if this page kept its own copy of the tiers
+ * it would eventually disagree with the gate that enforces them — and the version
+ * the customer read is the one they'd expect to be honoured.
+ */
+function useCatalog() {
+  const [plans, setPlans] = useState(MOCK_PLANS);
+  const [live, setLive] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    getCatalog()
+      .then((catalog) => {
+        if (cancelled || !catalog?.plans?.length) return;
+        setPlans(catalog.plans.map((p) => ({
+          id: p.tier,
+          name: p.name,
+          price: p.price_inr,
+          period: p.price_inr ? '/mo' : '',
+          tag: p.tagline,
+          popular: p.tier === 'starter',
+          cta: p.price_inr ? `Start ${p.name}` : 'Current',
+          features: [
+            p.monthly_credits
+              ? `${p.monthly_credits} credits every month`
+              : `1 month free · ${p.signup_credits} credits`,
+            `${p.daily_token_limit.toLocaleString('en-IN')} tokens per day`,
+            'Full diagnosis — free, uses no credits',
+            p.features.includes('voice_chat') ? 'Voice in Ally Chat' : 'Voice in Diagnosis',
+            ...(p.features.includes('plan_your_day') ? ['Plan Your Day'] : []),
+            ...(p.features.includes('know_my_energy') ? ['Know My Energy'] : []),
+            p.free_calls_per_month
+              ? `${p.free_calls_per_month} free call${p.free_calls_per_month > 1 ? 's' : ''} each month, then ₹300`
+              : 'Book a call · ₹300 / 30 min',
+          ],
+        })));
+        setLive(true);
+      })
+      .catch(() => { /* keep the fallback — a pricing page must always render */ });
+    return () => { cancelled = true; };
+  }, []);
+
+  return { plans, live };
+}
+
 function PlansView({ annual, setAnnual, onSelectPlan, currentPlan }) {
+  const { plans: PLANS } = useCatalog();
   return (
     <>
       {/* Hero */}
@@ -93,7 +145,7 @@ function PlansView({ annual, setAnnual, onSelectPlan, currentPlan }) {
 
       {/* Plan cards */}
       <div className="plans stagger d2">
-        {MOCK_PLANS.map(plan => {
+        {PLANS.map(plan => {
           const price = annual ? Math.floor(plan.price * 0.8) : plan.price;
           const isCurrent = currentPlan === plan.id;
           return (
@@ -171,7 +223,7 @@ function PlansView({ annual, setAnnual, onSelectPlan, currentPlan }) {
           <thead>
             <tr>
               <th style={{ textAlign: 'left', padding: '16px' }}>Feature</th>
-              {MOCK_PLANS.map(p => (
+              {PLANS.map(p => (
                 <th key={p.id} className={p.popular ? 'cmp-col-pop' : ''}>
                   <div className="cmp-pn">{p.name}</div>
                   <div className="cmp-pp">{p.price === 0 ? 'Free' : `₹${(annual ? Math.floor(p.price * 0.8) : p.price).toLocaleString()}/mo`}</div>
@@ -185,8 +237,8 @@ function PlansView({ annual, setAnnual, onSelectPlan, currentPlan }) {
                 <td style={{ fontWeight: 600, color: '#16241c', fontSize: 13 }}>{row.label}</td>
                 <td><CmpCell val={row.free} /></td>
                 <td className="cmp-col-pop"><CmpCell val={row.pro} /></td>
-                <td><CmpCell val={row.proplus} /></td>
-                <td><CmpCell val={row.max} /></td>
+                
+                
               </tr>
             ))}
           </tbody>
@@ -629,7 +681,7 @@ export default function Billing() {
   const [view, setView] = useState('plans'); // 'plans' | 'checkout' | 'success' | 'status'
   const [annual, setAnnual] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState(null);
-  const currentPlan = 'pro';
+  const currentPlan = 'starter';
 
   const handleSelectPlan = plan => {
     setSelectedPlan(plan);

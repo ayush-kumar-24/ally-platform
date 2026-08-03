@@ -129,11 +129,52 @@ export const LANDING_NAV_ITEMS = [
   { href: '#lp-final', label: 'Get Started' },
 ];
 
+/**
+ * Fallback pricing, used only until GET /plans responds. The backend catalog
+ * (app/plans/catalog.py) is the source of truth — these values mirror it so a
+ * cold page render isn't blank, and Billing replaces them as soon as the real
+ * catalog arrives.
+ *
+ * Free grants credits ONCE, not monthly: a renewing free tier is an unbounded
+ * recurring cost per signup. It's a one-month trial ending in a top-up decision.
+ */
 export const MOCK_PLANS = [
-  { id: 'free', name: 'Free', price: 0, period: '/mo', tag: 'Good for a taste', popular: false, cta: 'Current', features: ['2 diagnoses / mo', 'Basic founder DNA', '1 chat session / week', 'Email support'] },
-  { id: 'pro', name: 'Pro', price: 2499, period: '/mo', tag: 'For active founders', popular: true, cta: 'Start Pro', features: ['10 diagnoses / mo', 'Full founder + business DNA', 'Unlimited chat', 'Priority support', 'Clarity reports', 'Action plans'] },
-  { id: 'proplus', name: 'Pro+', price: 4999, period: '/mo', tag: 'For scaling teams', popular: false, cta: 'Start Pro+', features: ['25 diagnoses / mo', 'Everything in Pro', 'Team accounts (3)', 'Dedicated coach', 'Custom benchmarks', 'API access'] },
-  { id: 'max', name: 'Max', price: 9999, period: '/mo', tag: 'For enterprises', popular: false, cta: 'Contact us', features: ['Unlimited diagnoses', 'Everything in Pro+', 'Unlimited team members', 'White-label reports', 'On-premise option', 'SLA guarantee'] },
+  {
+    id: 'free', name: 'Free', price: 0, period: '', tag: 'Try Ally for a month',
+    popular: false, cta: 'Current',
+    features: [
+      '1 month free · 120 credits',
+      '4,000 tokens per day',
+      'Full diagnosis — free, uses no credits',
+      'Voice in Diagnosis',
+      'Founder & Business DNA, Reports',
+      'Book a call · ₹300 / 30 min',
+    ],
+  },
+  {
+    id: 'starter', name: 'Starter', price: 450, period: '/mo',
+    tag: 'For founders working on the business weekly', popular: true, cta: 'Start Starter',
+    features: [
+      '180 credits every month',
+      '6,000 tokens per day',
+      'Everything in Free',
+      'Voice in Ally Chat',
+      'Plan Your Day',
+      '1 free call each month, then ₹300',
+    ],
+  },
+  {
+    id: 'pro', name: 'Pro', price: 999, period: '/mo',
+    tag: 'Ally as your standing advisor', popular: false, cta: 'Start Pro',
+    features: [
+      '240 credits every month',
+      '8,000 tokens per day',
+      'Everything in Starter',
+      'Know My Energy',
+      '2 free calls each month, then ₹300',
+      'Priority support',
+    ],
+  },
 ];
 
 export const MOCK_HELP_FAQ = [

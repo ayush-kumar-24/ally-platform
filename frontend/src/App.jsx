@@ -31,6 +31,7 @@ import BusinessDNA from './pages/BusinessDNA';
 import NextSteps from './pages/NextSteps';
 import DiscoveryCall from './pages/DiscoveryCall';
 import PlanYourDay from './pages/PlanYourDay';
+import KnowMyEnergy from './pages/KnowMyEnergy';
 import Report from './pages/Report';
 import Billing from './pages/Billing';
 import HelpSupport from './pages/HelpSupport';
@@ -38,6 +39,15 @@ import TermsOfService from './pages/TermsOfService';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import Toast from './components/ui/Toast';
 import CookieBanner from './components/CookieBanner';
+// Admin Panel — internal only. Access is decided by the backend (/admin/me);
+// AdminLayout renders an access error for anyone the server does not recognise.
+import AdminLayout from './pages/admin/AdminLayout';
+import AdminDashboard from './pages/admin/AdminDashboard';
+import AdminUsers from './pages/admin/AdminUsers';
+import AdminUserDetail from './pages/admin/AdminUserDetail';
+import AdminAuditLog from './pages/admin/AdminAuditLog';
+import AdminSystem from './pages/admin/AdminSystem';
+import AdminUsage from './pages/admin/AdminUsage';
 
 // Show splash only once per session (won't replay on route changes)
 const splashShown = sessionStorage.getItem('splashShown') === 'true';
@@ -114,11 +124,26 @@ export default function App() {
           <Route path="business-dna" element={<BusinessDNA />} />
           <Route path="profile" element={<FounderProfile />} />
           <Route path="plan" element={<PlanYourDay />} />
+          <Route path="know-my-energy" element={<KnowMyEnergy />} />
           <Route path="next-steps" element={<NextSteps />} />
           <Route path="discovery-call" element={<DiscoveryCall />} />
           <Route path="report" element={<Report />} />
           <Route path="billing" element={<Billing />} />
           <Route path="help" element={<HelpSupport />} />
+        </Route>
+
+        {/* ── Admin Panel (internal) ── */}
+        <Route path="/admin" element={
+          <ErrorBoundary label="Admin" fallbackPath="/admin">
+            <AdminLayout />
+          </ErrorBoundary>
+        }>
+          <Route index element={<AdminDashboard />} />
+          <Route path="users" element={<AdminUsers />} />
+          <Route path="users/:id" element={<AdminUserDetail />} />
+          <Route path="usage" element={<AdminUsage />} />
+          <Route path="audit" element={<AdminAuditLog />} />
+          <Route path="system" element={<AdminSystem />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />
