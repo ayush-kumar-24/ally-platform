@@ -26,10 +26,17 @@ class AttachmentRepository(abc.ABC):
     @abc.abstractmethod
     def purge(self, attachment_id: str) -> bool: ...
 
+    @abc.abstractmethod
+    def add_content(self, attachment_id: str, content: bytes) -> None: ...
+
+    @abc.abstractmethod
+    def get_content(self, attachment_id: str) -> bytes | None: ...
+
 
 class InMemoryAttachmentRepository(AttachmentRepository):
     def __init__(self) -> None:
         self._items: dict[str, Attachment] = {}
+        self._content: dict[str, bytes] = {}
         self._lock = threading.RLock()
 
     def add(self, attachment: Attachment) -> None:
@@ -54,4 +61,13 @@ class InMemoryAttachmentRepository(AttachmentRepository):
 
     def purge(self, attachment_id: str) -> bool:
         with self._lock:
+            self._content.pop(attachment_id, None)
             return self._items.pop(attachment_id, None) is not None
+
+    def add_content(self, attachment_id: str, content: bytes) -> None:
+        with self._lock:
+            self._content[attachment_id] = content
+
+    def get_content(self, attachment_id: str) -> bytes | None:
+        with self._lock:
+            return self._content.get(attachment_id)

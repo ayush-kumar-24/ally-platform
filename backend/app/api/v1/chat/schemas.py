@@ -13,7 +13,7 @@ class MessageRequest(BaseModel):
     conversation_id: str | None = Field(default=None, max_length=128)
     session_id: int | None = None
     language: str = Field(default="en", max_length=16)
-    response_category: str = Field(default="diagnosis_answer", max_length=64)
+    response_category: str = Field(default="general_chat", max_length=64)
     request_id: str | None = Field(default=None, max_length=128)
 
 

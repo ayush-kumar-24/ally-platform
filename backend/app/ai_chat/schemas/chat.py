@@ -31,7 +31,7 @@ class ChatRequest:
     conversation_id: str | None = None
     session_id: int | None = None
     language: str = "en"
-    response_category: str = "diagnosis_answer"
+    response_category: str = "general_chat"
     request_id: str | None = None
     actor: str = "founder"
 
@@ -43,7 +43,7 @@ class GroundingRequest:
 
     message: str
     language: str = "en"
-    response_category: str = "diagnosis_answer"
+    response_category: str = "general_chat"
 
 
 @dataclass(frozen=True)
@@ -64,6 +64,10 @@ class ConversationContextWindow:
     memory_injected: bool = False
     retrieval_injected: bool = False
     graph_injected: bool = False
+    attachments_injected: bool = False
+    # pre-formatted attachments block (read via getattr in grounded_variables,
+    # so other GroundingSource implementers without this field stay valid)
+    attachments_text: str = ""
 
     @property
     def conversation(self) -> Conversation:

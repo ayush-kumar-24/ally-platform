@@ -100,6 +100,27 @@ def test_add_persists_and_reads_back(founder_and_conversation):
     db.close()
 
 
+def test_content_bytes_persist_across_separate_sessions(founder_and_conversation):
+    """The point of migration a7c9e1f3b5d7: the raw bytes are durable, not just
+    discarded after checksum/size derivation -- readable from a totally separate
+    DB session, same proof shape as the metadata resume test below."""
+    fid, conv_id = founder_and_conversation
+    db1 = SessionLocal()
+    a = svc(db1).add_attachment(conv_id, fid, "notes.txt", CONTENT)
+    db1.commit()
+    db1.close()
+
+    db2 = SessionLocal()
+    assert svc(db2).get_content(a.attachment_id) == CONTENT
+    db2.close()
+
+
+def test_content_missing_for_unknown_attachment(founder_and_conversation):
+    db = SessionLocal()
+    assert svc(db).get_content("nope") is None
+    db.close()
+
+
 def test_extension_and_type_are_derived_not_stored(founder_and_conversation):
     """extension/attachment_type have no DB column -- prove they still round-trip
     correctly, recomputed from file_name/file_type on read."""

@@ -165,13 +165,15 @@ class Container:
         return build_conversation_service(SqlConversationRepository(db))
 
     def context_window_builder(self, db: Session):
-        """Request-scoped: the builder reads founder memory and the DB-backed
-        conversation store, so it is assembled entirely from the request's session."""
+        """Request-scoped: the builder reads founder memory, uploaded attachments
+        and the DB-backed conversation store, so it is assembled entirely from the
+        request's session."""
         return ContextWindowBuilder(
             conversation_service=self.conversation_service(db),
             memory=self.memory(db),
             retrieval=self._retrieval_service,
             knowledge_graph=self._kg_service,
+            attachments=self.attachment_service(db),
         )
 
     def grounded_prompt_manager(self):

@@ -18,18 +18,27 @@ Deterministic: no token counting, no summarization LLM, stable formatting/orderi
 
 from __future__ import annotations
 
+from app.ai_chat.attachments.schemas import AttachmentType
 from app.ai_chat.schemas.chat import ConversationContextWindow, GroundingRequest
 from app.ai_chat.schemas.conversation import Conversation, ConversationContext, MessageRole
 from app.api.v1.ally.memory.schemas import MemorySearchRequest
+from app.api.v1.ally.prompts.grounding.flatteners import attachments_block
 from app.core.logger import logger
 
 _SPEAKER = {MessageRole.USER: "Founder", MessageRole.ASSISTANT: "Ally", MessageRole.SYSTEM: "System"}
 
+# Attachment types whose bytes can be decoded as text and read into the prompt.
+# Everything else (images, PDFs, docx) is referenced by name only -- nothing in
+# this codebase decodes binary formats into text yet.
+_TEXT_READABLE = frozenset({AttachmentType.TEXT, AttachmentType.SPREADSHEET})
+
 
 class ContextWindowConfig:
-    def __init__(self, *, max_history_messages: int = 20, memory_limit: int = 5):
+    def __init__(self, *, max_history_messages: int = 20, memory_limit: int = 5,
+                 attachment_limit: int = 5):
         self.max_history_messages = max_history_messages
         self.memory_limit = memory_limit
+        self.attachment_limit = attachment_limit
 
 
 class ContextWindowBuilder:
@@ -40,12 +49,14 @@ class ContextWindowBuilder:
         memory,
         retrieval,
         knowledge_graph,
+        attachments=None,
         config: ContextWindowConfig | None = None,
     ):
         self.conversation_service = conversation_service
         self.memory = memory
         self.retrieval = retrieval
         self.knowledge_graph = knowledge_graph
+        self.attachments = attachments
         self.config = config or ContextWindowConfig()
 
     def build(
@@ -55,7 +66,7 @@ class ContextWindowBuilder:
         conversation: Conversation,
         current_message: str,
         language: str = "en",
-        response_category: str = "diagnosis_answer",
+        response_category: str = "general_chat",
     ) -> ConversationContextWindow:
         # 1-4. History + trimming + important preservation (reuse frozen M1).
         conv_ctx = self.conversation_service.build_context(
@@ -70,6 +81,10 @@ class ContextWindowBuilder:
 
         # 7. Inject graph expansion (M4) -- fail closed.
         graph, graph_ok = self._safe_graph(ally_context)
+
+        # 7b. Inject uploaded-file context (Milestone 4) -- fail closed. Text-
+        # readable files are decoded and inlined; other types are named only.
+        attachments_text, attachments_ok = self._safe_attachments(conversation.conversation_id)
 
         # 8. Include the current message, folding recent history into the text.
         founder_message = self._compose_message(conv_ctx, current_message)
@@ -87,6 +102,8 @@ class ContextWindowBuilder:
             memory_injected=memory_ok,
             retrieval_injected=retrieval_ok,
             graph_injected=graph_ok,
+            attachments_injected=attachments_ok,
+            attachments_text=attachments_text,
         )
 
     # --- fail-closed source injection ------------------------------------
@@ -117,6 +134,28 @@ class ContextWindowBuilder:
             logger.warning("ai_chat: graph injection failed; continuing",
                            extra={"stage": "inject_graph", "error": str(exc)})
             return None, False
+
+    def _safe_attachments(self, conversation_id: str) -> tuple[str, bool]:
+        if self.attachments is None:
+            return "", False
+        try:
+            items = self.attachments.list_attachments(conversation_id)
+            recent = items[-self.config.attachment_limit:]
+            entries = tuple(self._read_entry(a) for a in recent)
+            return attachments_block(entries), True
+        except Exception as exc:  # noqa: BLE001 -- degrade, never fail the turn
+            logger.warning("ai_chat: attachment injection failed; continuing",
+                           extra={"stage": "inject_attachments", "error": str(exc)})
+            return "", False
+
+    def _read_entry(self, attachment) -> tuple[str, str, int, str | None]:
+        meta = attachment.metadata
+        text = None
+        if meta.attachment_type in _TEXT_READABLE:
+            content = self.attachments.get_content(attachment.attachment_id)
+            if content is not None:
+                text = content.decode("utf-8", errors="replace")
+        return meta.filename, meta.attachment_type.value, meta.size_bytes, text
 
     # --- message composition ---------------------------------------------
 

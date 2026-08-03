@@ -12,6 +12,7 @@ fabricated.
 
 from __future__ import annotations
 
+from app.api.v1.ally.context.schemas import AllyContext
 from app.api.v1.ally.kg.schemas import GraphView
 from app.api.v1.ally.memory.schemas import MemoryItem
 from app.api.v1.ally.rag.schemas import RetrievalResult
@@ -20,6 +21,7 @@ _MAX_MEMORY = 6
 _MAX_RETRIEVAL = 5
 _MAX_GRAPH_LINES = 8
 _CLAMP = 280
+_DIAGNOSIS_SUMMARY_CLAMP = 600
 
 
 def _clamp(text: str, limit: int = _CLAMP) -> str:
@@ -62,4 +64,57 @@ def graph_expansion(graph: GraphView | None) -> str:
     ]
     if not lines:
         lines = [f"- {n.node_type.value}: {n.label}" for n in graph.nodes[:_MAX_GRAPH_LINES]]
+    return "\n".join(lines)
+
+
+def diagnosis_block(ctx: AllyContext | None) -> str:
+    """Compact diagnosis summary for a GENERAL-purpose chat turn, where the
+    diagnosis is supporting context rather than the entire answer. Returns ""
+    when there is no diagnosis yet -- the variable assembler substitutes an
+    absence sentinel, same convention as the other grounding blocks."""
+    if ctx is None or not ctx.has_diagnosis or ctx.diagnosis is None:
+        return ""
+    d = ctx.diagnosis
+    lines: list[str] = []
+    if ctx.founder.stage_name:
+        lines.append(f"Stage: {ctx.founder.stage_name}")
+    if d.overall_confidence is not None:
+        lines.append(f"Diagnostic confidence: {d.overall_confidence}/100")
+    if d.executive_summary:
+        lines.append(f"Summary: {_clamp(d.executive_summary, _DIAGNOSIS_SUMMARY_CLAMP)}")
+    top = sorted((r for r in ctx.root_causes if r.is_top_finding), key=lambda r: r.rank)
+    if top:
+        lines.append(
+            "Top root causes: "
+            + "; ".join(f"{r.rank}. {r.name}" for r in top)
+        )
+    if ctx.business_health is not None and ctx.business_health.band:
+        lines.append(f"Business health: {ctx.business_health.band}")
+    return "\n".join(lines)
+
+
+_MAX_ATTACHMENT_TEXT = 1500
+
+
+def attachments_block(entries: tuple[tuple[str, str, int, str | None], ...]) -> str:
+    """Format uploaded-file entries (filename, attachment_type, size_bytes,
+    text_content_or_None) into a readable block. Text-bearing files (already
+    decoded by the caller) get their content inlined and clamped; binary types
+    (images, PDFs, docx -- nothing decodes those yet) are listed by name only,
+    so the model is told a file exists without fabricating what's in it."""
+    if not entries:
+        return ""
+    lines: list[str] = []
+    for filename, attachment_type, size_bytes, text in entries:
+        kb = max(1, size_bytes // 1024)
+        if text:
+            lines.append(
+                f"- {filename} ({attachment_type}, {kb} KB):\n"
+                f"{_clamp(text, _MAX_ATTACHMENT_TEXT)}"
+            )
+        else:
+            lines.append(
+                f"- {filename} ({attachment_type}, {kb} KB) -- uploaded, but its "
+                "contents cannot be read yet; you only know it exists."
+            )
     return "\n".join(lines)

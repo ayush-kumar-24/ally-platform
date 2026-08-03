@@ -3,7 +3,7 @@ import datetime
 import decimal
 import uuid
 
-from sqlalchemy import Boolean, CHAR, CheckConstraint, Column, Computed, Date, DateTime, ForeignKeyConstraint, Index, Integer, Numeric, PrimaryKeyConstraint, Sequence, SmallInteger, String, Table, Text, UniqueConstraint, Uuid, text
+from sqlalchemy import Boolean, CHAR, CheckConstraint, Column, Computed, Date, DateTime, ForeignKeyConstraint, Index, Integer, LargeBinary, Numeric, PrimaryKeyConstraint, Sequence, SmallInteger, String, Table, Text, UniqueConstraint, Uuid, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -1061,10 +1061,14 @@ class FileUploads(Base):
     # derived from this at read time (see metadata.categorize), not stored.
     file_type: Mapped[str] = mapped_column(String(50), nullable=False)
     file_size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
-    # Nullable: no storage backend exists yet -- see the persistence-columns
+    # Nullable: no object-storage backend exists yet -- see the persistence-columns
     # migration docstring. Never written to by the current upload path.
     storage_path: Mapped[Optional[str]] = mapped_column(String(500))
     upload_category: Mapped[str] = mapped_column(String(20), nullable=False)
+    # The raw uploaded bytes (migration a7c9e1f3b5d7), bounded by the 25 MiB
+    # per-file validator cap -- lets chat read back text-based uploads instead
+    # of only knowing metadata about them.
+    content: Mapped[Optional[bytes]] = mapped_column(LargeBinary)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text('true'))
     message_id: Mapped[Optional[int]] = mapped_column(Integer)
     storage_url: Mapped[Optional[str]] = mapped_column(Text)

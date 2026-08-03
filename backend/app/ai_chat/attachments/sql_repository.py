@@ -14,9 +14,10 @@ the domain attachment_id; the integer upload_id stays the internal PK.
 functions of file_name / file_type (mime) respectively (attachments/metadata.py),
 recomputed on read so they can never drift out of sync with their source.
 
-`storage_path` / `storage_url` are left untouched (no data to write -- see the
-migration docstring: no storage backend exists in this codebase yet). This
-repository fixes metadata durability only.
+`storage_path` / `storage_url` are left untouched (no object-storage backend
+exists in this codebase). Raw bytes are instead stored in-row via `content`
+(migration a7c9e1f3b5d7), bounded by the 25 MiB upload cap -- enough for chat
+to read back text-based uploads without needing an external storage service.
 
 FAILS LOUD, not resilient-degrade -- same reasoning as the conversation
 repository: this repository IS the attachment metadata storage, so a silent
@@ -125,6 +126,18 @@ class SqlAttachmentRepository(AttachmentRepository):
         self.db.delete(row)
         self.db.flush()
         return True
+
+    def add_content(self, attachment_id: str, content: bytes) -> None:
+        row = self._get_row(attachment_id)
+        if row is None:
+            raise LookupError(f"attachment {attachment_id!r} not found")
+        row.content = content
+        self.db.flush()
+
+    def get_content(self, attachment_id: str) -> bytes | None:
+        return self.db.execute(
+            select(FileUploadRow.content).where(FileUploadRow.external_id == attachment_id)
+        ).scalar_one_or_none()
 
     # --- mapping helpers -----------------------------------------------
 
