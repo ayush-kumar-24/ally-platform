@@ -5,25 +5,20 @@
  * real backend call to POST /voice/transcribe (OpenAI Whisper server-side) — no
  * browser speech API involved, so accuracy/support is consistent across browsers.
  *
- * Plan gating (free plan: diagnosis only, not chat) is enforced by the backend
- * (403 VoiceUpgradeRequiredError) as the source of truth; `canUseVoiceInChat`
- * here is only a UI-level pre-check so a free founder never even sees the
- * recording UI activate for chat — it must stay consistent with, not replace,
- * the backend check.
+ * Plan gating goes through the same entitlement catalog as every other gated
+ * feature (services/plans.js FEATURES.VOICE_CHAT / VOICE_DIAGNOSIS, mirroring
+ * app/plans/catalog.py) — this endpoint doesn't invent its own "free plan"
+ * rule, it asks the same catalog PlanGate/chat_gate do. The backend's
+ * FeatureNotInPlanError (403) is the actual authority; the UI-level pre-check
+ * lives in the caller (AllyChat.jsx, via can(plan, FEATURES.VOICE_CHAT)) so a
+ * free founder never even sees the recording UI activate for chat.
  */
 
 import { post } from './api';
 
-export const FREE_PLAN = 'free';
-
-/** Mirrors the backend gate (voice/router.py): free plan = diagnosis only. */
-export function canUseVoiceInChat(user) {
-  return Boolean(user) && user.plan_type !== FREE_PLAN;
-}
-
 export class VoiceUpgradeRequiredError extends Error {
-  constructor() {
-    super('Voice input in chat requires a paid plan.');
+  constructor(message) {
+    super(message || 'This voice feature requires a different plan.');
     this.name = 'VoiceUpgradeRequiredError';
   }
 }
@@ -75,8 +70,8 @@ export async function transcribeAudio(blob, context) {
     });
     return data.text;
   } catch (err) {
-    if (err.status === 403 && err.data?.error === 'VoiceUpgradeRequiredError') {
-      throw new VoiceUpgradeRequiredError();
+    if (err.status === 403 && err.data?.error === 'FeatureNotInPlanError') {
+      throw new VoiceUpgradeRequiredError(err.detail);
     }
     throw err;
   }

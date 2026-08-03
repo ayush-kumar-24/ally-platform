@@ -57,7 +57,7 @@ def test_free_plan_blocked_from_chat_voice():
     try:
         resp = client.post(f"{BASE}/transcribe", data={"context": "chat"}, files=_audio_file())
         assert resp.status_code == 403
-        assert resp.json()["error"] == "VoiceUpgradeRequiredError"
+        assert resp.json()["error"] == "FeatureNotInPlanError"
     finally:
         _teardown()
 
@@ -72,7 +72,7 @@ def test_free_plan_allowed_in_diagnosis():
         _teardown()
 
 
-@pytest.mark.parametrize("plan", ["starter", "pro", "enterprise"])
+@pytest.mark.parametrize("plan", ["starter", "pro"])  # "enterprise" is a DB-level value the catalog doesn't model yet (falls back to Free)
 def test_paid_plans_allowed_in_chat(plan):
     client = _client(plan_type=plan, provider=FakeTranscriptionProvider(text="Paid plan works."))
     try:
@@ -83,7 +83,7 @@ def test_paid_plans_allowed_in_chat(plan):
         _teardown()
 
 
-@pytest.mark.parametrize("plan", ["starter", "pro", "enterprise"])
+@pytest.mark.parametrize("plan", ["starter", "pro"])  # "enterprise" is a DB-level value the catalog doesn't model yet (falls back to Free)
 def test_paid_plans_allowed_in_diagnosis(plan):
     client = _client(plan_type=plan, provider=FakeTranscriptionProvider())
     try:

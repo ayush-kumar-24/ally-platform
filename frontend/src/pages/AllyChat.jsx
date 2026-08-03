@@ -2,8 +2,9 @@ import { useState, useRef, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { MOCK_CHAT_HISTORY, MOCK_MESSAGES } from '../data/mockData';
 import { post, ApiError } from '../services/api';
-import { canUseVoiceInChat } from '../services/voice';
 import { useVoiceInput } from '../hooks/useVoiceInput';
+import { usePlan } from '../components/PlanGate';
+import { can, FEATURES } from '../services/plans';
 
 const PROMPT_CARDS = [
   { t: 'Help me increase revenue', s: 'Find the highest-leverage growth lever' },
@@ -113,21 +114,26 @@ export default function AllyChat() {
     }
   };
 
+  const { plan: myPlan } = usePlan();
+  // Optimistic while entitlements load / if the fetch fails, same convention as
+  // PlanGate (components/PlanGate.jsx) -- the backend's FeatureNotInPlanError is
+  // the real authority regardless of what this resolves to.
+  const canUseVoice = !myPlan || can(myPlan, FEATURES.VOICE_CHAT);
+  const upgradeMessage = 'Voice chat is a paid-plan feature. Voice input is available for free during your diagnosis.';
+
   const voice = useVoiceInput({
     context: 'chat',
     onTranscribed: (text) => {
       setInput(prev => (prev ? `${prev} ${text}` : text));
       sizeTa();
     },
-    onUpgradeRequired: () => showToast(
-      'Voice chat is a paid-plan feature. Voice input is available for free during your diagnosis.'
-    ),
+    onUpgradeRequired: () => showToast(upgradeMessage),
     onError: () => showToast('Could not access the microphone — check your browser permissions.'),
   });
 
   const handleMicClick = () => {
-    if (!canUseVoiceInChat(user)) {
-      showToast('Voice chat is a paid-plan feature. Voice input is available for free during your diagnosis.');
+    if (!canUseVoice) {
+      showToast(upgradeMessage);
       return;
     }
     voice.toggle();
@@ -273,7 +279,7 @@ export default function AllyChat() {
             />
             <button
               className={`ci-btn${voice.status === 'recording' ? ' recording' : ''}`}
-              title={canUseVoiceInChat(user) ? 'Voice input' : 'Voice input (paid plan)'}
+              title={canUseVoice ? 'Voice input' : 'Voice input (paid plan)'}
               aria-pressed={voice.status === 'recording'}
               disabled={voice.status === 'transcribing'}
               onClick={handleMicClick}
