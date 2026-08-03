@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import AuthTransition from '../../components/AuthTransition';
 import { CURRENT_VERSIONS, flushPendingConsent, recordConsent, savePendingConsent } from '../../services/consents';
-import { consumeOAuthRedirect, signInWithGoogle } from '../../services/auth';
+import { consumeOAuthRedirect, signInWithGoogle, signInWithLinkedIn } from '../../services/auth';
 import { get } from '../../services/api';
 import { supabaseConfigured } from '../../services/supabaseClient';
 
@@ -19,10 +19,10 @@ export default function Login() {
   // both see `submitting === false` and both fire. The ref flips synchronously.
   const inFlight = useRef(false);
 
-  // Google redirects the whole page away and back -- this picks the session up
-  // on the return trip. No-ops (returns null fast) on every other load, since
-  // consumeOAuthRedirect only finds something when the URL actually carries a
-  // fresh Supabase session.
+  // Google/LinkedIn redirect the whole page away and back -- this picks the
+  // session up on the return trip. No-ops (returns null fast) on every other
+  // load, since consumeOAuthRedirect only finds something when the URL
+  // actually carries a fresh Supabase session.
   useEffect(() => {
     if (!supabaseConfigured) return;
     (async () => {
@@ -45,7 +45,9 @@ export default function Login() {
 
       setUser((prev) => ({
         ...prev,
-        authProvider: 'google',
+        // 'google' | 'linkedin_oidc' -- whichever the founder actually used,
+        // read from the backend's own response rather than assumed.
+        authProvider: founder.provider,
         name: profile?.full_name || founder.email || prev?.name,
         email: founder.email || prev?.email,
         plan_type: profile?.plan_type || prev?.plan_type,
@@ -93,19 +95,19 @@ export default function Login() {
       savePendingConsent(choices);
     }
 
-    // Real Google sign-in: redirect to Google now. The rest of this function
+    // Real sign-in: redirect to the provider now. The rest of this function
     // (the simulated identity below) is skipped entirely -- the mount-time
-    // effect above picks the flow back up once Google redirects here, and
-    // flushes the pending consent captured just above.
-    if (provider === 'google' && supabaseConfigured) {
+    // effect above picks the flow back up once the provider redirects here,
+    // and flushes the pending consent captured just above.
+    if (supabaseConfigured && (provider === 'google' || provider === 'linkedin')) {
       try {
-        await signInWithGoogle();
+        await (provider === 'google' ? signInWithGoogle() : signInWithLinkedIn());
       } catch (err) {
-        setValidationError('Could not start Google sign-in. Please try again.');
+        setValidationError(`Could not start ${provider === 'google' ? 'Google' : 'LinkedIn'} sign-in. Please try again.`);
         inFlight.current = false;
         setSubmitting(false);
       }
-      return; // signInWithGoogle navigates away on success; nothing left to do
+      return; // navigates away on success; nothing left to do
     }
 
     setUser(prev => ({
@@ -204,9 +206,6 @@ export default function Login() {
           Private &amp; encrypted &middot; we never share your business.{' '}
           {!supabaseConfigured && (
             <span style={{ opacity: 0.7 }}>(Demo — simulated login, no account created)</span>
-          )}
-          {supabaseConfigured && (
-            <span style={{ opacity: 0.7 }}>(LinkedIn sign-in is still simulated — Google is real)</span>
           )}
         </p>
       </div>

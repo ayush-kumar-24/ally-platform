@@ -1,13 +1,18 @@
 /**
- * services/auth.js — Google sign-in via Supabase, then handoff to our own backend.
+ * services/auth.js — Google/LinkedIn sign-in via Supabase, then handoff to our
+ * own backend.
  *
  * Flow (matches backend/app/api/v1/auth/routes.py's own docstring):
- *   1. signInWithGoogle() redirects the whole page to Google, then back here.
+ *   1. signInWithGoogle()/signInWithLinkedIn() redirects the whole page to the
+ *      provider, then back here.
  *   2. On return, Supabase's client parses the token from the URL automatically
  *      (detectSessionInUrl) -- consumeOAuthRedirect() reads that session.
  *   3. Its access_token is exchanged at POST /auth/session for OUR OWN backend
  *      tokens (setTokens stores those) -- from here on, nothing about Supabase
  *      matters; services/api.js's normal Bearer-token flow takes over.
+ *
+ * consumeOAuthRedirect() itself is provider-agnostic -- it just reads back
+ * whatever session Supabase parsed from the URL, so both providers share it.
  */
 
 import { clearTokens, post, setTokens } from './api';
@@ -20,14 +25,28 @@ export class AuthNotConfiguredError extends Error {
   }
 }
 
-/** Redirects the page to Google's consent screen. Never returns (full navigation). */
-export async function signInWithGoogle() {
+async function signInWithProvider(provider) {
   if (!supabaseConfigured) throw new AuthNotConfiguredError();
   const { error } = await supabase.auth.signInWithOAuth({
-    provider: 'google',
+    provider,
     options: { redirectTo: window.location.origin + '/guided/login' },
   });
   if (error) throw error;
+}
+
+/** Redirects the page to Google's consent screen. Never returns (full navigation). */
+export function signInWithGoogle() {
+  return signInWithProvider('google');
+}
+
+/**
+ * Redirects to LinkedIn's consent screen. Never returns (full navigation).
+ * Uses Supabase's "linkedin_oidc" provider id -- the current OIDC-based
+ * LinkedIn integration; the older "linkedin" provider is deprecated on
+ * Supabase's side and won't be enabled by a fresh LinkedIn provider setup.
+ */
+export function signInWithLinkedIn() {
+  return signInWithProvider('linkedin_oidc');
 }
 
 /**
