@@ -25,11 +25,28 @@ from fastapi import Depends
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.api.v1.chat.dependencies import get_current_founder_id
+from app.api.deps import get_founder_record
 from app.core.container import container
 from app.db.session import get_db
+from app.models import Founder
 from app.plans.catalog import DEFAULT_TIER, Feature
 from app.plans.service import EntitlementService
+
+
+def get_current_founder_id(founder: Founder = Depends(get_founder_record)) -> int:
+    """The authenticated founder's id. Defined here (not in
+    app.api.v1.chat.dependencies, which re-exports this same function) because
+    chat.router imports ChatGate/chat_gate FROM this module -- the reverse
+    direction closes a cycle through app.api.v1.chat's own __init__.py. A fresh
+    process following router.py's own import order hits that immediately: it
+    silently leaves plans_router with zero routes registered rather than
+    raising, so every test can still pass (they import chat's package earlier
+    for unrelated reasons, masking the cycle) while /plans/* stays completely
+    unreachable in a real run. Single source of truth here also means chat's
+    test overrides of this dependency correctly reach chat_gate too -- FastAPI
+    keys dependency_overrides by function identity, so two separate copies of
+    this function would silently diverge under override."""
+    return founder.founder_id
 
 
 def enforcement_enabled() -> bool:
