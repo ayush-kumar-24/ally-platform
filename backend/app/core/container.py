@@ -16,6 +16,8 @@ into any subsystem's internals.
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 from sqlalchemy.orm import Session
 
 from app.api.v1.ally.context.builder import AllyContextBuilder
@@ -28,6 +30,7 @@ from app.api.v1.ally.orchestrator import AgentOrchestrator, OrchestratorService
 from app.api.v1.ally.prompts.library import default_prompt_manager
 from app.api.v1.ally.rag.repository import InMemoryVectorRetrievalRepository
 from app.api.v1.ally.rag.service import build_retrieval_service
+from app.api.v1.ally.rag.sql_repository import SqlVectorRetrievalRepository
 from app.api.v1.ally.prompts.grounding import default_grounded_prompt_manager
 from app.ai_chat.builders.context_window import ContextWindowBuilder
 from app.ai_chat.execution.chat_execution import ChatExecutionService
@@ -51,6 +54,8 @@ from app.consents.db_repository import SqlAlchemyConsentRepository
 from app.consents.service import ConsentService
 from app.privacy.db_repository import SqlAlchemyPrivacyRepository
 from app.privacy.service import PrivacyService
+from app.core.config import settings
+from app.services import embeddings
 
 
 class Container:
@@ -130,8 +135,25 @@ class Container:
         build_db_memory_service) rather than failing the founder's conversation."""
         return build_db_memory_service(db)
 
-    def retrieval(self):
-        return self._retrieval_service
+    def retrieval(self, db: Session | None = None):
+        """SQL-backed (pgvector, rag_chunks) when retrieval is configured and a
+        request DB session is available; otherwise the empty in-memory fallback,
+        same fail-open convention as reasoning/deps.py's _build_enricher -- a
+        misconfigured or disabled deployment gets no retrieved knowledge, not a
+        crash. Request-scoped (not held in __init__) because it needs the
+        request's own DB session, same reasoning as memory/conversation/
+        attachments/suggestions above."""
+        if db is None or not settings.RETRIEVAL_ENABLED or not settings.EMBEDDING_PROVIDER:
+            return self._retrieval_service
+        provider = embeddings.get_provider(settings.EMBEDDING_PROVIDER)
+        repository = SqlVectorRetrievalRepository(
+            db, provider, expected_dimension=settings.EMBEDDING_DIMENSION
+        )
+        return build_retrieval_service(
+            repository,
+            default_top_k=settings.RETRIEVAL_TOP_K,
+            default_min_similarity=Decimal(str(settings.RETRIEVAL_MIN_SIMILARITY)),
+        )
 
     def knowledge_graph(self):
         return self._kg_service
@@ -152,7 +174,7 @@ class Container:
         agent = AgentOrchestrator(
             context_builder=self.context_builder(db),
             memory=self.memory(db),
-            retrieval=self.retrieval(),
+            retrieval=self.retrieval(db),
             knowledge_graph=self.knowledge_graph(),
             prompt_manager=self.prompt_manager(),
             execution=self.execution(),
@@ -175,7 +197,7 @@ class Container:
         return ContextWindowBuilder(
             conversation_service=self.conversation_service(db),
             memory=self.memory(db),
-            retrieval=self._retrieval_service,
+            retrieval=self.retrieval(db),
             knowledge_graph=self._kg_service,
             attachments=self.attachment_service(db),
         )
