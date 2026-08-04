@@ -8,8 +8,11 @@ export default function Welcome() {
   const [showModal, setShowModal] = useState(false);
   const [agreeModalDiagnosis, setAgreeModalDiagnosis] = useState(false);
 
-  const firstName = user?.name ? user.name.split(' ')[0] : 'Ayush';
-  const email = user?.email || 'ayush@brightloom.in';
+  // Same fabricated-identity bug as everywhere else this session, but on the
+  // very first screen a founder sees their own name on: with no name yet, this
+  // greeted every founder as "Ayush" signed in as "ayush@brightloom.in".
+  const firstName = user?.name ? user.name.split(' ')[0] : 'there';
+  const email = user?.email || '';
 
   const handleContinue = () => {
     if (user?.consents?.diagnosisConsent) {
@@ -45,9 +48,14 @@ export default function Welcome() {
       <section className="view j-stage active" id="v-welcome">
         <div className="j-inner wide wc-inner">
           <div className="j-avatar"><img src="/ally-logo.png" alt="" /></div>
-          <div className="j-eye" style={{ justifyContent: 'center' }}>
-            Signed in · <span data-fe="true">{email}</span>
-          </div>
+          {/* AppContext hydrates the real email a beat after this page mounts;
+              showing "Signed in · " with nothing after the dot is worse than
+              showing nothing until it lands. */}
+          {email && (
+            <div className="j-eye" style={{ justifyContent: 'center' }}>
+              Signed in · <span data-fe="true">{email}</span>
+            </div>
+          )}
           <h1 className="j-title wc-title">
             Good to meet you, <em data-ff="true">{firstName}</em>.
           </h1>
