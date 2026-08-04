@@ -62,10 +62,13 @@ def test_resolve_task_model_missing_raises():
         resolve_task_model(_FakeDB(None), "unmapped_task")
 
 
-def test_all_seven_tasks_registered_in_enum():
+def test_every_task_is_registered_in_the_enum():
+    """ALL is what seeds model_task_routing, so a task missing from it has no
+    active routing row and raises at first use rather than falling back."""
     assert set(LLMTask.ALL) == {
         "answer_interpretation", "next_question_selection", "distress_detection",
-        "diagnosis_reasoning", "answer_consistency", "archetype_assignment", "report_narrative",
+        "diagnosis_reasoning", "answer_consistency", "archetype_assignment",
+        "report_narrative", "first_impression",
     }
 
 
