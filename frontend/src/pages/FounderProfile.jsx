@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { get, post } from '../services/api';
 import { getProfile, updateProfile } from '../services/profile';
@@ -157,6 +158,7 @@ function fmtDate(iso) {
 // ---------------------------------------------------------------------------
 
 export default function FounderProfile() {
+  const navigate = useNavigate();
   const { user, setUser, showToast } = useApp();
   const [editing, setEditing] = useState(false);
 
@@ -633,6 +635,7 @@ export default function FounderProfile() {
         {/* Upgrade button */}
         <button
           className="btn btn-primary"
+          onClick={() => navigate('/app/billing')}
           style={{
             width: '100%',
             background: 'var(--forest, #1b4332)',

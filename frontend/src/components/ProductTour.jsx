@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { markTourSeen } from '../services/dashboard';
 
@@ -13,6 +14,7 @@ const TOUR_STEPS = [
 ];
 
 export default function ProductTour() {
+  const navigate = useNavigate();
   const { tourOpen, endTour, sidebarCollapsed, toggleSidebar, sidebarOpen, openSidebar, closeSidebar } = useApp();
   const [stepIndex, setStepIndex] = useState(0);
   const [spotStyle, setSpotStyle] = useState({ opacity: 0 });
@@ -120,6 +122,11 @@ export default function ProductTour() {
     // call is why founders.tour_seen_at exists; nothing had ever made it.
     markTourSeen();
     endTour();
+    /* Last hop of the first-time journey: onboarding -> diagnosis -> report ->
+       tour -> here. The tour walks the sidebar, so it can finish anywhere;
+       without this the founder is left on whichever screen the last step
+       pointed at rather than the home they'll return to from now on. */
+    navigate('/app');
   };
 
   useEffect(() => {

@@ -21,13 +21,6 @@ const COMPARE_ROWS = [
   { label: 'Extra calls', free: '₹300 / 30 min', starter: '₹300 / 30 min', pro: '₹300 / 30 min' },
 ];
 
-const MOCK_INVOICES = [
-  { id: 'INV-2026-007', date: 'Jul 1, 2026', plan: 'Pro', amount: '₹999', status: 'Paid' },
-  { id: 'INV-2026-006', date: 'Jun 1, 2026', plan: 'Pro', amount: '₹999', status: 'Paid' },
-  { id: 'INV-2026-005', date: 'May 1, 2026', plan: 'Starter', amount: '₹450', status: 'Paid' },
-  { id: 'INV-2026-004', date: 'Apr 1, 2026', plan: 'Starter', amount: '₹450', status: 'Paid' },
-];
-
 /* ─── Helpers ─── */
 function CmpCell({ val }) {
   if (val === true)
@@ -637,43 +630,16 @@ function StatusView({ onUpgrade, currentPlan }) {
       </div>
 
       {/* Invoice history */}
+      {/* This table listed four invoices -- INV-2026-007 at ₹999 "Paid", and
+          three more -- for every founder who opened the page, with a PDF button
+          that did nothing. They were invented: there is no invoice endpoint in
+          the API at all. Fabricated payment records are not a placeholder, so
+          the section says what is true until billing history actually exists. */}
       <div className="bl-invoice-section">
         <div className="bl-section-label" style={{ marginBottom: 14 }}>Billing History</div>
-        <div className="bl-invoice-table-wrap">
-          <table className="bl-invoice-table">
-            <thead>
-              <tr>
-                <th>Invoice ID</th>
-                <th>Date</th>
-                <th>Plan</th>
-                <th>Amount</th>
-                <th>Status</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {MOCK_INVOICES.map(inv => (
-                <tr key={inv.id}>
-                  <td className="inv-id">{inv.id}</td>
-                  <td>{inv.date}</td>
-                  <td>{inv.plan}</td>
-                  <td className="inv-amount">{inv.amount}</td>
-                  <td><span className="inv-status paid">{inv.status}</span></td>
-                  <td>
-                    <button id={`download-${inv.id}`} className="inv-dl-btn">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
-                        <polyline points="7 10 12 15 17 10" />
-                        <line x1="12" y1="15" x2="12" y2="3" />
-                      </svg>
-                      PDF
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <p className="dash-empty">
+          No invoices yet. Once billing is live, your receipts will appear here.
+        </p>
       </div>
     </div>
   );

@@ -355,7 +355,7 @@ export default function Dashboard() {
             <section className="dash-section">
               <div className="dash-section-head">
                 <div className="dash-section-title">Recent conversations</div>
-                <button className="dash-link" type="button">Open <IconArrowRight /></button>
+                <button className="dash-link" type="button" onClick={() => navigate('/app/ally-chat')}>Open <IconArrowRight /></button>
               </div>
               <div className="dash-list">
                 {conversations.length === 0 && (
@@ -502,7 +502,7 @@ export default function Dashboard() {
             <section className="dash-section">
               <div className="dash-section-head">
                 <div className="dash-section-title">Recent reports</div>
-                <button className="dash-link" type="button">All <IconArrowRight /></button>
+                <button className="dash-link" type="button" onClick={() => navigate('/app/report')}>All <IconArrowRight /></button>
               </div>
               {/* Three invented reports with invented scores of 74/68/61 --
                   shown even to founders who had never run a diagnosis. */}
@@ -536,7 +536,7 @@ export default function Dashboard() {
         <section className="dash-unlock">
           <div className="dash-section-head">
             <div className="dash-section-title">Unlock more with Ally</div>
-            <button className="dash-link" type="button">See plans <IconArrowRight /></button>
+            <button className="dash-link" type="button" onClick={() => navigate('/app/billing')}>See plans <IconArrowRight /></button>
           </div>
           <div className="dash-unlock-grid">
             <article className="dash-unlock-card">
