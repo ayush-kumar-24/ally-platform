@@ -60,12 +60,40 @@ export function sendSuggestionFeedback(suggestionId, feedback, note) {
   return post(`/chat/suggestions/${suggestionId}/feedback`, { feedback, note });
 }
 
+/**
+ * A timestamp as a person reads it.
+ *
+ * `created_at` went straight to the screen, so opening an older conversation
+ * printed "2026-08-01T14:22:31.118Z" under every bubble while messages sent in
+ * the same session said "Just now".
+ */
+export function messageTime(iso) {
+  if (!iso) return '';
+  const then = new Date(iso);
+  if (Number.isNaN(then.getTime())) return '';
+
+  const minutes = Math.floor((Date.now() - then.getTime()) / 60000);
+  if (minutes < 1) return 'Just now';
+  if (minutes < 60) return `${minutes}m ago`;
+
+  const midnight = new Date();
+  midnight.setHours(0, 0, 0, 0);
+  const clock = then.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  if (then >= midnight) return clock;
+
+  const yesterday = new Date(midnight);
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (then >= yesterday) return `Yesterday, ${clock}`;
+
+  return then.toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) + `, ${clock}`;
+}
+
 /** Normalise a server message into what the UI renders. */
 export function toUiMessage(m) {
   return {
     id: m.message_id ?? m.id,
     role: m.role === 'assistant' ? 'ally' : m.role,
     text: m.content ?? m.text ?? '',
-    time: m.created_at,
+    time: messageTime(m.created_at),
   };
 }

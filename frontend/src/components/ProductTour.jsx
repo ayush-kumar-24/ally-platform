@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useApp } from '../context/AppContext';
+import { markTourSeen } from '../services/dashboard';
 
 const TOUR_STEPS = [
   { nav: '/app/ally-chat', emoji: '💬', title: 'Chat with Ally', text: 'Ask questions, brainstorm ideas and make better decisions with Ally anytime.' },
@@ -114,6 +115,10 @@ export default function ProductTour() {
     const { collapsed, wasOpen } = restoreRef.current;
     if (!wasOpen) closeSidebar();
     if (collapsed && !sidebarCollapsed) toggleSidebar();
+    // Tell the server it has been seen -- whether they finished it or skipped
+    // it, they have been offered it and should not be offered it again. This
+    // call is why founders.tour_seen_at exists; nothing had ever made it.
+    markTourSeen();
     endTour();
   };
 

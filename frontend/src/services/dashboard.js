@@ -7,7 +7,7 @@
  * like a broken app.
  */
 
-import { get } from './api';
+import { get, post } from './api';
 
 /** Diagnosis-derived health score, band, pillars and red flags. */
 export function getBusinessHealth() {
@@ -51,6 +51,20 @@ export function getOverview() {
 /** The founder's real plan, credits and daily token usage. */
 export function getMyPlan() {
   return get('/plans/me');
+}
+
+/**
+ * Record that the founder has seen the product tour.
+ *
+ * The endpoint and the founders.tour_seen_at column have both existed since the
+ * dashboard was built and nothing ever called it, so tour_seen_at was NULL for
+ * everyone: the server always said "show the tour", and the welcome banner
+ * reappeared on every single reload because dismissal lived in React state.
+ *
+ * Never throws — failing to record this should not break finishing the tour.
+ */
+export function markTourSeen() {
+  return post('/dashboard/tour-seen', {}).catch(() => null);
 }
 
 export async function loadDashboard() {

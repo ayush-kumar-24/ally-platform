@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
-import { completionPercent, loadDashboard, relativeDay } from '../services/dashboard';
+import { completionPercent, loadDashboard, markTourSeen, relativeDay } from '../services/dashboard';
+import FeedbackPrompt from '../components/FeedbackPrompt';
+import { FEEDBACK } from '../services/feedback';
 import {
   IconArrowRight,
   IconChat,
@@ -84,6 +86,7 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const { user, startTour } = useApp();
   const [showBanner, setShowBanner] = useState(true);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -139,12 +142,18 @@ export default function Dashboard() {
     : 0;
 
   // The onboarding banner is only truthful once the profile really is complete.
+  // `show_tour` is the server's answer to "have they been offered this yet",
+  // read from founders.tour_seen_at. Previously dismissal lived only in React
+  // state, so the banner came back on every reload however many times it was
+  // closed. Defaults to showing when the overview hasn't loaded -- a founder
+  // who has genuinely never seen it should still be offered it.
   const profileComplete = profilePct === 100;
+  const tourUnseen = overview?.welcome?.show_tour !== false;
 
   return (
     <div className="dash-page">
       <div className="dash-inner">
-        {showBanner && profileComplete && (
+        {showBanner && profileComplete && tourUnseen && (
           <section className="dash-banner">
             <div className="dash-banner-ic">🎉</div>
             <div className="dash-banner-body">
@@ -165,11 +174,20 @@ export default function Dashboard() {
                   <IconArrowRight />
                   Take a 60-second Product Tour
                 </button>
-                <button className="btn btn-ghost" type="button" onClick={() => setShowBanner(false)}>
+                {/* Declining has to be recorded too, or the banner returns on
+                    the next reload having just been told "maybe later". */}
+                <button
+                  className="btn btn-ghost"
+                  type="button"
+                  onClick={() => { setShowBanner(false); markTourSeen(); }}
+                >
                   Maybe Later
                 </button>
               </div>
-              <div className="dash-banner-foot">You can start this tour anytime from Settings.</div>
+              {/* Was "You can start this tour anytime from Settings" -- no
+                  Settings screen has ever offered it. It is offered here and
+                  once more after your first diagnosis. */}
+              <div className="dash-banner-foot">We'll offer it again after your first diagnosis.</div>
             </div>
             <button className="dash-dismiss" type="button" onClick={() => setShowBanner(false)} aria-label="Dismiss banner">
               <IconX />
@@ -462,6 +480,25 @@ export default function Dashboard() {
               </div>
             </section>
 
+            {/* Unprompted feedback, always available. The two prompted ones
+                (after a diagnosis, after reading a report) are asked once each;
+                this one has no target and can be given as often as they like. */}
+            <section className="dash-section">
+              <div className="dash-section-head">
+                <div className="dash-section-title">Tell us how it's going</div>
+              </div>
+              <p className="dash-empty" style={{ padding: '4px 2px 0' }}>
+                Ally is early. If something is working, or isn't, we'd rather hear it than guess.
+              </p>
+              <button
+                className="dash-feedback-open"
+                type="button"
+                onClick={() => setFeedbackOpen(true)}
+              >
+                Give feedback
+              </button>
+            </section>
+
             <section className="dash-section">
               <div className="dash-section-head">
                 <div className="dash-section-title">Recent reports</div>
@@ -535,6 +572,15 @@ export default function Dashboard() {
           </div>
         </section>
       </div>
+
+      <FeedbackPrompt
+        type={FEEDBACK.GENERAL}
+        when={feedbackOpen}
+        dedupe={false}
+        onResolved={() => setFeedbackOpen(false)}
+        title="How's Ally working for you?"
+        subtitle="Anything at all — what's useful, what isn't, what's missing."
+      />
     </div>
   );
 }
