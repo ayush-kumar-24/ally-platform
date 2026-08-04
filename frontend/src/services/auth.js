@@ -15,7 +15,7 @@
  * whatever session Supabase parsed from the URL, so both providers share it.
  */
 
-import { clearTokens, post, setTokens } from './api';
+import { clearTokens, getRefreshToken, post, setTokens } from './api';
 import { supabase, supabaseConfigured } from './supabaseClient';
 
 export class AuthNotConfiguredError extends Error {
@@ -47,6 +47,33 @@ export function signInWithGoogle() {
  */
 export function signInWithLinkedIn() {
   return signInWithProvider('linkedin_oidc');
+}
+
+/**
+ * End the session, properly.
+ *
+ * The refresh token is revoked server-side (it lives 30 days, so simply
+ * dropping it client-side would leave a working credential in the wild), then
+ * every local trace of the founder is cleared. The button that used to sit here
+ * only showed a "Signing out..." toast -- it made no request, cleared no token,
+ * and left you signed in.
+ *
+ * Never throws: a founder pressing sign out must end up signed out even if the
+ * revoke call fails, so the local clear happens either way.
+ */
+export async function logout() {
+  const refresh_token = getRefreshToken();
+  try {
+    if (refresh_token) await post('/auth/logout', { refresh_token });
+  } catch {
+    // Offline, or the token was already revoked. Clearing locally still matters.
+  } finally {
+    clearTokens();
+    localStorage.removeItem('ally_founder');
+    if (supabaseConfigured) {
+      try { await supabase.auth.signOut(); } catch { /* nothing left to do */ }
+    }
+  }
 }
 
 /**

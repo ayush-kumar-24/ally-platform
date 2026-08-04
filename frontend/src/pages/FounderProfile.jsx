@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { get, post } from '../services/api';
 import { getProfile, updateProfile } from '../services/profile';
+import { logout } from '../services/auth';
 import {
   deleteAccount,
   downloadExport,
@@ -159,6 +160,17 @@ function fmtDate(iso) {
 
 export default function FounderProfile() {
   const navigate = useNavigate();
+  const [signingOut, setSigningOut] = useState(false);
+
+  /* Revoke the refresh token server-side, clear every local trace, then send
+     them to the landing page. Guarded so a double-click cannot fire two
+     revokes, the second of which would fail against an already-dead token. */
+  const handleSignOut = async () => {
+    if (signingOut) return;
+    setSigningOut(true);
+    await logout();
+    navigate('/', { replace: true });
+  };
   const { user, setUser, showToast } = useApp();
   const [editing, setEditing] = useState(false);
 
@@ -964,13 +976,16 @@ export default function FounderProfile() {
             <span className="pr-settings-title">Sign out</span>
             <span className="pr-settings-desc">End this session and return to a fresh start</span>
           </div>
+          {/* Was onClick={() => showToast('Signing out...')} -- a toast and
+              nothing else. No request, no token cleared, still signed in. */}
           <button
             className="pr-row-btn"
-            onClick={() => showToast('Signing out...')}
+            onClick={handleSignOut}
             type="button"
+            disabled={signingOut}
             style={{ fontWeight: 650 }}
           >
-            Sign out
+            {signingOut ? 'Signing out…' : 'Sign out'}
           </button>
         </div>
       </div>
