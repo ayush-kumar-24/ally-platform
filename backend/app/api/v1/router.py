@@ -16,6 +16,7 @@ from app.api.v1.discovery.routes import router as discovery_router
 from app.api.v1.intelligence.routes import router as intelligence_router
 from app.api.v1.knowledge.routes import router as knowledge_router
 from app.api.v1.notifications.routes import router as notifications_router
+from app.api.v1.feedback.router import router as feedback_router
 from app.api.v1.impression.router import router as impression_router
 from app.api.v1.profile.routes import router as profile_router
 from app.api.v1.reference.routes import router as reference_router
@@ -30,6 +31,7 @@ api_router = APIRouter(prefix="/api/v1")
 api_router.include_router(auth_router)
 api_router.include_router(profile_router)
 api_router.include_router(impression_router)
+api_router.include_router(feedback_router)
 api_router.include_router(discovery_router)
 api_router.include_router(diagnosis_router)
 api_router.include_router(settings_router)

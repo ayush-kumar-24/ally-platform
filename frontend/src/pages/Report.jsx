@@ -2,6 +2,10 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { factList, getLatestReport, getReport } from '../services/reports';
 import { DnaError, DnaLoading, DnaNoReport } from '../components/DnaState';
+import FeedbackPrompt from '../components/FeedbackPrompt';
+import { FEEDBACK } from '../services/feedback';
+import { useApp } from '../context/AppContext';
+import { getOverview } from '../services/dashboard';
 
 function ReportView({ report, meta }) {
   const navigate = useNavigate();
@@ -88,6 +92,33 @@ function ReportView({ report, meta }) {
  * set of sections — a report for a distressed founder has a different shape from
  * a standard one, and hardcoding either would misrepresent the other.
  */
+/**
+ * Have they actually read it?
+ *
+ * Asking the instant the report renders would be asking about something they
+ * have not seen. Either signal counts as read: reaching the end of the page, or
+ * staying with it long enough that they plainly did not just bounce.
+ */
+function useHasRead(ready, { dwellMs = 25000 } = {}) {
+  const [read, setRead] = useState(false);
+
+  useEffect(() => {
+    if (!ready || read) return undefined;
+    const timer = setTimeout(() => setRead(true), dwellMs);
+    const onScroll = () => {
+      const { scrollHeight, clientHeight } = document.documentElement;
+      const y = window.scrollY || document.documentElement.scrollTop;
+      // Near the bottom -- not exactly, since the last pixel is rarely reached.
+      if (y + clientHeight >= scrollHeight - 240) setRead(true);
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();   // a report short enough to need no scrolling is already read
+    return () => { clearTimeout(timer); window.removeEventListener('scroll', onScroll); };
+  }, [ready, read, dwellMs]);
+
+  return read;
+}
+
 export default function Report() {
   const [state, setState] = useState({ status: 'loading' });
 
@@ -104,9 +135,38 @@ export default function Report() {
 
   useEffect(load, [load]);
 
+  // Hooks cannot live below the early returns, so this is computed here and
+  // only becomes true once a report is actually on screen.
+  const hasRead = useHasRead(state.status === 'ready');
+
+  const { startTour } = useApp();
+  const offerTour = useCallback(() => {
+    // Ask the server rather than assuming: it knows from tour_seen_at whether
+    // this founder has been offered the tour before, on any device.
+    getOverview()
+      .then((o) => { if (o?.welcome?.show_tour) startTour(); })
+      .catch(() => { /* not worth interrupting the report over */ });
+  }, [startTour]);
+
   if (state.status === 'loading') return <DnaLoading label="Loading your report…" />;
   if (state.status === 'no-report') return <DnaNoReport kind="report" />;
   if (state.status === 'error') return <DnaError onRetry={load} />;
 
-  return <ReportView report={state.report} meta={state.meta} />;
+  return (
+    <>
+      <ReportView report={state.report} meta={state.meta} />
+      <FeedbackPrompt
+        type={FEEDBACK.REPORT}
+        when={hasRead}
+        reportId={state.meta?.report_id ?? state.report?.report_id}
+        title="Was this report useful?"
+        subtitle="Now that you've read it — did it tell you something you didn't already know?"
+        // The tour was only ever offered from the dashboard banner, so a
+        // founder who dismissed it there was never shown it again. Offering it
+        // here means it lands when they have just seen what Ally can do --
+        // and only if the server says they have not already been shown it.
+        onResolved={offerTour}
+      />
+    </>
+  );
 }

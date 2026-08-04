@@ -174,6 +174,145 @@
   color: #34d399;
 }
 
+/* --- modal + feedback ------------------------------------------------------ */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(3, 12, 8, .68);
+  backdrop-filter: blur(3px);
+}
+.modal-panel {
+  width: 100%;
+  max-width: 440px;
+  background: #0c1f16;
+  border: 1px solid rgba(255, 255, 255, .13);
+  border-radius: 18px;
+  padding: 22px;
+  outline: none;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, .45);
+}
+.modal-head { display: flex; align-items: flex-start; gap: 12px; }
+.modal-title {
+  flex: 1;
+  margin: 0;
+  font-size: 17px;
+  font-weight: 650;
+  line-height: 1.35;
+  color: #eaf3ee;
+}
+.modal-x {
+  flex-shrink: 0;
+  width: 30px; height: 30px;
+  display: grid; place-items: center;
+  border-radius: 9px;
+  border: 1px solid rgba(255, 255, 255, .13);
+  background: rgba(255, 255, 255, .04);
+  color: #a7c0b4;
+  cursor: pointer;
+  transition: .2s;
+}
+.modal-x:hover { color: #fff; background: rgba(255, 255, 255, .12); }
+.modal-x svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 2; }
+.modal-sub { margin: 8px 0 0; font-size: 13px; line-height: 1.5; color: #7d9488; }
+
+.modal-textarea {
+  width: 100%;
+  margin-top: 14px;
+  background: rgba(255, 255, 255, .06);
+  border: 1px solid rgba(255, 255, 255, .13);
+  border-radius: 12px;
+  padding: 10px 13px;
+  color: #eaf3ee;
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 13.5px;
+  line-height: 1.5;
+  resize: vertical;
+  outline: none;
+  transition: border-color .2s;
+}
+.modal-textarea::placeholder { color: #7d9488; }
+.modal-textarea:focus { border-color: rgba(16, 185, 129, .5); }
+
+.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
+.modal-actions .btn:disabled { opacity: .45; cursor: not-allowed; }
+
+.stars { display: flex; align-items: center; gap: 4px; margin-top: 16px; }
+.star {
+  width: 38px; height: 38px;
+  display: grid; place-items: center;
+  border: none;
+  background: none;
+  color: rgba(255, 255, 255, .18);
+  cursor: pointer;
+  border-radius: 9px;
+  transition: color .15s, transform .15s;
+}
+.star svg { width: 25px; height: 25px; fill: currentColor; }
+.star.on { color: #fbbf24; }
+.star:hover { transform: scale(1.12); }
+.star:focus-visible { outline: 2px solid rgba(16, 185, 129, .7); outline-offset: 1px; }
+.star:disabled { cursor: not-allowed; }
+.stars-label { margin-left: 8px; font-size: 12.5px; font-weight: 500; color: #a7c0b4; }
+
+/* the dashboard's own feedback card */
+.dash-feedback-open {
+  margin-top: 10px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #34d399;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+.dash-feedback-open:hover { text-decoration: underline; }
+
+@media (max-width: 480px) {
+  .modal-panel { padding: 18px; border-radius: 15px; }
+  .star { width: 34px; height: 34px; }
+  .star svg { width: 22px; height: 22px; }
+}
+
+/* --- ally chat: states that previously rendered as nothing ----------------- */
+.ac-status {
+  margin: 0;
+  padding: 18px 22px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: #7d9488;
+  text-align: center;
+}
+.ac-status .btn { margin-top: 10px; }
+
+.ac-senderror {
+  max-width: 800px;
+  margin: 0 auto 10px;
+  padding: 9px 13px;
+  border-radius: 10px;
+  background: rgba(220, 38, 38, .12);
+  border: 1px solid rgba(248, 113, 113, .35);
+  color: #fca5a5;
+  font-size: 12.5px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+/* The prompt cards became real buttons; keep them looking like cards. */
+button.ac-pcard {
+  text-align: left;
+  font: inherit;
+  width: 100%;
+  cursor: pointer;
+}
+
+.ci-btn:disabled,
+.ci-btn.send:disabled { opacity: .45; cursor: not-allowed; }
+.ci-row textarea:disabled { opacity: .6; cursor: not-allowed; }
+
 /* --- mobile ---------------------------------------------------------------- */
 @media (max-width: 768px) {
   .ob-cards,

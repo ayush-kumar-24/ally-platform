@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { normalise, resumeOrStart, submitAnswer } from '../services/diagnosis';
 import { useVoiceInput } from '../hooks/useVoiceInput';
+import FeedbackPrompt from '../components/FeedbackPrompt';
+import { FEEDBACK } from '../services/feedback';
 
 const DIM_CHIPS = ['All', 'Revenue', 'Strategy', 'Team', 'Operations', 'Finance', 'Market'];
 
@@ -67,9 +69,11 @@ export default function DiagnosisChat() {
           role: 'ally', time: 'now',
           text: 'That completes your diagnosis. I am building your report now.',
         }]);
-        // The report is generated after the last answer, so hand off to the
-        // interstitial rather than dropping the founder on an empty report page.
-        setTimeout(() => navigate('/app/thinking'), 1200);
+        // The hand-off to the report interstitial now waits on the feedback
+        // prompt below: the moment the diagnosis ends is the only point the
+        // founder has just experienced it, and navigating 1.2s later would tear
+        // the dialog off the screen. FeedbackPrompt resolves immediately when
+        // there is nothing to ask, so this never strands anyone.
       }
     } catch {
       setMessages(prev => [...prev, {
@@ -193,6 +197,18 @@ export default function DiagnosisChat() {
           </div>
         </div>
       )}
+
+      {/* Asked once, the moment the diagnosis ends. Holds the hand-off to the
+          report interstitial so the dialog is not navigated out from under
+          them, and resolves straight through if they have already answered. */}
+      <FeedbackPrompt
+        type={FEEDBACK.DIAGNOSIS}
+        when={done}
+        sessionId={sessionId}
+        title="How was that diagnosis?"
+        subtitle="You just answered a lot of questions. Were they the right ones?"
+        onResolved={() => navigate('/app/thinking')}
+      />
     </div>
   );
 }
