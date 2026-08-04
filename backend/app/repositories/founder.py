@@ -4,16 +4,39 @@ Shows the pattern: subclass BaseRepository, add only the model-specific lookups.
 Other models get their own repository the same way as features need them.
 """
 
+from typing import Any
+
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.models import Founder
 from app.repositories.base import BaseRepository
+from app.services.profile_progress import validate_profile
 
 
 class FounderRepository(BaseRepository[Founder]):
     def __init__(self) -> None:
         super().__init__(Founder)
+
+    def update(self, db: Session, obj: Founder, data: dict[str, Any], *, commit: bool = True) -> Founder:
+        """Partial update, plus keeping `profile_completed` truthful.
+
+        Nothing else in the codebase ever set this column to true -- it is the
+        DB default (false) forever, even once a founder has genuinely filled
+        every required onboarding field, because `/profile/validate` computes
+        completeness fresh on every call but never persists the result. That
+        left `profile_completed` permanently false for every founder, which
+        matters beyond just this column: it is the one signal that could tell
+        a returning, already-onboarded founder apart from a brand-new one.
+        Recomputing it here, on every write through this repository (which is
+        every PATCH /profile/* endpoint), means it can never go stale.
+        """
+        obj = super().update(db, obj, data, commit=False)
+        completed = validate_profile(obj)["valid"]
+        if obj.profile_completed != completed:
+            obj.profile_completed = completed
+        self._finish(db, obj, commit)
+        return obj
 
     def get_by_user_id(self, db: Session, user_id) -> Founder | None:
         """Look up a founder by the Supabase auth uid carried in the token."""

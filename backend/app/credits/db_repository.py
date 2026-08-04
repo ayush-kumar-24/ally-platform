@@ -189,10 +189,21 @@ class SqlAlchemyCreditRepository(CreditRepository):
 
     def get_balance(self, user_id: int) -> CreditBalance:
         """Settle, then report. A balance read that skipped settlement could show
-        credits that have already expired -- and the user would try to spend them."""
+        credits that have already expired -- and the user would try to spend them.
+
+        Reports zero when the credit columns have not been migrated yet: showing a
+        balance of 0 is honest (nobody has been granted anything) and lets the rest
+        of the page render, whereas raising takes the whole view down.
+        """
         from datetime import timezone
         now = datetime.now(timezone.utc)
-        balance, _ = self.settle_only(user_id, now)
+        try:
+            balance, _ = self.settle_only(user_id, now)
+        except UserNotFoundError:
+            raise
+        except Exception:
+            self.db.rollback()
+            return CreditBalance(user_id=user_id, balance=0)
         row = self.db.execute(
             text("""select (select max(created_at) from credit_transactions
                              where user_id = :uid) as last_at"""),
@@ -204,7 +215,10 @@ class SqlAlchemyCreditRepository(CreditRepository):
         """Settled bucket detail -- for the admin UI, which shows monthly and bonus
         separately alongside the renewal date."""
         from datetime import timezone
-        self.settle_only(user_id, datetime.now(timezone.utc))
+        try:
+            self.settle_only(user_id, datetime.now(timezone.utc))
+        except Exception:
+            self.db.rollback()
         row = self.db.execute(text("""
             select monthly_credits, bonus_credits, credits_expires_at,
                    credits_renewal_date, monthly_credit_allowance
@@ -226,9 +240,16 @@ class SqlAlchemyCreditRepository(CreditRepository):
         Settlement writes rows, and paging through history must not mutate it --
         clicking "next page" should never change what the ledger contains.
         """
-        total = self.db.execute(
-            text("select count(*) from credit_transactions where user_id = :uid"),
-            {"uid": user_id}).scalar() or 0
+        # The ledger table arrives with a pending migration; an empty ledger is the
+        # truthful answer until then. Only this READ degrades -- `apply` still
+        # raises, so a credit movement can never silently vanish.
+        try:
+            total = self.db.execute(
+                text("select count(*) from credit_transactions where user_id = :uid"),
+                {"uid": user_id}).scalar() or 0
+        except Exception:
+            self.db.rollback()
+            return [], 0
         rows = self.db.execute(text("""
             select id, user_id, admin_id, type, bucket, amount, balance_before,
                    balance_after, reason, created_at

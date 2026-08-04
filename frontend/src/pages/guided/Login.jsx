@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import AuthTransition from '../../components/AuthTransition';
 import { CURRENT_VERSIONS, flushPendingConsent, recordConsent, savePendingConsent } from '../../services/consents';
-import { consumeOAuthRedirect, signInWithGoogle, signInWithLinkedIn } from '../../services/auth';
+import { consumeOAuthRedirect, signInWithGoogle, signInWithLinkedIn, startDevSession } from '../../services/auth';
 import { get } from '../../services/api';
 import { supabaseConfigured } from '../../services/supabaseClient';
 
@@ -110,12 +110,28 @@ export default function Login() {
       return; // navigates away on success; nothing left to do
     }
 
+    // Supabase isn't configured (local dev). Establish a real backend session
+    // against the dev founder rather than inventing an identity: a fabricated
+    // name is worse than none -- the founder can't tell it's fake -- and with no
+    // token nothing they enter downstream can actually save.
+    let devFounder = null;
+    let devProfile = null;
+    try {
+      devFounder = await startDevSession();
+      if (devFounder) devProfile = await get('/profile');
+    } catch {
+      // Backend down, or no dev founder configured. Fall through with no
+      // identity; AppContext re-hydrates from /profile once a session exists.
+    }
+    const devName = devProfile?.full_name || '';
+
     setUser(prev => ({
       ...prev,
       authProvider: provider,
-      name: 'Ayush Sharma',
-      email: provider === 'linkedin' ? 'ayush.sharma@brightloom.in' : 'ayush@brightloom.in',
-      initials: 'AS',
+      name: devName,
+      email: devProfile?.email || devFounder?.email || '',
+      initials: devName.split(' ').filter(Boolean).slice(0, 2)
+        .map(w => w[0].toUpperCase()).join('') || '?',
       consents: {
         termsAccepted: true,
         termsVersion: stored?.terms_version ?? CURRENT_VERSIONS.terms,

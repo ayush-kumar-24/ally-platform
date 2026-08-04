@@ -1,7 +1,9 @@
-import { useState } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { useApp } from './context/AppContext';
+import { clearTokens, onAuthFailure } from './services/api';
 import ErrorBoundary from './components/ErrorBoundary';
+import RequireAuth from './components/RequireAuth';
 import SplashScreen from './components/SplashScreen';
 import PlatformLayout from './layouts/PlatformLayout';
 import GuidedLayout from './layouts/GuidedLayout';
@@ -17,10 +19,6 @@ import Tour from './pages/guided/Tour';
 import Summary from './pages/guided/Summary';
 import Validate from './pages/guided/Validate';
 import Problem from './pages/guided/Problem';
-import Reveal from './pages/guided/Reveal';
-import RootCause from './pages/guided/RootCause';
-import Conclusion from './pages/guided/Conclusion';
-import GuidedReport from './pages/guided/GuidedReport';
 import Dashboard from './pages/Dashboard';
 import AllyChat from './pages/AllyChat';
 import DiagnosisChat from './pages/DiagnosisChat';
@@ -55,6 +53,20 @@ const splashShown = sessionStorage.getItem('splashShown') === 'true';
 export default function App() {
   const { toast } = useApp();
   const [showSplash, setShowSplash] = useState(!splashShown);
+  const navigate = useNavigate();
+
+  // A session that can't be recovered (no refresh token, or the server rejects
+  // it) used to fail every request silently on whatever page the founder was
+  // on -- each page showing its own generic "couldn't reach the server"
+  // message, which reads as a network problem rather than "please sign in
+  // again." This sends them to login instead, which is what actually fixes it.
+  useEffect(() => {
+    onAuthFailure(() => {
+      clearTokens();
+      localStorage.removeItem('ally_founder');
+      navigate('/guided/login', { replace: true });
+    });
+  }, [navigate]);
 
   const handleSplashDone = () => {
     sessionStorage.setItem('splashShown', 'true');
@@ -103,17 +115,20 @@ export default function App() {
           <Route path="summary" element={<Summary />} />
           <Route path="validate" element={<Validate />} />
           <Route path="problem" element={<Problem />} />
-          <Route path="reveal" element={<Reveal />} />
-          <Route path="root-cause" element={<RootCause />} />
-          <Route path="conclusion" element={<Conclusion />} />
-          <Route path="report" element={<GuidedReport />} />
+          {/* reveal / root-cause / conclusion / report used to sit here: a fully
+              scripted "Ally reasons through your problem" sequence with fixed
+              dialogue and a fixed root cause for every founder, ending in a canned
+              report. Problem.jsx now hands off straight to the real, backend-driven
+              diagnosis at /app/diagnosis instead. */}
           <Route path="*" element={<Navigate to="/guided/login" replace />} />
         </Route>
 
         {/* ── Main platform ── */}
         <Route path="/app" element={
           <ErrorBoundary label="Platform" fallbackPath="/app">
-            <PlatformLayout />
+            <RequireAuth>
+              <PlatformLayout />
+            </RequireAuth>
           </ErrorBoundary>
         }>
           <Route index element={<Dashboard />} />

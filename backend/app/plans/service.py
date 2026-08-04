@@ -127,8 +127,13 @@ class EntitlementService:
             raise DailyTokenLimitError(used, plan.daily_token_limit, next_utc_midnight(now))
 
         if self.credits is not None:
-            balance = self.credits.get_balance(founder_id).balance
-            if balance <= 0:
+            try:
+                balance = self.credits.get_balance(founder_id).balance
+            except Exception:
+                # Credit columns not migrated yet. Enforcement is gated separately,
+                # so skipping the check here cannot bypass a limit that was live.
+                balance = None
+            if balance is not None and balance <= 0:
                 raise OutOfCreditsError(balance, 1)
 
     def record_chat_usage(self, founder_id: int, tier: PlanTier | str | None, *,

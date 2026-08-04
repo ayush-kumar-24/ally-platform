@@ -601,7 +601,12 @@
 .bt-opt.on{color:#fff}
 .bt-slider{position:absolute;top:5px;bottom:5px;border-radius:99px;background:#1B4332;box-shadow:0 4px 12px -4px rgba(6,20,13,.4);transition:transform .35s cubic-bezier(.34,1.4,.5,1),width .35s cubic-bezier(.34,1.4,.5,1);z-index:1}
 .bt-save{font-size:10px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#10B981;background:rgba(16,185,129,.14);border-radius:99px;padding:2px 7px}
-.plans{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin:30px 0 12px;align-items:stretch}
+/* auto-fit, not repeat(4,1fr): the tier count comes from the API now, so a fixed
+   four columns left a phantom empty track and crushed three cards to ~130px on a
+   phone. minmax(0,…) lets a track shrink below its content's min-content width,
+   which a bare 1fr refuses to do. */
+.plans{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr));gap:16px;margin:30px 0 12px;align-items:stretch}
+.plan-card{min-width:0}
 .plan-card{position:relative;display:flex;flex-direction:column;background:#fff;border:1px solid #e7e0d6;border-radius:20px;padding:24px 22px;box-shadow:0 1px 2px -1px rgba(6,20,13,.14),0 6px 16px -6px rgba(6,20,13,.18);transition:transform .35s cubic-bezier(.2,.7,.2,1),box-shadow .35s,border-color .35s}
 .plan-card:hover{transform:translateY(-5px);box-shadow:0 24px 50px -22px rgba(6,20,13,.28);border-color:#d8cfc2}
 .plan-card.popular{background:radial-gradient(130% 100% at 50% 0%,#164a32,#0E2A1C 60%,#0a2016);border-color:transparent;box-shadow:0 30px 70px -26px rgba(6,32,20,.62);transform:translateY(-8px)}
@@ -1916,7 +1921,12 @@ body.lp-done #landing-page { display:none; }
 .dash-unlock-help{color:#8a958b}
 
 @media (max-width: 1100px){
-  .dash-actions,.dash-feature,.dash-grid,.dash-stats,.dash-unlock-grid{grid-template-columns:1fr}
+  /* minmax(0,1fr), not 1fr: a bare `1fr` is minmax(auto,1fr), and that auto
+     minimum floors the column at its widest child's min-content. On narrow
+     screens that made the column wider than its container, so cards overflowed
+     and body{overflow-x:hidden} silently clipped them. */
+  .dash-actions,.dash-feature,.dash-grid,.dash-stats,.dash-unlock-grid{grid-template-columns:minmax(0,1fr)}
+  .dash-stack,.dash-side{min-width:0}
   .dash-feature{justify-items:start}
   .dash-ring{margin-top:6px}
 }

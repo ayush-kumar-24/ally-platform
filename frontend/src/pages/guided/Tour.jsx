@@ -1,34 +1,52 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useApp } from '../../context/AppContext';
+import { labelFor, midSentence, readable } from '../../utils/profileDisplay';
+import { useFounderRead } from '../../hooks/useFounderRead';
 
+/* Keyed to the eight stages the database actually stores. The previous map
+   listed 'Idea' / 'Early traction' / 'Scaling' / 'Plateau', none of which are
+   real stage names, so the eyebrow always fell through to 'first-impression'. */
 const STAGE_LABELS = {
-  Idea: 'idea-stage',
-  'Early traction': 'growth-led',
-  Scaling: 'scale-building',
-  Plateau: 'plateau-watch',
+  Ideation: 'idea-stage',
+  Validation: 'signal-hunting',
+  'Prototype / MVP': 'build-led',
+  'Early Traction': 'traction-led',
+  'Growth / Scaling': 'scale-building',
+  Expansion: 'expansion-minded',
+  Maturity: 'steward-led',
+  Exit: 'legacy-minded',
 };
 
+/** Fallback used until the generated read arrives (or if it never does). */
 function buildFirstImpression(profile) {
-  const stage = profile.stage || 'Idea';
-  const challenge = (profile.challenges || profile.problem || 'Focus').toLowerCase();
+  const stage = profile.stage || 'Ideation';
+  const challenge = readable('challenges', profile.challenges) || profile.problem || 'focus';
   const industry = profile.industry || 'your market';
-  const feeling = (profile.feeling || 'Steady').replace(/^[^A-Za-z]+\s*/, '').toLowerCase();
+  const feeling = labelFor('feeling', profile.feeling) || 'Steady';
 
   return [
-    `Noticed a ${stage.toLowerCase()} founder energy with fast, intuitive calls`,
-    `Flagged pressure building around ${challenge}`,
-    `Mapped your context through the lens of ${industry}`,
-    `Reading your pace as ${feeling} — ready to go deeper with you`,
+    `Noticed a ${midSentence(stage)} founder energy with fast, intuitive calls`,
+    `Flagged pressure building around ${midSentence(challenge)}`,
+    `Mapped your context through the lens of ${midSentence(industry)}`,
+    `Reading your pace as ${midSentence(feeling)} — ready to go deeper with you`,
   ];
 }
 
 export default function Tour() {
   const navigate = useNavigate();
-  const { user } = useApp();
   const [active, setActive] = useState(0);
-  const profile = user?.founderProfile || {};
-  const bullets = useMemo(() => buildFirstImpression(profile), [profile]);
+
+  /* The server forms one impression from the founder's stored answers and keeps
+     it, so it never rewrites itself under them. Fetched rather than built here:
+     swapping words into fixed sentences is not a read, and the answers live on
+     the server rather than in this tab's memory. */
+  const { answers: profile, impression } = useFounderRead();
+
+  // Until it arrives (or if it never does), fall back to what we can derive.
+  const bullets = useMemo(
+    () => (impression?.bullets?.length ? impression.bullets : buildFirstImpression(profile)),
+    [impression, profile],
+  );
   const eyebrow = (profile.stage && STAGE_LABELS[profile.stage]) || 'first-impression';
 
   useEffect(() => {

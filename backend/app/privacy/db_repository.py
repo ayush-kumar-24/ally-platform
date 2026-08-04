@@ -55,12 +55,24 @@ class SqlAlchemyPrivacyRepository(PrivacyRepository):
     # --- state ----------------------------------------------------------
 
     def get_state(self, founder_id: int) -> PrivacyState:
-        row = self.db.execute(
-            text("""select founder_id, processing_restricted_at,
-                           deletion_requested_at, deletion_scheduled_at
-                    from founders where founder_id = :fid"""),
-            {"fid": founder_id},
-        ).mappings().first()
+        # `processing_restricted_at` arrives with a migration that may not have run.
+        # Falling back to the deletion columns keeps the Privacy Center usable
+        # instead of 500-ing the whole page over one absent column.
+        try:
+            row = self.db.execute(
+                text("""select founder_id, processing_restricted_at,
+                               deletion_requested_at, deletion_scheduled_at
+                        from founders where founder_id = :fid"""),
+                {"fid": founder_id},
+            ).mappings().first()
+        except Exception:
+            self.db.rollback()
+            legacy = self.db.execute(
+                text("""select founder_id, deletion_requested_at, deletion_scheduled_at
+                        from founders where founder_id = :fid"""),
+                {"fid": founder_id},
+            ).mappings().first()
+            row = dict(legacy) | {"processing_restricted_at": None} if legacy else None
         if row is None:
             raise FounderNotFoundError(founder_id)
         return PrivacyState(

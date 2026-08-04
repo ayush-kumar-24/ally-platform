@@ -1,14 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
-import { get, post, ApiError } from '../services/api';
+import { normalise, resumeOrStart, submitAnswer } from '../services/diagnosis';
 import { useVoiceInput } from '../hooks/useVoiceInput';
 
 const DIM_CHIPS = ['All', 'Revenue', 'Strategy', 'Team', 'Operations', 'Finance', 'Market'];
-
-function nowLabel() {
-  return 'Just now';
-}
 
 export default function DiagnosisChat() {
   const navigate = useNavigate();
@@ -16,10 +12,10 @@ export default function DiagnosisChat() {
   const [activeDim, setActiveDim] = useState('All');
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
-  const [question, setQuestion] = useState(null); // current QuestionRead, or null when complete
-  const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const [complete, setComplete] = useState(false);
+  const [question, setQuestion] = useState(null);
+  const [sessionId, setSessionId] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
   const [kgVisible, setKgVisible] = useState(true);
   const kgRef = useRef(null);
   const scrollRef = useRef(null);
@@ -29,84 +25,59 @@ export default function DiagnosisChat() {
     if (kgRef.current) setTimeout(() => kgRef.current?.classList.add('draw'), 800);
   }, [messages]);
 
-  // Resume an in-progress session, or start a new one, on first load.
+  // Resume if a session is in progress, otherwise start one. The server owns the
+  // progress, which is what makes closing the tab mid-diagnosis safe.
   useEffect(() => {
     let cancelled = false;
-    (async () => {
-      try {
-        let session, currentQuestion;
-        try {
-          const current = await get('/diagnosis/current');
-          session = current.session;
-          currentQuestion = current.question;
-        } catch (err) {
-          if (err instanceof ApiError && err.status === 404) {
-            const started = await post('/diagnosis/start', {});
-            session = started.session;
-            currentQuestion = started.question;
-          } else {
-            throw err;
-          }
-        }
+    resumeOrStart()
+      .then((session) => {
         if (cancelled) return;
-        if (session?.current_category) setActiveDim(session.current_category);
-        if (currentQuestion) {
-          setQuestion(currentQuestion);
-          setMessages([{ role: 'ally', text: currentQuestion.question_text, time: nowLabel() }]);
-        } else {
-          setComplete(true);
-          setMessages([{
-            role: 'ally',
-            text: "You've completed your diagnosis. Your report is ready — head over to your dashboard to see the full breakdown.",
-            time: nowLabel(),
-          }]);
+        setSessionId(session.sessionId);
+        setQuestion(session.question);
+        if (session.question?.text) {
+          setMessages([{ role: 'ally', text: session.question.text, time: 'now' }]);
         }
-      } catch (err) {
-        showToast(err instanceof ApiError ? err.detail : 'Could not load your diagnosis session — please refresh.');
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setMessages([{ role: 'ally', time: 'now',
+            text: "I couldn't start your diagnosis just now. Please refresh to try again." }]);
+        }
+      });
     return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const submitAnswer = async (text) => {
-    const answer = text.trim();
-    if (!answer || !question || submitting) return;
-    setMessages(prev => [...prev, { role: 'me', text: answer, time: nowLabel() }]);
+  const answer = async (text) => {
+    if (!text.trim() || busy || done) return;
+    setMessages(prev => [...prev, { role: 'me', text, time: 'now' }]);
     setInput('');
-    setSubmitting(true);
+    setBusy(true);
     try {
-      const result = await post('/diagnosis/answer', {
-        question_id: question.question_id,
-        answer_text: answer,
-      });
-      if (result.session?.current_category) setActiveDim(result.session.current_category);
-      if (result.is_complete || !result.next_question) {
-        setComplete(true);
-        setQuestion(null);
-        setMessages(prev => [...prev, {
-          role: 'ally',
-          text: "That completes your diagnosis. Your report is ready — head over to your dashboard to see the full breakdown.",
-          time: nowLabel(),
-        }]);
+      const res = await submitAnswer({ questionId: question?.id, answer: text });
+      const state = normalise(res, true);
+      const next = state.question;
+      // Trust the explicit is_complete flag over "no next question": a transient
+      // gap must not be mistaken for the end of the diagnosis.
+      if (next?.text && !state.complete) {
+        setQuestion(next);
+        setMessages(prev => [...prev, { role: 'ally', time: 'now', text: next.text }]);
       } else {
-        setQuestion(result.next_question);
+        setDone(true);
         setMessages(prev => [...prev, {
-          role: 'ally', text: result.next_question.question_text, time: nowLabel(),
+          role: 'ally', time: 'now',
+          text: 'That completes your diagnosis. I am building your report now.',
         }]);
+        // The report is generated after the last answer, so hand off to the
+        // interstitial rather than dropping the founder on an empty report page.
+        setTimeout(() => navigate('/app/thinking'), 1200);
       }
-    } catch (err) {
+    } catch {
       setMessages(prev => [...prev, {
-        role: 'ally',
-        text: err instanceof ApiError && err.status === 422
-          ? "That answer didn't come through — could you rephrase it?"
-          : "Something went wrong submitting that answer. Please try again.",
-        time: nowLabel(),
+        role: 'ally', time: 'now',
+        text: "That didn't save. Your answer wasn't lost — try sending it again.",
       }]);
     } finally {
-      setSubmitting(false);
+      setBusy(false);
     }
   };
 
@@ -133,22 +104,22 @@ export default function DiagnosisChat() {
 
         {/* Messages */}
         <div className="chat-scroll" ref={scrollRef}>
-          {loading ? (
-            <div className="msg ally">
-              <div className="m-av ally">🤝</div>
-              <div><div className="bubble">Loading your diagnosis…</div></div>
-            </div>
-          ) : (
-            messages.map((m, i) => (
-              <div key={i} className={`msg ${m.role}`}>
-                <div className={`m-av ${m.role}`}>{m.role === 'ally' ? '🤝' : 'RV'}</div>
-                <div>
-                  <div className="bubble">{m.text}</div>
-                  <div className="m-meta">{m.time}</div>
-                </div>
+          {messages.map((m, i) => (
+            <div key={i} className={`msg ${m.role}`}>
+              <div className={`m-av ${m.role}`}>{m.role === 'ally' ? '🤝' : 'RV'}</div>
+              <div>
+                <div className="bubble">{m.text}</div>
+                <div className="m-meta">{m.time}</div>
               </div>
-            ))
-          )}
+            </div>
+          ))}
+        </div>
+
+        {/* Suggestions */}
+        <div className="suggs">
+          <button className="sugg">Tell me more about the SME churn pattern</button>
+          <button className="sugg">What's my founder DNA score for Sales?</button>
+          <button className="sugg">Show me the root cause hypothesis</button>
         </div>
 
         {/* Input */}
@@ -156,37 +127,38 @@ export default function DiagnosisChat() {
           <div className="ci-row">
             <textarea
               rows={1}
-              placeholder={complete ? 'Your diagnosis is complete.' : "Answer Ally's question…"}
+              placeholder={done ? 'Your diagnosis is complete.' : "Answer Ally's question or ask anything..."}
               value={input}
-              disabled={complete || loading || submitting}
               onChange={e => setInput(e.target.value)}
+              disabled={busy || done}
               onKeyDown={e => {
-                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitAnswer(input); }
+                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); answer(input); }
               }}
             />
             <button
               className={`ci-btn${voice.status === 'recording' ? ' recording' : ''}`}
               title="Voice input"
               aria-pressed={voice.status === 'recording'}
-              disabled={complete || loading || voice.status === 'transcribing'}
+              disabled={busy || done || voice.status === 'transcribing'}
               onClick={voice.toggle}
             >
               <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/></svg>
             </button>
-            <button
-              className="ci-btn send"
-              title="Send"
-              disabled={complete || loading || submitting}
-              onClick={() => submitAnswer(input)}
-            >
+            <button className="ci-btn send" title="Send" type="button"
+                    disabled={busy || done || !input.trim()}
+                    onClick={() => answer(input)}>
               <svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
             </button>
           </div>
-          <div className="ci-hint">Structured diagnosis · Voice input free on every plan here</div>
+          <div className="ci-hint">
+            {done ? 'Diagnosis complete — building your report…'
+                  : busy ? 'Saving your answer…'
+                  : 'Structured diagnosis · Voice input free on every plan here'}
+          </div>
         </div>
       </div>
 
-      {/* Knowledge Graph Panel (illustrative -- not yet driven by live session data) */}
+      {/* Knowledge Graph Panel */}
       {kgVisible && (
         <div className="kg-panel">
           <h3>Live knowledge graph</h3>

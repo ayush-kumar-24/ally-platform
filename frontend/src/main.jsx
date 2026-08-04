@@ -14,6 +14,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import App from './App';
 import './index.css';
 import './styles/onboarding-supplement.css';
+import './styles/onboarding-questions.css';
 import './styles/animations.css';
 import './styles/tour.css';
 

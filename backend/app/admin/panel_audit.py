@@ -128,6 +128,18 @@ class SqlAlchemyPanelAuditRepository(PanelAuditRepository):
     def list(self, *, limit: int = 100, offset: int = 0, admin_id: int | None = None,
              target_user_id: int | None = None, action: str | None = None
              ) -> tuple[list[PanelAuditEvent], int]:
+        # The audit table arrives with a pending migration. Until then an empty
+        # trail is the truthful answer -- and far better than 500-ing the page an
+        # admin opens to find out what happened. Writes are NOT softened: a failed
+        # audit write must still fail its action.
+        try:
+            return self._list(limit=limit, offset=offset, admin_id=admin_id,
+                              target_user_id=target_user_id, action=action)
+        except Exception:
+            self.db.rollback()
+            return [], 0
+
+    def _list(self, *, limit, offset, admin_id, target_user_id, action):
         q = self.db.query(PanelAuditRow)
         if admin_id is not None:
             q = q.filter(PanelAuditRow.admin_id == admin_id)

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
+import { updateBusinessSection } from '../../services/profile';
 
 function buildExamples(profile) {
   const suggestions = [profile.challenges, 'Growth flatlined', 'Users don\'t activate', 'Cash feels tight'].filter(Boolean);
@@ -13,8 +14,20 @@ export default function Problem() {
   const profile = user?.founderProfile || {};
   const examples = useMemo(() => buildExamples(profile), [profile]);
   const [problem, setProblem] = useState(user?.problem || profile.problem || '');
+  const [starting, setStarting] = useState(false);
 
-  const handleContinue = () => {
+  /**
+   * Hands off into the REAL diagnosis (/app/diagnosis, backend-driven, gated on
+   * the server's is_complete flag). This used to navigate into a scripted
+   * `/guided/reveal -> root-cause -> conclusion -> report` sequence that was
+   * entirely hardcoded UI theater -- fixed dialogue and a fixed "root cause"
+   * regardless of what a founder typed here -- so every founder saw a finished
+   * report after one tap. That sequence has been removed; this is now the only
+   * diagnosis a founder goes through.
+   */
+  const handleContinue = async () => {
+    if (starting) return;
+    setStarting(true);
     setUser((prev) => ({
       ...prev,
       problem,
@@ -23,7 +36,12 @@ export default function Problem() {
         perceivedProblem: problem,
       },
     }));
-    navigate('/guided/reveal');
+    try {
+      await updateBusinessSection({ problem_statement: problem });
+    } catch {
+      // Not fatal -- the diagnosis itself doesn't depend on this having saved.
+    }
+    navigate('/app/diagnosis');
   };
 
   return (
@@ -62,10 +80,10 @@ export default function Problem() {
           className="btn btn-em"
           type="button"
           onClick={handleContinue}
-          disabled={!problem.trim()}
-          style={{ opacity: problem.trim() ? 1 : 0.4, pointerEvents: problem.trim() ? 'auto' : 'none' }}
+          disabled={!problem.trim() || starting}
+          style={{ opacity: problem.trim() && !starting ? 1 : 0.4, pointerEvents: problem.trim() && !starting ? 'auto' : 'none' }}
         >
-          Start diagnosis <svg viewBox="0 0 24 24" className="w-4 h-4 inline-block ml-1" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          {starting ? 'Starting…' : 'Start diagnosis'} <svg viewBox="0 0 24 24" className="w-4 h-4 inline-block ml-1" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
         </button>
       </div>
     </section>

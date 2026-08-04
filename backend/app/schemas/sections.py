@@ -18,7 +18,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.schemas.founder import CleanStrList, Feelings
+from app.schemas.founder import Challenges, CleanStrList, Feelings
 
 # Mirrors the founders experience_level CHECK, so a bad value is a clean 422
 # at the API instead of a 500 from the database.
@@ -59,7 +59,8 @@ class BusinessInfoRead(BaseModel):
     stage_id: int | None = None
     building_summary: str | None = None
     problem_statement: str | None = None
-    customer_segment: str | None = None
+    customer_segment: Any | None = None
+    customer_segment_other: str | None = None
     industry: str | None = None
     current_challenges: Any | None = None
 
@@ -72,9 +73,11 @@ class BusinessInfoUpdate(BaseModel):
     stage: str | None = Field(default=None, min_length=1, max_length=50)
     building_summary: str | None = Field(default=None, max_length=5000)
     problem_statement: str | None = Field(default=None, max_length=5000)
-    customer_segment: str | None = Field(default=None, max_length=100)
-    industry: str | None = Field(default=None, max_length=100)
-    current_challenges: CleanStrList | None = None
+    customer_segment: CleanStrList | None = None            # multi-select chips
+    customer_segment_other: str | None = Field(default=None, max_length=200)
+    # Bounded to match the String(30) column rather than overshooting it.
+    industry: str | None = Field(default=None, max_length=30)
+    current_challenges: Challenges | None = None            # "choose up to 3"
 
 
 # --- Goals (Q7-8) -----------------------------------------------------------

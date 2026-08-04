@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MOCK_PLANS, MOCK_FOUNDER } from '../data/mockData';
-import { getCatalog } from '../services/plans';
+import { MOCK_PLANS } from '../data/mockData';
+import { getProfile } from '../services/profile';
+import { getCatalog, getMyPlan } from '../services/plans';
 
 /* ─── Static data ─── */
 /** Keys must match the plan tiers (free / starter / pro) served by GET /plans. */
@@ -258,10 +259,13 @@ const PAYMENT_METHODS = [
 ];
 
 function CheckoutView({ plan, annual, onBack, onSuccess }) {
+  // Prefill from the signed-in founder rather than a placeholder identity.
+  const [founder, setFounder] = useState(null);
+  useEffect(() => { getProfile().then(setFounder).catch(() => setFounder(null)); }, []);
   const [method, setMethod] = useState('card');
   const [form, setForm] = useState({
-    name: MOCK_FOUNDER.name,
-    email: MOCK_FOUNDER.email,
+    name: founder?.full_name ?? '',
+    email: founder?.email ?? '',
     card: '',
     expiry: '',
     cvv: '',
@@ -512,6 +516,8 @@ function CheckoutView({ plan, annual, onBack, onSuccess }) {
    VIEW 3 — Payment Success / Confirmation
 ═══════════════════════════════════════════ */
 function SuccessView({ plan, onViewStatus }) {
+  const [founder, setFounder] = useState(null);
+  useEffect(() => { getProfile().then(setFounder).catch(() => setFounder(null)); }, []);
   return (
     <div className="bl-success-wrap stagger d1">
       <div className="bl-success-icon">
@@ -522,7 +528,7 @@ function SuccessView({ plan, onViewStatus }) {
       <h2 className="bl-success-title">Payment Successful!</h2>
       <p className="bl-success-sub">
         Welcome to the <strong>{plan.name} Plan</strong>. Your subscription is now active.
-        A confirmation receipt has been sent to <strong>{MOCK_FOUNDER.email}</strong>.
+        A confirmation receipt has been sent to <strong>{founder?.email ?? 'your email'}</strong>.
       </p>
       <div className="bl-success-details">
         <div className="bl-sd-row"><span>Plan</span><strong>{plan.name}</strong></div>
@@ -681,7 +687,17 @@ export default function Billing() {
   const [view, setView] = useState('plans'); // 'plans' | 'checkout' | 'success' | 'status'
   const [annual, setAnnual] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState(null);
-  const currentPlan = 'starter';
+  // Was hardcoded to 'starter' -- every founder, on any plan, saw Starter marked
+  // "Current Plan" here regardless of what they actually pay for.
+  const [currentPlan, setCurrentPlan] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getMyPlan()
+      .then((p) => { if (!cancelled) setCurrentPlan(p?.tier || 'free'); })
+      .catch(() => { if (!cancelled) setCurrentPlan('free'); });
+    return () => { cancelled = true; };
+  }, []);
 
   const handleSelectPlan = plan => {
     setSelectedPlan(plan);

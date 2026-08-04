@@ -1,17 +1,50 @@
+// Both sides are needed: useRef + planning for the task-reminder nudges from
+// main, and the real profile/notification services from feat/admin-panel.
+// mockData is deliberately gone -- see toUser below.
 import { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
-import { MOCK_FOUNDER, MOCK_NOTIFICATIONS } from '../data/mockData';
-import { get } from '../services/api';
+import { getAccessToken } from '../services/api';
+import { getProfile } from '../services/profile';
+import { listNotifications, markAllRead, toDisplay } from '../services/notifications';
 import { isDueOrOverdue, listTasks } from '../services/planning';
 
 const AppContext = createContext(null);
 
+/** Server profile -> the shape the UI components already expect.
+ *
+ * This used to spread MOCK_FOUNDER "for display defaults". Those defaults were
+ * a fictional person: it gave every signed-in founder stage "Early Traction", a
+ * clarity score of 72, the role "CEO & Co-founder", a location in Mumbai and
+ * the label "Pro" regardless of what they actually pay. Nothing reads those
+ * fields any more, and a real founder must not inherit a fake one's details.
+ */
+function toUser(profile) {
+  const name = profile?.full_name || '';
+  return {
+    avatar: null,
+    name,
+    initials: name.split(' ').filter(Boolean).slice(0, 2)
+      .map(w => w[0].toUpperCase()).join('') || '?',
+    email: profile?.email || '',
+    company: profile?.business_name || '',
+    plan: profile?.plan_type || 'free',
+    founderId: profile?.founder_id ?? null,
+  };
+}
+
 export function AppProvider({ children }) {
-  const [user, setUser] = useState(MOCK_FOUNDER);
+  // Identity starts empty, never as a mock founder. Rendering a fabricated name
+  // ("Rahul Varma") to a signed-in founder is worse than rendering nothing for a
+  // moment -- they cannot tell it is a placeholder.
+  const [user, setUser] = useState(() => {
+    const saved = localStorage.getItem('ally_founder');
+    if (saved) { try { return JSON.parse(saved); } catch { /* fall through */ } }
+    return toUser(null);
+  });
   const [sidebarCollapsed, setSidebarCollapsed] = useState(
     () => localStorage.getItem('ally_sb_collapsed') === 'true'
   );
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [notifications, setNotifications] = useState(MOCK_NOTIFICATIONS);
+  const [notifications, setNotifications] = useState([]);
   const [activeView, setActiveView] = useState('dashboard');
   const [isGuided, setIsGuided] = useState(false);
   const [guidedStage, setGuidedStage] = useState('');
@@ -73,41 +106,40 @@ export function AppProvider({ children }) {
     setActiveView('dashboard');
   }, []);
 
+  const refreshNotifications = useCallback(() => {
+    // AppProvider wraps the whole app, including the public landing page and the
+    // pre-login guided screens. Without this guard, every anonymous visitor's
+    // browser fired an authenticated request that could only ever fail --
+    // wasted, and in dev mode it resolved to a nonexistent fixed founder and
+    // came back 404 rather than a clean "not signed in."
+    if (!getAccessToken()) return Promise.resolve();
+    return listNotifications()
+      .then(res => setNotifications((res?.items ?? []).map(toDisplay)))
+      .catch(() => { /* the bell is not worth failing a page over */ });
+  }, []);
+
+  useEffect(() => { refreshNotifications(); }, [refreshNotifications]);
+
+  // "Clear all" must reach the server, otherwise the notifications return on the
+  // next load and the button looks broken.
   const clearNotifications = useCallback(() => {
     setNotifications([]);
-  }, []);
+    markAllRead().catch(() => refreshNotifications());
+  }, [refreshNotifications]);
 
   const startTour = useCallback(() => setTourOpen(true), []);
   const endTour = useCallback(() => setTourOpen(false), []);
 
+  // Hydrate identity from the server. localStorage is only a first-paint cache --
+  // the server is the truth, so a name changed elsewhere (or a stale cache from a
+  // previous account on this browser) is corrected on load rather than persisting.
   useEffect(() => {
-    const saved = localStorage.getItem('ally_founder');
-    if (saved) {
-      try { setUser(JSON.parse(saved)); } catch (e) {}
-    }
-  }, []);
-
-  // Real plan_type from the backend -- the source of truth for plan-gated
-  // features (e.g. voice input in chat). Merged onto the existing user object
-  // rather than replacing it: most of `user` today (stage, company, clarityScore,
-  // ...) still comes from mock data / other screens, and isn't part of this fetch.
-  useEffect(() => {
-    get('/profile')
-      .then((profile) => {
-        setUser((prev) => ({
-          ...prev,
-          founder_id: profile.founder_id,
-          plan_type: profile.plan_type,
-          name: profile.full_name || prev?.name,
-        }));
-      })
-      .catch(() => {
-        // No session yet / backend unreachable -- keep whatever's in `user`
-        // (mock or localStorage). If plan_type ends up missing, the UI-level
-        // gate (canUseVoiceInChat) can't pre-block, but the backend's own
-        // check on POST /voice/transcribe is the real authority and still
-        // enforces the free-plan restriction regardless of frontend state.
-      });
+    if (!getAccessToken()) return undefined;
+    let cancelled = false;
+    getProfile()
+      .then(p => { if (!cancelled && p) setUser(toUser(p)); })
+      .catch(() => { /* signed out or offline: keep the cached value */ });
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
@@ -153,7 +185,7 @@ export function AppProvider({ children }) {
       user, setUser,
       sidebarCollapsed, toggleSidebar,
       sidebarOpen, openSidebar, closeSidebar,
-      notifications, setNotifications, clearNotifications,
+      notifications, setNotifications, clearNotifications, refreshNotifications,
       activeView, setActiveView: navigate,
       isGuided, setIsGuided,
       guidedStage, setGuidedStage: goGuidedStep,

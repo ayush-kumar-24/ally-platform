@@ -109,7 +109,14 @@ let refreshFlight = null; // Promise<string new access token> while a refresh is
 
 async function refreshTokens() {
   const refresh_token = getRefreshToken();
-  if (!refresh_token) throw new ApiError(401, 'No session — please sign in.');
+  if (!refresh_token) {
+    // No wired onAuthFailure handler meant this path used to fail silently on
+    // whatever page the founder happened to be on -- e.g. a diagnosis page
+    // reporting "couldn't reach the server" when the real problem was simply
+    // "you are not signed in."
+    authFailureHandler?.();
+    throw new ApiError(401, 'No session — please sign in.');
+  }
   try {
     // Bare axios (not `api`): must not recurse through these interceptors.
     const { data } = await axios.post(
@@ -153,5 +160,17 @@ export const post  = (url, body, config) => api.post(url, body, config).then(r =
 export const put   = (url, body, config) => api.put(url, body, config).then(r => r.data);
 export const patch = (url, body, config) => api.patch(url, body, config).then(r => r.data);
 export const del   = (url, config)       => api.delete(url, config).then(r => r.data);
+
+/**
+ * Drop undefined/null keys from a request body.
+ *
+ * Several API schemas type optional fields as plain `str` with a default rather
+ * than `str | None`, so sending an explicit null is a 422 while omitting the key
+ * is fine. Callers should not have to remember which fields are which.
+ */
+export function prune(obj) {
+  return Object.fromEntries(
+    Object.entries(obj ?? {}).filter(([, v]) => v !== undefined && v !== null));
+}
 
 export default api;

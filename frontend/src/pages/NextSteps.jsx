@@ -1,4 +1,6 @@
-import { useApp } from '../context/AppContext';
+import { useCallback, useEffect, useState } from 'react';
+import { getLatestReport, getRecommendations } from '../services/reports';
+import { DnaError, DnaLoading, DnaNoReport } from '../components/DnaState';
 import { useNavigate } from 'react-router-dom';
 
 const ACTIONS = [
@@ -52,9 +54,16 @@ const ROADMAP = [
   }
 ];
 
-export default function NextSteps() {
+function NextStepsView({ actions }) {
   const navigate = useNavigate();
-  const { user } = useApp();
+  // Server recommendations when the report produced any; the static list is the
+  // fallback so the page still reads as guidance rather than an empty shell.
+  const items = (actions?.length ? actions : ACTIONS).map((a, i) => ({
+    num: a.num ?? String(i + 1),
+    title: a.title ?? a.heading ?? a.name ?? '',
+    body: a.body ?? a.description ?? a.detail ?? a.rationale ?? '',
+    ...a,
+  }));
 
   return (
     <div className="fd-container">
@@ -76,12 +85,16 @@ export default function NextSteps() {
       </div>
 
       <div className="rep-act-list stagger d2">
-        {ACTIONS.map((act) => (
+        {items.map((act) => (
           <div key={act.num} className="rep-act-card" style={{ padding: '24px' }}>
             <div className="rep-act-num">{act.num}</div>
             <div className="rep-act-content">
-              <p className="rep-act-text" style={{ fontSize: '14.5px', fontWeight: 500 }}>{act.text}</p>
-              <span className={`rep-act-tag ${act.tag}`} style={{ marginTop: 8 }}>{act.tagLabel}</span>
+              <p className="rep-act-text" style={{ fontSize: '14.5px', fontWeight: 500 }}>
+                {act.text || act.title || act.body}
+              </p>
+              {act.tagLabel && (
+                <span className={`rep-act-tag ${act.tag}`} style={{ marginTop: 8 }}>{act.tagLabel}</span>
+              )}
             </div>
           </div>
         ))}
@@ -143,4 +156,32 @@ export default function NextSteps() {
       </div>
     </div>
   );
+}
+
+
+/**
+ * Next steps come from the diagnosis recommendations, not a fixed list — they are
+ * the output of the founder's own report. Without a report there is nothing
+ * honest to recommend, so the page says so instead of showing generic advice.
+ */
+export default function NextSteps() {
+  const [state, setState] = useState({ status: 'loading' });
+
+  const load = useCallback(() => {
+    setState({ status: 'loading' });
+    getLatestReport()
+      .then(async (latest) => {
+        if (!latest) return setState({ status: 'no-report' });
+        const recs = await getRecommendations(latest.report_id).catch(() => null);
+        setState({ status: 'ready', actions: recs?.recommendations ?? recs?.items ?? [] });
+      })
+      .catch((error) => setState({ status: 'error', error }));
+  }, []);
+
+  useEffect(load, [load]);
+
+  if (state.status === 'loading') return <DnaLoading label="Loading your next steps…" />;
+  if (state.status === 'no-report') return <DnaNoReport kind="next steps" />;
+  if (state.status === 'error') return <DnaError onRetry={load} />;
+  return <NextStepsView actions={state.actions} />;
 }

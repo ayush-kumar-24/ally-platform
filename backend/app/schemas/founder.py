@@ -47,6 +47,10 @@ def _dedupe(v: list | None) -> list | None:
 CleanStrList = Annotated[list[str], AfterValidator(_clean_str_list), Field(max_length=30)]
 Feelings = Annotated[list[Feeling], AfterValidator(_dedupe), Field(max_length=8)]
 
+# "What's your biggest challenge right now?" is capped at three by the onboarding
+# spec. Enforced here as well as in the UI so the cap survives a direct API call.
+Challenges = Annotated[list[str], AfterValidator(_clean_str_list), Field(max_length=3)]
+
 
 class FounderRead(BaseModel):
     """A founder as the frontend sees it.
@@ -76,13 +80,19 @@ class FounderRead(BaseModel):
     experience_level: str | None = None
     emotional_state: list[str] | None = None  # multi-select feelings
     decision_making_style: str | None = None
+    # The stage-specific question asked at the end of onboarding. Stored since
+    # the flow was built, but missing here, so the whole-profile read never
+    # returned it and any screen showing the profile back had a blank row.
+    adaptive_reflection: str | None = None
 
     # Business DNA
     building_summary: str | None = None
     problem_statement: str | None = None
-    customer_segment: str | None = None
+    customer_segment: Any | None = None      # multi-select chips
+    customer_segment_other: str | None = None
     industry: str | None = None
     stage_id: int | None = None
+    stage_name: str | None = None      # resolved from stage_id, see Founder.stage_name
     current_challenges: Any | None = None
     goal_90_day: str | None = None
     vision_1_year: str | None = None
@@ -126,9 +136,12 @@ class FounderUpdate(BaseModel):
 
     building_summary: str | None = Field(default=None, max_length=5000)
     problem_statement: str | None = Field(default=None, max_length=5000)
-    customer_segment: str | None = Field(default=None, max_length=100)
-    industry: str | None = Field(default=None, max_length=100)
-    current_challenges: CleanStrList | None = None
+    customer_segment: CleanStrList | None = None            # multi-select chips
+    customer_segment_other: str | None = Field(default=None, max_length=200)
+    # industry is String(30) in the database. Bounding it at 100 here let a
+    # 31-100 character value pass validation and then fail at the insert.
+    industry: str | None = Field(default=None, max_length=30)
+    current_challenges: Challenges | None = None            # capped at 3
     goal_90_day: str | None = Field(default=None, max_length=5000)
     vision_1_year: str | None = Field(default=None, max_length=5000)
     team_size: str | None = Field(default=None, max_length=50)

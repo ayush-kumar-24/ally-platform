@@ -4,8 +4,9 @@ Both are read-only aggregations over data other modules own.
 
 Honesty about unavailable metrics
 --------------------------------
-Some cards (revenue, API cost, average response time) depend on tables that may not
-exist or may not be populated in a given environment. Rather than render a
+Some cards depend on tables that may not exist or be populated in a given
+environment. API cost and latency come from `llm_call_log`, which records the
+provider's own per-call cost -- so those figures are real, not estimated. Rather than render a
 confident `0`, an unavailable metric is returned as `None` with a reason, and the UI
 shows "—". A dashboard that displays ₹0 revenue when it simply cannot see the
 payments table is worse than one that admits it does not know: the first gets acted
@@ -115,7 +116,7 @@ class SqlAlchemyInsightsRepository(InsightsRepository):
             self._metric("active_today", "Active today",
                          "select count(*) from founders where last_active_at >= :since", p),
             self._metric("diagnoses_today", "Diagnoses today",
-                         "select count(*) from diagnosis_sessions where created_at >= :since", p),
+                         "select count(*) from sessions where started_at >= :since", p),
             self._metric("credits_used_today", "Credits used today",
                          """select coalesce(abs(sum(amount)), 0) from credit_transactions
                              where created_at >= :since and amount < 0""", p),
@@ -123,13 +124,13 @@ class SqlAlchemyInsightsRepository(InsightsRepository):
                          """select coalesce(sum(amount_inr), 0) from subscriptions
                              where status = 'active'""", unit="₹"),
             self._metric("api_cost", "API cost today",
-                         "select coalesce(sum(cost_usd), 0) from llm_usage where created_at >= :since",
-                         p, unit="$"),
+                         """select coalesce(sum(estimated_cost_usd), 0) from llm_call_log
+                             where created_at >= :since""", p, unit="$"),
             self._metric("active_chats", "Active chats",
                          """select count(*) from conversations
                              where updated_at >= :since""", p),
             self._metric("avg_response_ms", "Avg response time",
-                         """select round(avg(latency_ms)) from llm_usage
+                         """select round(avg(latency_ms)) from llm_call_log
                              where created_at >= :since""", p, unit="ms"),
         ]
 
@@ -150,14 +151,14 @@ class SqlAlchemyInsightsRepository(InsightsRepository):
                                         title="Account created",
                                         detail=r.get("email") or ""))
 
-        for r in self._rows("""select created_at, session_id, status from diagnosis_sessions
-                                where founder_id = :fid order by created_at desc limit 50""", p):
+        for r in self._rows("""select created_at, session_id, status from sessions
+                                where founder_id = :fid order by started_at desc limit 50""", p):
             events.append(TimelineEvent(at=r["created_at"], kind="diagnosis",
                                         title="Diagnosis session",
                                         detail=str(r.get("status") or ""),
                                         meta={"session_id": r.get("session_id")}))
 
-        for r in self._rows("""select created_at, report_id, report_type from reports
+        for r in self._rows("""select created_at, report_id, report_type from founder_reports
                                 where founder_id = :fid order by created_at desc limit 50""", p):
             events.append(TimelineEvent(at=r["created_at"], kind="report",
                                         title="Report generated",

@@ -65,7 +65,8 @@ def test_validate_becomes_valid_when_filled(founder_client):
     # fill every required field
     founder_client.patch("/api/v1/profile/business", json={
         "stage": "Validation", "building_summary": "x", "problem_statement": "x",
-        "customer_segment": "b2b", "industry": "saas", "current_challenges": ["retention"],
+        "customer_segment": ["Businesses"], "industry": "saas",
+        "current_challenges": ["retention"],
     })
     founder_client.patch("/api/v1/profile/goals", json={"goal_90_day": "x", "vision_1_year": "x"})
     founder_client.patch("/api/v1/profile/founder", json={

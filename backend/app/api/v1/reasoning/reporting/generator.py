@@ -247,5 +247,8 @@ class ReportGenerator:
 
     def _pct(self, value: Decimal, of_100: bool = False) -> str:
         if of_100:
-            return f"{value}/100"
+            # Was `f"{value}/100"` -- the raw Decimal, unrounded, so a report read
+            # "confidence is 0.0000/100" instead of "0/100". The percent branch
+            # below already rounds; this one didn't.
+            return f"{value.quantize(Decimal('1'))}/100"
         return f"{(value * 100).quantize(Decimal('1'))}%"

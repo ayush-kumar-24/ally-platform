@@ -5,13 +5,10 @@ import { FEATURES } from '../services/plans';
 import { addTask, listTasks, setTaskStatus } from '../services/planning';
 import { ApiError } from '../services/api';
 
-const CHIP_SUGGESTIONS = [
-  'Investor meeting at 10',
-  'Finish the pitch deck',
-  'Call Rahul',
-  'Review CAC',
-  'Book hotel'
-];
+/* There were five suggestion chips here -- "Investor meeting at 10", "Call
+   Rahul", "Review CAC" and so on. They were somebody's imagined day, and
+   "Rahul" was the mock founder's name. Prefilling a founder's plan with
+   invented tasks is the opposite of asking them what their day holds. */
 
 const PRIORITY_RANK = { high: 0, medium: 1, low: 2 };
 const sortByPriority = (tasks) =>
@@ -20,6 +17,17 @@ const sortByPriority = (tasks) =>
 function completedAtLabel(task) {
   if (!task.completed_at) return '';
   return new Date(task.completed_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+}
+
+/** "Today" / "Overdue" / "12 Aug" — a due date read the way a person reads it. */
+function dueLabel(task) {
+  if (!task?.due_date) return '';
+  const today = new Date().toISOString().slice(0, 10);
+  if (task.due_date === today) return 'Today';
+  if (task.due_date < today) return 'Overdue';
+  return new Date(`${task.due_date}T00:00:00`).toLocaleDateString(undefined, {
+    day: 'numeric', month: 'short',
+  });
 }
 
 function PlanYourDayInner() {
@@ -99,15 +107,15 @@ function PlanYourDayInner() {
     }
   };
 
-  const handleChipClick = (chip) => {
-    setInputText(prev => (prev ? `${prev}, ${chip}` : chip));
-  };
-
   const totalGoals = tasks.length;
   const completionPct = totalGoals > 0 ? Math.round((completedGoals.length / totalGoals) * 100) : 0;
   const strokeDashoffset = 308 - (completionPct / 100) * 308;
 
-  const nextReminder = activeGoals.find(t => t.due_date) || activeGoals[0] || null;
+  /* Genuinely the soonest due task. This used to fall back to activeGoals[0] --
+     an arbitrary task with no due date at all -- under a "reminder" heading. */
+  const nextReminder = activeGoals
+    .filter(t => t.due_date)
+    .sort((a, b) => String(a.due_date).localeCompare(String(b.due_date)))[0] || null;
   const firstName = (user?.name || 'there').split(' ')[0];
 
   return (
@@ -211,26 +219,16 @@ function PlanYourDayInner() {
                 </div>
               </div>
 
+              <label className="sr-only" htmlFor="pl-day">Tell Ally about your day</label>
               <textarea
+                id="pl-day"
                 className="pl-textarea"
-                placeholder="e.g. Investor meeting at 10, finish the pitch deck, call Rahul, review CAC..."
+                placeholder="Whatever's on your plate today…"
                 value={inputText}
                 disabled={submitting}
                 onChange={(e) => setInputText(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handlePlanMyDay())}
               />
-
-              <div className="pl-chips">
-                {CHIP_SUGGESTIONS.map((chip, idx) => (
-                  <button
-                    key={idx}
-                    className="pl-chip-btn"
-                    onClick={() => handleChipClick(chip)}
-                  >
-                    {chip}
-                  </button>
-                ))}
-              </div>
 
               <div className="pl-input-footer">
                 <div className="pl-input-hint">
@@ -286,18 +284,38 @@ function PlanYourDayInner() {
                 <p style={{ fontSize: '12.5px', color: 'var(--muted)', margin: 0 }}>Loading your tasks…</p>
               </div>
             ) : activeGoals.length === 0 ? (
+              /* "All caught up!" was shown to everyone with nothing active --
+                 including a founder opening this page for the very first time,
+                 who has not caught up on anything. */
               <div className="plan-empty" style={{ background: '#ffffff', padding: '24px', borderRadius: '14px', border: '1px solid var(--bd)' }}>
-                <h3 style={{ fontSize: '15px', fontWeight: 700, margin: '0 0 4px' }}>All caught up!</h3>
-                <p style={{ fontSize: '12.5px', color: 'var(--muted)', margin: 0 }}>No active tasks remaining for today.</p>
+                {tasks.length === 0 ? (
+                  <>
+                    <h3 style={{ fontSize: '15px', fontWeight: 700, margin: '0 0 4px' }}>Nothing planned yet.</h3>
+                    <p style={{ fontSize: '12.5px', color: 'var(--muted)', margin: 0 }}>
+                      Tell Ally what your day holds and it'll break it into tasks.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <h3 style={{ fontSize: '15px', fontWeight: 700, margin: '0 0 4px' }}>All caught up.</h3>
+                    <p style={{ fontSize: '12.5px', color: 'var(--muted)', margin: 0 }}>
+                      Nothing left on today's list.
+                    </p>
+                  </>
+                )}
               </div>
             ) : (
               activeGoals.map((task) => (
                 <div key={task.task_id} className="pl-goal-row">
                   <button
                     className="pl-checkbox"
+                    type="button"
+                    role="checkbox"
+                    aria-checked="false"
+                    aria-label={`Mark "${task.title}" as done`}
                     onClick={() => handleToggleActive(task)}
                   >
-                    <svg viewBox="0 0 12 12">
+                    <svg viewBox="0 0 12 12" aria-hidden="true">
                       <polyline points="2 6 5 9 10 3" />
                     </svg>
                   </button>
@@ -339,14 +357,27 @@ function PlanYourDayInner() {
                 <p style={{ fontSize: '12.5px', color: 'var(--muted)', margin: 0 }}>No tasks completed yet. Start checking off goals!</p>
               </div>
             ) : (
+              // Was a plain div with onClick: un-completing a task was
+              // mouse-only, unreachable by keyboard and invisible to screen
+              // readers.
               completedGoals.map((task) => (
                 <div
                   key={task.task_id}
                   className="pl-completed-row"
+                  role="checkbox"
+                  aria-checked="true"
+                  aria-label={`Mark "${task.title}" as not done`}
+                  tabIndex={0}
                   onClick={() => handleToggleCompleted(task)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      handleToggleCompleted(task);
+                    }
+                  }}
                   style={{ cursor: 'pointer' }}
                 >
-                  <div className="pl-checkbox">
+                  <div className="pl-checkbox" aria-hidden="true">
                     <svg viewBox="0 0 12 12">
                       <polyline points="2 6 5 9 10 3" />
                     </svg>
@@ -422,51 +453,33 @@ function PlanYourDayInner() {
             </div>
           </div>
 
-          {/* Upcoming Reminder Card */}
-          <div className="pl-reminder-kicker">Upcoming reminder</div>
-          <div className="pl-reminder-card">
-            <div className="pl-reminder-ic">
-              <svg viewBox="0 0 24 24">
-                <circle cx="12" cy="12" r="10" />
-                <polyline points="12 6 12 12 16 14" />
-              </svg>
-            </div>
-            <div className="pl-reminder-content">
-              <span className="pl-reminder-time">
-                {nextReminder?.due_date || '--:--'}
-              </span>
-              <span className="pl-reminder-title">
-                {nextReminder ? nextReminder.title : 'No upcoming goals'}
-              </span>
-            </div>
-          </div>
-          <p className="pl-reminder-hint">
-            Ally will nudge you about overdue or due-today tasks while you're active in the app.
-          </p>
+          {/* Only shown when something is actually scheduled. It used to render
+              regardless, with "--:--" and "No upcoming goals" under a heading
+              that promised a reminder. */}
+          {nextReminder && (
+            <>
+              <div className="pl-reminder-kicker">Next due</div>
+              <div className="pl-reminder-card">
+                <div className="pl-reminder-ic">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <circle cx="12" cy="12" r="10" />
+                    <polyline points="12 6 12 12 16 14" />
+                  </svg>
+                </div>
+                <div className="pl-reminder-content">
+                  <span className="pl-reminder-time">{dueLabel(nextReminder)}</span>
+                  <span className="pl-reminder-title">{nextReminder.title}</span>
+                </div>
+              </div>
+              <p className="pl-reminder-hint">
+                Ally nudges you about overdue or due-today tasks while you're in the app.
+              </p>
+            </>
+          )}
 
-          {/* Daily Motivation Card */}
-          <div
-            className="pl-reminder-kicker"
-            style={{ fontSize: '10px', color: 'var(--emerald-dark)' }}
-          >
-            Daily motivation
-          </div>
-          <div className="pl-motiv-card">
-            <div className="pl-reminder-ic" style={{ background: 'rgba(16, 185, 129, 0.12)' }}>
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.2"
-              >
-                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-              </svg>
-            </div>
-            <div>
-              <div className="pl-motiv-kicker">Daily Motivation</div>
-              <p className="pl-motiv-text">Complete the hardest task first.</p>
-            </div>
-          </div>
+          {/* A "Daily Motivation" card sat here reading "Complete the hardest
+              task first." -- the same sentence for every founder, every day,
+              forever. Labelling a constant "daily" is the giveaway. */}
         </div>
       </div>
     </div>
