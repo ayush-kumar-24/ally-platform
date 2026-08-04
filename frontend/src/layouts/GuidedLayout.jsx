@@ -67,6 +67,12 @@ export default function GuidedLayout() {
   const handleBack = () => navigate(-1);
   const handleExit = () => { exitGuided(); navigate('/'); };
 
+  /* The shell below was height:100vh + overflow:hidden, which pinned the guided
+     flow to the viewport and left no page scroll at all. Any screen taller than
+     the window -- the summary, with thirteen answers plus Ally's read -- had to
+     grow its own inner scrollbar, so content below the fold was reachable only
+     by scrolling inside a box. minHeight lets the page itself scroll. */
+
   /* Onboarding writes to the founder's row from the very first answer, so it
      needs a session before it starts -- not at the end. Without one, the dev
      auth fallback resolves every request to a placeholder founder that has no
@@ -79,7 +85,7 @@ export default function GuidedLayout() {
   }
 
   return (
-    <div style={{ position: 'relative', height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+    <div style={{ position: 'relative', minHeight: '100vh', display: 'flex', flexDirection: 'column', overflowX: 'hidden' }}>
       <div id="guidedBg" style={{ display: 'block' }}>
         <div className="gb-orb o1" />
         <div className="gb-orb o2" />

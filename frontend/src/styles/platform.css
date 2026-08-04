@@ -74,7 +74,7 @@
 .btn-dark-ghost:hover{background:rgba(255,255,255,.14)}
 
 /* view-wrap */
-.view-wrap{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+.view-wrap{flex:1;min-height:0;display:flex;flex-direction:column;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch}
 .view{display:none}
 .view.active{display:block;flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;scroll-behavior:smooth;overscroll-behavior:contain}
 .pad{padding:26px 32px 60px;max-width:1120px;margin:0 auto}

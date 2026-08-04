@@ -132,7 +132,7 @@ export default function Summary() {
         </div>
 
         <div className="summary-card">
-          <div className="sc-fields" style={{ maxHeight: 'calc(100vh - 290px)', overflowY: 'auto' }}>
+          <div className="sc-fields">
             {FIELD_ORDER.map(([key, label, opts]) => (
               <div key={key} className="sc-f">
                 <label htmlFor={`sc-${key}`}>{label}</label>
