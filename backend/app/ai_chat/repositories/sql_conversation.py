@@ -75,6 +75,23 @@ class SqlConversationRepository(ConversationRepository):
         # same request (or process) still works; lost on restart, by design.
         self._summaries = _SUMMARY_STORE
 
+    def _persist(self) -> None:
+        """Write, and mean it.
+
+        Every mutating method here used to end at `flush()`. Flush sends the
+        INSERT so the row gets its id -- which is why creating a conversation
+        returned a perfectly real conversation_id -- but it does not commit, and
+        `get_db` closes the session without committing either. So the row was
+        rolled back the moment the request finished, and the next request looked
+        up an id that no longer existed anywhere: every POST /chat/message came
+        back 404 ConversationNotFound, and the conversations table stayed empty.
+
+        This repository is the founder's message storage; a write that silently
+        disappears is the one failure mode it must not have.
+        """
+        self.db.flush()
+        self.db.commit()
+
     # --- conversations -----------------------------------------------------
 
     def add_conversation(self, conversation: Conversation) -> None:
@@ -93,7 +110,7 @@ class SqlConversationRepository(ConversationRepository):
             updated_at=conversation.updated_at,
         )
         self.db.add(row)
-        self.db.flush()
+        self._persist()
 
     def get_conversation(self, conversation_id: str) -> Conversation | None:
         row = self._get_row(conversation_id)
@@ -114,7 +131,7 @@ class SqlConversationRepository(ConversationRepository):
         row.meta_data = dict(conversation.metadata)
         row.last_message_at = conversation.last_message_at
         row.updated_at = conversation.updated_at
-        self.db.flush()
+        self._persist()
 
     def list_conversations(
         self, founder_id: int, *, statuses: tuple[ConversationStatus, ...]
@@ -138,7 +155,7 @@ class SqlConversationRepository(ConversationRepository):
         if row is None:
             return False
         self.db.delete(row)  # ON DELETE CASCADE removes its messages
-        self.db.flush()
+        self._persist()
         with _SUMMARY_LOCK:
             self._summaries.pop(conversation_id, None)
         return True
@@ -167,7 +184,7 @@ class SqlConversationRepository(ConversationRepository):
             created_at=message.created_at,
         )
         self.db.add(row)
-        self.db.flush()
+        self._persist()
 
     def list_messages(self, conversation_id: str) -> tuple[ConversationMessage, ...]:
         conv_row = self._get_row(conversation_id)

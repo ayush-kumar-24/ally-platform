@@ -309,6 +309,13 @@ button.ac-pcard {
   cursor: pointer;
 }
 
+/* `.pc-t` is claimed by two unrelated components: the chat prompt card, and the
+   completed-plan-goal row, whose global rule strikes it through to show it is
+   done (platform.css, near .plan-cgoal). The chat rule sets font and colour but
+   never reset text-decoration, so every prompt card title rendered struck out
+   as though the suggestion had already been used. */
+.ac-pcard .pc-t { text-decoration: none; }
+
 .ci-btn:disabled,
 .ci-btn.send:disabled { opacity: .45; cursor: not-allowed; }
 .ci-row textarea:disabled { opacity: .6; cursor: not-allowed; }

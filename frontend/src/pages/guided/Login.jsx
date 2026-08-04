@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import AuthTransition from '../../components/AuthTransition';
 import { CURRENT_VERSIONS, flushPendingConsent, recordConsent, savePendingConsent } from '../../services/consents';
@@ -9,6 +9,9 @@ import { supabaseConfigured } from '../../services/supabaseClient';
 
 export default function Login() {
   const navigate = useNavigate();
+  const location = useLocation();
+  // Where they were going before the session ran out, if anywhere.
+  const returnTo = location.state?.from || '/guided/welcome';
   const { setUser } = useApp();
   const [showAuthTransition, setShowAuthTransition] = useState(false);
   const [agreeTerms, setAgreeTerms] = useState(false);
@@ -152,7 +155,11 @@ export default function Login() {
     <section className="view j-stage active auth-active" id="v-login">
       {showAuthTransition && (
         <AuthTransition
-          onNavigate={() => navigate('/guided/welcome')}
+          // RequireAuth records where the founder was heading when their
+          // session ran out. Without honouring it, anyone whose token expired
+          // mid-flow was dropped back at the start of onboarding with no
+          // explanation and no way back to where they were.
+          onNavigate={() => navigate(returnTo, { replace: true })}
           onComplete={() => setShowAuthTransition(false)}
         />
       )}

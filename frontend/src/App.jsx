@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { useApp } from './context/AppContext';
 import { clearTokens, onAuthFailure } from './services/api';
+import { startDevSession } from './services/auth';
+import { supabaseConfigured } from './services/supabaseClient';
 import ErrorBoundary from './components/ErrorBoundary';
 import RequireAuth from './components/RequireAuth';
 import SplashScreen from './components/SplashScreen';
@@ -61,7 +63,19 @@ export default function App() {
   // message, which reads as a network problem rather than "please sign in
   // again." This sends them to login instead, which is what actually fixes it.
   useEffect(() => {
-    onAuthFailure(() => {
+    onAuthFailure(async () => {
+      /* Local development has no Supabase, so "sign in again" means clicking
+         through the login page to re-mint the same dev session -- which is
+         exactly what happens automatically here instead. Access tokens last 30
+         minutes, and walking the guided flow at reading speed takes longer than
+         that, so without this a founder gets dumped back at login mid-journey
+         and loses their place. Never runs in production, where Supabase is
+         configured and a real sign-in is genuinely required. */
+      if (!supabaseConfigured) {
+        try {
+          if (await startDevSession()) return;
+        } catch { /* fall through to the real sign-out below */ }
+      }
       clearTokens();
       localStorage.removeItem('ally_founder');
       navigate('/guided/login', { replace: true });
