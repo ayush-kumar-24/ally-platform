@@ -20,6 +20,9 @@ from app.services.llm.registry import (
     get_provider,
     register_provider,
 )
+from app.services.llm.router import LLMTask, TaskModel, resolve_task_model
+from app.services.llm.tasks import provider_for_task
+from app.services.llm.telemetry import estimate_cost
 
 __all__ = [
     "LLMConfigurationError",
@@ -34,4 +37,9 @@ __all__ = [
     "available_providers",
     "get_provider",
     "register_provider",
+    "LLMTask",
+    "TaskModel",
+    "resolve_task_model",
+    "provider_for_task",
+    "estimate_cost",
 ]

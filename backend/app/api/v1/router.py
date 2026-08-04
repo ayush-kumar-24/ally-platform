@@ -1,7 +1,6 @@
 from fastapi import APIRouter
 from sqlalchemy import text
 
-from app.api.v1.ally.chat.router import router as ally_router
 from app.api.v1.chat.router import router as chat_api_router
 from app.api.v1.admin.router import router as admin_router
 from app.api.v1.planning.router import router as planning_router
@@ -22,6 +21,7 @@ from app.api.v1.reference.routes import router as reference_router
 from app.api.v1.reports.routes import router as reports_router
 from app.api.v1.settings.routes import router as settings_router
 from app.api.v1.settings.router import router as settings_preferences_router
+from app.api.v1.voice.router import router as voice_router
 from app.db.session import engine
 
 api_router = APIRouter(prefix="/api/v1")
@@ -37,13 +37,13 @@ api_router.include_router(knowledge_router)
 api_router.include_router(intelligence_router)
 api_router.include_router(reference_router)
 api_router.include_router(dashboard_router)
-api_router.include_router(ally_router)
 api_router.include_router(reports_router)
 api_router.include_router(chat_api_router)
 api_router.include_router(admin_router)
 api_router.include_router(planning_router)
 api_router.include_router(consents_router)
 api_router.include_router(privacy_router)
+api_router.include_router(voice_router)
 api_router.include_router(plans_router)
 # Registered after the Phase 12 admin router; paths are distinct (/admin/users,
 # /admin/credits, /admin/audit vs /admin/founders, /admin/announcements).

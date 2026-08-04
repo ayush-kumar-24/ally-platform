@@ -28,6 +28,7 @@ def build_filters(
     top_k: int = 5,
     min_similarity: Decimal = _ZERO,
     intent: str | None = None,
+    allow_sales_collateral: bool = False,
 ) -> RetrievalFilters:
     founder = context.founder
 
@@ -53,4 +54,5 @@ def build_filters(
         min_similarity=min_similarity,
         top_k=max(0, top_k),
         intent=intent,
+        allow_sales_collateral=allow_sales_collateral,
     )

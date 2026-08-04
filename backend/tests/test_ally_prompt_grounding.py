@@ -230,3 +230,47 @@ def test_graph_expansion_falls_back_to_nodes_without_edges():
 
 def test_inherited_render_is_a_grounded_manager():
     assert isinstance(default_grounded_prompt_manager(), GroundedPromptManager)
+
+
+# --- general_chat_grounded (default chat category -- can talk about anything) --
+
+
+def test_general_chat_renders_without_a_diagnosis():
+    """The behaviour the diagnosis-only default used to break: a founder with no
+    diagnosis yet must still get a rendered prompt, not a fail-closed error."""
+    no_diagnosis_ctx = AllyContext(
+        founder=FounderProfileContext(3, "Priya", None, None, None), has_diagnosis=False,
+    )
+    src = source(ctx=no_diagnosis_ctx, message="hey, how's it going?", category="general_chat")
+    rendered = default_grounded_prompt_manager().render_grounded(src)
+    assert rendered.template_key == "general_chat_grounded.standard"
+    assert "No diagnosis completed yet." in rendered.user_prompt
+    assert "hey, how's it going?" in rendered.user_prompt
+
+
+def test_general_chat_includes_diagnosis_when_present():
+    src = source(category="general_chat")  # default make_ctx() has a diagnosis
+    rendered = default_grounded_prompt_manager().render_grounded(src)
+    assert "Focus on activation." in rendered.user_prompt
+    assert "Weak activation" in rendered.user_prompt
+
+
+def test_general_chat_attachments_use_sentinel_when_absent():
+    src = source(category="general_chat")
+    rendered = default_grounded_prompt_manager().render_grounded(src)
+    assert "No files uploaded in this conversation." in rendered.user_prompt
+
+
+def test_general_chat_attachments_are_rendered_when_present():
+    src = source(category="general_chat")
+    src.attachments_text = "- notes.txt (text, 1 KB):\nfollow up with sales"
+    rendered = default_grounded_prompt_manager().render_grounded(src)
+    assert "follow up with sales" in rendered.user_prompt
+
+
+def test_general_chat_distress_selects_distress_template():
+    src = source(ctx=make_ctx(distress=True), category="general_chat",
+                 memory=[make_memory("Had a tough fundraising month.", 60)])
+    rendered = default_grounded_prompt_manager().render_grounded(src)
+    assert rendered.template_key == "general_chat_grounded.distress"
+    assert "tough fundraising month" in rendered.user_prompt

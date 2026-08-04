@@ -99,3 +99,61 @@ class PlanDetail:
 
     plan: Plan
     goals: tuple[GoalWithTasks, ...]
+
+
+# --- progress (derived, deterministic -- no stored field) -------------------
+@dataclass(frozen=True)
+class ProgressCounts:
+    total: int
+    todo: int
+    in_progress: int
+    done: int
+    percent_complete: int          # round(done / total * 100); 0 when total == 0
+
+
+@dataclass(frozen=True)
+class GoalProgress:
+    goal_id: str
+    title: str
+    status: ProgressStatus
+    tasks: ProgressCounts
+
+
+@dataclass(frozen=True)
+class PlanProgress:
+    """A plan's completion, computed from task/goal status -- never stored."""
+
+    plan_id: str
+    tasks: ProgressCounts          # across every task in the plan
+    goals: ProgressCounts          # the goals themselves, counted by status
+    per_goal: tuple[GoalProgress, ...]
+
+
+# --- reminders --------------------------------------------------------------
+class ReminderChannel(str, Enum):
+    IN_APP = "in_app"
+    EMAIL = "email"
+
+
+class ReminderStatus(str, Enum):
+    SCHEDULED = "scheduled"
+    SENT = "sent"
+    CANCELLED = "cancelled"
+
+
+@dataclass(frozen=True)
+class Reminder:
+    """A scheduled nudge for a task. Storage + API only -- the actual delivery is a
+    separate worker's job (query due_reminders, send, mark_reminder_sent)."""
+
+    reminder_id: str
+    task_id: str
+    plan_id: str
+    founder_id: int
+    remind_at: datetime
+    channel: ReminderChannel
+    status: ReminderStatus
+    note: str
+    created_at: datetime
+    updated_at: datetime
+    sent_at: datetime | None = None

@@ -7,7 +7,10 @@ import {
   sendMessage,
   toUiMessage,
 } from '../services/chat';
-import { explainLimit, getMyPlan } from '../services/plans';
+import { post, ApiError } from '../services/api';
+import { useVoiceInput } from '../hooks/useVoiceInput';
+import { usePlan as usePlanGateEntitlements } from '../components/PlanGate';
+import { explainLimit, getMyPlan, can, FEATURES } from '../services/plans';
 
 const PROMPT_CARDS = [
   { t: 'Help me increase revenue', s: 'Find the highest-leverage growth lever' },
@@ -18,15 +21,13 @@ const PROMPT_CARDS = [
   { t: 'Create a GTM strategy', s: 'A go-to-market plan for launch' },
 ];
 
-
-
 function greeting() {
   const h = new Date().getHours();
   return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
 }
 
 export default function AllyChat() {
-  const { user } = useApp();
+  const { user, showToast } = useApp();
   const [histOpen, setHistOpen] = useState(false);
   const [activeConv, setActiveConv] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -36,8 +37,10 @@ export default function AllyChat() {
   const [limitNotice, setLimitNotice] = useState(null);
   const [sending, setSending] = useState(false);
   const [plan, setPlan] = useState(null);
+  const [uploading, setUploading] = useState(false);
   const scrollRef = useRef(null);
   const taRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -108,7 +111,10 @@ export default function AllyChat() {
             : "I couldn't put together a grounded answer just then. Try rephrasing, or ask me something else.",
         }]);
       } else {
-        setMessages(prev => [...prev, { role: 'ally', text: reply, time: 'Just now' }]);
+        setMessages(prev => [...prev, {
+          role: 'ally', text: reply, time: 'Just now',
+          confidence: res.confidence != null ? Math.round(res.confidence * 100) : undefined,
+        }]);
       }
     } catch (err) {
       // 403/402/429 are the plan gate doing its job -- show what it means and
@@ -119,7 +125,9 @@ export default function AllyChat() {
       } else {
         setMessages(prev => [...prev, {
           role: 'ally',
-          text: "I couldn't reach the server just then. Your message wasn't lost — try sending it again.",
+          text: err instanceof ApiError && err.isNetwork
+            ? "I couldn't reach the server — check your connection and try again."
+            : "I couldn't reach the server just then. Your message wasn't lost — try sending it again.",
           time: 'Just now',
         }]);
       }
@@ -127,6 +135,63 @@ export default function AllyChat() {
       setTyping(false);
       setSending(false);
     }
+  };
+
+  // A conversation is created lazily by the first send() call. Attachments need
+  // an existing conversation_id up front, so this creates one on demand if there
+  // isn't one yet (e.g. attaching a file before typing anything).
+  const ensureConversation = async () => {
+    if (activeConv) return activeConv;
+    const created = await createConversation();
+    setActiveConv(created.conversation_id);
+    setConversations(prev => [created, ...prev]);
+    return created.conversation_id;
+  };
+
+  const handleAttachClick = () => fileInputRef.current?.click();
+
+  const handleFileSelected = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-selecting the same file later
+    if (!file) return;
+    setUploading(true);
+    try {
+      const conversationId = await ensureConversation();
+      const form = new FormData();
+      form.append('conversation_id', conversationId);
+      form.append('file', file);
+      await post('/chat/attachments', form, { headers: { 'Content-Type': undefined } });
+      showToast(`Attached "${file.name}" — mention it in your message and I'll take it into account.`);
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.detail : 'Could not attach that file — please try again.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // PlanGate's usePlan() gives a lightweight `{plan, loading}` read used only for
+  // the voice-input gate; `plan` (above) is the fuller /plans/me object the usage
+  // bar needs. Two different shapes for two different jobs, both real API-backed.
+  const { plan: entitlementPlan } = usePlanGateEntitlements();
+  const canUseVoice = !entitlementPlan || can(entitlementPlan, FEATURES.VOICE_CHAT);
+  const upgradeMessage = 'Voice chat is a paid-plan feature. Voice input is available for free during your diagnosis.';
+
+  const voice = useVoiceInput({
+    context: 'chat',
+    onTranscribed: (text) => {
+      setInput(prev => (prev ? `${prev} ${text}` : text));
+      sizeTa();
+    },
+    onUpgradeRequired: () => showToast(upgradeMessage),
+    onError: () => showToast('Could not access the microphone — check your browser permissions.'),
+  });
+
+  const handleMicClick = () => {
+    if (!canUseVoice) {
+      showToast(upgradeMessage);
+      return;
+    }
+    voice.toggle();
   };
 
   const dailyLimit = plan?.daily_token_limit ?? 0;
@@ -270,7 +335,18 @@ export default function AllyChat() {
             </span>
           </div>
           <div className="ci-row">
-            <button className="ci-btn" title="Attach a file or image">
+            <input
+              ref={fileInputRef}
+              type="file"
+              style={{ display: 'none' }}
+              onChange={handleFileSelected}
+            />
+            <button
+              className="ci-btn"
+              title="Attach a file or image"
+              disabled={uploading}
+              onClick={handleAttachClick}
+            >
               <svg viewBox="0 0 24 24"><path d="M21.4 11.05 12.25 20.2a5.5 5.5 0 01-7.78-7.78l9.19-9.19a3.5 3.5 0 114.95 4.95l-9.2 9.19a1.5 1.5 0 01-2.12-2.12l8.49-8.49"/></svg>
             </button>
             <textarea
@@ -281,7 +357,13 @@ export default function AllyChat() {
               onChange={e => { setInput(e.target.value); sizeTa(); }}
               onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(input); } }}
             />
-            <button className="ci-btn" title="Voice input" aria-pressed="false">
+            <button
+              className={`ci-btn${voice.status === 'recording' ? ' recording' : ''}`}
+              title={canUseVoice ? 'Voice input' : 'Voice input (paid plan)'}
+              aria-pressed={voice.status === 'recording'}
+              disabled={voice.status === 'transcribing'}
+              onClick={handleMicClick}
+            >
               <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/></svg>
             </button>
             <button className="ci-btn send" onClick={() => send(input)} title="Send">

@@ -9,8 +9,10 @@ window is a valid GroundingSource for the frozen grounded prompt manager.
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from itertools import count
+from types import SimpleNamespace
 
 from app.ai_chat import ContextWindowBuilder, ContextWindowConfig, MessageRole, build_conversation_service
+from app.ai_chat.attachments.schemas import AttachmentType, SupportedMimeType
 from app.api.v1.ally.context.schemas import (
     AllyContext,
     DiagnosisContext,
@@ -90,7 +92,7 @@ class Boom:
         return _raise
 
 
-def setup(*, memory=None, retrieval=None, kg=None, config=None):
+def setup(*, memory=None, retrieval=None, kg=None, attachments=None, config=None):
     conv = build_conversation_service(clock=FakeClock(), id_factory=_ids())
     mem = memory if memory is not None else build_memory_service(InMemoryMemoryRepository(), clock=FakeClock())
     builder = ContextWindowBuilder(
@@ -98,6 +100,7 @@ def setup(*, memory=None, retrieval=None, kg=None, config=None):
         memory=mem,
         retrieval=_retrieval() if retrieval is None else retrieval,
         knowledge_graph=_kg() if kg is None else kg,
+        attachments=attachments,
         config=config,
     )
     return conv, builder
@@ -177,6 +180,135 @@ def test_graph_failure_degrades():
     c = _conv_with(conv, (U, "hi"))
     w = builder.build(ally_context=make_ctx(), conversation=c, current_message="hi")
     assert w.graph_injected is False and w.graph is None
+
+
+# --- attachments (Milestone 4 -- files uploaded in this conversation) -------
+
+
+class FakeAttachment:
+    def __init__(self, attachment_id, filename, attachment_type, size_bytes, mime_type=None):
+        self.attachment_id = attachment_id
+        self.metadata = SimpleNamespace(
+            filename=filename, attachment_type=attachment_type, size_bytes=size_bytes,
+            mime_type=mime_type,
+        )
+
+
+class FakeAttachments:
+    def __init__(self, items=(), content=None):
+        self._items = items
+        self._content = content or {}
+
+    def list_attachments(self, conversation_id):
+        return self._items
+
+    def get_content(self, attachment_id):
+        return self._content.get(attachment_id)
+
+
+def test_attachments_not_configured_is_not_injected():
+    conv, builder = setup()  # no attachments service wired
+    c = _conv_with(conv, (U, "hi"))
+    w = builder.build(ally_context=make_ctx(), conversation=c, current_message="hi")
+    assert w.attachments_injected is False and w.attachments_text == ""
+
+
+def test_text_attachment_content_is_inlined():
+    att = FakeAttachment("att-1", "notes.txt", AttachmentType.TEXT, 20)
+    attachments = FakeAttachments(items=(att,), content={"att-1": b"remember to follow up with sales"})
+    conv, builder = setup(attachments=attachments)
+    c = _conv_with(conv, (U, "hi"))
+    w = builder.build(ally_context=make_ctx(), conversation=c, current_message="hi")
+    assert w.attachments_injected is True
+    assert "notes.txt" in w.attachments_text
+    assert "remember to follow up with sales" in w.attachments_text
+
+
+def test_binary_attachment_is_named_not_fabricated():
+    att = FakeAttachment("att-2", "deck.pdf", AttachmentType.DOCUMENT, 4096)
+    attachments = FakeAttachments(items=(att,))  # no decodable content
+    conv, builder = setup(attachments=attachments)
+    c = _conv_with(conv, (U, "hi"))
+    w = builder.build(ally_context=make_ctx(), conversation=c, current_message="hi")
+    assert "deck.pdf" in w.attachments_text
+    assert "cannot be read yet" in w.attachments_text
+
+
+def test_pdf_attachment_text_is_extracted_and_inlined():
+    from reportlab.pdfgen import canvas
+
+    buf = __import__("io").BytesIO()
+    c = canvas.Canvas(buf)
+    c.drawString(100, 750, "Runway is eleven months")
+    c.save()
+    pdf_bytes = buf.getvalue()
+
+    att = FakeAttachment("att-3", "board-deck.pdf", AttachmentType.DOCUMENT, len(pdf_bytes),
+                          mime_type=SupportedMimeType.PDF)
+    attachments = FakeAttachments(items=(att,), content={"att-3": pdf_bytes})
+    conv, builder = setup(attachments=attachments)
+    c2 = _conv_with(conv, (U, "hi"))
+    w = builder.build(ally_context=make_ctx(), conversation=c2, current_message="hi")
+    assert "board-deck.pdf" in w.attachments_text
+    assert "Runway is eleven months" in w.attachments_text
+
+
+def test_docx_attachment_text_is_extracted_and_inlined():
+    from docx import Document
+
+    buf = __import__("io").BytesIO()
+    doc = Document()
+    doc.add_paragraph("We are hiring two engineers this quarter.")
+    doc.save(buf)
+    docx_bytes = buf.getvalue()
+
+    att = FakeAttachment("att-4", "hiring-plan.docx", AttachmentType.DOCUMENT, len(docx_bytes),
+                          mime_type=SupportedMimeType.DOCX)
+    attachments = FakeAttachments(items=(att,), content={"att-4": docx_bytes})
+    conv, builder = setup(attachments=attachments)
+    c2 = _conv_with(conv, (U, "hi"))
+    w = builder.build(ally_context=make_ctx(), conversation=c2, current_message="hi")
+    assert "hiring-plan.docx" in w.attachments_text
+    assert "hiring two engineers" in w.attachments_text
+
+
+def test_corrupted_pdf_attachment_is_named_not_fabricated():
+    att = FakeAttachment("att-5", "corrupt.pdf", AttachmentType.DOCUMENT, 4,
+                          mime_type=SupportedMimeType.PDF)
+    attachments = FakeAttachments(items=(att,), content={"att-5": b"nope"})
+    conv, builder = setup(attachments=attachments)
+    c2 = _conv_with(conv, (U, "hi"))
+    w = builder.build(ally_context=make_ctx(), conversation=c2, current_message="hi")
+    assert w.attachments_injected is True  # the block itself still renders
+    assert "corrupt.pdf" in w.attachments_text
+    assert "cannot be read yet" in w.attachments_text
+
+
+def test_attachment_byte_budget_falls_back_to_name_only_past_the_cap():
+    big = FakeAttachment("att-6", "huge.txt", AttachmentType.TEXT, 1000)
+    small = FakeAttachment("att-7", "small.txt", AttachmentType.TEXT, 10)
+    attachments = FakeAttachments(
+        items=(big, small),
+        content={"att-6": b"x" * 1000, "att-7": b"tiny note"},
+    )
+    conv, builder = setup(
+        attachments=attachments,
+        config=ContextWindowConfig(attachment_byte_budget=1),
+    )
+    c2 = _conv_with(conv, (U, "hi"))
+    w = builder.build(ally_context=make_ctx(), conversation=c2, current_message="hi")
+    # first file is within budget (spent starts at 0) -> extracted
+    assert "x" * 1000 in w.attachments_text
+    # second file pushes past the tiny budget -> name-only, not fabricated
+    assert "small.txt" in w.attachments_text
+    assert "tiny note" not in w.attachments_text
+
+
+def test_attachments_failure_degrades():
+    conv, builder = setup(attachments=Boom())
+    c = _conv_with(conv, (U, "hi"))
+    w = builder.build(ally_context=make_ctx(), conversation=c, current_message="hi")
+    assert w.attachments_injected is False and w.attachments_text == ""
 
 
 # --- deterministic trimming -------------------------------------------------

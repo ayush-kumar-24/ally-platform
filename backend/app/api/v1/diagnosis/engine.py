@@ -111,16 +111,24 @@ class QuestionSelectionEngine:
         None is the completion signal: the service turns it into a completed
         session. It is a legitimate outcome, not an error.
         """
-        stage_groups = resolve_stage_groups(founder)
-        candidates = self.repository.list_candidate_questions(
-            session_id=session.session_id,
-            stage_groups=stage_groups,
-        )
-
+        candidates = self.candidate_questions(session, founder)
         if not candidates:
             return None
-
         return min(candidates, key=_sort_key)
+
+    def candidate_questions(
+        self, session: DiagnosisSession, founder: Founder
+    ) -> list[Question]:
+        """Unanswered, stage-eligible questions for this session (unordered)."""
+        return self.repository.list_candidate_questions(
+            session_id=session.session_id,
+            stage_groups=resolve_stage_groups(founder),
+        )
+
+    @staticmethod
+    def order_candidates(candidates: list[Question]) -> list[Question]:
+        """The deterministic ask-order -- the shortlist head is the default pick."""
+        return sorted(candidates, key=_sort_key)
 
     def resolve_follow_up(self, session: DiagnosisSession, answer_question: Question) -> None:
         """Follow-up hook -- inert until scoring exists.

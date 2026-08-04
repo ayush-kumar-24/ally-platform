@@ -6,7 +6,7 @@ mirrors the app's other repositories (commit + return the domain object).
 
 from __future__ import annotations
 
-from app.planning.db_models import GoalRow, PlanRow, TaskRow
+from app.planning.db_models import GoalRow, PlanRow, ReminderRow, TaskRow
 from app.planning.models import (
     Goal,
     ItemSource,
@@ -14,9 +14,20 @@ from app.planning.models import (
     PlanStatus,
     Priority,
     ProgressStatus,
+    Reminder,
+    ReminderChannel,
+    ReminderStatus,
     Task,
 )
 from app.planning.repository import PlanningRepository
+
+
+def _reminder(row: ReminderRow) -> Reminder:
+    return Reminder(reminder_id=row.reminder_id, task_id=row.task_id, plan_id=row.plan_id,
+                    founder_id=row.founder_id, remind_at=row.remind_at,
+                    channel=ReminderChannel(row.channel), status=ReminderStatus(row.status),
+                    note=row.note, created_at=row.created_at, updated_at=row.updated_at,
+                    sent_at=row.sent_at)
 
 
 def _plan(row: PlanRow) -> Plan:
@@ -129,3 +140,40 @@ class SqlAlchemyPlanningRepository(PlanningRepository):
         rows = (self.db.query(TaskRow).filter(TaskRow.goal_id == goal_id)
                 .order_by(TaskRow.created_at, TaskRow.task_id).all())
         return tuple(_task(r) for r in rows)
+
+    # --- reminders -------------------------------------------------------
+    def add_reminder(self, reminder):
+        self.db.add(ReminderRow(
+            reminder_id=reminder.reminder_id, task_id=reminder.task_id, plan_id=reminder.plan_id,
+            founder_id=reminder.founder_id, remind_at=reminder.remind_at,
+            channel=reminder.channel.value, status=reminder.status.value, note=reminder.note,
+            created_at=reminder.created_at, updated_at=reminder.updated_at, sent_at=reminder.sent_at))
+        self.db.commit()
+        return reminder
+
+    def get_reminder(self, reminder_id):
+        row = self.db.get(ReminderRow, reminder_id)
+        return _reminder(row) if row else None
+
+    def replace_reminder(self, reminder):
+        row = self.db.get(ReminderRow, reminder.reminder_id)
+        if row is None:
+            return self.add_reminder(reminder)
+        row.status, row.note, row.remind_at = reminder.status.value, reminder.note, reminder.remind_at
+        row.channel, row.updated_at, row.sent_at = reminder.channel.value, reminder.updated_at, reminder.sent_at
+        self.db.commit()
+        return reminder
+
+    def list_reminders(self, founder_id, *, task_id=None):
+        q = self.db.query(ReminderRow).filter(ReminderRow.founder_id == founder_id)
+        if task_id is not None:
+            q = q.filter(ReminderRow.task_id == task_id)
+        rows = q.order_by(ReminderRow.remind_at, ReminderRow.reminder_id).all()
+        return tuple(_reminder(r) for r in rows)
+
+    def due_reminders(self, before):
+        rows = (self.db.query(ReminderRow)
+                .filter(ReminderRow.status == ReminderStatus.SCHEDULED.value,
+                        ReminderRow.remind_at <= before)
+                .order_by(ReminderRow.remind_at, ReminderRow.reminder_id).all())
+        return tuple(_reminder(r) for r in rows)

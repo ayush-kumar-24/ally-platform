@@ -54,6 +54,7 @@ class RetrievalService:
         top_k: int | None = None,
         min_similarity: Decimal | None = None,
         intent: str | None = None,
+        allow_sales_collateral: bool = False,
     ) -> RetrievalResult:
         if not self.enabled:
             return self._empty(query, filters=None, enabled=False)
@@ -61,7 +62,10 @@ class RetrievalService:
         top = self.default_top_k if top_k is None else max(0, top_k)
         min_sim = self.default_min_similarity if min_similarity is None else min_similarity
 
-        filters = build_filters(context, top_k=top, min_similarity=min_sim, intent=intent)
+        filters = build_filters(
+            context, top_k=top, min_similarity=min_sim, intent=intent,
+            allow_sales_collateral=allow_sales_collateral,
+        )
         request = RetrievalRequest(query=query, filters=filters, top_k=top)
 
         try:
@@ -72,6 +76,12 @@ class RetrievalService:
                 extra={"stage": "rag_retrieval", "error": str(exc)},
             )
             return self._empty(query, filters=filters, enabled=True)
+
+        # Definitive safety net: even if a repository ignores passes_filters (e.g. a
+        # future DB wrapper), restricted content never leaves this service unless the
+        # caller explicitly opted in. Applied before dedup/rank/top-k.
+        if not allow_sales_collateral:
+            candidates = tuple(c for c in candidates if not c.is_restricted)
 
         unique = deduplicate(candidates)
         confidence = (

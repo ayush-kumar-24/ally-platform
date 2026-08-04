@@ -14,6 +14,8 @@ Why the backend issues its own tokens: the rest of the API never depends on the
 provider's token format, so moving to AWS Cognito later changes only step 1.
 """
 
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.orm import Session
 
@@ -44,6 +46,13 @@ from app.schemas.auth import (
 from app.services.provisioning import ensure_founder
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+def _claim_expiry(claims: dict) -> datetime | None:
+    """The token's own `exp` claim as a datetime, for SqlSessionStore's pruning --
+    a revoked row is useless once the token it revokes would have expired anyway."""
+    exp = claims.get("exp")
+    return datetime.fromtimestamp(exp, tz=timezone.utc) if exp is not None else None
 
 
 def _token_pair(identity: AuthUser) -> TokenPair:
@@ -81,7 +90,7 @@ async def start_session(
 
 
 @router.post("/refresh", response_model=TokenPair)
-async def refresh_session(payload: RefreshRequest):
+async def refresh_session(payload: RefreshRequest, db: Session = Depends(get_db)):
     """Trade a valid, non-revoked refresh token for a fresh token pair.
 
     The old refresh token is revoked as part of this call (rotation), so a
@@ -89,16 +98,16 @@ async def refresh_session(payload: RefreshRequest):
     """
     claims = decode_token(payload.refresh_token, REFRESH)
 
-    store = get_session_store()
+    store = get_session_store(db)
     if store.is_revoked(claims["jti"]):
         raise AuthError("Refresh token has been revoked")
 
-    store.revoke(claims["jti"])
+    store.revoke(claims["jti"], expires_at=_claim_expiry(claims))
     return _token_pair(identity_from_claims(claims))
 
 
 @router.post("/resume", response_model=SessionResponse)
-async def resume_session(payload: RefreshRequest):
+async def resume_session(payload: RefreshRequest, db: Session = Depends(get_db)):
     """Restore a session on app reload from a stored refresh token.
 
     Like /session, but the starting point is our refresh token rather than a
@@ -111,11 +120,11 @@ async def resume_session(payload: RefreshRequest):
     """
     claims = decode_token(payload.refresh_token, REFRESH)
 
-    store = get_session_store()
+    store = get_session_store(db)
     if store.is_revoked(claims["jti"]):
         raise AuthError("Session has ended; please log in again")
 
-    store.revoke(claims["jti"])
+    store.revoke(claims["jti"], expires_at=_claim_expiry(claims))
     identity = identity_from_claims(claims)
     pair = _token_pair(identity)
     return SessionResponse(
@@ -126,7 +135,7 @@ async def resume_session(payload: RefreshRequest):
 
 
 @router.post("/logout", status_code=status.HTTP_200_OK)
-async def logout(payload: LogoutRequest):
+async def logout(payload: LogoutRequest, db: Session = Depends(get_db)):
     """Revoke a refresh token. The client should also discard its access token.
 
     Access tokens are short-lived and not individually tracked, so they remain
@@ -134,7 +143,7 @@ async def logout(payload: LogoutRequest):
     token is what actually ends the session.
     """
     claims = decode_token(payload.refresh_token, REFRESH)
-    get_session_store().revoke(claims["jti"])
+    get_session_store(db).revoke(claims["jti"], expires_at=_claim_expiry(claims))
     return {"detail": "logged out"}
 
 

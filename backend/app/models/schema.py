@@ -3,7 +3,7 @@ import datetime
 import decimal
 import uuid
 
-from sqlalchemy import Boolean, CHAR, CheckConstraint, Column, Computed, Date, DateTime, ForeignKeyConstraint, Index, Integer, Numeric, PrimaryKeyConstraint, Sequence, SmallInteger, String, Table, Text, UniqueConstraint, Uuid, text
+from sqlalchemy import Boolean, CHAR, CheckConstraint, Column, Computed, Date, DateTime, ForeignKeyConstraint, Index, Integer, LargeBinary, Numeric, PrimaryKeyConstraint, Sequence, SmallInteger, String, Table, Text, UniqueConstraint, Uuid, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -235,9 +235,11 @@ class QuestionTags(Base):
 class RagDocuments(Base):
     __tablename__ = 'rag_documents'
     __table_args__ = (
-        CheckConstraint("document_type::text = ANY (ARRAY['client_report'::character varying, 'case_study'::character varying, 'consultant_note'::character varying, 'playbook'::character varying]::text[])", name='rag_documents_document_type_check'),
+        CheckConstraint("document_type::text = ANY (ARRAY['client_report'::character varying, 'case_study'::character varying, 'consultant_note'::character varying, 'playbook'::character varying, 'service_offering'::character varying, 'external_insight'::character varying]::text[])", name='rag_documents_document_type_check'),
+        CheckConstraint("knowledge_domain IS NULL OR knowledge_domain::text = ANY (ARRAY['founder_knowledge'::character varying, 'goxl_knowledge'::character varying, 'business_resources'::character varying, 'learning_content'::character varying]::text[])", name='rag_documents_knowledge_domain_check'),
         CheckConstraint("review_status::text = ANY (ARRAY['pending'::character varying, 'approved'::character varying, 'rejected'::character varying]::text[])", name='rag_documents_review_status_check'),
         PrimaryKeyConstraint('document_id', name='rag_documents_pkey'),
+        Index('ix_rag_documents_knowledge_domain', 'knowledge_domain'),
     )
 
     document_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -249,6 +251,8 @@ class RagDocuments(Base):
     content_summary: Mapped[Optional[str]] = mapped_column(Text)
     industry_tag: Mapped[Optional[str]] = mapped_column(String(100))
     stage_relevance: Mapped[Optional[str]] = mapped_column(String(50))
+    # Coarse routing bucket for the agentic RAG router (nullable until backfilled).
+    knowledge_domain: Mapped[Optional[str]] = mapped_column(Text)
     reviewed_by: Mapped[Optional[str]] = mapped_column(String(100))
     created_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True), server_default=text('now()'))
     updated_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True), server_default=text('now()'))
@@ -570,11 +574,13 @@ class Conversations(Base):
     __tablename__ = 'conversations'
     __table_args__ = (
         CheckConstraint("conversation_type::text = ANY (ARRAY['chat'::character varying, 'diagnosis'::character varying]::text[])", name='conversations_conversation_type_check'),
-        CheckConstraint("status::text = ANY (ARRAY['active'::character varying, 'completed'::character varying, 'archived'::character varying]::text[])", name='conversations_status_check'),
+        CheckConstraint("status::text = ANY (ARRAY['active'::character varying, 'completed'::character varying, 'archived'::character varying, 'deleted'::character varying]::text[])", name='conversations_status_check'),
         ForeignKeyConstraint(['founder_id'], ['founders.founder_id'], ondelete='CASCADE', name='conversations_founder_id_fkey'),
         PrimaryKeyConstraint('conversation_id', name='conversations_pkey'),
+        UniqueConstraint('external_id', name='conversations_external_id_key'),
         Index('idx_conversations_founder', 'founder_id'),
         Index('idx_conversations_type', 'conversation_type'),
+        Index('ix_conversations_external_id', 'external_id'),
     )
 
     conversation_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -583,6 +589,12 @@ class Conversations(Base):
     status: Mapped[str] = mapped_column(String(20), nullable=False, server_default=text("'active'::character varying"))
     is_locked: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text('false'))
     message_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text('0'))
+    # The domain (ConversationService) identifies conversations by this string id
+    # (uuid hex), not the internal integer PK -- see conversation.py's repository.
+    external_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    unread_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text('0'))
+    token_stats: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    meta_data: Mapped[dict] = mapped_column("metadata", JSONB, nullable=False, server_default=text("'{}'::jsonb"))
     title: Mapped[Optional[str]] = mapped_column(String(200))
     locked_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
     lock_reason: Mapped[Optional[str]] = mapped_column(String(100))
@@ -1032,22 +1044,44 @@ class FileUploads(Base):
     __tablename__ = 'file_uploads'
     __table_args__ = (
         CheckConstraint("upload_category::text = ANY (ARRAY['file'::character varying, 'image'::character varying]::text[])", name='file_uploads_upload_category_check'),
+        CheckConstraint("status::text = ANY (ARRAY['active'::character varying, 'archived'::character varying, 'deleted'::character varying]::text[])", name='file_uploads_status_check'),
         ForeignKeyConstraint(['conversation_id'], ['conversations.conversation_id'], name='file_uploads_conversation_id_fkey'),
         ForeignKeyConstraint(['founder_id'], ['founders.founder_id'], name='file_uploads_founder_id_fkey'),
         PrimaryKeyConstraint('upload_id', name='file_uploads_pkey'),
+        UniqueConstraint('external_id', name='file_uploads_external_id_key'),
+        Index('ix_file_uploads_external_id', 'external_id'),
+        Index('ix_file_uploads_conversation_id', 'conversation_id'),
     )
 
     upload_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     founder_id: Mapped[int] = mapped_column(Integer, nullable=False)
     conversation_id: Mapped[int] = mapped_column(Integer, nullable=False)
     file_name: Mapped[str] = mapped_column(String(300), nullable=False)
+    # Holds the MIME type string (e.g. "application/pdf") -- attachment_type is
+    # derived from this at read time (see metadata.categorize), not stored.
     file_type: Mapped[str] = mapped_column(String(50), nullable=False)
     file_size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
-    storage_path: Mapped[str] = mapped_column(String(500), nullable=False)
+    # Nullable: no object-storage backend exists yet -- see the persistence-columns
+    # migration docstring. Never written to by the current upload path.
+    storage_path: Mapped[Optional[str]] = mapped_column(String(500))
     upload_category: Mapped[str] = mapped_column(String(20), nullable=False)
+    # The raw uploaded bytes (migration a7c9e1f3b5d7), bounded by the 25 MiB
+    # per-file validator cap -- lets chat read back text-based uploads instead
+    # of only knowing metadata about them.
+    content: Mapped[Optional[bytes]] = mapped_column(LargeBinary)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text('true'))
     message_id: Mapped[Optional[int]] = mapped_column(Integer)
     storage_url: Mapped[Optional[str]] = mapped_column(Text)
+    # The domain (AttachmentService) identifies attachments by this string id
+    # (uuid hex), not the internal integer PK -- see sql_attachment.py.
+    external_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, server_default=text("'active'"))
+    checksum: Mapped[str] = mapped_column(String(64), nullable=False)
+    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
+    archived_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
+    deleted_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
+    tags: Mapped[list] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+    extra: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
     created_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True), server_default=text('now()'))
 
     conversation: Mapped['Conversations'] = relationship('Conversations', back_populates='file_uploads')
@@ -1178,7 +1212,7 @@ class Sessions(Base):
     __table_args__ = (
         CheckConstraint("data_quality_status::text = ANY (ARRAY['unreviewed'::character varying, 'approved'::character varying, 'rejected'::character varying]::text[])", name='sessions_data_quality_status_check'),
         CheckConstraint('overall_confidence_score >= 0::numeric AND overall_confidence_score <= 100::numeric', name='sessions_overall_confidence_score_check'),
-        CheckConstraint("routing_state::text = ANY (ARRAY['continue'::character varying, 'validate'::character varying, 'generate_report'::character varying]::text[])", name='sessions_routing_state_check'),
+        CheckConstraint("routing_state::text = ANY (ARRAY['continue'::character varying, 'validate'::character varying, 'generate_report'::character varying, 'distress_support'::character varying]::text[])", name='sessions_routing_state_check'),
         CheckConstraint("session_state::text = ANY (ARRAY['stable'::character varying, 'significantly_guarded'::character varying, 'high_distress'::character varying]::text[])", name='sessions_session_state_check'),
         CheckConstraint("status::text = ANY (ARRAY['in_progress'::character varying, 'completed'::character varying, 'abandoned'::character varying]::text[])", name='sessions_status_check'),
         ForeignKeyConstraint(['current_question_id'], ['questions.question_id'], name='sessions_current_question_id_fkey'),

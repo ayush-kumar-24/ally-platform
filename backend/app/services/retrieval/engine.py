@@ -47,6 +47,14 @@ class SourceSpec:
     # Public filter name -> real column. Only these columns may be pre-filtered on;
     # values are always bound parameters, so the whitelist is the injection guard.
     filter_columns: dict[str, str] = field(default_factory=dict)
+    # A CONTENT GATE, not a relevance filter: applied on every search UNLESS the
+    # caller is explicitly privileged (`include_restricted=True`). It keeps content
+    # that must never surface in the diagnosis / chat path -- e.g. GoXL sales
+    # collateral tagged `content_class=sales_collateral` / `retrieval_scope=
+    # recommendation_only` -- out of the default corpus. Fail-closed: only a
+    # deliberate recommendation retrieval opts in. A trusted constant (no input),
+    # so it is safe to inline into the SQL.
+    restricted_where: str | None = None
 
 
 SOURCE_SPECS: dict[RetrievalSource, SourceSpec] = {
@@ -86,6 +94,12 @@ SOURCE_SPECS: dict[RetrievalSource, SourceSpec] = {
         {"document_id": "document_id", "metadata_tags": "metadata_tags"},
         extra_where="is_active = TRUE",
         filter_columns={"document_id": "document_id"},
+        # `IS DISTINCT FROM` so untagged chunks (NULL key) are KEPT -- only chunks
+        # explicitly marked as sales collateral / recommendation-only are dropped.
+        restricted_where=(
+            "metadata_tags->>'retrieval_scope' IS DISTINCT FROM 'recommendation_only' "
+            "AND metadata_tags->>'content_class' IS DISTINCT FROM 'sales_collateral'"
+        ),
     ),
 }
 
@@ -112,6 +126,7 @@ class RetrievalEngine:
         k: int = 5,
         min_similarity: Decimal | float = 0.0,
         filters: Mapping[str, object] | None = None,
+        include_restricted: bool = False,
     ) -> list[RetrievalEvidence]:
         """Embed `query_text` once and search each source, returning up to `k`
         hits per source that clear `min_similarity`, best first within a source.
@@ -120,10 +135,17 @@ class RetrievalEngine:
         `{"category": "Sales & Revenue", "stage_group": "Stage 0→1"}`). Each source
         applies only the filter keys it supports (see SourceSpec.filter_columns);
         unsupported keys are ignored for that source. This keeps a search off the
-        full corpus, which otherwise returns weak neighbours."""
+        full corpus, which otherwise returns weak neighbours.
+
+        `include_restricted` (default False) is the sales-collateral gate: while
+        False, any source with a `restricted_where` (RAG_CHUNKS) excludes content
+        tagged recommendation-only / sales collateral. ONLY a deliberate
+        recommendation retrieval should pass True; the diagnosis and chat paths
+        must never set it, so GoXL offering content can never surface mid-diagnosis."""
         vector = self._embed_query(query_text)
         return self.search_by_vector(
-            vector, sources=sources, k=k, min_similarity=min_similarity, filters=filters
+            vector, sources=sources, k=k, min_similarity=min_similarity,
+            filters=filters, include_restricted=include_restricted,
         )
 
     def search_by_vector(
@@ -134,6 +156,7 @@ class RetrievalEngine:
         k: int = 5,
         min_similarity: Decimal | float = 0.0,
         filters: Mapping[str, object] | None = None,
+        include_restricted: bool = False,
     ) -> list[RetrievalEvidence]:
         """Search using a caller-supplied vector (e.g. an existing row embedding),
         bypassing the embedding provider. Same guarantees as `search`."""
@@ -145,7 +168,9 @@ class RetrievalEngine:
         results: list[RetrievalEvidence] = []
         for source in selected:
             spec = SOURCE_SPECS[source]
-            results.extend(self._search_one(spec, qvec, k, min_sim, filters))
+            results.extend(
+                self._search_one(spec, qvec, k, min_sim, filters, include_restricted)
+            )
         return results
 
     # --- Internals --------------------------------------------------------
@@ -170,9 +195,10 @@ class RetrievalEngine:
         k: int,
         min_sim: Decimal,
         filters: Mapping[str, object] | None = None,
+        include_restricted: bool = False,
     ) -> list[RetrievalEvidence]:
         active = self._active_filters(spec, filters)
-        sql = self._build_sql(spec, active.keys())
+        sql = self._build_sql(spec, active.keys(), include_restricted=include_restricted)
         params: dict[str, object] = {"qvec": qvec, "k": k, "min_sim": min_sim}
         for key in active:
             params[f"flt_{key}"] = active[key]
@@ -193,7 +219,7 @@ class RetrievalEngine:
             )
         return evidence
 
-    def _build_sql(self, spec: SourceSpec, filter_keys=()) -> str:
+    def _build_sql(self, spec: SourceSpec, filter_keys=(), *, include_restricted: bool = False) -> str:
         meta_inner = "".join(
             f", {expr} AS {label}" for label, expr in spec.metadata.items()
         )
@@ -205,13 +231,21 @@ class RetrievalEngine:
         filters = "".join(
             f" AND {spec.filter_columns[key]} = :flt_{key}" for key in filter_keys
         )
+        # Content gate (sales-collateral). Also in the INNER query so restricted
+        # rows are excluded BEFORE the top-k, never just trimmed after. Skipped only
+        # when the caller is explicitly privileged. Trusted constant -> safe inline.
+        restricted = (
+            f" AND {spec.restricted_where}"
+            if spec.restricted_where and not include_restricted
+            else ""
+        )
         distance = "embedding <=> CAST(:qvec AS vector)"
         return (
             f"SELECT source_id, content, similarity{meta_outer} FROM ("
             f" SELECT {spec.id_col} AS source_id, {spec.content_col} AS content,"
             f" 1 - ({distance}) AS similarity{meta_inner}"
             f" FROM {spec.table}"
-            f" WHERE embedding IS NOT NULL{extra}{filters}"
+            f" WHERE embedding IS NOT NULL{extra}{filters}{restricted}"
             f" ORDER BY {distance} ASC, {spec.id_col} ASC"
             f" LIMIT :k"
             f" ) s WHERE similarity >= :min_sim"

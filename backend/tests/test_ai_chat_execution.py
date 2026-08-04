@@ -298,7 +298,11 @@ def test_pipeline_trace_correctness():
     assert t.provider == "mock" and t.model in ("mock-standard", "mock-careful")
     assert t.memory_injected and t.retrieval_injected and t.graph_injected
     assert t.started_at < t.finished_at and t.duration_ms > 0
-    assert r.metrics.retrieval_hits == 1 and r.metrics.graph_nodes == 2 and r.metrics.prompt_version == 2
+    # prompt_version 1: general_chat_grounded.standard is the default chat category
+    # (a founder can talk about anything, not only their diagnosis -- see the
+    # attachment/general-chat fix); diagnosis_answer_grounded (v2) is still
+    # resolvable but is no longer what an ordinary chat turn selects by default.
+    assert r.metrics.retrieval_hits == 1 and r.metrics.graph_nodes == 2 and r.metrics.prompt_version == 1
 
 
 def test_deterministic_execution():
@@ -383,10 +387,14 @@ def test_memory_unavailable_degrades_but_answers():
     assert r.ok and not r.trace.memory_injected and r.metrics.memory_reads == 0
 
 
-def test_founder_without_diagnosis_fails_at_prompt():
+def test_founder_without_diagnosis_can_still_chat():
+    # A founder with no diagnosis yet must still be able to chat -- the
+    # general_chat_grounded default has no diagnosis precondition (unlike the
+    # old diagnosis_answer_grounded default, which made this founder's very
+    # first chat message fail closed before they'd ever completed a diagnosis).
     w = ChatWorld()
     r = w.send(founder_id=2, message="hi")   # founder 2 answerable; sanity it works
     assert r.ok
-    r3 = w.send(founder_id=3, message="hi")  # founder 3: valid, no diagnosis -> prompt fails closed
-    assert r3.ok is False and r3.trace.failed_step == "render_prompt"
-    assert r3.assistant_message_id is None
+    r3 = w.send(founder_id=3, message="hi")  # founder 3: valid, no diagnosis
+    assert r3.ok is True and r3.trace.failed_step is None
+    assert r3.assistant_message_id is not None

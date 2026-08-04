@@ -61,3 +61,20 @@ class TaskRow(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ReminderRow(Base):
+    __tablename__ = "planning_reminders"
+
+    reminder_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    task_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("planning_tasks.task_id", ondelete="CASCADE"), nullable=False, index=True)
+    plan_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    founder_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    remind_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    channel: Mapped[str] = mapped_column(String(20), nullable=False, server_default="in_app")
+    status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="scheduled", index=True)
+    note: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

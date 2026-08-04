@@ -1,11 +1,14 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useApp } from '../context/AppContext';
 import { normalise, resumeOrStart, submitAnswer } from '../services/diagnosis';
+import { useVoiceInput } from '../hooks/useVoiceInput';
 
 const DIM_CHIPS = ['All', 'Revenue', 'Strategy', 'Team', 'Operations', 'Finance', 'Market'];
 
 export default function DiagnosisChat() {
   const navigate = useNavigate();
+  const { showToast } = useApp();
   const [activeDim, setActiveDim] = useState('All');
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
@@ -78,6 +81,14 @@ export default function DiagnosisChat() {
     }
   };
 
+  // Voice is free on every plan in diagnosis (only chat is plan-gated) -- no
+  // canUseVoiceInChat check here, matching the product decision.
+  const voice = useVoiceInput({
+    context: 'diagnosis',
+    onTranscribed: (text) => setInput(prev => (prev ? `${prev} ${text}` : text)),
+    onError: () => showToast('Could not access the microphone — check your browser permissions.'),
+  });
+
   return (
     <div className="chat" style={{ height: 'calc(100vh - 64px)' }}>
       <div className="chat-main">
@@ -116,7 +127,7 @@ export default function DiagnosisChat() {
           <div className="ci-row">
             <textarea
               rows={1}
-              placeholder="Answer Ally's question or ask anything..."
+              placeholder={done ? 'Your diagnosis is complete.' : "Answer Ally's question or ask anything..."}
               value={input}
               onChange={e => setInput(e.target.value)}
               disabled={busy || done}
@@ -124,6 +135,15 @@ export default function DiagnosisChat() {
                 if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); answer(input); }
               }}
             />
+            <button
+              className={`ci-btn${voice.status === 'recording' ? ' recording' : ''}`}
+              title="Voice input"
+              aria-pressed={voice.status === 'recording'}
+              disabled={busy || done || voice.status === 'transcribing'}
+              onClick={voice.toggle}
+            >
+              <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/></svg>
+            </button>
             <button className="ci-btn send" title="Send" type="button"
                     disabled={busy || done || !input.trim()}
                     onClick={() => answer(input)}>
@@ -133,7 +153,7 @@ export default function DiagnosisChat() {
           <div className="ci-hint">
             {done ? 'Diagnosis complete — building your report…'
                   : busy ? 'Saving your answer…'
-                  : 'Structured diagnosis · your progress is saved as you go'}
+                  : 'Structured diagnosis · Voice input free on every plan here'}
           </div>
         </div>
       </div>

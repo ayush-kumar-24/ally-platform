@@ -14,6 +14,7 @@
     "@fontsource-variable/inter": "^5.0.0",
     "@fontsource-variable/inter-tight": "^5.0.0",
     "@fontsource-variable/montserrat": "^5.0.0",
+    "@supabase/supabase-js": "^2.112.0",
     "axios": "^1.19.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",

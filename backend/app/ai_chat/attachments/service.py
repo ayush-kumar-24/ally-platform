@@ -3,7 +3,9 @@
 Repository-driven, deterministic (injected clock + id_factory). Validates, derives
 metadata (mime/type/size/checksum), assigns an id + timestamps, and manages the
 attachment lifecycle (archive / restore / delete / list / summarize). Contents are
-never parsed -- metadata only.
+never parsed or interpreted here -- metadata derivation only; the raw bytes are
+stored as-is (via `add_content`) so a later reader (chat grounding) can decide
+what to do with them, e.g. decode text files. `get_content` is that read path.
 """
 
 from __future__ import annotations
@@ -91,12 +93,18 @@ class AttachmentService:
             tags=tuple(tags), extra=dict(extra or {}),
         )
         self.repository.add(attachment)
+        self.repository.add_content(attachment.attachment_id, content)
         return attachment
 
     # --- read ------------------------------------------------------------
 
     def get_attachment(self, attachment_id: str) -> Attachment:
         return self._require(attachment_id)
+
+    def get_content(self, attachment_id: str) -> bytes | None:
+        """The raw uploaded bytes, or None if the attachment doesn't exist / has
+        none stored. Callers decide how to interpret them (e.g. decode text)."""
+        return self.repository.get_content(attachment_id)
 
     def list_attachments(
         self, conversation_id: str, *, include_archived: bool = False, include_deleted: bool = False

@@ -179,6 +179,19 @@ def test_archive_sets_timestamp_then_restore_clears():
     assert s.restore_attachment(a.attachment_id).archived_at is None
 
 
+# --- content storage/read (chat-grounding read path) -------------------------
+
+
+def test_content_round_trips():
+    s = svc()
+    a = add(s, content=b"%PDF-1.4 the actual bytes")
+    assert s.get_content(a.attachment_id) == b"%PDF-1.4 the actual bytes"
+
+
+def test_content_missing_for_unknown_attachment():
+    assert svc().get_content("nope") is None
+
+
 def test_get_missing_raises():
     with pytest.raises(AttachmentNotFoundError):
         svc().get_attachment("nope")

@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { saveOnboardingProfile } from '../../services/profile';
+import { useVoiceInput } from '../../hooks/useVoiceInput';
 
 /* 13 questions — Ally builds a live Founder DNA, grouped Business / Founder.
    Faithful port of #v-profile from ally-platform-main.html. */
@@ -65,7 +66,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, reduce ? Math.min(ms, 50)
 
 export default function ProfileBuild() {
   const navigate = useNavigate();
-  const { user, setUser } = useApp();
+  const { user, setUser, showToast } = useApp();
   const first = user?.name ? user.name.split(' ')[0] : 'there';
   const initial = (user?.initials || first).charAt(0);
 
@@ -243,11 +244,23 @@ export default function ProfileBuild() {
     ta.style.height = 'auto';
     ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
   };
-  const onVoice = () => {
-    const q = PROFILE_Q[qiRef.current] || {};
-    setInput(q.def || "Here's my honest answer.");
-    if (taRef.current) taRef.current.focus();
-  };
+  // Profile-build is pre-chat onboarding, not the paid chat surface -- voice
+  // here is ungated, same product decision as the diagnosis mic (context:
+  // 'diagnosis' matches the backend's VOICE_DIAGNOSIS feature, free on every
+  // plan). Replaces a stub that used to just fill the input with the canned
+  // default answer instead of transcribing anything the founder actually said.
+  const voice = useVoiceInput({
+    context: 'diagnosis',
+    onTranscribed: (text) => {
+      setInput((prev) => (prev ? `${prev} ${text}` : text));
+      if (taRef.current) {
+        taRef.current.focus();
+        taRef.current.style.height = 'auto';
+        taRef.current.style.height = Math.min(taRef.current.scrollHeight, 120) + 'px';
+      }
+    },
+    onError: () => showToast('Could not access the microphone — check your browser permissions.'),
+  });
 
   const groupCount = (g) =>
     PROFILE_Q.filter((q) => q.g === g && fields[q.k]?.status === 'on').length;
@@ -289,7 +302,14 @@ export default function ProfileBuild() {
                 onChange={onInput}
                 onKeyDown={onKeyDown}
               />
-              <button className="ci-btn" type="button" aria-label="Voice input" onClick={onVoice}>
+              <button
+                className={`ci-btn${voice.status === 'recording' ? ' recording' : ''}`}
+                type="button"
+                aria-label="Voice input"
+                aria-pressed={voice.status === 'recording'}
+                disabled={voice.status === 'transcribing'}
+                onClick={voice.toggle}
+              >
                 <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></svg>
               </button>
               <button className="ci-btn send" type="button" aria-label="Send" onClick={() => answer(taRef.current.value)}>
@@ -368,4 +388,3 @@ export default function ProfileBuild() {
     </section>
   );
 }
-

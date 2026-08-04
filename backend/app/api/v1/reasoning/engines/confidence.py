@@ -225,6 +225,7 @@ class WeightedConfidenceModel(ConfidenceModel):
         scored: list[ScoredRootCause],
         questions_answered: int,
         context: ReasoningContext,
+        consistency=None,
     ) -> ConfidenceInputs:
         """Resolve the five evidence signals, the reliability modifier and the
         hard-rule facts (CONFIDENCE_SCORE_METHODOLOGY). This is where the DB reads
@@ -248,13 +249,16 @@ class WeightedConfidenceModel(ConfidenceModel):
         )
 
         # (c) ANSWER CONSISTENCY -- measured by the semantic contradiction detector
-        # (an LLM-layer feature). It is not implemented yet, so the signal is marked
-        # UNAVAILABLE rather than defaulted to a perfect 1.0: the strategy then
-        # excludes it and renormalises the remaining weights, so an unmeasured
-        # signal neither rewards nor penalises the founder. When the detector lands,
-        # set consistency_available=True and pass its measured 0..1 score here.
-        consistency_available = False
-        consistency_score: Decimal | None = None
+        # (LLMConsistencyDetector). A measured `ConsistencyResult` is passed in when
+        # the detector ran; if it is absent or the detector FAILED (available=False),
+        # the signal stays UNAVAILABLE so the strategy excludes it and renormalises
+        # the remaining weights -- an unmeasured signal never rewards or penalises.
+        if consistency is not None and getattr(consistency, "available", False):
+            consistency_available = True
+            consistency_score = consistency.score
+        else:
+            consistency_available = False
+            consistency_score = None
 
         # (d) CONFIRMATION RATIO -- top causes' confirmation status rescaled to 0..1.
         confirmation_ratio = self._confirmation_ratio(

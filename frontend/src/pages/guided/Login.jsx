@@ -1,8 +1,11 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import AuthTransition from '../../components/AuthTransition';
-import { CURRENT_VERSIONS, recordConsent, savePendingConsent } from '../../services/consents';
+import { CURRENT_VERSIONS, flushPendingConsent, recordConsent, savePendingConsent } from '../../services/consents';
+import { consumeOAuthRedirect, signInWithGoogle, signInWithLinkedIn } from '../../services/auth';
+import { get } from '../../services/api';
+import { supabaseConfigured } from '../../services/supabaseClient';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -15,6 +18,53 @@ export default function Login() {
   // Ref, not state: state updates are async, so two clicks in the same tick would
   // both see `submitting === false` and both fire. The ref flips synchronously.
   const inFlight = useRef(false);
+
+  // Google/LinkedIn redirect the whole page away and back -- this picks the
+  // session up on the return trip. No-ops (returns null fast) on every other
+  // load, since consumeOAuthRedirect only finds something when the URL
+  // actually carries a fresh Supabase session.
+  useEffect(() => {
+    if (!supabaseConfigured) return;
+    (async () => {
+      const founder = await consumeOAuthRedirect();
+      if (!founder) return;
+
+      let profile = null;
+      try {
+        profile = await get('/profile');
+      } catch {
+        // Provisioning races the very first request sometimes; the rest of the
+        // app re-fetches /profile on its own, so a miss here isn't fatal.
+      }
+      let stored = null;
+      try {
+        stored = await flushPendingConsent();
+      } catch {
+        // Stays pending in localStorage; flushed again on the next app load.
+      }
+
+      setUser((prev) => ({
+        ...prev,
+        // 'google' | 'linkedin_oidc' -- whichever the founder actually used,
+        // read from the backend's own response rather than assumed.
+        authProvider: founder.provider,
+        name: profile?.full_name || founder.email || prev?.name,
+        email: founder.email || prev?.email,
+        plan_type: profile?.plan_type || prev?.plan_type,
+        consents: stored ? {
+          termsAccepted: true,
+          termsVersion: stored.terms_version,
+          privacyVersion: stored.privacy_version,
+          diagnosisConsent: stored.agree_diagnosis,
+          consentedAt: stored.consented_at,
+          consentId: stored.consent_id,
+          synced: true,
+        } : prev?.consents,
+      }));
+      setShowAuthTransition(true);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleAuth = async (provider) => {
     if (inFlight.current) return;
@@ -43,6 +93,21 @@ export default function Login() {
       // simulated) — hold the consent locally and flush it once a session exists,
       // so the user's actual choice is never silently lost.
       savePendingConsent(choices);
+    }
+
+    // Real sign-in: redirect to the provider now. The rest of this function
+    // (the simulated identity below) is skipped entirely -- the mount-time
+    // effect above picks the flow back up once the provider redirects here,
+    // and flushes the pending consent captured just above.
+    if (supabaseConfigured && (provider === 'google' || provider === 'linkedin')) {
+      try {
+        await (provider === 'google' ? signInWithGoogle() : signInWithLinkedIn());
+      } catch (err) {
+        setValidationError(`Could not start ${provider === 'google' ? 'Google' : 'LinkedIn'} sign-in. Please try again.`);
+        inFlight.current = false;
+        setSubmitting(false);
+      }
+      return; // navigates away on success; nothing left to do
     }
 
     setUser(prev => ({
@@ -137,7 +202,12 @@ export default function Login() {
             Continue with LinkedIn
           </button>
         </div>
-        <p className="j-fine">Private &amp; encrypted &middot; we never share your business. <span style={{ opacity: 0.7 }}>(Demo — simulated login, no account created)</span></p>
+        <p className="j-fine">
+          Private &amp; encrypted &middot; we never share your business.{' '}
+          {!supabaseConfigured && (
+            <span style={{ opacity: 0.7 }}>(Demo — simulated login, no account created)</span>
+          )}
+        </p>
       </div>
     </section>
   );

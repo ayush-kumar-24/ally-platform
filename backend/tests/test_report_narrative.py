@@ -276,3 +276,70 @@ def test_identity_fusion_separation_language_wired_from_payload():
     n = _gen(p)  # no explicit separate_identity kwarg -> must come from payload
     note = next(s for s in n.sections if s.key == "psychological_note").prose
     assert "You are not those challenges" in note
+
+
+# --- Fix regression: Section H must not fire for an UNRELATED pillar red flag --
+def test_unrelated_pillar_red_flag_does_not_trigger_section_h():
+    # Financial Runway is red-flagged; Founder Readiness is healthy and not
+    # flagged. Section H is Founder-Readiness-specific -- it must not render
+    # with empty content just because some other pillar is red-flagged (that
+    # used to hand the LLM narrator nothing to work with, and it fabricated a
+    # claim to fill the section).
+    runway = _pillar("Financial Runway", 22, flag=True, band="Critical Gap",
+                     note="Runway under three months is a red flag.")
+    p = _payload(
+        pillars=(_pillar("Founder Readiness", 60, band="Developing"), runway),
+        red_flag_pillars=(runway,),
+    )
+    assert p.psychology_flagged is False
+    n = _gen(p)
+    assert "psychological_note" not in _keys(n)
+    # the red flag still surfaces -- via Business DNA, not a fabricated Section H
+    biz = next(s for s in n.sections if s.key == "business_dna")
+    assert "Financial Runway" in biz.prose
+
+
+def test_founder_readiness_red_flag_still_triggers_section_h():
+    fr = _pillar("Founder Readiness", 28, flag=True, band="Critical Gap",
+                 desc="Running on empty affects every decision that follows.")
+    p = _payload(pillars=(fr, _pillar("Market Clarity", 55)), red_flag_pillars=(fr,))
+    n = _gen(p)
+    assert "psychological_note" in _keys(n)
+
+
+# --- Fix regression: areas_to_monitor slots carry NAMES only, never the score --
+def test_areas_to_monitor_slots_have_no_raw_score():
+    p = _payload(category_risk_scores={"Go-To-Market": 0.2, "Product": 0.18, "Sales & Revenue": 0.12})
+    gen = ReportNarrativeGenerator()
+    slots, facts = gen._slots_and_facts("areas_to_monitor", p, False)
+    assert slots == {"categories": ["Go-To-Market", "Product", "Sales & Revenue"]}
+    assert facts == slots
+    for v in slots["categories"]:
+        assert isinstance(v, str)  # not a (name, score) tuple
+
+
+# --- Fix regression: the LLM prompt instructs brevity when slots["brief"] ------
+def test_llm_prompt_includes_brief_directive_when_flagged():
+    from app.api.v1.reports.narrator import LLMSectionNarrator, ToneGuidance
+
+    captured = {}
+    def fake_llm(prompt):
+        captured["prompt"] = prompt
+        return "A brief note on the business."
+
+    narrator = LLMSectionNarrator(fake_llm)
+    narrator.narrate("business_dna", {"overall_band": "Needs Attention", "brief": True}, ToneGuidance("Validator"))
+    assert "BRIEF" in captured["prompt"] and "one short sentence" in captured["prompt"].lower()
+
+
+def test_llm_prompt_omits_brief_directive_when_not_flagged():
+    from app.api.v1.reports.narrator import LLMSectionNarrator, ToneGuidance
+
+    captured = {}
+    def fake_llm(prompt):
+        captured["prompt"] = prompt
+        return "prose"
+
+    narrator = LLMSectionNarrator(fake_llm)
+    narrator.narrate("business_dna", {"overall_band": "Needs Attention"}, ToneGuidance("Validator"))
+    assert "IMPORTANT: this section must be BRIEF" not in captured["prompt"]

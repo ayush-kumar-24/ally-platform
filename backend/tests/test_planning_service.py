@@ -14,6 +14,9 @@ from app.planning import (
     PlanStatus,
     Priority,
     ProgressStatus,
+    ReminderChannel,
+    ReminderNotFoundError,
+    ReminderStatus,
     TaskNotFoundError,
     build_planning_service,
 )
@@ -186,3 +189,96 @@ def test_deterministic_execution():
         s.add_task(1, g.goal_id, title="T")
         return s.get_plan_detail(1, p.plan_id)
     assert run() == run()
+
+
+# --- progress (derived) -----------------------------------------------------
+def test_plan_progress_derived_from_task_status():
+    s = svc()
+    p = s.create_plan(1, title="Q3")
+    g = s.add_goal(1, p.plan_id, title="Ship onboarding")
+    t1 = s.add_task(1, g.goal_id, title="a")
+    s.add_task(1, g.goal_id, title="b")
+    t3 = s.add_task(1, g.goal_id, title="c")
+    s.update_task(1, t1.task_id, status=ProgressStatus.DONE)
+    s.update_task(1, t3.task_id, status=ProgressStatus.IN_PROGRESS)
+    prog = s.plan_progress(1, p.plan_id)
+    assert prog.tasks.total == 3
+    assert (prog.tasks.done, prog.tasks.in_progress, prog.tasks.todo) == (1, 1, 1)
+    assert prog.tasks.percent_complete == 33
+    assert len(prog.per_goal) == 1 and prog.per_goal[0].tasks.total == 3
+
+
+def test_plan_progress_empty_is_zero_not_error():
+    s = svc()
+    p = s.create_plan(1, title="Empty")
+    prog = s.plan_progress(1, p.plan_id)
+    assert prog.tasks.total == 0 and prog.tasks.percent_complete == 0
+    assert prog.per_goal == ()
+
+
+def test_plan_progress_enforces_ownership():
+    s = svc()
+    p = s.create_plan(1, title="Mine")
+    with pytest.raises(PlanNotFoundError):
+        s.plan_progress(2, p.plan_id)
+
+
+# --- reminders --------------------------------------------------------------
+def _task_for(s):
+    p = s.create_plan(1, title="P")
+    g = s.add_goal(1, p.plan_id, title="G")
+    return s.add_task(1, g.goal_id, title="T")
+
+_FUTURE = datetime(2026, 8, 1, 9, 0, tzinfo=timezone.utc)
+
+
+def test_schedule_and_list_reminder():
+    s = svc()
+    t = _task_for(s)
+    r = s.schedule_reminder(1, t.task_id, remind_at=_FUTURE, note="ping")
+    assert r.status == ReminderStatus.SCHEDULED and r.task_id == t.task_id and r.channel == ReminderChannel.IN_APP
+    lst = s.list_reminders(1)
+    assert len(lst) == 1 and lst[0].reminder_id == r.reminder_id
+
+
+def test_schedule_reminder_past_time_rejected():
+    s = svc()
+    t = _task_for(s)
+    with pytest.raises(InvalidPlanningInputError):
+        s.schedule_reminder(1, t.task_id, remind_at=datetime(2020, 1, 1, tzinfo=timezone.utc))
+
+
+def test_schedule_reminder_foreign_task_rejected():
+    s = svc()
+    t = _task_for(s)
+    with pytest.raises(TaskNotFoundError):
+        s.schedule_reminder(2, t.task_id, remind_at=_FUTURE)   # not founder 2's task
+
+
+def test_cancel_reminder_and_ownership():
+    s = svc()
+    t = _task_for(s)
+    r = s.schedule_reminder(1, t.task_id, remind_at=_FUTURE)
+    with pytest.raises(ReminderNotFoundError):
+        s.cancel_reminder(2, r.reminder_id)                    # another founder
+    cancelled = s.cancel_reminder(1, r.reminder_id)
+    assert cancelled.status == ReminderStatus.CANCELLED
+
+
+def test_due_reminders_are_scheduled_and_past_only():
+    s = svc()
+    t = _task_for(s)
+    r = s.schedule_reminder(1, t.task_id, remind_at=_FUTURE)
+    ids = lambda rs: [x.reminder_id for x in rs]
+    assert r.reminder_id in ids(s.due_reminders(before=datetime(2026, 8, 2, tzinfo=timezone.utc)))
+    assert r.reminder_id not in ids(s.due_reminders(before=datetime(2026, 7, 31, tzinfo=timezone.utc)))  # not yet due
+    s.cancel_reminder(1, r.reminder_id)
+    assert r.reminder_id not in ids(s.due_reminders(before=datetime(2026, 8, 2, tzinfo=timezone.utc)))    # cancelled excluded
+
+
+def test_mark_reminder_sent():
+    s = svc()
+    t = _task_for(s)
+    r = s.schedule_reminder(1, t.task_id, remind_at=_FUTURE)
+    sent = s.mark_reminder_sent(r.reminder_id)
+    assert sent.status == ReminderStatus.SENT and sent.sent_at is not None

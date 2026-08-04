@@ -88,6 +88,11 @@ class DistressAssessment:
     # The empathy protocol (prompt_library, category='distress') to apply.
     empathy_protocol_code: str | None = None
     empathy_protocol_text: str | None = None
+    # How this assessment was produced: "measured" (LLM language detection),
+    # "error" (detector failed -> failed CLOSED to high distress), or None (the
+    # deterministic proxy). Recorded so an error-induced closure is never
+    # indistinguishable from a measured clean result.
+    detector_status: str | None = None
 
 
 class PsychologicalStateEngine:

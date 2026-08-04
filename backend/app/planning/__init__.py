@@ -13,17 +13,24 @@ from app.planning.errors import (
     InvalidPlanStateError,
     PlanningError,
     PlanNotFoundError,
+    ReminderNotFoundError,
     TaskNotFoundError,
 )
 from app.planning.models import (
     Goal,
+    GoalProgress,
     GoalWithTasks,
     ItemSource,
     Plan,
     PlanDetail,
+    PlanProgress,
     PlanStatus,
     Priority,
+    ProgressCounts,
     ProgressStatus,
+    Reminder,
+    ReminderChannel,
+    ReminderStatus,
     Task,
 )
 from app.planning.repository import InMemoryPlanningRepository, PlanningRepository
@@ -33,10 +40,12 @@ __all__ = [
     # models
     "Plan", "Goal", "Task", "PlanDetail", "GoalWithTasks",
     "PlanStatus", "ProgressStatus", "Priority", "ItemSource",
+    "PlanProgress", "GoalProgress", "ProgressCounts",
+    "Reminder", "ReminderChannel", "ReminderStatus",
     # repository / service
     "PlanningRepository", "InMemoryPlanningRepository",
     "PlanningService", "build_planning_service",
     # errors
     "PlanningError", "PlanNotFoundError", "GoalNotFoundError", "TaskNotFoundError",
-    "InvalidPlanningInputError", "InvalidPlanStateError",
+    "ReminderNotFoundError", "InvalidPlanningInputError", "InvalidPlanStateError",
 ]

@@ -1,12 +1,12 @@
 """Composition root for the Ally AI stack.
 
 One place that owns the long-lived subsystem instances (repositories, prompt
-library, LLM execution) and assembles a per-request AgentOrchestrator from the
-FROZEN M1-M7 public interfaces. It modifies no subsystem -- it only wires them.
+library, LLM execution) and assembles per-request services from the FROZEN M1-M7
+public interfaces. It modifies no subsystem -- it only wires them.
 
 Why this exists: as real backends arrive (Redis, PostgreSQL, pgvector,
 OpenAI/Claude/Gemini) the wiring grows. Keeping it here means every caller stays a
-single line -- `container.orchestrator(db)` -- and swapping a backend (e.g. an
+single line -- `container.chat_execution(db)` -- and swapping a backend (e.g. an
 in-memory repository for a durable one, or MockLLMProvider for a real provider) is
 a change in exactly one file, driven by settings.
 
@@ -16,6 +16,8 @@ into any subsystem's internals.
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 from sqlalchemy.orm import Session
 
 from app.api.v1.ally.context.builder import AllyContextBuilder
@@ -23,22 +25,22 @@ from app.api.v1.ally.context.repository import AllyContextRepository
 from app.integrations.llm.routing import build_failover_execution
 from app.api.v1.ally.kg.repository import InMemoryKnowledgeGraphRepository
 from app.api.v1.ally.kg.service import build_knowledge_graph_service
-from app.api.v1.ally.memory.repository import InMemoryMemoryRepository
-from app.api.v1.ally.memory.service import build_memory_service
-from app.api.v1.ally.orchestrator import AgentOrchestrator, OrchestratorService
+from app.api.v1.ally.memory.sql_repository import build_db_memory_service
 from app.api.v1.ally.prompts.library import default_prompt_manager
 from app.api.v1.ally.rag.repository import InMemoryVectorRetrievalRepository
 from app.api.v1.ally.rag.service import build_retrieval_service
+from app.api.v1.ally.rag.sql_repository import SqlVectorRetrievalRepository
 from app.api.v1.ally.prompts.grounding import default_grounded_prompt_manager
 from app.ai_chat.builders.context_window import ContextWindowBuilder
 from app.ai_chat.execution.chat_execution import ChatExecutionService
+from app.ai_chat.repositories.sql_conversation import SqlConversationRepository
 from app.ai_chat.services.conversation import build_conversation_service
 from app.ai_chat.streaming.service import StreamingChatService
-from app.ai_chat.attachments.repository import InMemoryAttachmentRepository
 from app.ai_chat.attachments.service import AttachmentService
+from app.ai_chat.attachments.sql_repository import SqlAttachmentRepository
 from app.ai_chat.links.extractor import LinkExtractor
-from app.ai_chat.suggestions.repository import InMemorySuggestionRepository
 from app.ai_chat.suggestions.service import SuggestionService
+from app.ai_chat.suggestions.sql_repository import SqlSuggestionRepository
 from app.settings.repository import SqlAlchemySettingsRepository
 from app.settings.service import SettingsService
 from app.admin.audit import InMemoryAuditRepository
@@ -51,6 +53,8 @@ from app.consents.db_repository import SqlAlchemyConsentRepository
 from app.consents.service import ConsentService
 from app.privacy.db_repository import SqlAlchemyPrivacyRepository
 from app.privacy.service import PrivacyService
+from app.core.config import settings
+from app.services import embeddings
 from app.admin.panel_audit import AuditRecorder, SqlAlchemyPanelAuditRepository
 from app.admin.panel_service import AdminPanelService
 from app.admin.users_db_repository import SqlAlchemyAdminUserRepository
@@ -69,12 +73,12 @@ class Container:
 
     def __init__(self):
         # --- Repositories / stores (swap these for Redis / Postgres / pgvector) ---
-        self._memory_repository = InMemoryMemoryRepository()
+        # Founder memory is DB-backed and REQUEST-SCOPED (see memory(db)); it needs
+        # the request's session, so it is NOT built here as a held singleton.
         self._retrieval_repository = InMemoryVectorRetrievalRepository([])
         self._kg_repository = InMemoryKnowledgeGraphRepository([], [])
 
         # --- Services built over those stores (stateless wrappers) ---
-        self._memory_service = build_memory_service(self._memory_repository)
         self._retrieval_service = build_retrieval_service(self._retrieval_repository)
         self._kg_service = build_knowledge_graph_service(self._kg_repository)
 
@@ -84,28 +88,27 @@ class Container:
 
         # --- Phase 6 AI Chat flow (Milestone 2) -- additive, composes the frozen
         # foundation. The orchestrator wiring above is untouched. Conversations are
-        # a process-level store (swap for a DB repository later); the grounded
-        # prompt manager is separate from the orchestrator's standard manager.
-        self._conversation_service = build_conversation_service()
+        # DB-backed and REQUEST-SCOPED (see conversation_service(db)) -- they persist
+        # to conversations/messages, so they must never be held as a process-level
+        # singleton (that would pin one DB session for the process lifetime, and is
+        # exactly the bug this replaced: an in-memory store that lost every founder's
+        # chat history on restart / could not be shared across worker processes).
         self._grounded_prompt_manager = default_grounded_prompt_manager()
-        self._context_window_builder = ContextWindowBuilder(
-            conversation_service=self._conversation_service,
-            memory=self._memory_service,
-            retrieval=self._retrieval_service,
-            knowledge_graph=self._kg_service,
-        )
+        # The context-window builder reads founder memory, so it too is built
+        # PER-REQUEST (see context_window_builder(db)) -- never a held singleton
+        # that would pin the old in-memory store after the DB swap.
 
         # --- Phase 6 attachments + links (Milestone 4) -- additive, metadata only.
-        # Attachments are a process-level store (swap for a DB repository later); the
-        # link extractor is pure/stateless.
-        self._attachment_repository = InMemoryAttachmentRepository()
-        self._attachment_service = AttachmentService(self._attachment_repository)
+        # Attachments are DB-backed and REQUEST-SCOPED (see attachment_service(db)) --
+        # same reasoning as conversations: a process-level singleton would lose every
+        # attachment's metadata on restart. The link extractor is pure/stateless.
         self._link_extractor = LinkExtractor()
 
         # --- Phase 6 AI suggestions (Milestone 5) -- additive, deterministic,
         # rule-based; composes chat artifacts, never executes actions or calls an LLM.
-        self._suggestion_repository = InMemorySuggestionRepository()
-        self._suggestion_service = SuggestionService(self._suggestion_repository)
+        # DB-backed and REQUEST-SCOPED (see suggestion_service(db)) -- same reasoning
+        # as conversations/attachments: a process-level singleton would lose every
+        # suggestion and every founder's feedback on restart.
 
         # --- Phase 12 admin & operations (independent) -- process-level in-memory
         # repositories (a production adapter reads the DB + ai_chat stores). The admin
@@ -132,11 +135,31 @@ class Container:
 
     # --- Subsystem accessors (seams for future backends) ------------------
 
-    def memory(self):
-        return self._memory_service
+    def memory(self, db: Session):
+        """Request-scoped, DB-backed founder memory -- persists to founder_memory /
+        founder_memory_events. Resilient: a DB failure degrades + logs (see
+        build_db_memory_service) rather than failing the founder's conversation."""
+        return build_db_memory_service(db)
 
-    def retrieval(self):
-        return self._retrieval_service
+    def retrieval(self, db: Session | None = None):
+        """SQL-backed (pgvector, rag_chunks) when retrieval is configured and a
+        request DB session is available; otherwise the empty in-memory fallback,
+        same fail-open convention as reasoning/deps.py's _build_enricher -- a
+        misconfigured or disabled deployment gets no retrieved knowledge, not a
+        crash. Request-scoped (not held in __init__) because it needs the
+        request's own DB session, same reasoning as memory/conversation/
+        attachments/suggestions above."""
+        if db is None or not settings.RETRIEVAL_ENABLED or not settings.EMBEDDING_PROVIDER:
+            return self._retrieval_service
+        provider = embeddings.get_provider(settings.EMBEDDING_PROVIDER)
+        repository = SqlVectorRetrievalRepository(
+            db, provider, expected_dimension=settings.EMBEDDING_DIMENSION
+        )
+        return build_retrieval_service(
+            repository,
+            default_top_k=settings.RETRIEVAL_TOP_K,
+            default_min_similarity=Decimal(str(settings.RETRIEVAL_MIN_SIMILARITY)),
+        )
 
     def knowledge_graph(self):
         return self._kg_service
@@ -150,62 +173,67 @@ class Container:
     def context_builder(self, db: Session):
         return AllyContextBuilder(AllyContextRepository(db))
 
-    # --- Composition ------------------------------------------------------
-
-    def orchestrator(self, db: Session) -> OrchestratorService:
-        """Assemble a request-scoped OrchestratorService from the owned subsystems."""
-        agent = AgentOrchestrator(
-            context_builder=self.context_builder(db),
-            memory=self.memory(),
-            retrieval=self.retrieval(),
-            knowledge_graph=self.knowledge_graph(),
-            prompt_manager=self.prompt_manager(),
-            execution=self.execution(),
-        )
-        return OrchestratorService(agent)
-
     # --- Phase 6 chat flow accessors --------------------------------------
 
-    def conversation_service(self):
-        return self._conversation_service
+    def conversation_service(self, db: Session):
+        """Request-scoped, DB-backed conversation store -- persists to
+        conversations / messages. Fails loud on error (no resilient-degrade
+        wrapper): this repository IS the founder's message storage, so a silent
+        degrade would mean 'your message was sent' while it was actually lost."""
+        return build_conversation_service(SqlConversationRepository(db))
 
-    def context_window_builder(self):
-        return self._context_window_builder
+    def context_window_builder(self, db: Session):
+        """Request-scoped: the builder reads founder memory, uploaded attachments
+        and the DB-backed conversation store, so it is assembled entirely from the
+        request's session."""
+        return ContextWindowBuilder(
+            conversation_service=self.conversation_service(db),
+            memory=self.memory(db),
+            retrieval=self.retrieval(db),
+            knowledge_graph=self._kg_service,
+            attachments=self.attachment_service(db),
+        )
 
     def grounded_prompt_manager(self):
         return self._grounded_prompt_manager
 
     def chat_execution(self, db: Session) -> ChatExecutionService:
         """Assemble a request-scoped ChatExecutionService: the per-request context
-        builder (needs the DB session) over the process-level conversation store,
-        context-window builder, grounded prompt manager and execution service."""
+        builder, DB-backed conversation store, context-window builder, grounded
+        prompt manager and execution service."""
         return ChatExecutionService(
             context_builder=self.context_builder(db),
-            conversation_service=self._conversation_service,
-            context_window_builder=self._context_window_builder,
+            conversation_service=self.conversation_service(db),
+            context_window_builder=self.context_window_builder(db),
             prompt_manager=self._grounded_prompt_manager,
             execution=self._execution_service,
         )
 
     def streaming_chat(self, db: Session) -> StreamingChatService:
         """Assemble a request-scoped StreamingChatService that wraps the chat flow.
-        Additive: it composes the existing ChatExecutionService and the shared
-        conversation store; no existing service is changed."""
+        Additive: it composes the existing ChatExecutionService and the same
+        request's DB-backed conversation store; no existing service is changed."""
         return StreamingChatService(
             chat_service=self.chat_execution(db),
-            conversation_service=self._conversation_service,
+            conversation_service=self.conversation_service(db),
         )
 
     # --- Phase 6 attachments + links accessors ----------------------------
 
-    def attachment_service(self) -> AttachmentService:
-        return self._attachment_service
+    def attachment_service(self, db: Session) -> AttachmentService:
+        """Request-scoped, DB-backed attachment metadata store -- persists to
+        file_uploads. Fails loud on error, same reasoning as conversation_service:
+        this repository IS the attachment metadata storage."""
+        return AttachmentService(SqlAttachmentRepository(db))
 
     def link_extractor(self) -> LinkExtractor:
         return self._link_extractor
 
-    def suggestion_service(self) -> SuggestionService:
-        return self._suggestion_service
+    def suggestion_service(self, db: Session) -> SuggestionService:
+        """Request-scoped, DB-backed suggestion store -- persists to suggestions /
+        suggestion_feedback. Fails loud on error, same reasoning as the other
+        chat repositories: this IS the suggestion/feedback storage."""
+        return SuggestionService(SqlSuggestionRepository(db))
 
     # --- Phase 11 settings (DB-backed, per-request) -----------------------
 
@@ -299,5 +327,5 @@ class Container:
         return BroadcastService(SqlAlchemyBroadcastRepository(db))
 
 
-# Application-wide container instance. Import and use `container.orchestrator(db)`.
+# Application-wide container instance. Import and use `container.chat_execution(db)`.
 container = Container()

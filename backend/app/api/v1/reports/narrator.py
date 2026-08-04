@@ -131,7 +131,7 @@ class TemplateNarrator:
         return intro + " ".join(lines)
 
     def _areas_to_monitor(self, s, tone):
-        cats = [c for c, _ in s.get("categories", [])]
+        cats = list(s.get("categories") or [])  # names only -- never the raw score
         if not cats:
             return "No single critical issue stood out this session."
         return (
@@ -210,12 +210,27 @@ class LLMSectionNarrator:
         fallback after an error/empty output ('llm_fallback_template')."""
         import json
 
-        prompt = (
+        directives = [
             "You are writing ONE section of a founder's clarity report. Write 1-3 warm, "
-            "plain sentences. Persona: " + (tone.persona or "neutral") + ". "
+            "plain sentences. Persona: " + (tone.persona or "neutral") + ".",
             "Use ONLY the facts in the JSON below. Never invent or change a number, name, "
-            "score or claim. If a value is missing, do not mention it.\n"
-            f"SECTION: {section_key}\nFACTS: {json.dumps(slots, default=str)}"
+            "score or claim. If a value is missing, do not mention it or the topic it "
+            "would have covered -- do not guess, infer, or fill the gap with a plausible-"
+            "sounding statement.",
+        ]
+        if slots.get("brief"):
+            # Business content is deliberately de-prioritised under distress (the
+            # founder's wellbeing comes first) -- the LLM must match the template's
+            # single-sentence behaviour here, not write a full paragraph with a
+            # pillar breakdown.
+            directives.append(
+                "IMPORTANT: this section must be BRIEF -- exactly ONE short sentence "
+                "naming only the overall band, plus one line saying more detail can "
+                "wait. Do NOT list individual pillars, bands, or descriptions."
+            )
+        prompt = (
+            "\n".join(directives)
+            + f"\nSECTION: {section_key}\nFACTS: {json.dumps(slots, default=str)}"
         )
         try:
             out = (self.llm(prompt) or "").strip()

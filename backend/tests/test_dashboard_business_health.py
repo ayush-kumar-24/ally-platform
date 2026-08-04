@@ -6,9 +6,11 @@ a dummy self -- no DB/engine construction needed.
 
 from decimal import Decimal
 
+from types import SimpleNamespace
+
+from app.api.v1.dashboard.service import business_health_from_report
 from app.api.v1.reasoning.schemas import BusinessHealthScore, PillarScore
 from app.api.v1.reasoning.service import ReasoningService
-from app.schemas.dashboard import BusinessHealthDashboard, PillarHealth
 
 
 def _score() -> BusinessHealthScore:
@@ -50,19 +52,21 @@ def test_business_dna_none():
     assert ReasoningService._business_dna(None, None) is None
 
 
-def test_dashboard_schema_round_trips_snapshot():
+def test_business_health_surface_is_bands_not_scores():
+    """The founder-facing surface exposes bands only -- no raw score field at all."""
     dna = ReasoningService._business_dna(None, _score())
-    dash = BusinessHealthDashboard(
-        available=True, report_id=1, overall_score=dna["overall_score"],
-        band=dna["band"], red_flags=dna["red_flags"],
-        pillars=[PillarHealth(**p) for p in dna["pillars"]],
-    )
-    assert dash.available is True
-    assert dash.overall_score == 64
-    assert dash.pillars[0].red_flag_triggered is True
-    assert dash.pillars[1].score is None
+    report = SimpleNamespace(business_dna=dna, report_id=1, generated_at=None)
+    bh = business_health_from_report(report)
+    assert bh.available is True
+    assert bh.band == "Needs Attention"
+    assert bh.pillars[0].pillar_name == "Founder Readiness"
+    assert bh.pillars[0].red_flag_triggered is True
+    assert bh.pillars[1].band is None                 # unassessed pillar -> null, not 0
+    # structural guarantee: no score anywhere in the serialised payload
+    blob = bh.model_dump_json()
+    assert "score" not in blob.lower() and "74" not in blob
 
 
-def test_dashboard_empty_state():
-    dash = BusinessHealthDashboard(available=False)
-    assert dash.available is False and dash.pillars == [] and dash.overall_score is None
+def test_business_health_empty_state_is_null_not_zero():
+    bh = business_health_from_report(None)
+    assert bh.available is False and bh.band is None and bh.pillars == []

@@ -16,32 +16,35 @@ from app.ai_chat.links.extractor import LinkExtractor
 from app.ai_chat.services.conversation import ConversationService
 from app.ai_chat.streaming.service import StreamingChatService
 from app.ai_chat.suggestions.service import SuggestionService
-from app.api.deps import get_founder_record
+from app.api.v1.plans.dependencies import get_current_founder_id
 from app.core.container import container
 from app.db.session import get_db
-from app.models import Founder
+
+# get_current_founder_id re-exported from plans.dependencies (not redefined here)
+# so both modules share the exact same function object -- FastAPI's
+# dependency_overrides key by identity, and chat_gate (plans.dependencies) also
+# depends on it. Defining it separately in each module breaks existing test
+# overrides of THIS name silently (the override would apply to one copy but
+# chat_gate would still resolve the real founder via the other).
+# plans.dependencies is the canonical owner because the reverse direction --
+# plans importing from chat -- is what created the circular import in the first
+# place: chat.router imports ChatGate/chat_gate from plans.dependencies.
 
 
-def get_current_founder_id(founder: Founder = Depends(get_founder_record)) -> int:
-    """The authenticated founder's id -- the authoritative identity for every
-    chat request. Tests override this dependency directly."""
-    return founder.founder_id
+def get_conversation_service(db: Session = Depends(get_db)) -> ConversationService:
+    return container.conversation_service(db)
 
 
-def get_conversation_service() -> ConversationService:
-    return container.conversation_service()
-
-
-def get_attachment_service() -> AttachmentService:
-    return container.attachment_service()
+def get_attachment_service(db: Session = Depends(get_db)) -> AttachmentService:
+    return container.attachment_service(db)
 
 
 def get_link_extractor() -> LinkExtractor:
     return container.link_extractor()
 
 
-def get_suggestion_service() -> SuggestionService:
-    return container.suggestion_service()
+def get_suggestion_service(db: Session = Depends(get_db)) -> SuggestionService:
+    return container.suggestion_service(db)
 
 
 def get_chat_service(db: Session = Depends(get_db)) -> ChatExecutionService:

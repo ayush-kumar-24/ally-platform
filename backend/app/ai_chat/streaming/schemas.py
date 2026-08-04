@@ -37,7 +37,7 @@ class StreamingChatRequest:
     conversation_id: str | None = None
     session_id: int | None = None
     language: str = "en"
-    response_category: str = "diagnosis_answer"
+    response_category: str = "general_chat"
     request_id: str | None = None
     actor: str = "founder"
     max_chunk_size: int = _DEFAULT_MAX_CHUNK

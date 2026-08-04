@@ -18,18 +18,43 @@ Deterministic: no token counting, no summarization LLM, stable formatting/orderi
 
 from __future__ import annotations
 
+from app.ai_chat.attachments.extraction import extract_docx_text, extract_pdf_text
+from app.ai_chat.attachments.schemas import AttachmentType, SupportedMimeType
 from app.ai_chat.schemas.chat import ConversationContextWindow, GroundingRequest
 from app.ai_chat.schemas.conversation import Conversation, ConversationContext, MessageRole
 from app.api.v1.ally.memory.schemas import MemorySearchRequest
+from app.api.v1.ally.prompts.grounding.flatteners import attachments_block
 from app.core.logger import logger
 
 _SPEAKER = {MessageRole.USER: "Founder", MessageRole.ASSISTANT: "Ally", MessageRole.SYSTEM: "System"}
 
+# Attachment types whose bytes are decoded as plain UTF-8 text and read into the
+# prompt as-is. PDF/DOCX go through dedicated extraction (extraction.py) instead --
+# see _extract_text. Images are the only type nothing decodes yet (named-only).
+_TEXT_READABLE = frozenset({AttachmentType.TEXT, AttachmentType.SPREADSHEET})
+_EXTRACTABLE_MIME = {
+    SupportedMimeType.PDF: extract_pdf_text,
+    SupportedMimeType.DOCX: extract_docx_text,
+}
+
+
+_DEFAULT_ATTACHMENT_BYTE_BUDGET = 5_000_000  # total bytes READ+extracted per turn
+
 
 class ContextWindowConfig:
-    def __init__(self, *, max_history_messages: int = 20, memory_limit: int = 5):
+    def __init__(self, *, max_history_messages: int = 20, memory_limit: int = 5,
+                 attachment_limit: int = 5,
+                 attachment_byte_budget: int = _DEFAULT_ATTACHMENT_BYTE_BUDGET):
         self.max_history_messages = max_history_messages
         self.memory_limit = memory_limit
+        # attachment_limit bounds how many files are even considered; byte_budget
+        # additionally bounds how many of THOSE get their content read/extracted --
+        # 5 files under the count cap could still be 5x25 MiB (the per-file upload
+        # cap) of extraction work, so the count cap alone doesn't bound cost. Once
+        # the running total exceeds the budget, remaining files fall back to
+        # name-only (same as an unreadable format), never fail the turn.
+        self.attachment_limit = attachment_limit
+        self.attachment_byte_budget = attachment_byte_budget
 
 
 class ContextWindowBuilder:
@@ -40,12 +65,14 @@ class ContextWindowBuilder:
         memory,
         retrieval,
         knowledge_graph,
+        attachments=None,
         config: ContextWindowConfig | None = None,
     ):
         self.conversation_service = conversation_service
         self.memory = memory
         self.retrieval = retrieval
         self.knowledge_graph = knowledge_graph
+        self.attachments = attachments
         self.config = config or ContextWindowConfig()
 
     def build(
@@ -55,7 +82,7 @@ class ContextWindowBuilder:
         conversation: Conversation,
         current_message: str,
         language: str = "en",
-        response_category: str = "diagnosis_answer",
+        response_category: str = "general_chat",
     ) -> ConversationContextWindow:
         # 1-4. History + trimming + important preservation (reuse frozen M1).
         conv_ctx = self.conversation_service.build_context(
@@ -70,6 +97,10 @@ class ContextWindowBuilder:
 
         # 7. Inject graph expansion (M4) -- fail closed.
         graph, graph_ok = self._safe_graph(ally_context)
+
+        # 7b. Inject uploaded-file context (Milestone 4) -- fail closed. Text-
+        # readable files are decoded and inlined; other types are named only.
+        attachments_text, attachments_ok = self._safe_attachments(conversation.conversation_id)
 
         # 8. Include the current message, folding recent history into the text.
         founder_message = self._compose_message(conv_ctx, current_message)
@@ -87,6 +118,8 @@ class ContextWindowBuilder:
             memory_injected=memory_ok,
             retrieval_injected=retrieval_ok,
             graph_injected=graph_ok,
+            attachments_injected=attachments_ok,
+            attachments_text=attachments_text,
         )
 
     # --- fail-closed source injection ------------------------------------
@@ -117,6 +150,51 @@ class ContextWindowBuilder:
             logger.warning("ai_chat: graph injection failed; continuing",
                            extra={"stage": "inject_graph", "error": str(exc)})
             return None, False
+
+    def _safe_attachments(self, conversation_id: str) -> tuple[str, bool]:
+        if self.attachments is None:
+            return "", False
+        try:
+            items = self.attachments.list_attachments(conversation_id)
+            recent = items[-self.config.attachment_limit:]
+            entries = []
+            spent = 0
+            for a in recent:
+                within_budget = spent < self.config.attachment_byte_budget
+                entries.append(self._read_entry(a, extract=within_budget))
+                spent += a.metadata.size_bytes
+            return attachments_block(tuple(entries)), True
+        except Exception as exc:  # noqa: BLE001 -- degrade, never fail the turn
+            logger.warning("ai_chat: attachment injection failed; continuing",
+                           extra={"stage": "inject_attachments", "error": str(exc)})
+            return "", False
+
+    def _read_entry(self, attachment, *, extract: bool) -> tuple[str, str, int, str | None]:
+        meta = attachment.metadata
+        text = self._extract_text(attachment) if extract else None
+        return meta.filename, meta.attachment_type.value, meta.size_bytes, text
+
+    def _extract_text(self, attachment) -> str | None:
+        """Best-effort text for one attachment. Isolated per-attachment: a failure
+        here (bad decode, corrupted PDF) returns None -- the caller lists the file
+        by name only -- rather than dropping the whole attachments block."""
+        meta = attachment.metadata
+        extractor = _EXTRACTABLE_MIME.get(getattr(meta, "mime_type", None))
+        is_text_readable = meta.attachment_type in _TEXT_READABLE
+        if extractor is None and not is_text_readable:
+            return None
+        try:
+            content = self.attachments.get_content(attachment.attachment_id)
+            if content is None:
+                return None
+            if extractor is not None:
+                return extractor(content)
+            return content.decode("utf-8", errors="replace")
+        except Exception as exc:  # noqa: BLE001 -- one bad file must not sink the turn
+            logger.warning("ai_chat: attachment text extraction failed; naming only",
+                            extra={"stage": "extract_attachment_text",
+                                   "attachment_id": attachment.attachment_id, "error": str(exc)})
+            return None
 
     # --- message composition ---------------------------------------------
 

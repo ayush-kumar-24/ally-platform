@@ -36,6 +36,20 @@ class KnowledgeChunk:
     root_cause_ids: tuple[int, ...] = ()
     source_quality: int = 0
     metadata: Mapping[str, Any] = field(default_factory=dict)
+    # Content-governance tags (from rag_chunks.metadata_tags). First-class, not
+    # buried in `metadata`, because they drive a SAFETY gate, not relevance.
+    content_class: str | None = None          # e.g. "sales_collateral"
+    retrieval_scope: str | None = None        # e.g. "recommendation_only"
+
+    @property
+    def is_restricted(self) -> bool:
+        """Sales collateral / recommendation-only content that must NEVER surface in
+        the diagnosis or chat path. Only a deliberate recommendation retrieval may
+        include it (see RetrievalFilters.allow_sales_collateral)."""
+        return (
+            self.content_class == "sales_collateral"
+            or self.retrieval_scope == "recommendation_only"
+        )
 
 
 @dataclass(frozen=True)
@@ -56,6 +70,10 @@ class RetrievalFilters:
     min_similarity: Decimal = _ZERO
     top_k: int = 5
     intent: str | None = None
+    # Sales-collateral gate. Default False = fail-closed: recommendation-only /
+    # sales-collateral chunks are dropped. Only a deliberate recommendation
+    # retrieval sets this True; diagnosis and chat must leave it False.
+    allow_sales_collateral: bool = False
 
 
 @dataclass(frozen=True)
