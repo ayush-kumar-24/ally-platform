@@ -6,12 +6,21 @@ import { useVoiceInput } from '../hooks/useVoiceInput';
 import FeedbackPrompt from '../components/FeedbackPrompt';
 import { FEEDBACK } from '../services/feedback';
 
-const DIM_CHIPS = ['All', 'Revenue', 'Strategy', 'Team', 'Operations', 'Finance', 'Market'];
+/* There was a filter bar here: All / Revenue / Strategy / Team / Operations /
+   Finance / Market. It filtered nothing -- the click handler set state nothing
+   ever read -- and none of those seven are real: the question bank uses
+   seventeen categories ("Sales Execution", "Founder Psychology", "Target
+   Customer & ICP" and so on), and the server decides what to ask next anyway.
+   A founder cannot choose their own diagnosis path, so offering a chooser was
+   a lie twice over. What's shown now is the category actually being asked. */
+
+const clock = () => new Date().toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 
 export default function DiagnosisChat() {
   const navigate = useNavigate();
-  const { showToast } = useApp();
-  const [activeDim, setActiveDim] = useState('All');
+  const { user, showToast } = useApp();
+  const [answered, setAnswered] = useState(0);
+  const [category, setCategory] = useState(null);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [question, setQuestion] = useState(null);
@@ -36,13 +45,16 @@ export default function DiagnosisChat() {
         if (cancelled) return;
         setSessionId(session.sessionId);
         setQuestion(session.question);
+        // Real counters, straight off the session the server already returns.
+        setAnswered(session.answered ?? 0);
+        setCategory(session.question?.category ?? null);
         if (session.question?.text) {
-          setMessages([{ role: 'ally', text: session.question.text, time: 'now' }]);
+          setMessages([{ role: 'ally', text: session.question.text, time: clock() }]);
         }
       })
       .catch(() => {
         if (!cancelled) {
-          setMessages([{ role: 'ally', time: 'now',
+          setMessages([{ role: 'ally', time: clock(),
             text: "I couldn't start your diagnosis just now. Please refresh to try again." }]);
         }
       });
@@ -51,22 +63,27 @@ export default function DiagnosisChat() {
 
   const answer = async (text) => {
     if (!text.trim() || busy || done) return;
-    setMessages(prev => [...prev, { role: 'me', text, time: 'now' }]);
+    setMessages(prev => [...prev, { role: 'me', text, time: clock() }]);
     setInput('');
     setBusy(true);
     try {
       const res = await submitAnswer({ questionId: question?.id, answer: text });
       const state = normalise(res, true);
       const next = state.question;
+      // The server's count is authoritative; only fall back to counting
+      // locally if it didn't send one.
+      if (typeof state.answered === 'number') setAnswered(state.answered);
+      else setAnswered(a => a + 1);
+      setCategory(next?.category ?? null);
       // Trust the explicit is_complete flag over "no next question": a transient
       // gap must not be mistaken for the end of the diagnosis.
       if (next?.text && !state.complete) {
         setQuestion(next);
-        setMessages(prev => [...prev, { role: 'ally', time: 'now', text: next.text }]);
+        setMessages(prev => [...prev, { role: 'ally', time: clock(), text: next.text }]);
       } else {
         setDone(true);
         setMessages(prev => [...prev, {
-          role: 'ally', time: 'now',
+          role: 'ally', time: clock(),
           text: 'That completes your diagnosis. I am building your report now.',
         }]);
         // The hand-off to the report interstitial now waits on the feedback
@@ -77,7 +94,7 @@ export default function DiagnosisChat() {
       }
     } catch {
       setMessages(prev => [...prev, {
-        role: 'ally', time: 'now',
+        role: 'ally', time: clock(),
         text: "That didn't save. Your answer wasn't lost — try sending it again.",
       }]);
     } finally {
@@ -93,24 +110,47 @@ export default function DiagnosisChat() {
     onError: () => showToast('Could not access the microphone — check your browser permissions.'),
   });
 
+  const initials = (user?.initials || user?.name || '?').charAt(0).toUpperCase();
+
+  /* The graph's "symptoms" are the founder's own answers, newest last -- the
+     panel claims to connect what you say to the underlying cause, so it has to
+     be built from what you actually said. It used to be three fixed labels
+     ("Flat growth", "Rising spend", "Week-2 silence") rendered identically for
+     everyone, before a single question had been answered. */
+  const symptoms = messages
+    .filter(m => m.role === 'me' && m.text.trim())
+    .slice(-3)
+    .map(m => (m.text.length > 22 ? `${m.text.slice(0, 21).trimEnd()}…` : m.text));
+
   return (
     <div className="chat" style={{ height: 'calc(100vh - 64px)' }}>
       <div className="chat-main">
-        {/* Dimension chips */}
+        {/* Which area the diagnosis is in, plus real progress. The count comes
+            from the session the server returns; there is no total to show
+            against it because the engine picks questions adaptively, so saying
+            "12 of N" would be inventing the N. */}
         <div className="chat-dims">
-          {DIM_CHIPS.map(d => (
-            <button key={d} className={`dim-chip${activeDim === d ? ' on' : ''}`} onClick={() => setActiveDim(d)}>
+          {category && (
+            <span className="dim-chip on">
               <span className="p" />
-              {d}
-            </button>
-          ))}
+              {category}
+            </span>
+          )}
+          <span className="dg-progress" aria-live="polite">
+            {answered > 0 ? `${answered} answered` : 'Just started'}
+            {' · your answers are saved as you go'}
+          </span>
         </div>
 
         {/* Messages */}
         <div className="chat-scroll" ref={scrollRef}>
           {messages.map((m, i) => (
             <div key={i} className={`msg ${m.role}`}>
-              <div className={`m-av ${m.role}`}>{m.role === 'ally' ? '🤝' : 'RV'}</div>
+              {/* Was the literal string 'RV' -- the mock founder's initials,
+                  shown to every founder next to their own answers. */}
+              <div className={`m-av ${m.role}`} aria-hidden="true">
+                {m.role === 'ally' ? '🤝' : initials}
+              </div>
               <div>
                 <div className="bubble">{m.text}</div>
                 <div className="m-meta">{m.time}</div>
@@ -119,12 +159,24 @@ export default function DiagnosisChat() {
           ))}
         </div>
 
-        {/* Suggestions */}
-        <div className="suggs">
-          <button className="sugg">Tell me more about the SME churn pattern</button>
-          <button className="sugg">What's my founder DNA score for Sales?</button>
-          <button className="sugg">Show me the root cause hypothesis</button>
-        </div>
+        {/* Was three buttons with no onClick at all, captioned with a fictional
+            founder's business ("the SME churn pattern"). These answer the
+            question actually on screen, and they send. */}
+        {!done && question && (
+          <div className="suggs">
+            {['I’m not sure', 'Can you rephrase that?', 'Skip this one'].map(t => (
+              <button
+                key={t}
+                className="sugg"
+                type="button"
+                disabled={busy}
+                onClick={() => answer(t)}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Input */}
         <div className="chat-input">
@@ -183,11 +235,17 @@ export default function DiagnosisChat() {
               <circle className="kg-sig s2" r="3" />
               <circle className="kg-sig s3" r="3" />
               <circle className="kg-sig hot" r="3.4" />
-              <text className="kg-lbl" x="52" y="43">Flat growth</text>
-              <text className="kg-lbl" x="52" y="123">Rising spend</text>
-              <text className="kg-lbl" x="52" y="183">Week-2 silence</text>
-              <text className="kg-lbl hot" x="96" y="118">Mechanism</text>
-              <text className="kg-lbl hot" x="176" y="172">Root cause</text>
+              {/* The founder's own answers, newest last. */}
+              {[43, 123, 183].map((y, i) => (
+                <text key={y} className="kg-lbl" x="52" y={y}>
+                  {symptoms[i] || '—'}
+                </text>
+              ))}
+              {/* The mechanism and root cause are produced by the reasoning
+                  layer once the diagnosis finishes -- there is nothing truthful
+                  to name here while questions are still being answered. */}
+              <text className="kg-lbl hot" x="96" y="118">{done ? 'Mechanism' : 'Listening…'}</text>
+              <text className="kg-lbl hot" x="176" y="172">{done ? 'Root cause' : 'In your report'}</text>
             </svg>
           </div>
           <div className="kg-legend">
@@ -195,6 +253,11 @@ export default function DiagnosisChat() {
             <div className="kg-leg"><span className="d" style={{ background: '#34d399' }} /> Mechanism Ally inferred</div>
             <div className="kg-leg"><span className="d" style={{ background: '#A8D94A' }} /> Root cause</div>
           </div>
+          {symptoms.length === 0 && (
+            <p className="kp-sub" style={{ marginTop: 10 }}>
+              Nothing plotted yet — this fills in from your answers as you go.
+            </p>
+          )}
         </div>
       )}
 

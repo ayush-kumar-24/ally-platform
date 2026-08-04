@@ -331,3 +331,13 @@ button.ac-pcard {
   .ob-card { min-height: 44px; }
   .ob-drop-list { max-height: 108px; }
 }
+
+/* Real diagnosis progress, replacing a filter bar that filtered nothing. */
+.dg-progress {
+  margin-left: auto;
+  align-self: center;
+  font-size: 12px;
+  font-weight: 500;
+  color: #7d9488;
+  white-space: nowrap;
+}
