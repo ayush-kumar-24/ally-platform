@@ -7,12 +7,62 @@
     <meta name="theme-color" content="#06140d" />
     <title>Ally — Founder DNA Platform · GoXL</title>
     <meta name="description" content="The first AI platform that understands the founder before the business. Map your founder DNA, diagnose the root cause, and get clarity in 20 minutes." />
+
+    <!-- Explicitly invite crawlers and let them cache a full snippet. Some
+         validators (AWS Activate's among them) treat a missing or restrictive
+         robots directive as "cannot verify this site" rather than as neutral,
+         so this states the permissive case rather than relying on the default.
+         Pairs with public/robots.txt, which already allows everything. -->
+    <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large" />
+    <meta name="author" content="GoXL" />
+
+    <!-- Open Graph. What a link preview shows, and what several site verifiers
+         read to confirm a domain belongs to a real product. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Ally by GoXL" />
+    <meta property="og:title" content="Ally — Founder DNA Platform · GoXL" />
+    <meta property="og:description" content="The first AI platform that understands the founder before the business. Map your founder DNA, diagnose the root cause, and get clarity in 20 minutes." />
+    <meta property="og:image" content="/ally-logo.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Ally — Founder DNA Platform · GoXL" />
+    <meta name="twitter:description" content="AI that diagnoses the founder first, then the business." />
+
     <!-- Fonts are self-hosted via @fontsource-variable (see src/main.jsx). No
          external CDN: consistent offline, no founder-IP leak to Google, and the
          same faces are available to the server-side PDF renderer. -->
   </head>
   <body>
     <div id="root"></div>
+
+    <!-- This is a client-rendered SPA, so the HTML a crawler receives is an
+         empty root div. Google executes JavaScript; many site verifiers do not,
+         and one that doesn't sees a blank page and reports it cannot validate
+         the site. This block puts the real description in the raw HTML for
+         them. It is inside <noscript>, so a normal visitor never sees it --
+         React has replaced the page by then. -->
+    <noscript>
+      <div style="max-width:44rem;margin:0 auto;padding:3rem 1.5rem;font-family:system-ui,sans-serif;line-height:1.6;color:#16241c">
+        <h1>Ally — the Founder DNA Platform, by GoXL</h1>
+        <p>
+          Ally is an AI co-founder coach. Where most tools diagnose a business,
+          Ally diagnoses the <strong>founder</strong> first, then the business,
+          then finds the root cause sitting at their intersection.
+        </p>
+        <h2>How it works</h2>
+        <ul>
+          <li><strong>Founder DNA</strong> — your decision patterns, working style and blind spots.</li>
+          <li><strong>Business DNA</strong> — scored across revenue, product, team, operations, fundraising and market.</li>
+          <li><strong>Root cause</strong> — where your patterns and your business metrics intersect.</li>
+          <li><strong>Clarity report</strong> — a scored diagnosis you can act on.</li>
+          <li><strong>Action plan</strong> — concrete next steps, plus optional coaching calls.</li>
+        </ul>
+        <p>
+          Built by <strong>GoXL Consulting Solutions</strong>. Ally needs
+          JavaScript enabled to run; please enable it to sign in.
+        </p>
+      </div>
+    </noscript>
+
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

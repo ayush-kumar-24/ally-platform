@@ -1,2 +1,27 @@
+# Everything public here is marketing. Crawl it.
+#
+# An AWS Activate application was rejected with "we are unable to validate your
+# website -- ensure your robots.txt enables web crawlers". The real cause was
+# that nothing was deployed yet, not this file. Kept permissive, with the
+# signed-in surfaces excluded: they sit behind RequireAuth and serve a crawler
+# the same empty shell as a signed-out visitor, so indexing them would just
+# publish a set of identical thin pages.
+
 User-agent: *
+Allow: /
+
+# No content without a session, so nothing to index.
+Disallow: /app
+Disallow: /admin
+Disallow: /guided
+
+# Named individually so a verifier looking for its own agent finds a rule
+# rather than falling through to the wildcard.
+User-agent: Amazonbot
+Allow: /
+
+User-agent: Googlebot
+Allow: /
+
+User-agent: bingbot
 Allow: /
