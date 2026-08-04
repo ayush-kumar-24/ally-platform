@@ -1,16 +1,22 @@
 import { createContext, useContext, useState, useCallback, useEffect } from 'react';
-import { MOCK_FOUNDER } from '../data/mockData';
 import { getAccessToken } from '../services/api';
 import { getProfile } from '../services/profile';
 import { listNotifications, markAllRead, toDisplay } from '../services/notifications';
 
 const AppContext = createContext(null);
 
-/** Server profile -> the shape the UI components already expect. */
+/** Server profile -> the shape the UI components already expect.
+ *
+ * This used to spread MOCK_FOUNDER "for display defaults". Those defaults were
+ * a fictional person: it gave every signed-in founder stage "Early Traction", a
+ * clarity score of 72, the role "CEO & Co-founder", a location in Mumbai and
+ * the label "Pro" regardless of what they actually pay. Nothing reads those
+ * fields any more, and a real founder must not inherit a fake one's details.
+ */
 function toUser(profile) {
   const name = profile?.full_name || '';
   return {
-    ...MOCK_FOUNDER,          // keeps non-identity display defaults (avatar, etc.)
+    avatar: null,
     name,
     initials: name.split(' ').filter(Boolean).slice(0, 2)
       .map(w => w[0].toUpperCase()).join('') || '?',

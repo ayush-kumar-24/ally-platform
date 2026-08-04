@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
-import { completionPercent, loadDashboard } from '../services/dashboard';
+import { completionPercent, loadDashboard, relativeDay } from '../services/dashboard';
 import {
   IconArrowRight,
   IconChat,
@@ -13,13 +13,24 @@ import {
   IconX,
 } from '../utils/icons';
 
-function ScoreRing({ score }) {
+/**
+ * The clarity ring.
+ *
+ * Shows the band, not a number. The API deliberately never serves a raw score
+ * (see backend/app/schemas/dashboard.py) -- `fill_pct` exists precisely so the
+ * ring can be drawn without disclosing one. This used to read
+ * `health.overall_score`, a field that does not exist in the response, so it
+ * rendered a confident "0 clarity" for every founder including those with a
+ * finished diagnosis.
+ */
+function ScoreRing({ fillPct, band, hasDiagnosis }) {
   const radius = 38;
   const circumference = 2 * Math.PI * radius;
-  const offset = circumference - (score / 100) * circumference;
+  const pct = Math.max(0, Math.min(100, fillPct ?? 0));
+  const offset = circumference - (pct / 100) * circumference;
 
   return (
-    <div className="dash-ring" aria-label={`Clarity score ${score}`}>
+    <div className="dash-ring" aria-label={band ? `Clarity band: ${band}` : 'No diagnosis yet'}>
       <svg viewBox="0 0 92 92" aria-hidden="true">
         <defs>
           <linearGradient id="dash-ring-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -37,8 +48,10 @@ function ScoreRing({ score }) {
         />
       </svg>
       <div className="mid">
-        <b>{score}</b>
-        <span>clarity</span>
+        <b className={band ? 'dash-ring-band' : ''}>{band || '—'}</b>
+        {/* A finished diagnosis can still carry no band. Saying "no diagnosis
+            yet" to someone who has one is a different lie from saying nothing. */}
+        <span>{band ? 'clarity' : hasDiagnosis ? 'not banded' : 'no diagnosis yet'}</span>
       </div>
     </div>
   );
@@ -94,14 +107,36 @@ export default function Dashboard() {
   // empty state instead of a fabricated score.
   const health = data?.health;
   const hasHealth = Boolean(health?.available);
-  const score = hasHealth ? Math.round(health.overall_score ?? 0) : null;
+  const band = hasHealth ? health.band : null;
+  const fillPct = hasHealth ? health.fill_pct : null;
   const pillars = health?.pillars ?? [];
   const redFlags = health?.red_flags ?? [];
 
   const profilePct = completionPercent(data?.progress);
   const summary = data?.summary;
-  const sessions = summary?.completed_sessions ?? 0;
-  const reports = summary?.total_reports ?? 0;
+
+  /* Everything below used to be invented in the markup -- three conversations
+     that never happened, a booked call that did not exist, report scores nobody
+     produced. It is all real, and all already served by /dashboard/overview. */
+  const overview = data?.overview;
+  const diagnosis = overview?.latest_diagnosis;
+  const hasDiagnosis = Boolean(diagnosis?.available);
+  const nextAction = overview?.upcoming_actions?.[0] || null;
+  const conversations = overview?.recent_conversations ?? [];
+  const recentReports = overview?.recent_reports ?? [];
+  const call = overview?.upcoming_call;
+  const hasCall = Boolean(call?.available);
+  const metrics = overview?.metrics;
+
+  const sessions = metrics?.sessions_completed ?? summary?.completed_sessions ?? 0;
+  const reports = metrics?.reports ?? summary?.total_reports ?? 0;
+
+  const plan = data?.plan;
+  const planLabel = plan?.plan_name ? `Ally ${plan.plan_name}` : 'Ally';
+  const isFree = (plan?.tier ?? 'free') === 'free';
+  const tokenPct = plan?.daily_token_limit
+    ? Math.min(100, Math.round((plan.daily_tokens_used / plan.daily_token_limit) * 100))
+    : 0;
 
   // The onboarding banner is only truthful once the profile really is complete.
   const profileComplete = profilePct === 100;
@@ -200,21 +235,36 @@ export default function Dashboard() {
             <div className="dash-feature-tag">
               <span className="dot" /> Your founder clarity
             </div>
-            <h3>Retention is your core constraint - not acquisition.</h3>
+            <h3>
+              {hasDiagnosis
+                ? (diagnosis.title || 'Your diagnosis is ready.')
+                : 'Your diagnosis hasn’t run yet.'}
+            </h3>
             <p>
-              Ally understood how you lead and decide, then traced four business symptoms to a single root cause. Fix this first and the rest compound.
+              {hasDiagnosis
+                ? diagnosis.summary
+                : 'Once you complete a diagnosis, Ally traces your symptoms to a single root cause and explains it here.'}
             </p>
             <div className="dash-feature-acts">
-              <button className="btn btn-em" type="button" onClick={() => navigate('/app/ally-chat')}>
-                <IconChat />
-                Discuss with Ally
-              </button>
-              <button className="btn btn-dark-ghost" type="button" onClick={() => navigate('/app/report')}>
-                View full report
-              </button>
+              {hasDiagnosis ? (
+                <>
+                  <button className="btn btn-em" type="button" onClick={() => navigate('/app/ally-chat')}>
+                    <IconChat />
+                    Discuss with Ally
+                  </button>
+                  <button className="btn btn-dark-ghost" type="button" onClick={() => navigate('/app/report')}>
+                    View full report
+                  </button>
+                </>
+              ) : (
+                <button className="btn btn-em" type="button" onClick={() => navigate('/app/diagnosis')}>
+                  <IconArrowRight />
+                  Start your diagnosis
+                </button>
+              )}
             </div>
           </div>
-          <ScoreRing score={score ?? 0} />
+          <ScoreRing fillPct={fillPct} band={band} hasDiagnosis={hasDiagnosis} />
         </section>
 
         <section className="dash-progress">
@@ -228,14 +278,15 @@ export default function Dashboard() {
             <Pill active={sessions > 0}>Diagnosis</Pill>
             <Pill active={reports > 0}>Report</Pill>
             <Pill active={hasHealth}>Next steps</Pill>
-            <Pill active={false}>Discovery call</Pill>
+            {/* Was hardcoded false, so a founder who had booked a call still saw it unlit. */}
+            <Pill active={(metrics?.discovery_calls_booked ?? 0) > 0}>Discovery call</Pill>
           </div>
 
           <div className="dash-stats">
             <StatCard icon={<IconCheck />} label="Founder clarity"
-                      value={score ?? '—'} unit={score === null ? '' : '/100'}
-                      sub={hasHealth ? (health.band || 'Scored') : 'Run a diagnosis to see this'}
-                      progress={score ?? 0} />
+                      value={band || '—'} unit=""
+                      sub={hasHealth ? 'From your latest diagnosis' : 'Run a diagnosis to see this'}
+                      progress={fillPct ?? 0} />
             <StatCard icon={<IconTrendingUp />} label="Dimensions scanned"
                       value={pillars.length} unit={pillars.length ? 'scanned' : ''}
                       sub={pillars.length ? 'From your latest diagnosis' : 'No diagnosis yet'}
@@ -257,19 +308,28 @@ export default function Dashboard() {
               <div className="dash-section-head">
                 <div>
                   <div className="dash-kicker">Next recommended action</div>
-                  <div className="dash-section-title">Retention - root cause</div>
+                  <div className="dash-section-title">
+                    {nextAction?.title || (hasDiagnosis ? 'Nothing outstanding' : 'Not yet')}
+                  </div>
                 </div>
-                <button className="dash-link" type="button">See roadmap <IconArrowRight /></button>
+                {nextAction && (
+                  <button className="dash-link" type="button" onClick={() => navigate('/app/plan')}>
+                    See roadmap <IconArrowRight />
+                  </button>
+                )}
               </div>
               <p>
-                Before adding a rupee of spend, plug the leak: identify the exact step where users go quiet in week two and redesign that first-value moment.
+                {nextAction?.description
+                  || (hasDiagnosis
+                    ? 'You have no open actions right now. Plan your day to add one.'
+                    : 'Your action plan is written from your diagnosis — run one and Ally will tell you where to start.')}
               </p>
               <div className="dash-note-actions">
-                <button className="btn btn-primary" type="button" onClick={() => navigate('/app/ally-chat')}>
-                  Discuss with Ally
-                </button>
-                <button className="btn btn-ghost" type="button">
-                  Mark done
+                <button className="btn btn-primary" type="button"
+                        onClick={() => navigate(hasDiagnosis ? '/app/plan' : '/app/diagnosis')}>
+                  {nextAction ? 'Open your plan'
+                    : hasDiagnosis ? 'Plan your day'
+                    : 'Start your diagnosis'}
                 </button>
               </div>
             </section>
@@ -280,30 +340,30 @@ export default function Dashboard() {
                 <button className="dash-link" type="button">Open <IconArrowRight /></button>
               </div>
               <div className="dash-list">
-                <button className="dash-list-row" type="button" onClick={() => navigate('/app/ally-chat')}>
-                  <span className="dash-list-ic"><IconChat /></span>
-                  <span className="dash-list-body">
-                    <span className="dash-list-title">Why has growth flatlined?</span>
-                    <span className="dash-list-sub">Retention - 12 messages - 92% confidence</span>
-                  </span>
-                  <span className="dash-list-meta">Today</span>
-                </button>
-                <button className="dash-list-row" type="button" onClick={() => navigate('/app/ally-chat')}>
-                  <span className="dash-list-ic"><IconChat /></span>
-                  <span className="dash-list-body">
-                    <span className="dash-list-title">Is our pricing the problem?</span>
-                    <span className="dash-list-sub">Pricing - ruled out - 8 messages</span>
-                  </span>
-                  <span className="dash-list-meta">2d ago</span>
-                </button>
-                <button className="dash-list-row" type="button" onClick={() => navigate('/app/ally-chat')}>
-                  <span className="dash-list-ic"><IconChat /></span>
-                  <span className="dash-list-body">
-                    <span className="dash-list-title">Should I raise or extend runway?</span>
-                    <span className="dash-list-sub">Cash flow - 6 messages</span>
-                  </span>
-                  <span className="dash-list-meta">5d ago</span>
-                </button>
+                {conversations.length === 0 && (
+                  <p className="dash-empty">
+                    You haven’t talked to Ally yet. Your conversations will show up here.
+                  </p>
+                )}
+                {conversations.map((c) => (
+                  <button
+                    key={c.conversation_id}
+                    className="dash-list-row"
+                    type="button"
+                    onClick={() => navigate('/app/ally-chat')}
+                  >
+                    <span className="dash-list-ic"><IconChat /></span>
+                    <span className="dash-list-body">
+                      <span className="dash-list-title">{c.title || 'Untitled conversation'}</span>
+                      <span className="dash-list-sub">
+                        {c.message_count != null
+                          ? `${c.message_count} message${c.message_count === 1 ? '' : 's'}`
+                          : 'Conversation'}
+                      </span>
+                    </span>
+                    <span className="dash-list-meta">{relativeDay(c.last_message_at || c.created_at)}</span>
+                  </button>
+                ))}
               </div>
             </section>
 
@@ -311,67 +371,93 @@ export default function Dashboard() {
               <div className="dash-section-head">
                 <div className="dash-section-title">Upcoming discovery call</div>
               </div>
-              <div className="dash-call">
-                <div className="dash-call-kicker">Confirmed - 30 min</div>
-                <div className="dash-call-row">
-                  <div className="dash-call-date">
-                    <b>14</b>
-                    <span>JUL</span>
+              {hasCall ? (
+                <div className="dash-call">
+                  <div className="dash-call-kicker">
+                    {call.status === 'confirmed' ? 'Confirmed' : call.status}
+                    {call.duration_minutes ? ` · ${call.duration_minutes} min` : ''}
                   </div>
-                  <div className="dash-call-copy">
-                    <div className="dash-call-title">Founder strategy session</div>
-                    <div className="dash-call-sub">Thu - 4:30 PM IST - with a GoXL advisor</div>
+                  <div className="dash-call-row">
+                    <div className="dash-call-date">
+                      <b>{new Date(call.scheduled_at).toLocaleDateString(undefined, { day: 'numeric' })}</b>
+                      <span>{new Date(call.scheduled_at).toLocaleDateString(undefined, { month: 'short' }).toUpperCase()}</span>
+                    </div>
+                    <div className="dash-call-copy">
+                      <div className="dash-call-title">Founder strategy session</div>
+                      <div className="dash-call-sub">
+                        {new Date(call.scheduled_at).toLocaleString(undefined, {
+                          weekday: 'short', hour: 'numeric', minute: '2-digit',
+                        })}
+                        {call.timezone ? ` · ${call.timezone}` : ''} · with a GoXL advisor
+                      </div>
+                    </div>
                   </div>
+                  <button className="btn btn-ghost dash-call-btn" type="button"
+                          onClick={() => navigate('/app/discovery-call')}>
+                    Manage booking
+                  </button>
                 </div>
-                <button className="btn btn-ghost dash-call-btn" type="button">
-                  Manage booking
-                </button>
-              </div>
+              ) : (
+                <div className="dash-call">
+                  {/* Was a hardcoded "Confirmed · 14 JUL" for every founder, including
+                      those who had never booked anything. */}
+                  <p className="dash-empty">You have no call booked.</p>
+                  <button className="btn btn-ghost dash-call-btn" type="button"
+                          onClick={() => navigate('/app/discovery-call')}>
+                    Book a discovery call
+                  </button>
+                </div>
+              )}
             </section>
           </div>
 
           <div className="dash-stack">
+            {/* Every value here was hardcoded to "Ally Free" and "18 / 20",
+                so a founder on Pro was told they were on Free and shown usage
+                belonging to nobody. */}
             <section className="dash-section dash-plan">
               <div className="dash-plan-top">
                 <div>
                   <div className="dash-kicker">Your plan</div>
-                  <div className="dash-plan-title">Ally Free</div>
+                  <div className="dash-plan-title">{planLabel}</div>
                 </div>
-                <span className="dash-badge small">Ally Free</span>
+                <span className="dash-badge small">{planLabel}</span>
               </div>
               <div className="dash-plan-row">
                 <span>Billing</span>
-                <b>Free forever</b>
+                <b>{isFree ? 'Free forever' : 'Active subscription'}</b>
               </div>
               <div className="dash-meter">
                 <div>
                   <div className="dash-meter-row">
-                    <span>AI Chat with Ally</span>
-                    <b>18 / 20</b>
+                    <span>Daily tokens</span>
+                    <b>{plan ? `${plan.daily_tokens_used} / ${plan.daily_token_limit}` : '—'}</b>
                   </div>
-                  <div className="dash-meter-bar"><i style={{ width: '90%' }} /></div>
+                  <div className="dash-meter-bar"><i style={{ width: `${tokenPct}%` }} /></div>
                 </div>
                 <div>
                   <div className="dash-meter-row">
-                    <span>AI Business Diagnosis</span>
-                    <b>1 / 1</b>
+                    <span>Credits</span>
+                    <b>{plan ? plan.credits_balance : '—'}</b>
                   </div>
-                  <div className="dash-meter-bar"><i style={{ width: '100%' }} /></div>
                 </div>
                 <div>
                   <div className="dash-meter-row">
-                    <span>Document Analysis</span>
-                    <b><span className="dash-upgrade">Upgrade to Pro</span></b>
+                    <span>Free discovery calls</span>
+                    <b>
+                      {plan
+                        ? (plan.free_calls_remaining > 0
+                          ? `${plan.free_calls_remaining} left`
+                          : <span className="dash-upgrade">₹{plan.call_price_inr} per call</span>)
+                        : '—'}
+                    </b>
                   </div>
                 </div>
               </div>
               <div className="dash-plan-actions">
                 <button className="btn btn-em" type="button" onClick={() => navigate('/app/billing')}>
                   <IconArrowRight />
-                  Upgrade
-                </button>
-                <button className="btn btn-ghost" type="button">
-                  Manage
+                  {isFree ? 'Upgrade' : 'Manage plan'}
                 </button>
               </div>
             </section>
@@ -381,31 +467,30 @@ export default function Dashboard() {
                 <div className="dash-section-title">Recent reports</div>
                 <button className="dash-link" type="button">All <IconArrowRight /></button>
               </div>
+              {/* Three invented reports with invented scores of 74/68/61 --
+                  shown even to founders who had never run a diagnosis. */}
               <div className="dash-list reports">
-                <button className="dash-list-row report" type="button" onClick={() => navigate('/app/report')}>
-                  <span className="dash-list-ic soft"><IconDocument /></span>
-                  <span className="dash-list-body">
-                    <span className="dash-list-title">Growth & retention diagnosis</span>
-                    <span className="dash-list-sub">10 dimensions - 3 priority actions</span>
-                  </span>
-                  <span className="dash-list-score">74</span>
-                </button>
-                <button className="dash-list-row report" type="button" onClick={() => navigate('/app/report')}>
-                  <span className="dash-list-ic soft"><IconDocument /></span>
-                  <span className="dash-list-body">
-                    <span className="dash-list-title">Sales pipeline audit</span>
-                    <span className="dash-list-sub">6 dimensions - 2 priority actions</span>
-                  </span>
-                  <span className="dash-list-score">68</span>
-                </button>
-                <button className="dash-list-row report" type="button" onClick={() => navigate('/app/report')}>
-                  <span className="dash-list-ic soft"><IconDocument /></span>
-                  <span className="dash-list-body">
-                    <span className="dash-list-title">Team and hiring clarity</span>
-                    <span className="dash-list-sub">4 dimensions - 3 priority actions</span>
-                  </span>
-                  <span className="dash-list-score">61</span>
-                </button>
+                {recentReports.length === 0 && (
+                  <p className="dash-empty">
+                    No reports yet. Your first one arrives when you finish a diagnosis.
+                  </p>
+                )}
+                {recentReports.map((r) => (
+                  <button
+                    key={r.report_id}
+                    className="dash-list-row report"
+                    type="button"
+                    onClick={() => navigate('/app/report')}
+                  >
+                    <span className="dash-list-ic soft"><IconDocument /></span>
+                    <span className="dash-list-body">
+                      <span className="dash-list-title">{r.title || 'Founder diagnosis'}</span>
+                      <span className="dash-list-sub">{relativeDay(r.generated_at)}</span>
+                    </span>
+                    {/* Band, never a number -- same disclosure rule as the ring. */}
+                    <span className="dash-list-score band">{r.band || '—'}</span>
+                  </button>
+                ))}
               </div>
             </section>
           </div>
