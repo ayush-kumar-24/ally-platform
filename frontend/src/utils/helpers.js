@@ -1,3 +1,18 @@
+/**
+ * "Good morning" / "Good afternoon" / "Good evening" for right now.
+ *
+ * There were three of these: the dashboard computed it, Ally Chat computed it
+ * with a different afternoon cutoff, and the platform header just hardcoded
+ * "Good morning" -- so at 7pm the page greeted you good morning at the top and
+ * good evening immediately below it.
+ */
+export function greetingNow(date = new Date()) {
+  const h = date.getHours();
+  if (h < 12) return 'Good morning';
+  if (h < 18) return 'Good afternoon';
+  return 'Good evening';
+}
+
 export function acEsc(s) {
   const d = document.createElement('div');
   d.textContent = s || '';

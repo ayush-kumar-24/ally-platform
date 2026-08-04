@@ -2,6 +2,7 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { useState, useRef, useEffect } from 'react';
 import ProductTour from '../components/ProductTour';
+import { greetingNow } from '../utils/helpers';
 import {
   IconDashboard,
   IconMessageSquare,
@@ -190,7 +191,7 @@ export default function PlatformLayout() {
             {isDashboard ? (
               <>
                 <div className="ey">Overview</div>
-                <h1>Good morning, {firstName}</h1>
+                <h1>{greetingNow()}, {firstName}</h1>
               </>
             ) : (
               <>
