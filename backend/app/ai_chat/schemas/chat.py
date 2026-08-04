@@ -68,6 +68,9 @@ class ConversationContextWindow:
     # pre-formatted attachments block (read via getattr in grounded_variables,
     # so other GroundingSource implementers without this field stay valid)
     attachments_text: str = ""
+    tasks_injected: bool = False
+    # pre-formatted tasks block, same getattr convention as attachments_text.
+    tasks_text: str = ""
 
     @property
     def conversation(self) -> Conversation:

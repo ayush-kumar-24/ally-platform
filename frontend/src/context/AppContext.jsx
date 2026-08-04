@@ -1,6 +1,7 @@
-import { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import { MOCK_FOUNDER, MOCK_NOTIFICATIONS } from '../data/mockData';
 import { get } from '../services/api';
+import { isDueOrOverdue, listTasks } from '../services/planning';
 
 const AppContext = createContext(null);
 
@@ -114,6 +115,38 @@ export function AppProvider({ children }) {
       localStorage.setItem('ally_founder', JSON.stringify(user));
     }
   }, [user]);
+
+  // Ally nudges the founder about overdue/due-today plan tasks while they're
+  // active in the app -- there's no backend delivery worker for this (the
+  // reminders table exists but nothing polls it yet), so this is a client-side
+  // stand-in: check once on load, then periodically while the tab stays open.
+  // A ref (not state) tracks which task ids have already been surfaced this
+  // session, so the same overdue task doesn't re-toast every interval.
+  const remindedTaskIds = useRef(new Set());
+  const checkTaskReminders = useCallback(async () => {
+    let tasks;
+    try {
+      tasks = await listTasks();
+    } catch {
+      // No session yet, feature not on this plan (403), or offline -- silent,
+      // same as the /profile fetch above. Not an error worth surfacing here.
+      return;
+    }
+    const due = tasks.filter(isDueOrOverdue).filter(t => !remindedTaskIds.current.has(t.task_id));
+    if (due.length === 0) return;
+    due.forEach(t => remindedTaskIds.current.add(t.task_id));
+    const [first, ...rest] = due;
+    const message = rest.length === 0
+      ? `Reminder: "${first.title}" is due.`
+      : `Reminder: "${first.title}" and ${rest.length} other task${rest.length > 1 ? 's' : ''} due.`;
+    showToast(message, 6000);
+  }, [showToast]);
+
+  useEffect(() => {
+    checkTaskReminders();
+    const interval = setInterval(checkTaskReminders, 20 * 60 * 1000); // every 20 min while active
+    return () => clearInterval(interval);
+  }, [checkTaskReminders]);
 
   return (
     <AppContext.Provider value={{

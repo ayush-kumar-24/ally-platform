@@ -29,6 +29,7 @@ _RETRIEVAL_NONE = "No supporting knowledge retrieved."
 _GRAPH_NONE = "No related diagnostic map available."
 _DIAGNOSIS_NONE = "No diagnosis completed yet."
 _ATTACHMENTS_NONE = "No files uploaded in this conversation."
+_TASKS_NONE = "No active tasks on the founder's plan."
 _FOUNDER_NAME_FALLBACK = "the founder"
 _STAGE_NAME_FALLBACK = "not set yet"
 
@@ -51,4 +52,7 @@ def grounded_variables(source: GroundingSource) -> dict[str, str]:
     # attachments; other GroundingSource implementers (tests, the orchestrator's
     # PipelineContext) simply have none -- getattr keeps this additive/optional.
     variables["attachments_block"] = getattr(source, "attachments_text", "") or _ATTACHMENTS_NONE
+    # Same optional/additive convention as attachments_text -- only the ai_chat
+    # GroundingSource carries tasks_text.
+    variables["tasks_block"] = getattr(source, "tasks_text", "") or _TASKS_NONE
     return variables

@@ -119,3 +119,21 @@ def attachments_block(entries: tuple[tuple[str, str, int, str | None], ...]) -> 
                 "contents cannot be read yet; you only know it exists."
             )
     return "\n".join(lines)
+
+
+def tasks_block(entries: tuple[tuple[str, str, str, object], ...]) -> str:
+    """Format the founder's not-done Plan Your Day tasks (title, status, priority,
+    due_date) into a readable block, so Ally can recognise when a message relates
+    to something already on the founder's plan -- e.g. "finish the pitch deck" --
+    without inventing tasks that were never actually created."""
+    if not entries:
+        return ""
+    lines: list[str] = []
+    for title, status, priority, due_date in entries:
+        bits = [priority]
+        if status == "in_progress":
+            bits.append("in progress")
+        if due_date:
+            bits.append(f"due {due_date.isoformat()}")
+        lines.append(f"- {title} ({', '.join(bits)})")
+    return "\n".join(lines)

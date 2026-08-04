@@ -1,49 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
 import PlanGate from '../components/PlanGate';
 import { FEATURES } from '../services/plans';
-
-const INITIAL_ACTIVE = [
-  {
-    id: 'act-1',
-    text: 'Finish the landing page',
-    priority: 'high',
-    time: '11:00 AM',
-    duration: '45 mins'
-  },
-  {
-    id: 'act-2',
-    text: 'Review pricing strategy',
-    priority: 'medium',
-    time: '2:00 PM',
-    duration: '30 mins'
-  },
-  {
-    id: 'act-3',
-    text: 'Draft the Q3 roadmap',
-    priority: 'medium',
-    time: '4:00 PM',
-    duration: '1 hr'
-  }
-];
-
-const INITIAL_COMPLETED = [
-  {
-    id: 'done-1',
-    text: 'Reply to the investor update',
-    time: '9:52 AM'
-  },
-  {
-    id: 'done-2',
-    text: 'Team standup',
-    time: '10:18 AM'
-  },
-  {
-    id: 'done-3',
-    text: 'Ship pricing page copy',
-    time: '8:38 AM'
-  }
-];
+import { addTask, listTasks, setTaskStatus } from '../services/planning';
+import { ApiError } from '../services/api';
 
 const CHIP_SUGGESTIONS = [
   'Investor meeting at 10',
@@ -53,71 +13,102 @@ const CHIP_SUGGESTIONS = [
   'Book hotel'
 ];
 
+const PRIORITY_RANK = { high: 0, medium: 1, low: 2 };
+const sortByPriority = (tasks) =>
+  [...tasks].sort((a, b) => (PRIORITY_RANK[a.priority] ?? 1) - (PRIORITY_RANK[b.priority] ?? 1));
+
+function completedAtLabel(task) {
+  if (!task.completed_at) return '';
+  return new Date(task.completed_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+}
+
 function PlanYourDayInner() {
-  const { user } = useApp();
+  const { user, showToast } = useApp();
   const [activeTab, setActiveTab] = useState('ally');
   const [inputText, setInputText] = useState('');
-  const [activeGoals, setActiveGoals] = useState(INITIAL_ACTIVE);
-  const [completedGoals, setCompletedGoals] = useState(INITIAL_COMPLETED);
-
+  const [tasks, setTasks] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
   const [dateString, setDateString] = useState('');
 
   useEffect(() => {
-    // Format: Tuesday, July 14
     const options = { weekday: 'long', month: 'long', day: 'numeric' };
     setDateString(new Date().toLocaleDateString('en-US', options));
   }, []);
 
-  const handleToggleActive = (goal) => {
-    setActiveGoals(prev => prev.filter(g => g.id !== goal.id));
-    const now = new Date();
-    const hours = now.getHours();
-    const minutes = now.getMinutes();
-    const ampm = hours >= 12 ? 'PM' : 'AM';
-    const formattedTime = `${hours % 12 || 12}:${minutes < 10 ? '0' : ''}${minutes} ${ampm}`;
-    setCompletedGoals(prev => [
-      ...prev,
-      { id: goal.id, text: goal.text, time: formattedTime }
-    ]);
+  const refresh = useCallback(async () => {
+    try {
+      const items = await listTasks();
+      setTasks(items);
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.detail : 'Could not load your tasks — please refresh.');
+    } finally {
+      setLoading(false);
+    }
+  }, [showToast]);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const activeGoals = sortByPriority(tasks.filter(t => t.status !== 'done'));
+  const completedGoals = tasks.filter(t => t.status === 'done');
+
+  const handleToggleActive = async (task) => {
+    // Optimistic: flip locally first so the checkbox feels instant, reconcile
+    // (or roll back) once the request actually resolves.
+    setTasks(prev => prev.map(t => (t.task_id === task.task_id ? { ...t, status: 'done' } : t)));
+    try {
+      await setTaskStatus(task.task_id, 'done');
+      refresh(); // pick up the real completed_at stamp
+    } catch (err) {
+      setTasks(prev => prev.map(t => (t.task_id === task.task_id ? task : t))); // roll back
+      showToast(err instanceof ApiError ? err.detail : 'Could not mark that task done — please try again.');
+    }
   };
 
-  const handleToggleCompleted = (goal) => {
-    setCompletedGoals(prev => prev.filter(g => g.id !== goal.id));
-    setActiveGoals(prev => [
-      ...prev,
-      {
-        id: goal.id,
-        text: goal.text,
-        priority: 'medium',
-        time: '5:00 PM',
-        duration: '30 mins'
-      }
-    ]);
+  const handleToggleCompleted = async (task) => {
+    setTasks(prev => prev.map(t => (t.task_id === task.task_id ? { ...t, status: 'todo' } : t)));
+    try {
+      await setTaskStatus(task.task_id, 'todo');
+    } catch (err) {
+      setTasks(prev => prev.map(t => (t.task_id === task.task_id ? task : t)));
+      showToast(err instanceof ApiError ? err.detail : 'Could not reopen that task — please try again.');
+    }
   };
 
-  const handlePlanMyDay = () => {
-    if (!inputText.trim()) return;
-    const newGoal = {
-      id: `custom-${Date.now()}`,
-      text: inputText.trim(),
-      priority: 'high',
-      time: '12:00 PM',
-      duration: '30 mins'
-    };
-    setActiveGoals(prev => [newGoal, ...prev]);
+  const handlePlanMyDay = async () => {
+    const text = inputText.trim();
+    if (!text || submitting) return;
+    setSubmitting(true);
     setInputText('');
+    try {
+      // "Plan with Ally" accepts a comma-separated brain-dump and turns each
+      // phrase into its own task -- deterministic splitting, not AI parsing;
+      // it doesn't infer times or durations, only what's actually in the text.
+      const titles = activeTab === 'ally'
+        ? text.split(',').map(s => s.trim()).filter(Boolean)
+        : [text];
+      for (const title of titles) {
+        await addTask(title, { priority: 'medium' });
+      }
+      await refresh();
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.detail : 'Could not add that task — please try again.');
+      setInputText(text); // give it back so nothing typed is lost
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleChipClick = (chip) => {
     setInputText(prev => (prev ? `${prev}, ${chip}` : chip));
   };
 
-  const totalGoals = activeGoals.length + completedGoals.length;
+  const totalGoals = tasks.length;
   const completionPct = totalGoals > 0 ? Math.round((completedGoals.length / totalGoals) * 100) : 0;
   const strokeDashoffset = 308 - (completionPct / 100) * 308;
 
-  const nextReminder = activeGoals.length > 0 ? activeGoals[0] : null;
-  const firstName = (user?.name || 'Ayush Sharma').split(' ')[0];
+  const nextReminder = activeGoals.find(t => t.due_date) || activeGoals[0] || null;
+  const firstName = (user?.name || 'there').split(' ')[0];
 
   return (
     <div className="pad plan-wrap">
@@ -224,6 +215,7 @@ function PlanYourDayInner() {
                 className="pl-textarea"
                 placeholder="e.g. Investor meeting at 10, finish the pitch deck, call Rahul, review CAC..."
                 value={inputText}
+                disabled={submitting}
                 onChange={(e) => setInputText(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handlePlanMyDay())}
               />
@@ -243,9 +235,9 @@ function PlanYourDayInner() {
               <div className="pl-input-footer">
                 <div className="pl-input-hint">
                   <span className="dot" />
-                  I'll sort priority, time & grouping.
+                  Comma-separate a few things and I'll add them as separate tasks.
                 </div>
-                <button className="pl-plan-btn" onClick={handlePlanMyDay}>
+                <button className="pl-plan-btn" onClick={handlePlanMyDay} disabled={submitting}>
                   Plan my day
                 </button>
               </div>
@@ -262,6 +254,7 @@ function PlanYourDayInner() {
                   style={{ minHeight: 'auto', height: '40px', padding: '0 12px' }}
                   placeholder="Task description..."
                   value={inputText}
+                  disabled={submitting}
                   onChange={(e) => setInputText(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handlePlanMyDay()}
                 />
@@ -269,6 +262,7 @@ function PlanYourDayInner() {
                   className="pl-plan-btn"
                   style={{ height: '40px', padding: '0 20px', flexShrink: 0 }}
                   onClick={handlePlanMyDay}
+                  disabled={submitting}
                 >
                   Add task
                 </button>
@@ -287,42 +281,41 @@ function PlanYourDayInner() {
           </div>
 
           <div className="pl-goal-list" style={{ marginBottom: 32 }}>
-            {activeGoals.length === 0 ? (
+            {loading ? (
+              <div className="plan-empty" style={{ background: '#ffffff', padding: '24px', borderRadius: '14px', border: '1px solid var(--bd)' }}>
+                <p style={{ fontSize: '12.5px', color: 'var(--muted)', margin: 0 }}>Loading your tasks…</p>
+              </div>
+            ) : activeGoals.length === 0 ? (
               <div className="plan-empty" style={{ background: '#ffffff', padding: '24px', borderRadius: '14px', border: '1px solid var(--bd)' }}>
                 <h3 style={{ fontSize: '15px', fontWeight: 700, margin: '0 0 4px' }}>All caught up!</h3>
                 <p style={{ fontSize: '12.5px', color: 'var(--muted)', margin: 0 }}>No active tasks remaining for today.</p>
               </div>
             ) : (
-              activeGoals.map((goal) => (
-                <div key={goal.id} className="pl-goal-row">
+              activeGoals.map((task) => (
+                <div key={task.task_id} className="pl-goal-row">
                   <button
                     className="pl-checkbox"
-                    onClick={() => handleToggleActive(goal)}
+                    onClick={() => handleToggleActive(task)}
                   >
                     <svg viewBox="0 0 12 12">
                       <polyline points="2 6 5 9 10 3" />
                     </svg>
                   </button>
                   <div className="pl-goal-content">
-                    <h4 className="pl-goal-title">{goal.text}</h4>
+                    <h4 className="pl-goal-title">{task.title}</h4>
                     <div className="pl-goal-badges">
-                      <span className={`pl-badge ${goal.priority}`}>
-                        {goal.priority}
+                      <span className={`pl-badge ${task.priority}`}>
+                        {task.priority}
                       </span>
-                      <span className="pl-meta-item">
-                        <svg viewBox="0 0 24 24">
-                          <circle cx="12" cy="12" r="10" />
-                          <polyline points="12 6 12 12 16 14" />
-                        </svg>
-                        {goal.time}
-                      </span>
-                      <span className="pl-meta-item">
-                        <svg viewBox="0 0 24 24">
-                          <circle cx="12" cy="12" r="10" />
-                          <line x1="8" y1="12" x2="16" y2="12" />
-                        </svg>
-                        {goal.duration}
-                      </span>
+                      {task.due_date && (
+                        <span className="pl-meta-item">
+                          <svg viewBox="0 0 24 24">
+                            <circle cx="12" cy="12" r="10" />
+                            <polyline points="12 6 12 12 16 14" />
+                          </svg>
+                          due {task.due_date}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -346,11 +339,11 @@ function PlanYourDayInner() {
                 <p style={{ fontSize: '12.5px', color: 'var(--muted)', margin: 0 }}>No tasks completed yet. Start checking off goals!</p>
               </div>
             ) : (
-              completedGoals.map((goal) => (
+              completedGoals.map((task) => (
                 <div
-                  key={goal.id}
+                  key={task.task_id}
                   className="pl-completed-row"
-                  onClick={() => handleToggleCompleted(goal)}
+                  onClick={() => handleToggleCompleted(task)}
                   style={{ cursor: 'pointer' }}
                 >
                   <div className="pl-checkbox">
@@ -359,9 +352,9 @@ function PlanYourDayInner() {
                     </svg>
                   </div>
                   <div className="pl-completed-content">
-                    <h4 className="pl-completed-title">{goal.text}</h4>
+                    <h4 className="pl-completed-title">{task.title}</h4>
                     <span className="pl-completed-time">
-                      Completed at {goal.time}
+                      Completed{completedAtLabel(task) ? ` at ${completedAtLabel(task)}` : ''}
                     </span>
                   </div>
                 </div>
@@ -374,16 +367,20 @@ function PlanYourDayInner() {
         <div className="plan-aside">
           {/* Progress Card */}
           <div className="pl-prog-card">
-            <defs>
-              <linearGradient id="plGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="#10B981" />
-                <stop offset="100%" stopColor="#A8D94A" />
-              </linearGradient>
-            </defs>
             <div className="pl-prog-title">Today's progress</div>
 
             <div className="pl-prog-ring">
               <svg viewBox="0 0 110 110">
+                {/* plan.css references stroke: url(#plGrad) on .fg -- the
+                    gradient must live inside an <svg> to render at all (it
+                    was previously a bare <defs> outside any svg, which React
+                    can't mount and the browser can't resolve). */}
+                <defs>
+                  <linearGradient id="plGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" stopColor="#10B981" />
+                    <stop offset="100%" stopColor="#A8D94A" />
+                  </linearGradient>
+                </defs>
                 <circle className="bg" cx="55" cy="55" r="49" />
                 <circle
                   className="fg"
@@ -436,15 +433,15 @@ function PlanYourDayInner() {
             </div>
             <div className="pl-reminder-content">
               <span className="pl-reminder-time">
-                {nextReminder ? nextReminder.time : '--:--'}
+                {nextReminder?.due_date || '--:--'}
               </span>
               <span className="pl-reminder-title">
-                {nextReminder ? nextReminder.text : 'No upcoming goals'}
+                {nextReminder ? nextReminder.title : 'No upcoming goals'}
               </span>
             </div>
           </div>
           <p className="pl-reminder-hint">
-            Reminder notifications will appear here.
+            Ally will nudge you about overdue or due-today tasks while you're active in the app.
           </p>
 
           {/* Daily Motivation Card */}

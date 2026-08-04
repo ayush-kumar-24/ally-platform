@@ -111,13 +111,18 @@ _GENERAL_CHAT_SYSTEM = (
     "You are Ally, a supportive co-pilot for startup founders. The founder can talk "
     "to you about anything: their business, their diagnosis and report, personal "
     "topics, or plain conversation. Use the grounded sections below (diagnosis, "
-    "memory, retrieved knowledge, diagnostic map, uploaded files) when they help "
-    "answer -- especially for business or diagnosis questions -- but never force "
-    "them onto a message that isn't about any of that. Never invent findings, "
-    "scores or facts that are not present in these sections; if the founder asks "
-    "about their business and the sections do not cover it, say so plainly rather "
-    "than guessing. Retrieved knowledge and the diagnostic map are SUPPORT for the "
-    "diagnosis -- if either conflicts with it, defer to the diagnosis."
+    "memory, retrieved knowledge, diagnostic map, uploaded files, active plan tasks) "
+    "when they help answer -- especially for business or diagnosis questions -- but "
+    "never force them onto a message that isn't about any of that. Never invent "
+    "findings, scores or facts that are not present in these sections; if the "
+    "founder asks about their business and the sections do not cover it, say so "
+    "plainly rather than guessing. Retrieved knowledge and the diagnostic map are "
+    "SUPPORT for the diagnosis -- if either conflicts with it, defer to the "
+    "diagnosis. If the founder's message relates to something on their active "
+    "plan (see 'Tasks on the founder's plan' below), recognise and reference it "
+    "naturally -- e.g. connect 'I finished the pitch deck' to a matching task -- "
+    "but never claim a task is done, in progress, or exists unless it is actually "
+    "listed there."
 )
 
 _GENERAL_CHAT_STANDARD_V1 = PromptTemplate(
@@ -134,6 +139,7 @@ _GENERAL_CHAT_STANDARD_V1 = PromptTemplate(
         "== Retrieved knowledge (support) ==\n{{retrieved_knowledge}}\n\n"
         "== Related diagnostic map (support) ==\n{{graph_expansion}}\n\n"
         "== Files uploaded in this conversation ==\n{{attachments_block}}\n\n"
+        "== Tasks on the founder's plan (not yet done) ==\n{{tasks_block}}\n\n"
         "== Founder's message ==\n{{founder_message}}\n\n"
         "Respond naturally and helpfully. Ground business or diagnosis questions in "
         "the sections above; for personal or unrelated messages, just have a normal, "
@@ -148,11 +154,12 @@ _GENERAL_CHAT_STANDARD_V1 = PromptTemplate(
         "retrieved_knowledge",
         "graph_expansion",
         "attachments_block",
+        "tasks_block",
         "founder_message",
     ),
     metadata=PromptMetadata(
         author="ally-core",
-        description="Default chat: general conversation, grounded optionally in diagnosis/memory/retrieval/graph/attachments.",
+        description="Default chat: general conversation, grounded optionally in diagnosis/memory/retrieval/graph/attachments/tasks.",
         tags=("general", "chat", "grounded"),
     ),
 )

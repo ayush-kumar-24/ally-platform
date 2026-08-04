@@ -13,6 +13,7 @@ from types import SimpleNamespace
 
 from app.ai_chat import ContextWindowBuilder, ContextWindowConfig, MessageRole, build_conversation_service
 from app.ai_chat.attachments.schemas import AttachmentType, SupportedMimeType
+from app.planning.models import PlanStatus, Priority, ProgressStatus
 from app.api.v1.ally.context.schemas import (
     AllyContext,
     DiagnosisContext,
@@ -92,7 +93,7 @@ class Boom:
         return _raise
 
 
-def setup(*, memory=None, retrieval=None, kg=None, attachments=None, config=None):
+def setup(*, memory=None, retrieval=None, kg=None, attachments=None, planning=None, config=None):
     conv = build_conversation_service(clock=FakeClock(), id_factory=_ids())
     mem = memory if memory is not None else build_memory_service(InMemoryMemoryRepository(), clock=FakeClock())
     builder = ContextWindowBuilder(
@@ -101,6 +102,7 @@ def setup(*, memory=None, retrieval=None, kg=None, attachments=None, config=None
         retrieval=_retrieval() if retrieval is None else retrieval,
         knowledge_graph=_kg() if kg is None else kg,
         attachments=attachments,
+        planning=planning,
         config=config,
     )
     return conv, builder
@@ -309,6 +311,96 @@ def test_attachments_failure_degrades():
     c = _conv_with(conv, (U, "hi"))
     w = builder.build(ally_context=make_ctx(), conversation=c, current_message="hi")
     assert w.attachments_injected is False and w.attachments_text == ""
+
+
+# --- planning tasks (Plan Your Day -- so Ally can relate a message to a task) ---
+
+
+class FakePlan:
+    def __init__(self, plan_id, status=PlanStatus.ACTIVE):
+        self.plan_id = plan_id
+        self.status = status
+
+
+class FakeTask:
+    def __init__(self, title, status=ProgressStatus.TODO, priority=Priority.MEDIUM, due_date=None):
+        self.title = title
+        self.status = status
+        self.priority = priority
+        self.due_date = due_date
+
+
+class FakePlanning:
+    """Mirrors PlanningService's shape for exactly the two calls
+    ContextWindowBuilder._safe_tasks makes -- list_plans + get_plan_detail."""
+
+    def __init__(self, plans=(), tasks_by_plan=None):
+        self._plans = plans
+        self._tasks_by_plan = tasks_by_plan or {}
+
+    def list_plans(self, founder_id):
+        return self._plans
+
+    def get_plan_detail(self, founder_id, plan_id):
+        tasks = self._tasks_by_plan.get(plan_id, ())
+        goal = SimpleNamespace(tasks=tasks)
+        return SimpleNamespace(goals=(goal,))
+
+
+def test_no_planning_configured_is_not_injected():
+    conv, builder = setup()  # no planning service wired
+    c = _conv_with(conv, (U, "hi"))
+    w = builder.build(ally_context=make_ctx(), conversation=c, current_message="hi")
+    assert w.tasks_injected is False and w.tasks_text == ""
+
+
+def test_not_done_tasks_are_inlined():
+    plan = FakePlan("plan-1")
+    task = FakeTask("Finish the pitch deck", priority=Priority.HIGH)
+    planning = FakePlanning(plans=(plan,), tasks_by_plan={"plan-1": (task,)})
+    conv, builder = setup(planning=planning)
+    c = _conv_with(conv, (U, "hi"))
+    w = builder.build(ally_context=make_ctx(), conversation=c, current_message="hi")
+    assert w.tasks_injected is True
+    assert "Finish the pitch deck" in w.tasks_text
+    assert "high" in w.tasks_text
+
+
+def test_done_tasks_are_excluded():
+    plan = FakePlan("plan-1")
+    done = FakeTask("Ship pricing page copy", status=ProgressStatus.DONE)
+    todo = FakeTask("Review CAC")
+    planning = FakePlanning(plans=(plan,), tasks_by_plan={"plan-1": (done, todo)})
+    conv, builder = setup(planning=planning)
+    c = _conv_with(conv, (U, "hi"))
+    w = builder.build(ally_context=make_ctx(), conversation=c, current_message="hi")
+    assert "Ship pricing page copy" not in w.tasks_text
+    assert "Review CAC" in w.tasks_text
+
+
+def test_archived_plan_excluded():
+    plan = FakePlan("plan-1", status=PlanStatus.ARCHIVED)
+    planning = FakePlanning(plans=(plan,), tasks_by_plan={"plan-1": (FakeTask("Old task"),)})
+    conv, builder = setup(planning=planning)
+    c = _conv_with(conv, (U, "hi"))
+    w = builder.build(ally_context=make_ctx(), conversation=c, current_message="hi")
+    assert w.tasks_text == ""
+
+
+def test_no_active_tasks_still_injected_empty():
+    planning = FakePlanning(plans=())
+    conv, builder = setup(planning=planning)
+    c = _conv_with(conv, (U, "hi"))
+    w = builder.build(ally_context=make_ctx(), conversation=c, current_message="hi")
+    assert w.tasks_injected is True  # the source itself didn't fail
+    assert w.tasks_text == ""        # just nothing to say
+
+
+def test_tasks_failure_degrades():
+    conv, builder = setup(planning=Boom())
+    c = _conv_with(conv, (U, "hi"))
+    w = builder.build(ally_context=make_ctx(), conversation=c, current_message="hi")
+    assert w.tasks_injected is False and w.tasks_text == ""
 
 
 # --- deterministic trimming -------------------------------------------------
