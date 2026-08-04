@@ -126,6 +126,24 @@ export default function Login() {
       // Backend down, or no dev founder configured. Fall through with no
       // identity; AppContext re-hydrates from /profile once a session exists.
     }
+
+    /* No real provider AND no dev token (this is what production looks like
+       right now, with Supabase unconfigured): there is no way to get a session
+       here, full stop. The old code fell through anyway -- set a mostly-empty
+       user, play the "signing you in" animation, and navigate into a guarded
+       route with no token. GuidedLayout's own auth check then bounced straight
+       back here, so the founder watched the animation play and landed back on
+       this exact screen -- indistinguishable from nothing having happened. Say
+       so instead of performing a sign-in that cannot succeed. */
+    if (!devFounder) {
+      setValidationError(
+        'Sign-in is not available in this environment yet. Please try again shortly.',
+      );
+      inFlight.current = false;
+      setSubmitting(false);
+      return;
+    }
+
     const devName = devProfile?.full_name || '';
 
     setUser(prev => ({
