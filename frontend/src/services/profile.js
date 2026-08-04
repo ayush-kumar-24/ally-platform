@@ -42,14 +42,15 @@ const BUSINESS = {
   stage: 'stage',
   building: 'building_summary',
   problem: 'problem_statement',
-  customer: 'customer_segment',
+  audience: 'customer_segment',
+  audienceOther: 'customer_segment_other',
   industry: 'industry',
   challenges: 'current_challenges',
 };
 
 const FOUNDER = {
   why: 'founder_motivation',
-  working: 'support_preferences',
+  support: 'support_preferences',
   experience: 'experience_level',
   feeling: 'emotional_state',
   reflection: 'adaptive_reflection',
@@ -61,7 +62,9 @@ const GOALS = {
 };
 
 /** Fields the API models as lists even when onboarding collects a single choice. */
-const LIST_FIELDS = new Set(['support_preferences', 'emotional_state', 'current_challenges']);
+const LIST_FIELDS = new Set([
+  'support_preferences', 'emotional_state', 'current_challenges', 'customer_segment',
+]);
 
 function section(answers, map) {
   const out = {};
@@ -71,6 +74,65 @@ function section(answers, map) {
     out[field] = LIST_FIELDS.has(field) && !Array.isArray(value) ? [value] : value;
   }
   return out;
+}
+
+/**
+ * Server profile -> the short keys the guided screens use.
+ *
+ * The inverse of the maps above. Without it those screens can only read answers
+ * from React state, which is memory-only: after a reload every field reads
+ * "Not answered" even though the answers are sitting in the database.
+ */
+export function toGuidedAnswers(profile) {
+  if (!profile) return {};
+  const feelings = profile.emotional_state || [];
+  return {
+    stage: profile.stage_name || '',
+    building: profile.building_summary || '',
+    problem: profile.problem_statement || '',
+    audience: profile.customer_segment || [],
+    audienceOther: profile.customer_segment_other || '',
+    industry: profile.industry || '',
+    challenges: profile.current_challenges || [],
+    goal90: profile.goal_90_day || '',
+    vision: profile.vision_1_year || '',
+    why: profile.founder_motivation || '',
+    support: profile.support_preferences || [],
+    experience: profile.experience_level || '',
+    feeling: Array.isArray(feelings) ? (feelings[0] || '') : (feelings || ''),
+    reflection: profile.adaptive_reflection || '',
+  };
+}
+
+/** Which section endpoint owns each canonical field. */
+const OWNER = {
+  business: new Set(Object.values(BUSINESS)),
+  founder: new Set(Object.values(FOUNDER)),
+  goals: new Set(Object.values(GOALS)),
+};
+
+/**
+ * Save an already-canonical patch (e.g. { building_summary, goal_90_day }),
+ * routing each field to the section endpoint that owns it.
+ *
+ * Used by the summary screen, where a founder corrects what Ally read back.
+ * Throws if any section fails, so the caller can tell them it didn't stick.
+ */
+export async function saveProfileEdits(changes) {
+  const calls = [
+    [OWNER.business, updateBusinessSection],
+    [OWNER.founder, updateFounderSection],
+    [OWNER.goals, updateGoals],
+  ]
+    .map(([fields, call]) => {
+      const payload = Object.fromEntries(
+        Object.entries(changes).filter(([field]) => fields.has(field)),
+      );
+      return Object.keys(payload).length > 0 ? call(payload) : null;
+    })
+    .filter(Boolean);
+
+  await Promise.all(calls);
 }
 
 /**

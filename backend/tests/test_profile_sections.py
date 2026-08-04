@@ -91,6 +91,47 @@ def test_business_section_rejects_bad_stage(founder_client):
     assert r.status_code == 422
 
 
+# --- onboarding multi-selects ------------------------------------------------
+
+def test_customer_segment_stores_multiple_chips(founder_client):
+    """"Who are you building this for?" is a multi-select, so several segments
+    have to survive the round trip rather than the last one winning."""
+    client, _ = founder_client
+    r = client.patch(f"{BASE}/business", json={
+        "customer_segment": ["Businesses", "Developers", "Enterprises"],
+        "customer_segment_other": "Independent research labs",
+    })
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["customer_segment"] == ["Businesses", "Developers", "Enterprises"]
+    assert body["customer_segment_other"] == "Independent research labs"
+
+
+def test_customer_segment_dedupes_and_trims(founder_client):
+    client, _ = founder_client
+    r = client.patch(f"{BASE}/business", json={
+        "customer_segment": ["Businesses", "  businesses ", "", "Students"],
+    })
+    assert r.status_code == 200, r.text
+    assert r.json()["customer_segment"] == ["Businesses", "Students"]
+
+
+def test_challenges_capped_at_three(founder_client):
+    """The spec says "choose up to 3". The UI enforces it; so must the API, or
+    the cap is only a suggestion to anything that isn't our own frontend."""
+    client, _ = founder_client
+    r = client.patch(f"{BASE}/business", json={
+        "current_challenges": ["Sales", "Hiring", "Cash flow", "Scaling"],
+    })
+    assert r.status_code == 422
+
+    ok = client.patch(f"{BASE}/business", json={
+        "current_challenges": ["Sales", "Hiring", "Cash flow"],
+    })
+    assert ok.status_code == 200, ok.text
+    assert ok.json()["current_challenges"] == ["Sales", "Hiring", "Cash flow"]
+
+
 def test_goals_section(founder_client):
     client, _ = founder_client
     r = client.patch(f"{BASE}/goals", json={"goal_90_day": "ship v1", "vision_1_year": "1000 users"})

@@ -362,10 +362,27 @@ class Founders(Base):
     emotional_state: Mapped[Optional[dict]] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
     adaptive_reflection: Mapped[Optional[str]] = mapped_column(Text)
     adaptive_question_id: Mapped[Optional[str]] = mapped_column(String(20))
+    # The read Ally forms straight after onboarding. Generated once and kept:
+    # a "first impression" that changes on every visit is not an impression.
+    first_impression: Mapped[Optional[dict]] = mapped_column(JSONB)
+    first_impression_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
+
+    @property
+    def stage_name(self) -> Optional[str]:
+        """The joined stage's name.
+
+        Reads of the profile carry `stage_id`, which is meaningless to a client
+        -- it would have to keep its own copy of founder_stages to show the
+        founder what they picked. Surfacing the name here keeps that lookup on
+        the side that owns the table.
+        """
+        return self.stage.stage_name if self.stage is not None else None
     decision_making_style: Mapped[Optional[str]] = mapped_column(String(30))
     building_summary: Mapped[Optional[str]] = mapped_column(Text)
     problem_statement: Mapped[Optional[str]] = mapped_column(Text)
-    customer_segment: Mapped[Optional[str]] = mapped_column(String(30))
+    # Multi-select: onboarding asks "who are you building this for?" as chips.
+    # customer_segment_other holds the free text behind the "Other" chip.
+    customer_segment: Mapped[Optional[dict]] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
     customer_segment_other: Mapped[Optional[str]] = mapped_column(String(200))
     industry: Mapped[Optional[str]] = mapped_column(String(30))
     industry_mapped_id: Mapped[Optional[int]] = mapped_column(Integer)

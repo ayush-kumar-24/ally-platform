@@ -1,106 +1,94 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { saveOnboardingProfile } from '../../services/profile';
 import { useVoiceInput } from '../../hooks/useVoiceInput';
+import {
+  QUESTIONS,
+  QUESTION_COUNT,
+  SECTIONS,
+  STAGE_GROUPS,
+  ADAPTIVE_BY_STAGE,
+  ADAPTIVE_FALLBACK,
+} from '../../data/onboardingQuestions';
+import { createReplyPicker } from '../../data/onboardingReplies';
 
-/* 13 questions — Ally builds a live Founder DNA, grouped Business / Founder.
-   Faithful port of #v-profile from ally-platform-main.html. */
-const PROFILE_Q = [
-  /* BUSINESS DNA */
-  { k: 'stage', g: 'business', lbl: 'Entrepreneurial Stage', q: 'First — which stage best describes where you are right now?', opts: ['Ideation', 'Validation', 'Prototype / MVP', 'Early Traction', 'Growth / Scaling', 'Expansion', 'Maturity', 'Exit'], def: 'Early Traction' },
-  { k: 'building', g: 'business', lbl: "What You're Building", q: 'In one line — what are you building?', ph: 'e.g. an AI copilot that prevents SaaS churn', def: 'An AI copilot that helps SaaS teams prevent churn' },
-  { k: 'problem', g: 'business', lbl: 'Problem Statement', q: "What's the core problem you take away for people?", ph: 'The pain you solve…', def: "Teams lose customers to churn they can't see coming" },
-  { k: 'customer', g: 'business', lbl: 'Customer Segment', q: 'Who is this really for? Describe your ideal customer.', ph: 'e.g. B2B SaaS teams, 6–50 people', def: 'B2B SaaS product & growth teams' },
-  { k: 'industry', g: 'business', lbl: 'Industry', q: 'Which industry feels closest to home?', opts: ['Technology & SaaS', 'Services & Consulting', 'Manufacturing & D2C', 'Social Impact & NGO'], def: 'Technology & SaaS' },
-  { k: 'challenges', g: 'business', lbl: 'Biggest Challenges', q: "What's the biggest thing holding you back right now?", opts: ['Retention', 'Acquisition', 'Activation', 'Pricing', 'Hiring', 'Focus', 'Cash flow'], def: 'Retention' },
-  { k: 'goal90', g: 'business', lbl: '90-Day Goal', q: 'Fast-forward 90 days — what has to be true for you to feel it went well?', ph: 'Your next 90 days…', def: 'Lift 30-day retention by 10 points' },
-  { k: 'vision', g: 'business', lbl: 'One-Year Vision', q: 'Now zoom out — where do you want this to be in a year?', ph: 'A year from now…', def: 'The default way SaaS teams predict and prevent churn' },
-  /* FOUNDER DNA */
-  { k: 'why', g: 'founder', lbl: 'Why You Started', q: 'This one matters most — what made you start this?', ph: 'The real reason…', def: 'I watched a company die from churn we caught too late' },
-  { k: 'working', g: 'founder', lbl: 'Working Style', q: 'How do you want me to show up for you?', opts: ['Coach', 'Co-Founder', 'Strategist', 'Analyst', 'Challenger'], def: 'Strategist' },
-  { k: 'experience', g: 'founder', lbl: 'Experience Level', q: 'How much of this road have you walked before?', opts: ['First-time founder', 'Second-time founder', 'Serial founder', 'Operator turned founder'], def: 'Second-time founder' },
-  { k: 'feeling', g: 'founder', lbl: 'Current Feeling', q: 'Honestly — how are you feeling about it all today?', opts: ['?? Energised', '?? Optimistic', '?? Steady', '?? Stretched', '?? Overwhelmed'], def: '?? Stretched' },
-  { k: 'reflection', g: 'founder', lbl: 'Stage Reflection', adaptive: true, q: '', ph: 'Say what’s really on your mind…', def: 'The teams that reach the first win almost never leave' },
-];
-
-const PQ_ADAPT = {
-  Ideation: 'What belief are you betting everything on?',
-  Validation: 'What early signal would prove people actually want this?',
-  'Prototype / MVP': 'What is the one thing your MVP has to get right?',
-  'Early Traction': 'What early signal tells you this is working?',
-  'Growth / Scaling': 'What has to break for you to reach the next level?',
-  Expansion: 'What new bet are you making to grow beyond today?',
-  Maturity: 'What got you here that might not get you further?',
-  Exit: 'What has to be true for this to be worth handing on?',
-};
-
-const GROUPS = [
-  { key: 'business', label: 'Business DNA' },
-  { key: 'founder', label: 'Founder DNA' },
-];
-
-function profAck(k, a) {
-  switch (k) {
-    case 'stage': return 'Got it — ' + a.toLowerCase() + '. That reframes what I look for; the risks are different at every stage.';
-    case 'building': return '“' + a + '” — specific and real. I can already picture who this is for.';
-    case 'problem': return "That's the heart of it. Naming the problem this clearly tells me you've felt it yourself.";
-    case 'customer': return 'Noted — ' + a + ". Knowing exactly who it's for sharpens every recommendation I'll make.";
-    case 'industry': return a + ' founders usually live or die on repeat behaviour, not the first sale — I\'ll keep that lens on.';
-    case 'challenges': return '“' + a + '” — thank you for being direct. That\'s the thread I\'ll pull hardest on.';
-    case 'goal90': return "A clear 90-day target. I'll hold everything I learn against whether it moves that number.";
-    case 'vision': return "That's a strong north star. It tells me which trade-offs you'll be willing to make.";
-    case 'why': return "Thank you — that's the part most founders skip. It tells me what you'll protect even when it's slower.";
-    case 'working': return 'Good to know. I\'ll show up as your ' + a.toLowerCase() + ' — direct where it helps, never noise.';
-    case 'experience': return a + ' — that shapes how I pitch things: less hand-holding, more signal.';
-    case 'feeling': return "Thanks for being honest about that. I'll factor how you're carrying this into how I pace us.";
-    case 'reflection': return "That's a real answer. I've got a clear read on you now.";
-    default: return 'Got it — thank you.';
-  }
-}
+/* Onboarding is deliberately offline: every question, option and reply is
+   defined in src/data/onboarding*.js. Nothing here calls an LLM. The only
+   network call is the one at the end that persists the answers. */
 
 const reduce = typeof window !== 'undefined' && window.matchMedia
   ? window.matchMedia('(prefers-reduced-motion: reduce)').matches : false;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, reduce ? Math.min(ms, 50) : ms));
 
+/** Option lists are either plain strings or {label, value} pairs. */
+const optLabel = (o) => (typeof o === 'string' ? o : o.label);
+const optValue = (o) => (typeof o === 'string' ? o : o.value);
+
+/** What the founder sees in the DNA panel and in their own chat bubble. */
+const displayOf = (value) => (Array.isArray(value) ? value.join(', ') : String(value ?? ''));
+
 export default function ProfileBuild() {
   const navigate = useNavigate();
   const { user, setUser, showToast } = useApp();
   const first = user?.name ? user.name.split(' ')[0] : 'there';
-  const initial = (user?.initials || first).charAt(0);
+  const initial = (user?.initials || first).charAt(0).toUpperCase();
 
   const [messages, setMessages] = useState([]);
   const [typing, setTyping] = useState(false);
-  const [suggs, setSuggs] = useState([]);
-  const [placeholder, setPlaceholder] = useState('Type your answer to Ally…');
+  const [activeQ, setActiveQ] = useState(-1);      // question awaiting an answer
   const [input, setInput] = useState('');
   const [fields, setFields] = useState({});
-  const [groupsOpen, setGroupsOpen] = useState({});
+  const [sectionsOpen, setSectionsOpen] = useState({});
   const [emptyGone, setEmptyGone] = useState(false);
   const [complete, setComplete] = useState(false);
   const [showBar, setShowBar] = useState(false);
+  const [introReady, setIntroReady] = useState(false);
   const [undTarget, setUndTarget] = useState(0);
   const [undDisplay, setUndDisplay] = useState(0);
   const [undNote, setUndNote] = useState('Listening…');
   const [undUp, setUndUp] = useState(false);
 
+  /* Per-control working state, reset whenever a new question is presented. */
+  const [stageGroup, setStageGroup] = useState(null);
+  const [picked, setPicked] = useState([]);
+  const [otherText, setOtherText] = useState('');
+  const [search, setSearch] = useState('');
+
   const scrollRef = useRef(null);
   const taRef = useRef(null);
+  const searchRef = useRef(null);
   const qiRef = useRef(0);
   const awaitingRef = useRef(false);
   const profileRef = useRef({});
   const started = useRef(false);
   const noteTimer = useRef(null);
+  const replyRef = useRef(createReplyPicker());
 
   const scrollToBottom = () => {
     const s = scrollRef.current;
     if (s) s.scrollTop = s.scrollHeight;
   };
-  useEffect(scrollToBottom, [messages, typing]);
+  useEffect(scrollToBottom, [messages, typing, activeQ]);
+
+  /* Focus the answer control as each question appears. Someone answering
+     thirteen questions in a row should never have to click into the box first.
+     This lives here rather than in present() because the control only mounts
+     once activeQ has been set. */
+  useEffect(() => {
+    if (activeQ < 0) return;
+    const { type } = QUESTIONS[activeQ];
+    if (type === 'short' || type === 'long') taRef.current?.focus();
+    else if (type === 'dropdown') searchRef.current?.focus();
+  }, [activeQ]);
 
   useEffect(() => {
-    if (reduce) { setUndDisplay(undTarget); return; }
+    // Don't animate a number nobody can see. requestAnimationFrame does not run
+    // in a hidden tab, so without this the bar (plain state) would move while
+    // the percentage beside it stayed frozen at a stale value for any founder
+    // who switches away mid-answer.
+    if (reduce || document.hidden) { setUndDisplay(undTarget); return undefined; }
     let raf;
     const from = undDisplay;
     const t0 = performance.now();
@@ -126,33 +114,40 @@ export default function ProfileBuild() {
     }
   }, []);
 
-  const pqText = (q) => (q.adaptive ? (PQ_ADAPT[profileRef.current.stage] || 'What matters most to you right now?') : q.q);
+  /* The last question's text depends on the stage picked in the first. */
+  const questionText = useCallback((q) => {
+    if (!q.adaptive) return q.q;
+    return ADAPTIVE_BY_STAGE[profileRef.current.stage] || ADAPTIVE_FALLBACK;
+  }, []);
 
-  const confirmField = useCallback((k, text, animate) => {
-    const q = PROFILE_Q.find((x) => x.k === k);
+  const confirmField = useCallback((key, text, animate) => {
+    const q = QUESTIONS.find((x) => x.key === key);
     setEmptyGone(true);
-    setGroupsOpen((o) => ({ ...o, [q.g]: true }));
+    setSectionsOpen((o) => ({ ...o, [q.section]: true }));
     if (animate && !reduce) {
-      setFields((f) => ({ ...f, [k]: { status: 'building', text } }));
+      setFields((f) => ({ ...f, [key]: { status: 'building', text } }));
       setTimeout(() => {
-        setFields((f) => ({ ...f, [k]: { status: 'on', text, justin: true } }));
-        setTimeout(() => setFields((f) => ({ ...f, [k]: { ...f[k], justin: false } })), 800);
+        setFields((f) => ({ ...f, [key]: { status: 'on', text, justin: true } }));
+        setTimeout(() => setFields((f) => ({ ...f, [key]: { ...f[key], justin: false } })), 800);
       }, 560);
     } else {
-      setFields((f) => ({ ...f, [k]: { status: 'on', text } }));
+      setFields((f) => ({ ...f, [key]: { status: 'on', text } }));
     }
   }, []);
 
   const present = useCallback((i) => {
-    const q = PROFILE_Q[i];
-    setSuggs(q.opts || []);
-    setPlaceholder(q.ph || 'Type your answer…');
+    setStageGroup(null);
+    setPicked([]);
+    setOtherText('');
+    setSearch('');
+    setInput('');
     awaitingRef.current = true;
-    if (taRef.current) taRef.current.focus();
+    setActiveQ(i);
   }, []);
 
   const finish = useCallback(() => {
-    setSuggs([]);
+    setActiveQ(-1);
+    awaitingRef.current = false;
 
     // Persist what the founder just spent ten minutes telling us. Fire-and-report
     // rather than blocking the closing message: the answers are already captured,
@@ -186,57 +181,100 @@ export default function ProfileBuild() {
   }, [addAlly, bumpUnd, first, setUser]);
 
   const askQ = useCallback(async (i) => {
-    if (i >= PROFILE_Q.length) { finish(); return; }
+    if (i >= QUESTION_COUNT) { finish(); return; }
+    const q = QUESTIONS[i];
     setTyping(true);
     await sleep(820);
     setTyping(false);
-    addAlly(pqText(PROFILE_Q[i]));
+    addAlly(questionText(q));
+    if (q.prompt) addAlly(q.prompt);
     present(i);
-  }, [addAlly, present, finish]);
+  }, [addAlly, present, finish, questionText]);
 
-  const answer = useCallback(async (raw) => {
-    const text = (raw || '').trim();
-    if (!text || !awaitingRef.current) return;
+  /**
+   * Commit an answer.
+   * `value`   what gets stored (string, or array for multi-selects)
+   * `extra`   fields the question collects alongside its main answer
+   * `display` what the founder sees, when that differs from what we store
+   */
+  const answer = useCallback(async (value, extra, display) => {
+    if (!awaitingRef.current) return;
+    const empty = Array.isArray(value) ? value.length === 0 : !String(value ?? '').trim();
+    if (empty) return;
+
     awaitingRef.current = false;
+    setActiveQ(-1);
     const i = qiRef.current;
-    const q = PROFILE_Q[i];
-    addMe(text);
+    const q = QUESTIONS[i];
+    const stored = Array.isArray(value) ? value : String(value).trim();
+    // Single-selects store the database value ('first_time', 'excited') and must
+    // never show it -- the founder reads their own words back, not our enum.
+    const shown = display || displayOf(stored);
+    // Multi-selects read better replied against the raw array (the reply joins
+    // them with "and"); everything else replies against what was actually shown.
+    const replyInput = Array.isArray(stored) ? stored : shown;
+
+    addMe(shown);
     setInput('');
-    setSuggs([]);
     if (taRef.current) taRef.current.style.height = 'auto';
-    profileRef.current = { ...profileRef.current, [q.k]: text };
-    confirmField(q.k, text, true);
+    profileRef.current = { ...profileRef.current, [q.key]: stored, ...(extra || {}) };
+    confirmField(q.key, shown, true);
     const nextQi = i + 1;
     qiRef.current = nextQi;
 
     await sleep(600);
-    const n = Object.keys(profileRef.current).length;
-    bumpUnd(Math.round((n / PROFILE_Q.length) * 100), 'Ally learned something new');
+    const answered = QUESTIONS.filter((x) => profileRef.current[x.key] !== undefined).length;
+    bumpUnd(Math.round((answered / QUESTION_COUNT) * 100), 'Ally learned something new');
 
     setTyping(true);
     await sleep(900);
     setTyping(false);
-    if (nextQi < PROFILE_Q.length) {
-      addAlly(profAck(q.k, text));
+    if (nextQi < QUESTION_COUNT) {
+      addAlly(replyRef.current(q.key, replyInput, { first }));
       await sleep(640);
       askQ(nextQi);
     } else {
+      addAlly(replyRef.current(q.key, replyInput, { first }));
+      await sleep(640);
       finish();
     }
-  }, [addMe, confirmField, bumpUnd, addAlly, askQ, finish]);
+  }, [addMe, confirmField, bumpUnd, addAlly, askQ, finish, first]);
+
+  /* The founder's name arrives from GET /profile *after* mount -- AppContext
+     hydrates identity asynchronously. Greeting someone as "there" while their
+     real name is about to appear in the panel beside it reads as a bug, and the
+     opening line is pushed into `messages` once, so it never self-corrects.
+     Hold the intro until the name lands, bounded so a founder with no name on
+     file (or an offline profile fetch) is never stuck on an empty screen. */
+  useEffect(() => {
+    if (user?.name) { setIntroReady(true); return undefined; }
+    const t = setTimeout(() => setIntroReady(true), 2500);
+    return () => clearTimeout(t);
+  }, [user?.name]);
 
   useEffect(() => {
-    if (started.current) return;
+    if (!introReady || started.current) return;
     started.current = true;
     (async () => {
-      addAlly(`Hey ${first} — let's build your picture together. No forms, I promise. I'll ask; you answer however feels natural.`);
-      await sleep(750);
+      addAlly(`Welcome to GoXL AI, ${first}.`);
+      await sleep(700);
+      addAlly('Every entrepreneur has a unique story, a different challenge, and a bold vision for the future. In just a few minutes, help me understand yours.');
+      await sleep(900);
       askQ(0);
     })();
-  }, []);
+  }, [introReady]);
 
+  const q = activeQ >= 0 ? QUESTIONS[activeQ] : null;
+  const isText = q && (q.type === 'short' || q.type === 'long');
+
+  // Enter sends on every free-text question, long ones included -- gating this
+  // on type === 'short' meant Enter silently did nothing on the five long-text
+  // questions, which is most of them. Shift+Enter still starts a new line.
   const onKeyDown = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); answer(taRef.current.value); }
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      answer(taRef.current.value);
+    }
   };
   const onInput = (e) => {
     setInput(e.target.value);
@@ -244,11 +282,11 @@ export default function ProfileBuild() {
     ta.style.height = 'auto';
     ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
   };
+
   // Profile-build is pre-chat onboarding, not the paid chat surface -- voice
   // here is ungated, same product decision as the diagnosis mic (context:
   // 'diagnosis' matches the backend's VOICE_DIAGNOSIS feature, free on every
-  // plan). Replaces a stub that used to just fill the input with the canned
-  // default answer instead of transcribing anything the founder actually said.
+  // plan).
   const voice = useVoiceInput({
     context: 'diagnosis',
     onTranscribed: (text) => {
@@ -262,8 +300,233 @@ export default function ProfileBuild() {
     onError: () => showToast('Could not access the microphone — check your browser permissions.'),
   });
 
-  const groupCount = (g) =>
-    PROFILE_Q.filter((q) => q.g === g && fields[q.k]?.status === 'on').length;
+  /* --- control handlers ---------------------------------------------------- */
+
+  const toggle = (value) => {
+    setPicked((cur) => {
+      if (cur.includes(value)) return cur.filter((v) => v !== value);
+      if (q?.max && cur.length >= q.max) return cur;   // cap enforced here
+      return [...cur, value];
+    });
+  };
+
+  const submitPicked = () => {
+    if (picked.length === 0) return;
+    const other = otherText.trim();
+    if (q.type === 'chips') {
+      // "Other" stays in the list as the marker that there is more; the free
+      // text it reveals goes to its own column rather than being appended as a
+      // pseudo-chip, so the same words are never stored in two places.
+      answer(picked, other ? { audienceOther: other } : undefined);
+      return;
+    }
+    answer(picked);
+  };
+
+  const filteredOptions = useMemo(() => {
+    if (!q || q.type !== 'dropdown') return [];
+    const term = search.trim().toLowerCase();
+    if (!term) return q.options;
+    return q.options.filter((o) => optLabel(o).toLowerCase().includes(term));
+  }, [q, search]);
+
+  const sectionCount = (key) =>
+    QUESTIONS.filter((x) => x.section === key && fields[x.key]?.status === 'on').length;
+
+  const needsOther = q?.type === 'chips' && picked.includes('Other');
+  const atMax = q?.max ? picked.length >= q.max : false;
+
+  /* --- the input region, one control per question type --------------------- */
+  function renderControl() {
+    if (!q) return null;
+
+    if (q.type === 'stage') {
+      const group = STAGE_GROUPS.find((g) => g.key === stageGroup);
+      if (!group) {
+        return (
+          <div className="ob-cards">
+            {STAGE_GROUPS.map((g) => (
+              <button
+                key={g.key}
+                type="button"
+                className="ob-card"
+                onClick={() => {
+                  // Stage 0 has exactly one stage -- asking again would be noise.
+                  if (g.stages.length === 1) {
+                    answer(g.stages[0].name, { stage_group: g.group });
+                  } else {
+                    setStageGroup(g.key);
+                  }
+                }}
+              >
+                <span className="ob-card-t">{g.label}</span>
+                <span className="ob-card-s">{g.hint}</span>
+              </button>
+            ))}
+          </div>
+        );
+      }
+      return (
+        <div className="ob-cards">
+          <button type="button" className="ob-back" onClick={() => setStageGroup(null)}>
+            ← {group.label}
+          </button>
+          {group.stages.map((s) => (
+            <button
+              key={s.name}
+              type="button"
+              className="ob-card"
+              onClick={() => answer(s.name, { stage_group: group.group })}
+            >
+              <span className="ob-card-t">{s.name}</span>
+              <span className="ob-card-s">{s.blurb}</span>
+            </button>
+          ))}
+        </div>
+      );
+    }
+
+    if (q.type === 'single') {
+      return (
+        <div className="suggs">
+          {q.options.map((o) => (
+            <button
+              key={optValue(o)}
+              type="button"
+              className="sugg"
+              onClick={() => answer(optValue(o), undefined, optLabel(o))}
+            >
+              {optLabel(o)}
+            </button>
+          ))}
+        </div>
+      );
+    }
+
+    if (q.type === 'dropdown') {
+      return (
+        <div className="ob-drop">
+          <label className="sr-only" htmlFor="obSearch">{q.q}</label>
+          <input
+            id="obSearch"
+            ref={searchRef}
+            className="ob-search"
+            type="text"
+            value={search}
+            placeholder={q.placeholder}
+            onChange={(e) => setSearch(e.target.value)}
+            autoComplete="off"
+          />
+          <div className="ob-drop-list" role="listbox">
+            {filteredOptions.length === 0 && (
+              <p className="ob-drop-empty">No match — pick “Other”.</p>
+            )}
+            {filteredOptions.map((o) => (
+              <button
+                key={optValue(o)}
+                type="button"
+                role="option"
+                aria-selected="false"
+                className="ob-drop-opt"
+                onClick={() => answer(optValue(o))}
+              >
+                {optLabel(o)}
+              </button>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    if (q.type === 'chips' || q.type === 'multi') {
+      return (
+        <div className="ob-multi">
+          <div className="ob-chips">
+            {q.options.map((o) => {
+              const v = optValue(o);
+              const on = picked.includes(v);
+              return (
+                <button
+                  key={v}
+                  type="button"
+                  className={`sugg${on ? ' on' : ''}`}
+                  aria-pressed={on}
+                  disabled={!on && atMax}
+                  onClick={() => toggle(v)}
+                >
+                  {optLabel(o)}
+                </button>
+              );
+            })}
+          </div>
+
+          {needsOther && (
+            <input
+              className="ob-other"
+              type="text"
+              value={otherText}
+              placeholder={q.otherPlaceholder || 'Tell me more…'}
+              onChange={(e) => setOtherText(e.target.value)}
+            />
+          )}
+
+          <div className="ob-multi-foot">
+            <span className="ob-count">
+              {q.max ? `${picked.length} of ${q.max} chosen` : `${picked.length} chosen`}
+            </span>
+            <button
+              type="button"
+              className="btn btn-em ob-continue"
+              disabled={picked.length === 0}
+              onClick={submitPicked}
+            >
+              Continue
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    /* short / long free text */
+    return (
+      <div className="chat-input">
+        <div className="ci-row">
+          <label className="sr-only" htmlFor="profText">Your answer to Ally</label>
+          <textarea
+            id="profText"
+            ref={taRef}
+            rows={q.type === 'long' ? 2 : 1}
+            placeholder={q.placeholder || 'Type your answer…'}
+            value={input}
+            onChange={onInput}
+            onKeyDown={onKeyDown}
+          />
+          <button
+            className={`ci-btn${voice.status === 'recording' ? ' recording' : ''}`}
+            type="button"
+            aria-label="Voice input"
+            aria-pressed={voice.status === 'recording'}
+            disabled={voice.status === 'transcribing'}
+            onClick={voice.toggle}
+          >
+            <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></svg>
+          </button>
+          <button className="ci-btn send" type="button" aria-label="Send" onClick={() => answer(input)}>
+            <svg viewBox="0 0 24 24"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z" /></svg>
+          </button>
+        </div>
+        {q.examples && (
+          <p className="ci-hint">For example: {q.examples.join(' · ')}</p>
+        )}
+        {!q.examples && (
+          <p className="ci-hint">
+            Ally is building your founder profile as you talk · Enter to send
+            {q.type === 'long' ? ' · Shift+Enter for a new line' : ''}
+          </p>
+        )}
+      </div>
+    );
+  }
 
   return (
     <section className="view chat-view active" id="v-profile">
@@ -272,52 +535,22 @@ export default function ProfileBuild() {
           <div className="chat-scroll" ref={scrollRef} aria-live="polite">
             {messages.map((m, i) => (
               <div key={i} className={`msg ${m.who === 'me' ? 'me' : 'ally'}`}>
-                <span className={`m-av ${m.who === 'me' ? 'me' : 'ally'}`}>{m.who === 'me' ? initial : '?'}</span>
+                <span className={`m-av ${m.who === 'me' ? 'me' : 'ally'}`}>{m.who === 'me' ? initial : 'A'}</span>
                 <div><div className="bubble">{m.text}</div></div>
               </div>
             ))}
             {typing && (
               <div className="typing">
-                <span className="m-av ally">?</span>
+                <span className="m-av ally">A</span>
                 <div className="bubble"><span className="td"><span /><span /><span /></span></div>
               </div>
             )}
           </div>
 
-          <div className="suggs">
-            {suggs.map((o) => (
-              <button key={o} className="sugg" type="button" onClick={() => answer(o)}>{o}</button>
-            ))}
-          </div>
-
-          <div className="chat-input">
-            <div className="ci-row">
-              <label className="sr-only" htmlFor="profText">Your answer to Ally</label>
-              <textarea
-                id="profText"
-                ref={taRef}
-                rows={1}
-                placeholder={placeholder}
-                value={input}
-                onChange={onInput}
-                onKeyDown={onKeyDown}
-              />
-              <button
-                className={`ci-btn${voice.status === 'recording' ? ' recording' : ''}`}
-                type="button"
-                aria-label="Voice input"
-                aria-pressed={voice.status === 'recording'}
-                disabled={voice.status === 'transcribing'}
-                onClick={voice.toggle}
-              >
-                <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></svg>
-              </button>
-              <button className="ci-btn send" type="button" aria-label="Send" onClick={() => answer(taRef.current.value)}>
-                <svg viewBox="0 0 24 24"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z" /></svg>
-              </button>
-            </div>
-            <p className="ci-hint">Ally is building your founder profile as you talk · Enter to send</p>
-          </div>
+          {renderControl()}
+          {!isText && q && (
+            <p className="ci-hint ob-standalone-hint">Ally is building your founder profile as you talk</p>
+          )}
         </div>
 
         <aside className="kg-panel prof-panel" aria-label="Your Founder DNA">
@@ -336,26 +569,26 @@ export default function ProfileBuild() {
               <span className="pf-empty-s">Your Founder DNA appears here as you answer.</span>
             </div>
 
-            {GROUPS.map((gr) => {
-              const qs = PROFILE_Q.filter((q) => q.g === gr.key);
+            {SECTIONS.map((sec) => {
+              const qs = QUESTIONS.filter((x) => x.section === sec.key);
               return (
-                <div key={gr.key} className={`pfg${groupsOpen[gr.key] ? ' open' : ''}`}>
+                <div key={sec.key} className={`pfg${sectionsOpen[sec.key] ? ' open' : ''}`}>
                   <div className="pfg-head">
-                    <span className="pfg-t">{gr.label}</span>
-                    <span className="pfg-c">{groupCount(gr.key)} / {qs.length}</span>
+                    <span className="pfg-t">{sec.label}</span>
+                    <span className="pfg-c">{sectionCount(sec.key)} / {qs.length}</span>
                   </div>
                   <div className="pfg-rows">
-                    {qs.map((q) => {
-                      const f = fields[q.k];
+                    {qs.map((item) => {
+                      const f = fields[item.key];
                       const status = f?.status;
                       const cls = 'pf' + (status === 'on' ? ' on' : '') + (status === 'building' ? ' building' : '') + (f?.justin ? ' justin' : '');
                       const val = status === 'on' ? f.text : status === 'building' ? 'Building…' : 'Waiting…';
                       const tag = status === 'on' ? 'Learned' : status === 'building' ? 'Building' : '';
                       return (
-                        <div key={q.k} className={cls}>
+                        <div key={item.key} className={cls}>
                           <div className="pf-l">
                             <span className="pf-ck"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5" /></svg></span>
-                            {q.lbl}
+                            {item.label}
                             <span className="pf-tag">{tag}</span>
                           </div>
                           <div className="pf-v">{val}</div>

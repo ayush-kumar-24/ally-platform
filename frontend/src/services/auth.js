@@ -50,6 +50,29 @@ export function signInWithLinkedIn() {
 }
 
 /**
+ * Local-development sign-in, used only when Supabase is not configured.
+ *
+ * There is no provider token to exchange, so the backend's dev auth provider
+ * takes a founder's `user_id` as the bearer instead (AUTH_PROVIDER=dev, which
+ * factory.py refuses outright when ENVIRONMENT=production). Set the founder in
+ * VITE_DEV_FOUNDER_TOKEN.
+ *
+ * Without this the local app runs with no token at all, so every write 401s --
+ * onboarding appears to work and then silently fails to save a single answer.
+ * Returns null when no dev token is configured.
+ */
+export async function startDevSession() {
+  const token = import.meta.env.VITE_DEV_FOUNDER_TOKEN;
+  if (!token) return null;
+  clearTokens();
+  const result = await post('/auth/session', {}, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  setTokens(result);
+  return result.founder;
+}
+
+/**
  * Call once on the login page's mount. If the URL carries a fresh OAuth
  * session (i.e. we just got redirected back from Google), exchanges it for a
  * backend session and returns the founder identity; otherwise returns null.

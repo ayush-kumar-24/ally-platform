@@ -38,21 +38,26 @@ _PRIORITY_RANK: dict[str, int] = {
 }
 
 # ---------------------------------------------------------------------------
-# ASSUMPTION -- please confirm.
-#
 # `questions.primary_stage_group` buckets questions into three groups, but no
-# column anywhere links a founder's stage (founder_stages.stage_id, 1..8) to
-# those buckets. This mapping is therefore a business rule with no database
+# column links a founder's stage (founder_stages.stage_id, 1..8) to those
+# buckets. This mapping is that link -- a business rule with no database
 # backing, derived from stage_order:
 #
-#     Ideation(1), Validation(2)          -> Stage 0
-#     Prototype/MVP(3), Early Traction(4) -> Stage 0->1
-#     Growth(5) .. Exit(8)                -> Stage 1->10+
+#     Ideation(1)                                     -> Stage 0
+#     Validation(2), Prototype/MVP(3), Early Trac.(4) -> Stage 0->1
+#     Growth(5) .. Exit(8)                            -> Stage 1->10+
 #
-# If the intended boundaries differ, this constant is the only thing to change.
+# These boundaries are the ones onboarding asks against: the founder picks the
+# group first and the exact stage second, so the two must agree or a founder
+# would be shown questions for a group they did not choose. The picker is
+# defined in frontend/src/data/onboardingQuestions.js (STAGE_GROUPS) -- change
+# both together.
+#
+# Note Validation sits in Stage 0->1, not Stage 0: a founder testing demand
+# already has something to test, which is past pure ideation.
 # ---------------------------------------------------------------------------
 _STAGE_ORDER_TO_GROUP: tuple[tuple[int, StageGroup], ...] = (
-    (2, StageGroup.STAGE_0),
+    (1, StageGroup.STAGE_0),
     (4, StageGroup.STAGE_0_TO_1),
     (8, StageGroup.STAGE_1_TO_10_PLUS),
 )

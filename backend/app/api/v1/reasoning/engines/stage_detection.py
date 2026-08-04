@@ -28,8 +28,12 @@ _ZERO = Decimal("0")
 
 # stage_order -> primary_stage_group bucket. A documented heuristic (founder_stages
 # has no group column); the single source of truth for the reasoning layer.
+# Must stay in step with _STAGE_ORDER_TO_GROUP in api/v1/diagnosis/engine.py and
+# with the STAGE_GROUPS picker in frontend/src/data/onboardingQuestions.js --
+# onboarding asks the founder for the group directly, so a mismatch here would
+# corroborate a declared stage against the wrong bucket.
 _STAGE_ORDER_GROUP_BOUNDS: tuple[tuple[int, str], ...] = (
-    (2, "Stage 0"),
+    (1, "Stage 0"),
     (4, "Stage 0→1"),
     (8, "Stage 1→10+"),
 )
