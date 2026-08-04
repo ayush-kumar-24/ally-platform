@@ -4,6 +4,7 @@ import { useApp } from '../context/AppContext';
 import { get, post } from '../services/api';
 import { getProfile, updateProfile } from '../services/profile';
 import { logout } from '../services/auth';
+import { getCatalog, getMyPlan } from '../services/plans';
 import {
   deleteAccount,
   downloadExport,
@@ -161,6 +162,23 @@ function fmtDate(iso) {
 export default function FounderProfile() {
   const navigate = useNavigate();
   const [signingOut, setSigningOut] = useState(false);
+
+  /* The real plan, so this page stops insisting everyone is on Free. */
+  const [plan, setPlan] = useState(null);
+  const [tiers, setTiers] = useState([]);
+  useEffect(() => {
+    let cancelled = false;
+    // /plans/me knows which tier they are on; the monthly price lives on the
+    // /plans catalog, so the figure shown is the same one the pricing page quotes.
+    getMyPlan().then(p => { if (!cancelled) setPlan(p); }).catch(() => {});
+    getCatalog().then(c => { if (!cancelled) setTiers(c?.plans || []); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+  const planTier = plan?.tier || 'free';
+  const isFreePlan = planTier === 'free';
+  const planLabel = plan?.plan_name ? `Ally ${plan.plan_name}` : 'Ally Free';
+  const monthly = tiers.find(t => t.tier === planTier)?.price_inr;
+  const planPrice = isFreePlan ? '₹0' : (monthly ? `₹${monthly.toLocaleString('en-IN')}` : '—');
 
   /* Revoke the refresh token server-side, clear every local trace, then send
      them to the landing page. Guarded so a double-click cannot fire two
@@ -617,30 +635,40 @@ export default function FounderProfile() {
             </div>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <b style={{ fontSize: '15px', color: 'var(--forest, #1b4332)' }}>Ally Free</b>
+                {/* Every value in this block was hardcoded to the free tier --
+                    name, badge, blurb and "₹0 forever" -- so a founder on Pro
+                    was told they were on Free, directly above an Upgrade
+                    button. The sidebar two inches away read the real plan. */}
+                <b style={{ fontSize: '15px', color: 'var(--forest, #1b4332)' }}>{planLabel}</b>
                 <span
                   style={{
                     fontSize: '8.5px',
                     fontWeight: 800,
                     letterSpacing: '0.04em',
                     textTransform: 'uppercase',
-                    background: '#e2e8f0',
-                    color: '#475569',
+                    background: isFreePlan ? '#e2e8f0' : '#d1fae5',
+                    color: isFreePlan ? '#475569' : '#065f46',
                     padding: '3px 8px',
                     borderRadius: '4px'
                   }}
                 >
-                  Free Plan
+                  {planTier} Plan
                 </span>
               </div>
               <div style={{ fontSize: '12px', color: 'var(--muted-2)', marginTop: '4px' }}>
-                You're on the free plan — upgrade anytime.
+                {isFreePlan
+                  ? "You're on the free plan — upgrade anytime."
+                  : 'Your subscription is active.'}
               </div>
             </div>
           </div>
           <div style={{ textAlign: 'right' }}>
-            <b style={{ fontSize: '20px', color: 'var(--ink, #16241c)', display: 'block', lineHeight: 1 }}>₹0</b>
-            <span style={{ fontSize: '10.5px', color: 'var(--muted-2)' }}>forever</span>
+            <b style={{ fontSize: '20px', color: 'var(--ink, #16241c)', display: 'block', lineHeight: 1 }}>
+              {planPrice}
+            </b>
+            <span style={{ fontSize: '10.5px', color: 'var(--muted-2)' }}>
+              {isFreePlan ? 'forever' : 'per month'}
+            </span>
           </div>
         </div>
 
