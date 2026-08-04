@@ -3,12 +3,14 @@ import { useApp } from '../context/AppContext';
 import { useState, useRef, useEffect } from 'react';
 import ProductTour from '../components/ProductTour';
 import { greetingNow } from '../utils/helpers';
+import { getOverview } from '../services/dashboard';
 import {
   IconDashboard,
   IconMessageSquare,
   IconUser,
   IconTrendingUp,
   IconDocument,
+  IconLock,
   IconArrowRight,
   IconCalendar,
   IconHelpCircle,
@@ -53,10 +55,15 @@ const NAV_GROUPS = [
     label: 'FOUNDER DIAGNOSIS',
     items: [
       { path: '/app/diagnosis', tip: 'Adaptive diagnosis', icon: IconPulse, label: 'Adaptive diagnosis', badge: null },
-      { path: '/app/founder-dna', tip: 'Founder DNA', icon: IconUser, label: 'Founder DNA', badge: null },
-      { path: '/app/business-dna', tip: 'Business DNA', icon: IconTrendingUp, label: 'Business DNA', badge: null },
-      { path: '/app/report', tip: 'Report', icon: IconDocument, label: 'Report', badge: null },
-      { path: '/app/next-steps', tip: 'Next steps', icon: IconArrowRight, label: 'Next steps', badge: null },
+      /* These four are written *from* a finished diagnosis, so before one
+         exists they can only render an empty state -- which reads as a broken
+         page rather than "not yet". The journey is onboarding -> diagnosis ->
+         report -> tour, and until the report lands there is nothing here to
+         open. Locked, with a reason, instead of silently empty. */
+      { path: '/app/founder-dna', tip: 'Founder DNA', icon: IconUser, label: 'Founder DNA', badge: null, needsReport: true },
+      { path: '/app/business-dna', tip: 'Business DNA', icon: IconTrendingUp, label: 'Business DNA', badge: null, needsReport: true },
+      { path: '/app/report', tip: 'Report', icon: IconDocument, label: 'Report', badge: null, needsReport: true },
+      { path: '/app/next-steps', tip: 'Next steps', icon: IconArrowRight, label: 'Next steps', badge: null, needsReport: true },
       { path: '/app/plan', tip: 'Plan Your Day', icon: IconCalendar, label: 'Plan Your Day', badge: 3 },
       { path: '/app/discovery-call', tip: 'Discovery call', icon: IconCalendar, label: 'Discovery call', badge: null },
     ],
@@ -83,6 +90,18 @@ export default function PlatformLayout() {
   const location = useLocation();
   const [npOpen, setNpOpen] = useState(false);
   const npRef = useRef(null);
+
+  /* Whether a diagnosis has actually produced a report yet -- what decides
+     which nav items are still locked. Starts unlocked so a slow call never
+     shuts a founder out of pages they have already earned. */
+  const [hasReport, setHasReport] = useState(true);
+  useEffect(() => {
+    let cancelled = false;
+    getOverview()
+      .then(o => { if (!cancelled && o) setHasReport(Boolean(o.latest_diagnosis?.available)); })
+      .catch(() => { /* leave unlocked rather than guess */ });
+    return () => { cancelled = true; };
+  }, []);
 
   const handleNav = (path) => {
     nav(path);
@@ -137,19 +156,29 @@ export default function PlatformLayout() {
           {NAV_GROUPS.map((group) => (
             <div key={group.label}>
               <div className="sb-group">{group.label}</div>
-              {group.items.map(({ path, tip, icon: Icon, label, badge }) => (
-                <button
-                  key={path}
-                  className={`nav-item${isActive(path) ? ' active' : ''}`}
-                  data-tip={tip}
-                  data-nav={path}
-                  onClick={() => handleNav(path)}
-                >
-                  <Icon className="ic" />
-                  <span className="lbl">{label}</span>
-                  {badge && <span className="nav-badge">{badge}</span>}
-                </button>
-              ))}
+              {group.items.map(({ path, tip, icon: Icon, label, badge, needsReport }) => {
+                const locked = needsReport && !hasReport;
+                return (
+                  <button
+                    key={path}
+                    className={`nav-item${isActive(path) ? ' active' : ''}${locked ? ' locked' : ''}`}
+                    data-tip={locked ? 'Finish your diagnosis to unlock' : tip}
+                    data-nav={path}
+                    aria-disabled={locked}
+                    onClick={() => {
+                      // Send them to the thing that unlocks it rather than to an
+                      // empty page they have to work out for themselves.
+                      if (locked) { handleNav('/app/diagnosis'); return; }
+                      handleNav(path);
+                    }}
+                  >
+                    <Icon className="ic" />
+                    <span className="lbl">{label}</span>
+                    {locked && <IconLock className="nav-lock" />}
+                    {!locked && badge && <span className="nav-badge">{badge}</span>}
+                  </button>
+                );
+              })}
             </div>
           ))}
         </nav>

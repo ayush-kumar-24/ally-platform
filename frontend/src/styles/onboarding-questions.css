@@ -341,3 +341,8 @@ button.ac-pcard {
   color: #7d9488;
   white-space: nowrap;
 }
+
+/* Nav items that need a finished diagnosis before they can show anything. */
+.nav-item.locked { opacity: .5; }
+.nav-item.locked .lbl { font-weight: 500; }
+.nav-lock { width: 13px; height: 13px; margin-left: auto; flex-shrink: 0; opacity: .8; }
