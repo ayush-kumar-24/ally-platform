@@ -1,4 +1,4 @@
-import { Outlet, useNavigate, useLocation } from 'react-router-dom';
+import { Navigate, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { useEffect } from 'react';
 import { getAccessToken } from '../services/api';
@@ -66,6 +66,17 @@ export default function GuidedLayout() {
 
   const handleBack = () => navigate(-1);
   const handleExit = () => { exitGuided(); navigate('/'); };
+
+  /* Onboarding writes to the founder's row from the very first answer, so it
+     needs a session before it starts -- not at the end. Without one, the dev
+     auth fallback resolves every request to a placeholder founder that has no
+     database row, so each write comes back 404: the founder answers thirteen
+     questions, none of it saves, and the only symptom is being bounced to login
+     at the /app boundary once RequireAuth finally checks. The login step is of
+     course exempt. */
+  if (location.pathname !== '/guided/login' && !getAccessToken()) {
+    return <Navigate to="/guided/login" replace state={{ from: location.pathname }} />;
+  }
 
   return (
     <div style={{ position: 'relative', height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
