@@ -32,7 +32,18 @@ class Settings(BaseSettings):
     AUTH_PROVIDER: str = "dev"
 
     # Only needed when AUTH_PROVIDER="supabase".
-    # Supabase dashboard -> Project Settings -> API -> JWT Settings -> JWT Secret.
+    #
+    # Supabase signs user access tokens ASYMMETRICALLY (ES256) and publishes the
+    # public half at {SUPABASE_URL}/auth/v1/.well-known/jwks.json. That is what
+    # verifies a real Google/LinkedIn login, so SUPABASE_URL is the setting that
+    # matters in production.
+    #
+    # SUPABASE_JWT_SECRET is the LEGACY shared HS256 secret. It still signs the
+    # anon/service keys and older projects' user tokens, so it is kept as a
+    # fallback -- but a project on asymmetric signing never uses it for logins.
+    # Verifying the anon key against it proves the secret is right and proves
+    # nothing about user tokens; they are signed by a different key entirely.
+    SUPABASE_URL: str = ""
     SUPABASE_JWT_SECRET: str = ""
 
     # --- Security ---
