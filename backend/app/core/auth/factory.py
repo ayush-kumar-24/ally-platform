@@ -22,6 +22,9 @@ def get_auth_provider() -> AuthProvider:
         return DevAuthProvider()
 
     if provider == "supabase":
-        return SupabaseAuthProvider(settings.SUPABASE_JWT_SECRET)
+        return SupabaseAuthProvider(
+            settings.SUPABASE_JWT_SECRET,
+            supabase_url=settings.SUPABASE_URL,
+        )
 
     raise RuntimeError(f"Unknown AUTH_PROVIDER {provider!r} (expected 'dev' or 'supabase')")
