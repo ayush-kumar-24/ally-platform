@@ -489,8 +489,13 @@ function PlanYourDayInner() {
 
 /**
  * Plan Your Day is a paid feature (Starter and above). The gate here is a
- * courtesy so a Free founder sees an explanation instead of a broken page --
- * the backend refuses the underlying calls either way.
+ * courtesy so a Free founder sees an explanation instead of a broken page.
+ *
+ * The enforcement is `require_plan_your_day`, applied to the whole /planning
+ * router, which answers 403 to a free founder. That is the check that counts:
+ * this component decides what to render, not who may call the API. Keep both --
+ * removing the gate below only makes the page ugly, but trusting it as the sole
+ * control is how the paywall was open with this comment claiming otherwise.
  */
 export default function PlanYourDay() {
   return (
