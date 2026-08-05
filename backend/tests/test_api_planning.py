@@ -13,6 +13,7 @@ from app.api.v1.planning.dependencies import (
     get_current_founder_id,
     get_diagnosis_steps,
     get_planning_service,
+    require_plan_your_day,
 )
 from app.planning import build_planning_service
 
@@ -27,8 +28,12 @@ def client():
     app.dependency_overrides[get_current_founder_id] = lambda: founder["id"]
     app.dependency_overrides[get_planning_service] = lambda: service
     app.dependency_overrides[get_diagnosis_steps] = lambda: ["Interview churned users", "Book a call"]
+    # These tests cover transport + service behaviour, not the paywall; the gate
+    # itself is exercised against the real dependency in TestPlanGate below.
+    app.dependency_overrides[require_plan_your_day] = lambda: None
     yield SimpleNamespace(http=TestClient(app), founder=founder, service=service)
-    for dep in (get_current_founder_id, get_planning_service, get_diagnosis_steps):
+    for dep in (get_current_founder_id, get_planning_service, get_diagnosis_steps,
+                require_plan_your_day):
         app.dependency_overrides.pop(dep, None)
 
 
@@ -117,3 +122,58 @@ def test_founder_isolation(client):
     client.founder["id"] = 2
     assert client.http.get(f"{BASE}/plans/{pid}").status_code == 404        # foreign plan hidden
     assert client.http.get(f"{BASE}/plans").json()["total"] == 0
+
+
+# --- plan gating ------------------------------------------------------------
+#
+# These exercise the REAL require_plan_your_day dependency. Everything above
+# overrides it; without this block the paywall would be entirely untested --
+# which is exactly how it came to be missing in the first place.
+
+
+class TestPlanGate:
+    @staticmethod
+    def _client(plan_type: str):
+        from app.api.deps import get_founder_record
+        from app.db.session import get_db
+
+        app.dependency_overrides[get_founder_record] = lambda: SimpleNamespace(
+            founder_id=1, plan_type=plan_type,
+        )
+        # require_feature reads the in-memory catalog, never the session, so a
+        # placeholder keeps these tests off the database.
+        app.dependency_overrides[get_db] = lambda: None
+        app.dependency_overrides[get_planning_service] = lambda: build_planning_service(
+            clock=lambda: T0, id_factory=(lambda c=count(1): f"gate-{next(c)}"))
+        return TestClient(app)
+
+    @staticmethod
+    def _teardown():
+        from app.api.deps import get_founder_record
+        from app.db.session import get_db
+
+        for dep in (get_founder_record, get_db, get_planning_service):
+            app.dependency_overrides.pop(dep, None)
+
+    def test_free_plan_is_refused(self):
+        try:
+            r = self._client("free").get(f"{BASE}/plans")
+            assert r.status_code == 403, r.text
+        finally:
+            self._teardown()
+
+    def test_free_plan_cannot_write_either(self):
+        """The read path 403ing is not enough -- writes are the paywall hole."""
+        try:
+            r = self._client("free").post(f"{BASE}/plans", json={"title": "Sneaky"})
+            assert r.status_code == 403, r.text
+        finally:
+            self._teardown()
+
+    @pytest.mark.parametrize("plan_type", ["starter", "pro"])
+    def test_paid_plans_are_allowed(self, plan_type):
+        try:
+            r = self._client(plan_type).get(f"{BASE}/plans")
+            assert r.status_code == 200, r.text
+        finally:
+            self._teardown()

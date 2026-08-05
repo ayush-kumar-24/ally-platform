@@ -15,10 +15,28 @@ from app.core.container import container
 from app.db.session import get_db
 from app.models import Founder
 from app.planning.service import PlanningService
+from app.plans.catalog import Feature
 
 
 def get_current_founder_id(founder: Founder = Depends(get_founder_record)) -> int:
     return founder.founder_id
+
+
+def require_plan_your_day(
+    founder: Founder = Depends(get_founder_record),
+    db: Session = Depends(get_db),
+) -> None:
+    """Plan Your Day is a paid feature (Starter and above).
+
+    Applied once at the router, not per endpoint, so a new route cannot ship
+    unprotected by omission -- the failure mode this replaces. The frontend
+    wraps the page in <PlanGate>, but that only decides what to render: a free
+    founder could call POST /planning/goals/{id}/tasks directly and the API
+    would happily serve them. A UI gate is not an entitlement.
+    """
+    container.entitlement_service(db).require_feature(
+        founder.plan_type, Feature.PLAN_YOUR_DAY
+    )
 
 
 def get_planning_service(db: Session = Depends(get_db)) -> PlanningService:

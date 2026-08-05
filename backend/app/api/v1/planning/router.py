@@ -10,6 +10,7 @@ from app.api.v1.planning.dependencies import (
     get_current_founder_id,
     get_diagnosis_steps,
     get_planning_service,
+    require_plan_your_day,
 )
 from app.api.v1.planning.responses import (
     GoalListResponse,
@@ -35,7 +36,12 @@ from app.api.v1.planning.schemas import (
 )
 from app.planning.service import PlanningService
 
-router = APIRouter(prefix="/planning", tags=["planning"])
+router = APIRouter(
+    prefix="/planning",
+    tags=["planning"],
+    # Plan-gated as a whole: every route below requires Starter or above.
+    dependencies=[Depends(require_plan_your_day)],
+)
 
 
 def _date_kwargs(payload, field: str, clear_flag: str) -> dict:
