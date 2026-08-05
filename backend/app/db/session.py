@@ -3,20 +3,24 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 
 from app.core.config import settings
 
-# Supabase's pooler allows 15 client connections in session mode. pool_size=5 +
-# max_overflow=10 was exactly 15, so one busy API process could take every slot
-# and leave nothing for anything else -- a second backend, an alembic run, a
-# script -- at which point the pooler answers new connections with
-# "(EMAXCONNSESSION) max clients reached" and endpoints 500 intermittently
-# depending on who got there first.
+# Supabase's pooler allows 15 client connections in session mode, shared by
+# every process that talks to it -- and this app can run as more than one
+# process (a multi-instance deploy, a local backend plus a hosted one, a
+# migration running alongside the API). 5+10 was exactly 15 on its own, so one
+# busy process could take every slot and leave nothing for anything else, at
+# which point the pooler answers new connections with "(EMAXCONNSESSION) max
+# clients reached" and endpoints 500 intermittently depending on who got there
+# first -- which is exactly what happened in development with just two
+# processes running.
 #
-# 3 + 5 caps this process at 8, leaving genuine headroom. pool_recycle keeps
-# connections from going stale behind the pooler, which closes idle ones.
+# DB_POOL_SIZE/DB_POOL_MAX_OVERFLOW (app/core/config.py) default to a per-
+# process cap of 5, sized for up to 2 instances with headroom. pool_recycle
+# keeps connections from going stale behind the pooler, which closes idle ones.
 engine = create_engine(
     settings.DATABASE_URL,
     pool_pre_ping=True,
-    pool_size=3,
-    max_overflow=5,
+    pool_size=settings.DB_POOL_SIZE,
+    max_overflow=settings.DB_POOL_MAX_OVERFLOW,
     pool_recycle=1800,
 )
 

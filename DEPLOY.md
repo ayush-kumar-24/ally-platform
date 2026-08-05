@@ -11,54 +11,31 @@ start opens a fresh pool, so concurrent invocations exhaust it and the pooler
 starts answering `(EMAXCONNSESSION) max clients reached`. That failure has
 already happened once in development with only two processes running.
 
-Use a persistent container for the API — Railway, Render and Fly all work from
-this repo's `requirements.txt`.
+Use a persistent container for the API, never a serverless one.
 
 ---
 
 ## 1. Backend first
 
-Deploy `backend/` to Railway or Render with:
+**Deployed via AWS App Runner** — see `backend/DEPLOY_AWS.md` for the full
+walkthrough (Dockerfile, ECR, env vars, the Supabase pooler-mode change that
+matters once real traffic arrives). Railway, Render and Fly also work from
+this repo's `requirements.txt` + `backend/Dockerfile`, if App Runner ever
+stops being the right fit.
 
-```
-Start command:  python scripts/run_dev.py --port $PORT --host 0.0.0.0
-```
-
-(or `uvicorn app.main:app --host 0.0.0.0 --port $PORT` — `run_dev.py` only exists
-to chdir so `.env` resolves, which a hosted env-var setup makes unnecessary.)
-
-Environment variables — see `backend/.env.example` for the full list. The ones
-that must change from their development values:
-
-| Variable | Value | Why |
-|---|---|---|
-| `ENVIRONMENT` | `production` | `factory.py` refuses `AUTH_PROVIDER=dev` unless this is set |
-| `AUTH_PROVIDER` | `supabase` | dev auth accepts any bearer as a founder id |
-| `SUPABASE_JWT_SECRET` | from Supabase → Settings → API | verifies the token the browser presents |
-| `SECRET_KEY` | `python -c "import secrets; print(secrets.token_urlsafe(48))"` | signs our own tokens |
-| `DATABASE_URL` | the Supabase pooler URI | |
-| `CORS_ORIGINS` | not needed if using the Vercel rewrite below | the proxy keeps the browser same-origin |
-| `ANTHROPIC_API_KEY` | | diagnosis reasoning + first impression |
-| `OPENAI_API_KEY` | | chat + voice transcription |
-
-Then run the migrations against the production database:
-
-```bash
-alembic upgrade head
-```
-
-Three are outstanding as of this writing: `customer_segment` → jsonb,
-`first_impression`, and `diagnosis_rating`. The code will not work without them.
-
-Confirm it is up: `GET https://<backend>/openapi.json` should return 200.
+Once it's live, confirm: `GET https://<backend>/` returns
+`{"status": "running", ...}`, and the three outstanding migrations
+(`customer_segment` → jsonb, `first_impression`, `diagnosis_rating`) have run
+against the production database — the Dockerfile runs `alembic upgrade head`
+on every start, so this happens automatically.
 
 ## 2. Frontend on Vercel
 
 1. **Import the repo** in Vercel → New Project.
 2. Set **Root Directory** to `frontend`. Everything else is read from
    `frontend/vercel.json`.
-3. Edit `frontend/vercel.json` and replace `REPLACE-ME.up.railway.app` with the
-   backend host from step 1.
+3. Edit `frontend/vercel.json` and replace `REPLACE-ME.awsapprunner.com` with
+   the backend's actual App Runner domain from step 1.
 4. Add environment variables (Project → Settings → Environment Variables):
 
 | Variable | Value |

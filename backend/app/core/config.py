@@ -12,6 +12,19 @@ class Settings(BaseSettings):
     # --- Database ---
     # Supabase today, AWS RDS later -- only this value changes when that happens.
     DATABASE_URL: str
+    # Per-process cap on connections to the Supabase pooler, which allows 15 in
+    # session mode total across everything talking to it -- every API process,
+    # every alembic run, every one-off script. Configurable so a multi-instance
+    # deploy can be tuned without a code change: at N instances this process
+    # alone can open up to N * (POOL_SIZE + POOL_MAX_OVERFLOW), and that must
+    # stay comfortably under 15 with headroom for the rest. Defaults sized for
+    # up to 2 instances (2*5=10) with room to spare. Running more than that
+    # needs either a lower per-instance value here or -- the real fix --
+    # switching DATABASE_URL to Supabase's transaction-mode pooler (port 6543),
+    # which is built for many concurrent short-lived connections instead of a
+    # fixed pool of long-lived ones.
+    DB_POOL_SIZE: int = 2
+    DB_POOL_MAX_OVERFLOW: int = 3
 
     # --- Auth ---
     # "dev"      = temporary local stand-in for testing, never used in production.
