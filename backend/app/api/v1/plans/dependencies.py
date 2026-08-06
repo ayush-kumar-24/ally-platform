@@ -5,12 +5,12 @@ the handler, so the frozen ChatExecutionService is never modified.
 
 Rollout switch
 --------------
-Enforcement is behind `PLAN_ENFORCEMENT_ENABLED` (default **off**). This is not
-timidity -- the tables the gate reads (`daily_token_usage`, `plan_call_usage`) and
-the credit columns it checks do not exist in the database yet, because the
-migrations are blocked. Turning the gate on before its storage exists would 500
-every chat request. It ships tested and dormant; flip the flag once
-`alembic upgrade head` has run.
+Enforcement is behind `PLAN_ENFORCEMENT_ENABLED`. It was dormant because the
+storage it reads did not exist; that is no longer true. `daily_token_usage`
+(now carrying a `source` so chat and planning meter separately),
+`plan_call_usage` and the credit columns are all migrated as of b8e2d4f60a19,
+and signup credits are granted as of a7c3f9e21d84 -- without which enabling this
+would have refused every newly-provisioned founder on their first message.
 
 When the flag is off the gate is a pass-through that still resolves the founder, so
 turning it on changes behaviour in exactly one place rather than rewiring routes.
@@ -26,6 +26,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_founder_record
+from app.core.config import settings
 from app.core.container import container
 from app.db.session import get_db
 from app.models import Founder
@@ -50,7 +51,19 @@ def get_current_founder_id(founder: Founder = Depends(get_founder_record)) -> in
 
 
 def enforcement_enabled() -> bool:
-    return os.environ.get("PLAN_ENFORCEMENT_ENABLED", "").strip().lower() in {"1", "true", "yes"}
+    """Is the quota gate live?
+
+    Reads the process environment FIRST so a deploy or a test can override, then
+    falls back to settings (which is what loads .env). Checking only os.environ --
+    as this did -- meant the flag was unsettable by the one mechanism every other
+    option in this codebase uses: pydantic-settings parses .env into the Settings
+    object and never exports it to the environment, so PLAN_ENFORCEMENT_ENABLED=true
+    in .env was read as absent and enforcement stayed silently off.
+    """
+    raw = os.environ.get("PLAN_ENFORCEMENT_ENABLED")
+    if raw is not None:
+        return raw.strip().lower() in {"1", "true", "yes"}
+    return settings.PLAN_ENFORCEMENT_ENABLED
 
 
 def get_entitlement_service(db: Session = Depends(get_db)) -> EntitlementService:

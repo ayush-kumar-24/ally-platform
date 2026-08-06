@@ -5,7 +5,9 @@ domain errors, and never commits -- transaction boundaries belong to the
 service so that a single request stays atomic.
 """
 
-from sqlalchemy import Select, select
+from datetime import datetime
+
+from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session
 
 from app.models import Answer, DiagnosisSession, Question, SessionStatus
@@ -19,6 +21,23 @@ class DiagnosisRepository:
 
     def get_session_by_id(self, session_id: int) -> DiagnosisSession | None:
         return self.db.get(DiagnosisSession, session_id)
+
+    def count_sessions_started_since(self, founder_id: int, since: datetime) -> int:
+        """Diagnoses this founder has STARTED since `since`, whatever their state.
+
+        Counts abandoned and completed runs alike: the cost of a diagnosis is
+        incurred when it is started and questions are answered, not when it is
+        finished, so counting only completions would let someone abandon at
+        question 29 and start again for free.
+        """
+        return self.db.scalar(
+            select(func.count())
+            .select_from(DiagnosisSession)
+            .where(
+                DiagnosisSession.founder_id == founder_id,
+                DiagnosisSession.started_at >= since,
+            )
+        ) or 0
 
     def get_active_session_for_founder(self, founder_id: int) -> DiagnosisSession | None:
         """Most recent in-progress session, if any.

@@ -13,12 +13,36 @@ own daily ceiling -- 30 days x daily_tokens / TOKENS_PER_CREDIT. A plan that gra
 more credits than its daily limit allows anyone to spend would strand the remainder
 every month, which is a refund request waiting to happen.
 
-    Free     120 credits (once)   4,000 tokens/day  -> 30 days of trial
-    Starter  180 credits/month    6,000 tokens/day  -> 180,000 tokens, all reachable
-    Pro      240 credits/month    8,000 tokens/day  -> 240,000 tokens, all reachable
+    Free     1,431 credits (once)  40,000 chat + 7,700 planning tokens/day
+    Starter    180 credits/month    6,000 tokens/day -> 180,000, all reachable
+    Pro        240 credits/month    8,000 tokens/day -> 240,000, all reachable
 
 Free grants credits **once**, not monthly: a renewing free tier is an unbounded
 recurring cost per signup. It is a one-month trial that ends in a top-up decision.
+
+Free is currently sized for the TESTING PHASE, not for a public free tier. The
+measured per-operation costs it is built from:
+
+    diagnosis   18,900 in + 5,500 out = 24,400   unmetered, once per month
+    chat         2,000 in +   400 out =  2,400   x 500 messages = 1,200,000
+    planning       800 in +   300 out =  1,100   x 7/day x 30   =   231,000
+                                                 total          = 1,431,000
+
+which is 1,431 credits at 1,000 tokens each, and exactly reachable:
+40,000 x 30 = 1,200,000 for chat, 7,700 x 30 = 231,000 for planning. At roughly
+Rs 168 per user per month this is a funded trial allowance -- shrink it before a
+public launch.
+
+Diagnosis is deliberately absent from the budget. It is unmetered so a founder can
+never hit a wall mid-diagnosis, which is also why it must stay capped by *count*
+(one per month) rather than by tokens.
+
+Chat and planning meter SEPARATELY -- they are different features and exhausting
+one must not disable the other. That is what the `source` dimension on
+daily_token_usage is for. Planning's counter reads zero today: adding a task is
+deterministic (no model call) and the task list Ally sees in chat is already
+inside chat's own input. The budget exists so reminder/notification LLM work has
+somewhere to land without a schema change.
 """
 
 from __future__ import annotations
@@ -28,6 +52,12 @@ from enum import Enum
 
 #: How many LLM tokens one credit represents. Round and explainable on an invoice.
 TOKENS_PER_CREDIT = 1_000
+
+#: Metered features. Each keeps its own daily counter (the `source` dimension on
+#: daily_token_usage), so chat running out cannot disable planning. Diagnosis is
+#: deliberately not here -- it is unmetered and capped by count instead.
+SOURCE_CHAT = "chat"
+SOURCE_PLANNING = "planning"
 
 #: Price of a 30-minute call once a founder's free allowance is used up.
 CALL_PRICE_INR = 300
@@ -91,15 +121,32 @@ class Plan:
     free_calls_per_month: int
     features: frozenset[Feature]
     tagline: str
+    #: Planning's own daily ceiling, metered separately from chat so exhausting
+    #: one feature cannot disable the other. 0 = planning consumes no budget.
+    planning_daily_token_limit: int = 0
+    #: Diagnoses a founder may START per calendar month. Diagnosis is unmetered by
+    #: tokens on purpose -- a founder must never hit a wall mid-assessment -- so a
+    #: count is the only thing bounding its cost. 0 = unlimited.
+    diagnoses_per_month: int = 1
 
     @property
     def is_paid(self) -> bool:
         return self.price_inr > 0
 
+    def daily_limit_for(self, source: str) -> int:
+        """The ceiling for one metered feature. Unknown sources fall back to the
+        chat limit rather than to unlimited: a source added without a limit here
+        must be constrained by something, and the wrong cap is recoverable in a
+        way that no cap is not."""
+        if source == SOURCE_PLANNING:
+            return self.planning_daily_token_limit
+        return self.daily_token_limit
+
     @property
     def reachable_monthly_tokens(self) -> int:
-        """Most a founder could consume in a 30-day month under the daily ceiling."""
-        return self.daily_token_limit * 30
+        """Most a founder could consume in a 30-day month under the daily ceilings,
+        across every metered feature."""
+        return (self.daily_token_limit + self.planning_daily_token_limit) * 30
 
     def includes(self, feature: Feature) -> bool:
         return feature in self.features
@@ -111,10 +158,16 @@ PLANS: dict[PlanTier, Plan] = {
         name="Free",
         price_inr=0,
         monthly_credits=0,          # one-time grant instead -- see signup_credits
-        signup_credits=120,
-        daily_token_limit=4_000,
+        signup_credits=1_431,       # 1,200 chat + 231 planning; see module docstring
+        daily_token_limit=40_000,   # ~17 chat messages/day, 500/month
+        planning_daily_token_limit=7_700,   # 7 planning actions/day at 1,100 each
         free_calls_per_month=0,
-        features=_UNIVERSAL,
+        # Plan Your Day is normally paid, but the testing phase includes it: the
+        # planning budget above is meaningless without the feature that spends it,
+        # and a tester told they get 7 planning actions a day would otherwise hit
+        # a 403 on the first one. Move it back to _PAID when Free is resized for
+        # a public launch -- the same moment the credit ladder has to be restored.
+        features=_UNIVERSAL | frozenset({Feature.PLAN_YOUR_DAY}),
         tagline="One month free. See what Ally finds.",
     ),
     PlanTier.STARTER: Plan(

@@ -2,6 +2,7 @@
 service + a fake founder + canned diagnosis steps; no DB/auth backend."""
 
 from datetime import datetime, timezone
+from dataclasses import replace
 from itertools import count
 from types import SimpleNamespace
 
@@ -155,25 +156,41 @@ class TestPlanGate:
         for dep in (get_founder_record, get_db, get_planning_service):
             app.dependency_overrides.pop(dep, None)
 
-    def test_free_plan_is_refused(self):
-        try:
-            r = self._client("free").get(f"{BASE}/plans")
-            assert r.status_code == 403, r.text
-        finally:
-            self._teardown()
-
-    def test_free_plan_cannot_write_either(self):
-        """The read path 403ing is not enough -- writes are the paywall hole."""
-        try:
-            r = self._client("free").post(f"{BASE}/plans", json={"title": "Sneaky"})
-            assert r.status_code == 403, r.text
-        finally:
-            self._teardown()
-
-    @pytest.mark.parametrize("plan_type", ["starter", "pro"])
-    def test_paid_plans_are_allowed(self, plan_type):
+    @pytest.mark.parametrize("plan_type", ["free", "starter", "pro"])
+    def test_every_current_tier_is_allowed(self, plan_type):
+        """Free included: Plan Your Day is temporarily in the Free feature set for
+        the testing phase, so no tier is refused today."""
         try:
             r = self._client(plan_type).get(f"{BASE}/plans")
             assert r.status_code == 200, r.text
+        finally:
+            self._teardown()
+
+    @pytest.mark.parametrize("method,payload", [
+        ("get", None),
+        ("post", {"title": "Sneaky"}),
+    ])
+    def test_a_tier_without_the_feature_is_refused(self, method, payload, monkeypatch):
+        """Proves the gate actually enforces, independently of what the catalog
+        happens to grant today.
+
+        Asserting "free is refused" would have stopped testing anything the moment
+        Plan Your Day moved into Free -- it would pass for the wrong reason, or
+        fail and get deleted. So strip the feature from the plan the request
+        resolves to and assert the refusal directly. Both verbs, because the read
+        path 403ing is not the paywall -- writes are.
+        """
+        from app.plans import catalog
+
+        stripped = {
+            tier: replace(plan, features=plan.features - {catalog.Feature.PLAN_YOUR_DAY})
+            for tier, plan in catalog.PLANS.items()
+        }
+        monkeypatch.setattr(catalog, "PLANS", stripped)
+        try:
+            client = self._client("free")
+            r = getattr(client, method)(f"{BASE}/plans", **({"json": payload} if payload else {}))
+            assert r.status_code == 403, r.text
+            assert r.json()["error"] == "FeatureNotInPlanError"
         finally:
             self._teardown()

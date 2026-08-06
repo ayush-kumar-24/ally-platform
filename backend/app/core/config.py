@@ -59,6 +59,14 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
 
+    # --- Plan enforcement ---
+    # The quota gate (daily token ceilings + credit balance). Was dormant while
+    # its storage was unmigrated; daily_token_usage, plan_call_usage and the
+    # credit columns all exist as of migration b8e2d4f60a19, so it can be live.
+    # An explicit PLAN_ENFORCEMENT_ENABLED in the process environment still wins
+    # over this, so a deploy can disable it without a code change.
+    PLAN_ENFORCEMENT_ENABLED: bool = False
+
     # --- Provisioning ---
     # ON: first real (Supabase) login creates the founder row via
     # create_founder_on_signup. Dev-mode identities are never provisioned (they
