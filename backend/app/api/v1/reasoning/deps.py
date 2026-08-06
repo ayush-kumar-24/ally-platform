@@ -202,7 +202,9 @@ def build_reasoning_service(db: Session) -> ReasoningService:
             repository, enricher=_build_enricher(db, repository)
         ),
         confidence_model=WeightedConfidenceModel(repository),
-        recommendation_engine=StandardRecommendationEngine(repository),
+        recommendation_engine=StandardRecommendationEngine(
+            repository, llm_fallback=_build_recommendation_fallback(db)
+        ),
         retrieval_enabled=settings.RETRIEVAL_ENABLED,
         consistency_detector=_build_consistency_detector(db),
         distress_detector=_build_distress_detector(db, repository),
@@ -210,6 +212,7 @@ def build_reasoning_service(db: Session) -> ReasoningService:
         # ReasoningService._record_diagnosis_memory) so chat's memory_summary
         # block carries it too, not only the session-scoped AllyContext.diagnosis.
         memory=build_db_memory_service(db),
+        archetype_engine=build_archetype_engine(db, repository),
     )
 
 
@@ -238,3 +241,38 @@ def _build_distress_detector(db: Session, repository: ReasoningRepository):
 
 def get_reasoning_service(db: Session = Depends(get_db)) -> ReasoningService:
     return build_reasoning_service(db)
+
+
+def _build_recommendation_fallback(db: Session):
+    """LLM gap-filler for root causes the intervention library does not cover, or
+    None when off. None restores the prior behaviour exactly: an uncovered cause
+    yields no recommendation.
+
+    Gated on RECOMMENDATION_FALLBACK_LLM rather than sharing a diagnosis flag.
+    This one writes advice a founder reads and acts on, with no reviewed
+    intervention behind it -- it deserves its own switch, so it can be turned off
+    without also disabling answer classification or distress detection.
+    """
+    if not settings.RECOMMENDATION_FALLBACK_LLM:
+        return None
+    from app.api.v1.reasoning.engines.recommendation_llm import LLMRecommendationFallback
+    return LLMRecommendationFallback(
+        provider_for_task(db, LLMTask.DIAGNOSIS_REASONING),
+    )
+
+
+def build_archetype_engine(db: Session, repository: ReasoningRepository):
+    """LLM archetype assignment when ARCHETYPE_LLM is on, deterministic otherwise.
+
+    Both satisfy the same `assign(answer_texts) -> ArchetypeMatch | None` shape,
+    so ReasoningService is unchanged either way, and the LLM path keeps the
+    deterministic engine as its fallback rather than replacing it.
+    """
+    deterministic = ArchetypeEngine(repository)
+    if not settings.ARCHETYPE_LLM:
+        return deterministic
+    from app.api.v1.reasoning.engines.archetype_llm import LLMArchetypeAssigner
+    return LLMArchetypeAssigner(
+        provider_for_task(db, LLMTask.ARCHETYPE_ASSIGNMENT),
+        fallback=deterministic,
+    )

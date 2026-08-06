@@ -106,6 +106,7 @@ class ReasoningService:
         consistency_detector=None,
         distress_detector=None,
         memory=None,
+        archetype_engine=None,
     ):
         self.db = db
         self.repository = repository
@@ -133,7 +134,9 @@ class ReasoningService:
             PsychologicalStateSignalScorer(repository),
             config.distress.high_distress_score,
         )
-        self.archetype_engine = ArchetypeEngine(repository)
+        # Injectable so the LLM assigner can be swapped in without touching this
+        # orchestrator; both satisfy assign(texts) -> ArchetypeMatch | None.
+        self.archetype_engine = archetype_engine or ArchetypeEngine(repository)
 
     async def analyze_session(
         self, founder: Founder, session_id: int, *, force: bool = False

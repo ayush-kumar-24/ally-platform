@@ -28,6 +28,7 @@ from app.api.v1.reasoning.interfaces import (
     RecommendationEngine,
 )
 from app.api.v1.reasoning.repository import ReasoningRepository
+from app.core.logger import logger
 from app.api.v1.reasoning.schemas import (
     Recommendation,
     RecommendationResult,
@@ -99,9 +100,14 @@ class StandardRecommendationEngine(RecommendationEngine):
         self,
         repository: ReasoningRepository,
         relevance: InterventionRelevanceStrategy | None = None,
+        llm_fallback=None,
     ):
         self.repository = repository
         self.relevance = relevance or DefaultInterventionRelevance()
+        #: Optional. Fills root causes the curated library does not cover; see
+        #: recommendation_llm.LLMRecommendationFallback. None => uncovered causes
+        #: produce nothing, which is the behaviour that predates it.
+        self.llm_fallback = llm_fallback
 
     def recommend(
         self,
@@ -156,7 +162,36 @@ class StandardRecommendationEngine(RecommendationEngine):
         # score, then intervention_id -- independent of DB return order and of
         # semantic evidence.
         scored_recs.sort(key=lambda pair: (pair[1].priority, -pair[0], pair[1].intervention_id))
-        return RecommendationResult(tuple(rec for _raw, rec in scored_recs))
+        recommendations = [rec for _raw, rec in scored_recs]
+
+        # Fill library gaps, if a fallback is wired. Runs last and only for causes
+        # the deterministic pass left with nothing, so a curated intervention can
+        # never be displaced by a generated one.
+        if self.llm_fallback is not None:
+            covered = {
+                rc_id
+                for rec in recommendations
+                for rc_id in rec.supporting_root_causes
+            }
+            uncovered = [
+                (code, scored, getattr(root_causes.get(scored.root_cause_id), "root_cause_name", ""))
+                for code, scored in code_to_scored.items()
+                if scored.root_cause_id not in covered
+            ]
+            if uncovered:
+                uncovered.sort(key=lambda t: t[1].rank)   # best-ranked gaps first
+                logger.info("Recommendation library gaps",
+                            extra={"uncovered": len(uncovered)})
+                recommendations.extend(self.llm_fallback.fill(
+                    uncovered,
+                    stage_name=getattr(context, "stage_name", None),
+                    industry=industry_code,
+                ))
+                # Re-sort so generated entries land by the same rule as the rest;
+                # a gap-filler for rank 1 belongs above a library row for rank 4.
+                recommendations.sort(key=lambda r: (r.priority, r.intervention_id))
+
+        return RecommendationResult(tuple(recommendations))
 
     # --- Internals --------------------------------------------------------
 

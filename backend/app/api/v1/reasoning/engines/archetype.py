@@ -64,6 +64,12 @@ class ArchetypeMatch:
     score: Decimal            # 0..1 fit strength
     matched_terms: tuple[str, ...]
     is_confident: bool
+    #: "llm" or "deterministic". Which mechanism actually chose this archetype.
+    #: Recorded for the same reason report sections carry narrator provenance: a
+    #: founder reading "you are an Operator" should be traceable to how that was
+    #: decided, and the two mechanisms are not equally strong. Defaults to
+    #: deterministic so the lexical engine needs no change to stay honest.
+    assigned_by: str = "deterministic"
 
     def as_founder_dna(self) -> dict:
         """Shape persisted into founder_reports.founder_dna."""
@@ -75,6 +81,7 @@ class ArchetypeMatch:
             "fit_score": float(self.score),
             "is_confident": self.is_confident,
             "matched_terms": list(self.matched_terms),
+            "assigned_by": self.assigned_by,
         }
 
 

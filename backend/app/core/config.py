@@ -67,6 +67,18 @@ class Settings(BaseSettings):
     # over this, so a deploy can disable it without a code change.
     PLAN_ENFORCEMENT_ENABLED: bool = False
 
+    # Founder-archetype assignment via LLM. Off => the deterministic lexical
+    # match, which its own docstring calls a heuristic. The LLM chooses from the
+    # same seeded catalogue and falls back to the lexical engine on any failure.
+    ARCHETYPE_LLM: bool = False
+
+    # Write a recommendation when the curated intervention library covers none of
+    # a detected root cause. Off => that cause yields nothing, silently, which is
+    # the behaviour this replaces. Its own flag, not a shared diagnosis one: this
+    # produces advice with no reviewed intervention behind it and should be
+    # switchable on its own.
+    RECOMMENDATION_FALLBACK_LLM: bool = False
+
     # --- Provisioning ---
     # ON: first real (Supabase) login creates the founder row via
     # create_founder_on_signup. Dev-mode identities are never provisioned (they

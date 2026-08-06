@@ -196,6 +196,15 @@ class Recommendation:
     next_actions: tuple[str, ...]
     intervention_code: str | None = None
     section: str | None = None
+    #: "library" when this came from a curated intervention row, "llm" when the
+    #: library had nothing for the detected cause and a model wrote it instead.
+    #:
+    #: Not cosmetic. A library recommendation has been reviewed and is tied to a
+    #: real intervention_id; a generated one has neither. A founder acting on
+    #: advice, and anyone auditing why it was given, needs to be able to tell
+    #: those apart -- and a gap in the library should be visible as a gap rather
+    #: than disappearing behind prose that reads identically.
+    source: str = "library"
 
 
 @dataclass(frozen=True)
