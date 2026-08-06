@@ -118,7 +118,11 @@ class ConfidenceScoreStrategy:
 
         # Reliability: None marks the High Distress band (no trustworthy evidence).
         # The distress hard rule handles routing; a null factor contributes 0.
-        reliability = inputs.reliability_factor if inputs.reliability_factor is not None else _ZERO
+        # Neutral, not zero. A missing multiplier means "we could not measure
+        # how trustworthy the conditions were", which is not the same as "the
+        # evidence is worthless" -- and zeroing here discards every signal that
+        # WAS measured. High distress passes an explicit 0 when it wants that.
+        reliability = inputs.reliability_factor if inputs.reliability_factor is not None else _ONE
 
         score = _round_int(base * reliability * self.stage_coherence_factor * _HUNDRED)
         score = self._apply_hard_rules(score, inputs)

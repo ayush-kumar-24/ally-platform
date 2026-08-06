@@ -45,6 +45,7 @@ from app.api.v1.reasoning.engines.distress_language import LLMDistressDetector
 from app.api.v1.reasoning.engines.psychological_state import PsychologicalStateSignalScorer
 from app.api.v1.reasoning.enrichment import RetrievalRootCauseEnricher
 from app.api.v1.reasoning.interfaces import AnswerClassifier, RootCauseEnricher
+from app.api.v1.reasoning.engines.archetype import ArchetypeEngine
 from app.api.v1.reasoning.repository import ReasoningRepository
 from app.api.v1.reasoning.service import ReasoningService
 from app.core.config import settings

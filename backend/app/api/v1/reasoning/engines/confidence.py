@@ -38,6 +38,7 @@ from app.api.v1.reasoning.config import ConfidenceInputs, ConfirmationMultiplier
 from app.api.v1.reasoning.interfaces import ConfidenceModel, ReasoningContext
 from app.api.v1.reasoning.repository import ReasoningRepository
 from app.core.config import settings
+from app.core.logger import logger
 from app.api.v1.reasoning.schemas import (
     DiagnosisResult,
     RootCauseDetection,
@@ -285,11 +286,27 @@ class WeightedConfidenceModel(ConfidenceModel):
             distress_score is not None
             and Decimal(distress_score) >= cfg.distress.high_distress_score
         )
-        reliability_factor = (
-            None
-            if distress_override
-            else self.repository.get_reliability_factor(distress_score)
-        )
+        # `None` used to mean two different things here -- "high distress, so
+        # discount this entirely" and "the lookup returned nothing" -- and the
+        # strategy treated both as zero, which multiplies the whole score to 0.
+        # A session with distress 0.00 and five ranked root causes scored 0
+        # because a config lookup came back empty. Nothing failed loudly; the
+        # diagnosis simply reported no confidence, forever.
+        #
+        # Distress now says so explicitly with a zero, and an unresolvable factor
+        # degrades to NEUTRAL. Absence must not be able to destroy every measured
+        # signal -- the rest of this model already excludes an unavailable input
+        # and renormalises rather than scoring it zero.
+        if distress_override:
+            reliability_factor = _ZERO
+        else:
+            measured = self.repository.get_reliability_factor(distress_score)
+            if measured is None:
+                logger.warning(
+                    "No reliability factor resolved; treating it as neutral",
+                    extra={"distress_score": str(distress_score)},
+                )
+            reliability_factor = measured if measured is not None else _ONE
 
         flagged = [c for c in diagnosis.category_risks if c.is_flagged]
         return ConfidenceInputs(

@@ -237,7 +237,7 @@ def test_category_signal_zero_when_no_categories():
     assert got.any_category_flagged is False
 
 
-def test_distress_override_by_session_score_nulls_reliability():
+def test_distress_override_by_session_score_zeroes_reliability():
     repo = FakeRepo(reliability=D("0.95"))
     model = WeightedConfidenceModel(repo)
     diagnosis = make_diagnosis(category_risks=[make_category("0.6", True)])
@@ -247,7 +247,11 @@ def test_distress_override_by_session_score_nulls_reliability():
         questions_answered=20, context=ctx,
     )
     assert got.distress_override is True
-    assert got.reliability_factor is None
+    # Distress says "discount this entirely" with an explicit zero. It used to
+    # say it with None, which the strategy also produced for an unresolvable
+    # lookup -- so a config miss was indistinguishable from maximum distress
+    # and silently zeroed a healthy score.
+    assert got.reliability_factor == D("0")
 
 
 def test_distress_override_by_diagnosis_flag():
@@ -259,7 +263,11 @@ def test_distress_override_by_diagnosis_flag():
         questions_answered=20, context=ctx,
     )
     assert got.distress_override is True
-    assert got.reliability_factor is None
+    # Distress says "discount this entirely" with an explicit zero. It used to
+    # say it with None, which the strategy also produced for an unresolvable
+    # lookup -- so a config miss was indistinguishable from maximum distress
+    # and silently zeroed a healthy score.
+    assert got.reliability_factor == D("0")
 
 
 def test_flagged_category_count():

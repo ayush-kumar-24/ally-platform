@@ -215,9 +215,22 @@ def test_session_reliability_scales_the_base(factor, expected):
     assert make_strategy().compute(make_inputs(reliability_factor=factor)) == expected
 
 
-def test_none_reliability_contributes_zero():
-    # High Distress band has a null reliability factor -> base * 0 = 0.
-    assert make_strategy().compute(make_inputs(reliability_factor=None)) == D("0")
+def test_unresolved_reliability_is_neutral_not_zero():
+    """A missing multiplier means "we could not measure how trustworthy the
+    conditions were", not "the evidence is worthless".
+
+    Zeroing here discarded every signal that WAS measured. A real 30-answer
+    session with five ranked root causes and full coverage scored 0 because one
+    config lookup returned nothing, and nothing failed loudly -- the diagnosis
+    just reported no confidence. High distress still discounts the score, but it
+    now says so with an explicit 0 rather than by omission.
+    """
+    assert make_strategy().compute(make_inputs(reliability_factor=None)) > D("0")
+
+
+def test_explicit_zero_reliability_still_zeroes_the_score():
+    """The distress path, which genuinely does want the score discounted."""
+    assert make_strategy().compute(make_inputs(reliability_factor=D("0"))) == D("0")
 
 
 @pytest.mark.parametrize("coherence, expected", [(D("1.00"), D("100")), (D("0.90"), D("90")), (D("0.75"), D("75"))])
