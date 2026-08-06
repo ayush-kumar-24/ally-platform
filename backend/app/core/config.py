@@ -79,6 +79,19 @@ class Settings(BaseSettings):
     # switchable on its own.
     RECOMMENDATION_FALLBACK_LLM: bool = False
 
+    # --- Diagnosis length ---
+    # Hard cap on questions in one diagnosis. A diagnosis must reach a confident
+    # picture within this budget; it is not a walk through the whole bank (which
+    # is 569 questions for Stage 0->1 and would never be finished by anyone).
+    #
+    # This is also the denominator for the confidence score's evidence-coverage
+    # signal. That signal used to divide by the founder's whole in-scope bank,
+    # which made the score's own target unreachable: 30/569 = 0.05 on a 25%-weight
+    # input capped the total at 76, so a founder answering 30 questions perfectly
+    # could never cross the 80 needed to generate a report. Coverage means "how
+    # much of THIS diagnosis is done", and a diagnosis is this many questions.
+    MAX_DIAGNOSIS_QUESTIONS: int = 30
+
     # --- Provisioning ---
     # ON: first real (Supabase) login creates the founder row via
     # create_founder_on_signup. Dev-mode identities are never provisioned (they

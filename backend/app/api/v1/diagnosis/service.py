@@ -323,12 +323,35 @@ class DiagnosisService:
         Completion lives here rather than in the engine so that "no questions
         left" has exactly one meaning across every entry point.
         """
-        if question is None:
+        # Completion has three triggers, and only the first is a success:
+        #
+        #   1. confidence >= CONFIDENCE_GENERATE_REPORT_MIN -- enough is known
+        #   2. the question budget is spent (MAX_DIAGNOSIS_QUESTIONS)
+        #   3. no eligible question is left in the bank
+        #
+        # (1) is set by the incremental scorer, which flips routing_state to
+        # generate_report; this reads that decision rather than re-deriving it.
+        # (2) is why the budget exists at all: the Stage 0->1 bank holds 569
+        # questions and exhaustion (3) is not a stopping point any real founder
+        # reaches -- before the cap, every session simply ran until abandoned,
+        # which is why no diagnosis had ever completed.
+        budget_spent = (session.questions_answered_count or 0) >= settings.MAX_DIAGNOSIS_QUESTIONS
+        confident = session.routing_state == RoutingState.GENERATE_REPORT.value
+
+        if question is None or budget_spent or confident:
             session.current_question_id = None
             session.current_category = None
             session.status = SessionStatus.COMPLETED.value
             session.completed_at = _utcnow()
-            session.routing_state = RoutingState.GENERATE_REPORT.value
+            # Only claim report-readiness when the score actually earned it. A
+            # session that ran out of budget or questions below the threshold is
+            # completed but NOT confident, and stamping generate_report on it --
+            # as this did unconditionally -- told the report layer the diagnosis
+            # was conclusive when it was merely over.
+            if not confident:
+                session.routing_state = (
+                    session.routing_state or RoutingState.CONTINUE.value
+                )
             return
 
         session.current_question_id = question.question_id

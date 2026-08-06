@@ -10,6 +10,8 @@ distance, distress detection).
 from decimal import Decimal
 from types import SimpleNamespace
 
+from app.core.config import settings
+
 import pytest
 
 from app.api.v1.reasoning.config import ConfirmationMultipliers
@@ -169,7 +171,11 @@ def test_build_inputs_happy_path():
     )
 
     assert got.category_signal == D("0.6")            # max normalised risk
-    assert got.evidence_coverage == D("0.5")          # 20 / 40
+    # Coverage is answered / MAX_DIAGNOSIS_QUESTIONS, not answered / the whole
+    # in-scope bank. Dividing by the bank made the score's own 80 threshold
+    # unreachable once diagnoses were capped at 30 questions: 30/569 on a
+    # 25%-weight input capped the achievable total at 76.
+    assert got.evidence_coverage == D(20) / D(settings.MAX_DIAGNOSIS_QUESTIONS)
     # Contradiction detector not implemented -> consistency marked UNAVAILABLE
     # (not defaulted to a numeric score); the strategy excludes + renormalises it.
     assert got.consistency_available is False
@@ -195,7 +201,10 @@ def test_coverage_capped_at_one():
     assert got.evidence_coverage == D("1")
 
 
-def test_coverage_zero_when_no_in_scope_questions():
+def test_coverage_no_longer_depends_on_the_in_scope_bank():
+    """An empty question bank used to zero coverage outright. Coverage now
+    measures progress through the diagnosis budget, which exists regardless of
+    how many questions the founder's stage happens to have."""
     repo = FakeRepo(in_scope=0)
     model = WeightedConfidenceModel(repo)
     diagnosis = make_diagnosis(category_risks=[make_category("0.4", True)])
@@ -203,7 +212,19 @@ def test_coverage_zero_when_no_in_scope_questions():
         diagnosis=diagnosis, scored=[make_scored(1, "1")],
         questions_answered=20, context=make_context(),
     )
-    assert got.evidence_coverage == D("0")
+    assert got.evidence_coverage == D(20) / D(settings.MAX_DIAGNOSIS_QUESTIONS)
+
+
+def test_coverage_caps_at_one_when_the_budget_is_spent():
+    repo = FakeRepo(in_scope=0)
+    model = WeightedConfidenceModel(repo)
+    diagnosis = make_diagnosis(category_risks=[make_category("0.4", True)])
+    got = model.build_confidence_inputs(
+        diagnosis=diagnosis, scored=[make_scored(1, "1")],
+        questions_answered=settings.MAX_DIAGNOSIS_QUESTIONS + 5,
+        context=make_context(),
+    )
+    assert got.evidence_coverage == D("1")
 
 
 def test_category_signal_zero_when_no_categories():

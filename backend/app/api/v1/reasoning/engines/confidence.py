@@ -37,6 +37,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from app.api.v1.reasoning.config import ConfidenceInputs, ConfirmationMultipliers
 from app.api.v1.reasoning.interfaces import ConfidenceModel, ReasoningContext
 from app.api.v1.reasoning.repository import ReasoningRepository
+from app.core.config import settings
 from app.api.v1.reasoning.schemas import (
     DiagnosisResult,
     RootCauseDetection,
@@ -239,14 +240,23 @@ class WeightedConfidenceModel(ConfidenceModel):
             (c.normalised_risk for c in diagnosis.category_risks), default=_ZERO
         )
 
-        # (b) EVIDENCE COVERAGE -- answered / in-scope questions for the founder's
-        # stage group, capped at 1.0. Self-reported stage owns the question set.
-        in_scope = self.repository.get_in_scope_question_count(context.founder.stage_id)
-        coverage = (
-            _ZERO
-            if in_scope <= 0
-            else min(_ONE, Decimal(questions_answered) / Decimal(in_scope))
-        )
+        # (b) EVIDENCE COVERAGE -- how much of THIS diagnosis is done: answered
+        # questions over the diagnosis budget, capped at 1.0.
+        #
+        # This divided by the founder's whole in-scope bank until the 30-question
+        # cap existed, and that made the score's own target unreachable. A Stage
+        # 0->1 founder has 569 in-scope questions, so 30 answers scored
+        # 30/569 = 0.05 on a 25%-weight input, capping the achievable total at 76
+        # -- below the 80 required to generate a report. A founder could answer
+        # every question flawlessly and still never finish. The cap and the
+        # threshold were mutually exclusive, and nothing failed loudly to say so:
+        # diagnoses would simply always end short.
+        #
+        # "Coverage" now means what the diagnosis actually measures. A founder
+        # answering strongly crosses 80 around question 10-15 and finishes early;
+        # a weaker run continues toward the cap.
+        budget = max(1, settings.MAX_DIAGNOSIS_QUESTIONS)
+        coverage = min(_ONE, Decimal(questions_answered) / Decimal(budget))
 
         # (c) ANSWER CONSISTENCY -- measured by the semantic contradiction detector
         # (LLMConsistencyDetector). A measured `ConsistencyResult` is passed in when
