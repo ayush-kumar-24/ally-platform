@@ -8,6 +8,7 @@ service so that a single request stays atomic.
 from datetime import datetime
 
 from sqlalchemy import Select, func, select
+from sqlalchemy import text as _text
 from sqlalchemy.orm import Session
 
 from app.models import Answer, DiagnosisSession, Question, SessionStatus
@@ -21,6 +22,19 @@ class DiagnosisRepository:
 
     def get_session_by_id(self, session_id: int) -> DiagnosisSession | None:
         return self.db.get(DiagnosisSession, session_id)
+
+    def get_detected_root_cause_ids(self, session_id: int) -> set[int]:
+        """Root causes this session has already detected.
+
+        Drives the validate-mode question bias: once there are candidate causes,
+        questions that could confirm or rule one out are worth more than another
+        broad sweep. Empty until the reasoning pipeline has written detections.
+        """
+        rows = self.db.execute(
+            _text("select root_cause_id from detected_root_causes where session_id = :s"),
+            {"s": session_id},
+        ).scalars().all()
+        return {int(r) for r in rows if r is not None}
 
     def count_sessions_started_since(self, founder_id: int, since: datetime) -> int:
         """Diagnoses this founder has STARTED since `since`, whatever their state.

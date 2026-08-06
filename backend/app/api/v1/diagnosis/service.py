@@ -283,7 +283,7 @@ class DiagnosisService:
         if not candidates:
             return None  # bank exhausted -> completion
 
-        ordered = self.engine.order_candidates(candidates)
+        ordered = self.engine.order_candidates(candidates, session)
         if self.advisor is None:
             return ordered[0]
 

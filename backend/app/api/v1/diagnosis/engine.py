@@ -15,7 +15,15 @@ would have to unpick later.
 """
 
 from app.api.v1.diagnosis.repository import DiagnosisRepository
-from app.models import DiagnosisSession, Founder, Question, QuestionPriority, StageGroup
+from app.core.logger import logger
+from app.models import (
+    DiagnosisSession,
+    Founder,
+    Question,
+    QuestionPriority,
+    RoutingState,
+    StageGroup,
+)
 
 # Order in which categories are worked through. Founder Psychology leads
 # because the psychological questions calibrate how the operational answers
@@ -119,7 +127,51 @@ class QuestionSelectionEngine:
         candidates = self.candidate_questions(session, founder)
         if not candidates:
             return None
-        return min(candidates, key=_sort_key)
+        return min(candidates, key=self._sort_key_for(session))
+
+    def _sort_key_for(self, session: DiagnosisSession):
+        """The ranking key, biased by what the session is currently trying to do.
+
+        Below the validate threshold the job is to GATHER: sweep the categories in
+        sequence and build a picture. That is `_sort_key`, unchanged.
+
+        Between the validate and report thresholds the job changes to CONFIRMING.
+        The diagnosis already has candidate root causes; asking more broad
+        questions adds coverage but does not resolve which cause is real -- and
+        confirmation and separation are 25% of the confidence score between them,
+        neither of which broad questions move. So questions tied to an
+        already-detected cause sort first, and the deterministic key orders within
+        that group exactly as before.
+
+        The bias only reorders. It never filters: every question stays reachable,
+        so a session in validate mode that runs out of targeted questions simply
+        continues with the normal order rather than ending early.
+        """
+        targeted = self._detected_root_cause_ids(session)
+        if not targeted:
+            return _sort_key
+
+        def key(question: Question):
+            confirms = question.root_cause_id in targeted
+            return (0 if confirms else 1, *_sort_key(question))
+
+        return key
+
+    def _detected_root_cause_ids(self, session: DiagnosisSession) -> set[int]:
+        """Root causes worth confirming, or empty when the bias does not apply.
+
+        Empty unless the session is in VALIDATE: in CONTINUE there is not yet a
+        picture to confirm, and in GENERATE_REPORT the diagnosis is over.
+        """
+        if session.routing_state != RoutingState.VALIDATE.value:
+            return set()
+        try:
+            return self.repository.get_detected_root_cause_ids(session.session_id)
+        except Exception:                                  # noqa: BLE001
+            # Question selection must never fail on an optional preference.
+            logger.warning("Validate-mode bias unavailable; using the default order",
+                           extra={"session_id": session.session_id})
+            return set()
 
     def candidate_questions(
         self, session: DiagnosisSession, founder: Founder
@@ -130,10 +182,17 @@ class QuestionSelectionEngine:
             stage_groups=resolve_stage_groups(founder),
         )
 
-    @staticmethod
-    def order_candidates(candidates: list[Question]) -> list[Question]:
-        """The deterministic ask-order -- the shortlist head is the default pick."""
-        return sorted(candidates, key=_sort_key)
+    def order_candidates(
+        self, candidates: list[Question], session: DiagnosisSession | None = None
+    ) -> list[Question]:
+        """The deterministic ask-order -- the shortlist head is the default pick.
+
+        Takes the session so the adaptive advisor's shortlist carries the same
+        validate-mode bias as the direct pick; without it the LLM would be handed
+        a broad shortlist while the deterministic path was targeting confirmation.
+        """
+        key = self._sort_key_for(session) if session is not None else _sort_key
+        return sorted(candidates, key=key)
 
     def resolve_follow_up(self, session: DiagnosisSession, answer_question: Question) -> None:
         """Follow-up hook -- inert until scoring exists.
