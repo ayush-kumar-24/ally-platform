@@ -115,7 +115,10 @@ class Plan:
     price_inr: int
     #: Granted every month and expiring at period end (the `monthly` credit bucket).
     monthly_credits: int
-    #: Granted once at signup and never expiring (the `bonus` bucket).
+    #: Granted once at signup, into the `monthly` bucket with an expiry 30 days
+    #: out and no renewal_date -- an allowance that lapses once and never returns.
+    #: NOT the `bonus` bucket: settle() only ever expires `monthly`, so a grant
+    #: written to `bonus` is permanent no matter what date is stamped on it.
     signup_credits: int
     daily_token_limit: int
     free_calls_per_month: int
