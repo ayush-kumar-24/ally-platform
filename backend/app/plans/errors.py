@@ -30,16 +30,31 @@ class FeatureNotInPlanError(PlanError):
 
 
 class OutOfCreditsError(PlanError):
-    """402 Payment Required -- the balance is empty, not the request malformed."""
+    """402 Payment Required -- the balance is empty, not the request malformed.
 
-    def __init__(self, balance: int, needed: int):
-        super().__init__(
-            f"Not enough credits: {needed} needed, {balance} available. "
-            f"Top up or upgrade your plan to continue.",
-            status_code=402,
-        )
+    Distinguishes *spent* from *expired*. Both are 402 and both end in an upgrade,
+    but "you used everything up" and "your trial ended" are different facts, and
+    telling a founder the wrong one is confusing in a way that costs support time:
+    someone whose trial lapsed with 900 credits unused, told they are "out of
+    credits", will reasonably think something is broken.
+    """
+
+    def __init__(self, balance: int, needed: int, expired_at=None):
+        if expired_at is not None:
+            message = (
+                f"Your free trial ended on {expired_at.day} "
+                f"{expired_at:%B}. Upgrade to keep using Ally."
+            )
+        else:
+            message = (
+                f"Not enough credits: {needed} needed, {balance} available. "
+                f"Top up or upgrade your plan to continue."
+            )
+        super().__init__(message, status_code=402)
         self.balance = balance
         self.needed = needed
+        #: When the trial lapsed, or None when the balance was simply spent.
+        self.expired_at = expired_at
 
 
 class DailyTokenLimitError(PlanError):

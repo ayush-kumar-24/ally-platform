@@ -111,7 +111,8 @@ class EntitlementService:
 
     def check_chat_allowed(self, founder_id: int, tier: PlanTier | str | None, *,
                            voice: bool = False, is_first_diagnosis: bool = False,
-                           source: str = SOURCE_CHAT) -> None:
+                           source: str = SOURCE_CHAT,
+                           trial_expires_at: datetime | None = None) -> None:
         """Pre-flight for one metered request. Raises on the first failing gate.
 
         `source` selects which daily counter and ceiling apply. Chat and planning
@@ -142,7 +143,14 @@ class EntitlementService:
                 # so skipping the check here cannot bypass a limit that was live.
                 balance = None
             if balance is not None and balance <= 0:
-                raise OutOfCreditsError(balance, 1)
+                # get_balance() settles first, so by the time the balance reads
+                # zero an expired trial has already been zeroed -- which is why
+                # the date is what distinguishes "lapsed" from "spent", not the
+                # number.
+                lapsed = (trial_expires_at is not None
+                          and trial_expires_at <= self._now())
+                raise OutOfCreditsError(balance, 1,
+                                        expired_at=trial_expires_at if lapsed else None)
 
     def record_chat_usage(self, founder_id: int, tier: PlanTier | str | None, *,
                           tokens: int, is_first_diagnosis: bool = False,

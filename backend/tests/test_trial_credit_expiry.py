@@ -75,3 +75,69 @@ def test_the_catalog_grant_is_sized_for_one_expiring_period():
     free = PLANS[PlanTier.FREE]
     assert free.signup_credits > 0
     assert free.monthly_credits == 0, "Free would renew monthly and never truly expire"
+
+
+# --- what the UI is told ----------------------------------------------------
+
+
+class TestTrialStatus:
+    """`trial` on GET /plans/me. Computed server-side on purpose: days_remaining
+    from a browser clock is wrong for anyone whose device time is off or who is
+    not on UTC, and "your trial ends in 3 days" showing a day early reads as a
+    billing bug."""
+
+    @staticmethod
+    def _status(delta=None):
+        from app.api.v1.plans.router import _trial_status
+        if delta is None:
+            return _trial_status(None)
+        return _trial_status(datetime.now(timezone.utc) + delta)
+
+    def test_paid_tiers_have_no_trial_block(self):
+        assert self._status(None) is None
+
+    def test_mid_trial_is_not_warning_yet(self):
+        s = self._status(timedelta(days=30))
+        assert s["days_remaining"] == 30
+        assert s["expiring_soon"] is False and s["has_expired"] is False
+
+    def test_warning_window_opens_at_three_days(self):
+        assert self._status(timedelta(days=3))["expiring_soon"] is True
+        assert self._status(timedelta(days=4))["expiring_soon"] is False
+
+    def test_part_of_a_day_left_still_counts_as_a_day(self):
+        """Ceiling, not floor: with 12 hours left the founder can still use Ally,
+        so telling them '0 days' while it works is wrong."""
+        s = self._status(timedelta(hours=12))
+        assert s["days_remaining"] == 1 and s["expiring_soon"] is True
+
+    def test_expired_is_distinguishable_from_expiring(self):
+        s = self._status(timedelta(days=-1))
+        assert s["has_expired"] is True
+        assert s["expiring_soon"] is False, "an ended trial is not 'ending soon'"
+        assert s["days_remaining"] == 0
+
+
+# --- the 402 a founder actually sees ----------------------------------------
+
+
+def test_out_of_credits_says_spent_when_the_balance_ran_out():
+    from app.plans.errors import OutOfCreditsError
+
+    err = OutOfCreditsError(0, 1)
+    assert err.status_code == 402
+    assert "Not enough credits" in err.message
+    assert err.expired_at is None
+
+
+def test_out_of_credits_says_expired_when_the_trial_lapsed():
+    """A founder whose trial ended with credits unused, told they are 'out of
+    credits', will reasonably think something is broken."""
+    from app.plans.errors import OutOfCreditsError
+
+    when = datetime(2026, 9, 4, tzinfo=timezone.utc)
+    err = OutOfCreditsError(0, 1, expired_at=when)
+    assert err.status_code == 402
+    assert "trial ended" in err.message and "4 September" in err.message
+    assert "Not enough credits" not in err.message
+    assert err.expired_at == when

@@ -70,19 +70,26 @@ def get_entitlement_service(db: Session = Depends(get_db)) -> EntitlementService
     return container.entitlement_service(db)
 
 
-def _tier_for(db: Session, founder_id: int) -> str:
-    """Resolve a founder's plan. Anything unresolvable is treated as Free.
+def _plan_context(db: Session, founder_id: int) -> tuple[str, object | None]:
+    """Resolve a founder's plan and trial expiry in one read.
 
-    Fails closed: an unknown founder or a missing column must grant the least,
-    never the most.
+    Fails closed on the tier: an unknown founder or a missing column must grant
+    the least, never the most. The expiry degrades to None instead, which only
+    costs a less specific 402 message -- never access.
+
+    Both come from the same row deliberately: fetching the date separately would
+    double the queries on the hot path for one string in an error message.
     """
     try:
-        tier = db.execute(text("select plan_type from founders where founder_id = :f"),
-                          {"f": founder_id}).scalar()
-        return tier or DEFAULT_TIER.value
+        row = db.execute(
+            text("select plan_type, credits_expires_at from founders where founder_id = :f"),
+            {"f": founder_id}).first()
+        if row is None:
+            return DEFAULT_TIER.value, None
+        return (row[0] or DEFAULT_TIER.value), row[1]
     except Exception:
         db.rollback()
-        return DEFAULT_TIER.value
+        return DEFAULT_TIER.value, None
 
 
 @dataclass
@@ -143,10 +150,10 @@ def chat_gate(
                         service=None, enforced=False)
 
     service = container.entitlement_service(db)
-    tier = _tier_for(db, founder_id)
+    tier, trial_expires_at = _plan_context(db, founder_id)
     # Text is assumed; a voice request must call gate.require_voice() explicitly, so
     # a missing flag can never unlock the paid voice path.
-    service.check_chat_allowed(founder_id, tier)
+    service.check_chat_allowed(founder_id, tier, trial_expires_at=trial_expires_at)
     from app.plans.reconciliation import SqlAlchemyReconciliationRepository
     return ChatGate(founder_id=founder_id, tier=tier, service=service, enforced=True,
                     reconciliation=SqlAlchemyReconciliationRepository(db))
