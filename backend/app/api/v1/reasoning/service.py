@@ -182,6 +182,48 @@ class ReasoningService:
 
     # --- Pipeline ---------------------------------------------------------
 
+    async def score_only(self, session, founder: Founder) -> Decimal | None:
+        """Confidence for a session AS IT STANDS, without producing a report.
+
+        The minimum needed to answer "how sure are we now": diagnosis (category /
+        stage / symptom) -> root-cause detection and ranking -> confidence. It
+        deliberately stops there. Retrieval enrichment, recommendations, business
+        health, archetype and report generation all belong to a finished
+        diagnosis; running them after every answer would cost thirty times what a
+        diagnosis should and produce a report nobody asked for yet.
+
+        Writes nothing. The caller decides what to do with the number -- keeping
+        this read-only means it cannot half-update a session if it throws.
+
+        Returns None when the session has no answers yet.
+        """
+        context = self._build_context(session, founder)
+        answers = self.repository.get_answers_for_session(session.session_id)
+        if not answers:
+            return None
+        questions = self.repository.get_questions_by_ids(a.question_id for a in answers)
+
+        diagnosis = await self.diagnosis_engine.diagnose(answers, questions, context)
+        detections = self.root_cause_engine.detect(
+            list(diagnosis.classifications), list(diagnosis.category_risks),
+            questions, context,
+        )
+        scored = self.confidence_model.score_and_rank(detections, context)
+        # Consistency is left unmeasured here: the detector is an LLM call over
+        # the whole answer history, which after every answer is the same O(n^2)
+        # problem that rules out re-classification. The confidence strategy
+        # already excludes an unavailable signal and renormalises the rest, so
+        # omitting it shifts weight to the measured signals rather than scoring
+        # a zero it never earned. The full pipeline measures it once at the end.
+        inputs = self.confidence_model.build_confidence_inputs(
+            diagnosis=diagnosis,
+            scored=scored,
+            questions_answered=len(answers),
+            context=context,
+            consistency=None,
+        )
+        return self.confidence_model.overall_confidence(inputs, context)
+
     async def _run_pipeline(
         self, session, founder: Founder, *, force: bool = False
     ) -> ReasoningResult | None:

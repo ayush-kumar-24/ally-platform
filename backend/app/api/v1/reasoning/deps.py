@@ -276,3 +276,43 @@ def build_archetype_engine(db: Session, repository: ReasoningRepository):
         provider_for_task(db, LLMTask.ARCHETYPE_ASSIGNMENT),
         fallback=deterministic,
     )
+
+
+def build_reasoning_service_for_scoring(db: Session) -> ReasoningService:
+    """A ReasoningService for scoring a session mid-diagnosis, not reporting on it.
+
+    Differs from the full service in exactly one way that matters, and it is the
+    difference between this being free and being unaffordable: the answer
+    classifier is the STORED one, never the LLM.
+
+    classify_answers() re-classifies every answer it is handed, with no reuse
+    check. Scoring after each answer hands it the whole history, so with the LLM
+    classifier a 30-question diagnosis would make 1+2+...+30 = 465 classification
+    calls instead of 30 -- roughly fifteen times the cost, and seconds of latency
+    added to every answer. Each answer's label is already persisted to
+    answers.score_label when it is first submitted, so re-reading it is both
+    cheaper and more consistent: the score cannot drift because the model
+    happened to classify the same answer differently on a later pass.
+
+    The enricher, recommendation engine, consistency and distress detectors and
+    memory are all omitted -- score_only never reaches them.
+    """
+    repository = ReasoningRepository(db)
+    rule_values = repository.get_active_rule_values()
+    config = build_reasoning_config(
+        rule_values, confidence_strategy=build_confidence_strategy(rule_values)
+    )
+    return ReasoningService(
+        db=db,
+        repository=repository,
+        config=config,
+        diagnosis_engine=DeterministicDiagnosisEngine(
+            category_engine=StandardDiagnosticEngine(StoredScoreAnswerClassifier()),
+            stage_detector=StageDetector(repository),
+            symptom_detector=SymptomDetector(repository),
+        ),
+        root_cause_engine=StandardRootCauseEngine(repository),   # no enrichment
+        confidence_model=WeightedConfidenceModel(repository),
+        recommendation_engine=StandardRecommendationEngine(repository),
+        retrieval_enabled=False,
+    )

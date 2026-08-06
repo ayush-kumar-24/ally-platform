@@ -13,6 +13,7 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.api.v1.diagnosis.advisor import AnswerInsight, NextQuestionAdvisor, resolve_next
+from app.api.v1.diagnosis import incremental_confidence
 from app.api.v1.diagnosis.engine import QuestionSelectionEngine
 from app.api.v1.diagnosis.repository import DiagnosisRepository
 from app.core.config import settings
@@ -239,6 +240,15 @@ class DiagnosisService:
             session.questions_answered_count += 1
             session.last_activity_at = _utcnow()
             session.updated_at = _utcnow()
+
+            # Score the session as it now stands, BEFORE deciding whether to ask
+            # another question. This is what turns the 60/80 thresholds from
+            # stored values into a decision: recompute sets routing_state, and
+            # _attach_question reads it to decide whether the diagnosis is done.
+            # Ordering matters -- scoring after attaching would decide on the
+            # previous answer's evidence and always be one question late.
+            await incremental_confidence.recompute(self.db, session, founder)
+
             self._attach_question(session, next_question)
             self.db.commit()
         except IntegrityError as exc:

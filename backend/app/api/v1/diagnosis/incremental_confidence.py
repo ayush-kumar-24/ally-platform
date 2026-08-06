@@ -51,7 +51,7 @@ from app.models import DiagnosisSession, Founder, RoutingState
 MIN_ANSWERS_BEFORE_COMPLETION = 8
 
 
-def recompute(
+async def recompute(
     db: Session,
     session: DiagnosisSession,
     founder: Founder,
@@ -68,7 +68,7 @@ def recompute(
     try:
         from app.api.v1.reasoning.deps import build_reasoning_service_for_scoring
 
-        score = build_reasoning_service_for_scoring(db).score_only(session, founder)
+        score = await build_reasoning_service_for_scoring(db).score_only(session, founder)
     except Exception as exc:                                  # noqa: BLE001
         logger.warning(
             "Incremental confidence failed; diagnosis continues",
@@ -82,11 +82,11 @@ def recompute(
     session.overall_confidence_score = score
 
     answered = session.questions_answered_count or 0
-    threshold = _report_threshold(db)
+    report_min, validate_min = _thresholds(db)
 
-    if score >= threshold and answered >= MIN_ANSWERS_BEFORE_COMPLETION:
+    if score >= report_min and answered >= MIN_ANSWERS_BEFORE_COMPLETION:
         session.routing_state = RoutingState.GENERATE_REPORT.value
-    elif score >= _validate_threshold(db):
+    elif score >= validate_min:
         session.routing_state = RoutingState.VALIDATE.value
     else:
         session.routing_state = RoutingState.CONTINUE.value
@@ -103,13 +103,16 @@ def recompute(
     return score
 
 
-def _report_threshold(db: Session) -> Decimal:
-    from app.api.v1.reasoning.deps import get_reasoning_config
+def _thresholds(db: Session) -> tuple[Decimal, Decimal]:
+    """(generate_report_min, validate_min) from the live scoring_rules -- the same
+    rows routing_state_for() uses, so the loop and the report layer can never
+    disagree about what 80 means."""
+    from app.api.v1.reasoning.config import build_reasoning_config
+    from app.api.v1.reasoning.deps import build_confidence_strategy
+    from app.api.v1.reasoning.repository import ReasoningRepository
 
-    return get_reasoning_config(db).confidence.generate_report_min
-
-
-def _validate_threshold(db: Session) -> Decimal:
-    from app.api.v1.reasoning.deps import get_reasoning_config
-
-    return get_reasoning_config(db).confidence.validate_min
+    rule_values = ReasoningRepository(db).get_active_rule_values()
+    cfg = build_reasoning_config(
+        rule_values, confidence_strategy=build_confidence_strategy(rule_values)
+    )
+    return cfg.confidence.generate_report_min, cfg.confidence.validate_min
