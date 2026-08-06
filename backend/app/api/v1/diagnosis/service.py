@@ -6,7 +6,7 @@ written. In particular an answer and the session-progress update it causes are
 committed together -- never one without the other.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import status
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -18,6 +18,8 @@ from app.api.v1.diagnosis.repository import DiagnosisRepository
 from app.core.config import settings
 from app.core.logger import logger
 from app.middleware.error_handler import AppError
+from app.plans.catalog import get_plan
+from app.plans.errors import MonthlyDiagnosisLimitError
 from app.models import (
     Answer,
     DiagnosisSession,
@@ -68,6 +70,38 @@ class DiagnosisService:
 
     # --- Public API ---
 
+    def _check_monthly_diagnosis_limit(self, founder: Founder) -> None:
+        """Bound how many diagnoses a founder may start in a calendar month.
+
+        Diagnosis is unmetered by tokens on purpose, so a count is the only thing
+        limiting what it costs -- roughly 24,400 tokens a run. The window is the
+        calendar month rather than a rolling 30 days so "your next one is
+        available from 1 September" is something a founder can actually predict.
+
+        Fails OPEN on an unreadable plan or count: refusing a founder their
+        diagnosis because a lookup failed is a worse outcome than serving one
+        extra, and this is a cost control, not a security boundary.
+        """
+        try:
+            plan = get_plan(founder.plan_type)
+            limit = plan.diagnoses_per_month
+            if limit <= 0:                      # 0 = unlimited
+                return
+            now = _utcnow()
+            month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            used = self.repository.count_sessions_started_since(
+                founder.founder_id, month_start)
+        except Exception:                       # noqa: BLE001
+            logger.warning(
+                "Diagnosis limit check failed; allowing the diagnosis",
+                extra={"founder_id": founder.founder_id},
+            )
+            return
+
+        if used >= limit:
+            next_month = (month_start + timedelta(days=32)).replace(day=1)
+            raise MonthlyDiagnosisLimitError(used, limit, next_month)
+
     def start_session(self, founder: Founder) -> tuple[DiagnosisSession, Question | None, bool]:
         """Start a diagnosis session, or resume the founder's active one.
 
@@ -86,6 +120,11 @@ class DiagnosisService:
             )
             question = self._current_question_for(existing, founder)
             return existing, question, True
+
+        # Only a NEW diagnosis is bounded. The resume path above has already
+        # returned, so an in-progress assessment can always be continued -- the
+        # limit can never strand someone partway through.
+        self._check_monthly_diagnosis_limit(founder)
 
         session = DiagnosisSession(
             founder_id=founder.founder_id,

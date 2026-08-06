@@ -26,6 +26,7 @@ from typing import Callable
 
 from app.plans.catalog import (
     CALL_PRICE_INR,
+    SOURCE_CHAT,
     Feature,
     Plan,
     PlanTier,
@@ -109,8 +110,14 @@ class EntitlementService:
     # --- chat gate --------------------------------------------------------
 
     def check_chat_allowed(self, founder_id: int, tier: PlanTier | str | None, *,
-                           voice: bool = False, is_first_diagnosis: bool = False) -> None:
-        """Pre-flight for a chat message. Raises on the first failing gate."""
+                           voice: bool = False, is_first_diagnosis: bool = False,
+                           source: str = SOURCE_CHAT) -> None:
+        """Pre-flight for one metered request. Raises on the first failing gate.
+
+        `source` selects which daily counter and ceiling apply. Chat and planning
+        are budgeted independently, so a founder who has spent their chat
+        allowance can still use planning, and the reverse.
+        """
         plan = self.plan_for(tier)
         self.require_feature(tier, Feature.ALLY_CHAT)
         if voice:
@@ -122,9 +129,10 @@ class EntitlementService:
             return
 
         now = self._now()
-        used = self.usage.get_daily(founder_id, now.date()).tokens_used
-        if used >= plan.daily_token_limit:
-            raise DailyTokenLimitError(used, plan.daily_token_limit, next_utc_midnight(now))
+        limit = plan.daily_limit_for(source)
+        used = self.usage.get_daily(founder_id, now.date(), source=source).tokens_used
+        if used >= limit:
+            raise DailyTokenLimitError(used, limit, next_utc_midnight(now))
 
         if self.credits is not None:
             try:
@@ -138,14 +146,14 @@ class EntitlementService:
 
     def record_chat_usage(self, founder_id: int, tier: PlanTier | str | None, *,
                           tokens: int, is_first_diagnosis: bool = False,
-                          reason: str = "Ally chat") -> dict:
+                          reason: str = "Ally chat", source: str = SOURCE_CHAT) -> dict:
         """Charge for what was actually used. Called after the model responds.
 
         The first diagnosis records tokens (so the daily ceiling still protects the
         system) but charges no credits.
         """
         now = self._now()
-        daily = self.usage.add_tokens(founder_id, now.date(), tokens, at=now)
+        daily = self.usage.add_tokens(founder_id, now.date(), tokens, at=now, source=source)
 
         charged = 0
         if not is_first_diagnosis and self.credits is not None and tokens > 0:

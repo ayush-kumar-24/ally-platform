@@ -43,20 +43,40 @@ def test_three_tiers_in_price_order():
     assert [p.price_inr for p in plans] == [0, 450, 999]
 
 
-def test_credit_ladder_ascends():
-    """Free's one-time grant must not out-number a paid monthly allowance, or the
-    pricing page reads as though paying gives you less."""
-    free, starter, pro = all_plans()
-    assert free.signup_credits == 120 and free.monthly_credits == 0
+def test_paid_credit_ladder_ascends():
+    """Paying more must grant more, or the pricing page contradicts itself."""
+    _, starter, pro = all_plans()
     assert starter.monthly_credits == 180
     assert pro.monthly_credits == 240
-    assert free.signup_credits < starter.monthly_credits < pro.monthly_credits
+    assert starter.monthly_credits < pro.monthly_credits
+
+
+def test_free_is_currently_a_testing_allowance_and_outgrants_paid_tiers():
+    """Free grants 1,431 credits -- roughly 8x Pro -- because it is sized for the
+    closed testing phase, not for a public free tier.
+
+    This is deliberate and it is also a landmine. It inverts the ladder the test
+    above protects: a pricing page rendered from this catalog today would show
+    the free plan giving eight times what Pro does. That is harmless while the
+    only users are invited testers and nobody can see a pricing page, and it is
+    indefensible the moment either stops being true.
+
+    Asserted rather than merely commented so that shrinking Free back to a real
+    free tier breaks this test and forces the ladder invariant to be restored,
+    instead of the inversion quietly surviving into launch.
+    """
+    free, starter, pro = all_plans()
+    assert free.signup_credits == 1_431 and free.monthly_credits == 0
+    assert free.signup_credits > pro.monthly_credits > starter.monthly_credits
 
 
 def test_daily_limits():
     free, starter, pro = all_plans()
     assert (free.daily_token_limit, starter.daily_token_limit, pro.daily_token_limit) \
-        == (4_000, 6_000, 8_000)
+        == (40_000, 6_000, 8_000)
+    # Planning meters separately, and only Free is sized for it so far.
+    assert free.planning_daily_token_limit == 7_700
+    assert starter.planning_daily_token_limit == 0
 
 
 def test_monthly_credits_are_reachable_under_the_daily_ceiling():
@@ -106,10 +126,25 @@ def test_voice_in_chat_is_paid_only():
     assert s.has_feature(PlanTier.PRO, Feature.VOICE_CHAT)
 
 
-def test_plan_your_day_is_paid_only():
+def test_plan_your_day_is_included_free_during_the_testing_phase():
+    """Normally a paid feature. Free carries it for the closed test because the
+    tier grants a planning token budget (7,700/day), and a budget without the
+    feature that spends it is a tester hitting 403 on their first planning action.
+
+    Asserted rather than commented so moving it back to _PAID -- which must happen
+    when Free is resized for launch -- breaks this test instead of silently
+    changing what testers can do.
+    """
     s, _ = svc()
-    assert not s.has_feature(PlanTier.FREE, Feature.PLAN_YOUR_DAY)
+    assert s.has_feature(PlanTier.FREE, Feature.PLAN_YOUR_DAY)
     assert s.has_feature(PlanTier.STARTER, Feature.PLAN_YOUR_DAY)
+
+
+def test_voice_chat_is_still_paid_only():
+    """The paid/free split still exists -- Plan Your Day is the one exception."""
+    s, _ = svc()
+    assert not s.has_feature(PlanTier.FREE, Feature.VOICE_CHAT)
+    assert s.has_feature(PlanTier.STARTER, Feature.VOICE_CHAT)
 
 
 def test_know_my_energy_is_pro_only():
@@ -121,8 +156,10 @@ def test_know_my_energy_is_pro_only():
 
 def test_require_feature_names_the_upgrade():
     s, _ = svc()
+    # Voice chat, not Plan Your Day: the latter is temporarily included in Free
+    # for the testing phase, so it no longer raises from Free at all.
     with pytest.raises(FeatureNotInPlanError) as exc:
-        s.require_feature(PlanTier.FREE, Feature.PLAN_YOUR_DAY)
+        s.require_feature(PlanTier.FREE, Feature.VOICE_CHAT)
     assert exc.value.required_plan == "Starter"
     with pytest.raises(FeatureNotInPlanError) as exc:
         s.require_feature(PlanTier.STARTER, Feature.KNOW_MY_ENERGY)
@@ -142,10 +179,35 @@ def test_free_user_blocked_from_voice_chat_with_403_not_429():
 
 
 def test_daily_limit_blocks_before_credits():
+    """The rate ceiling must fire ahead of the credit check: a founder who is out
+    of tokens for today should be told to come back tomorrow, not told to pay."""
+    free, _, _ = all_plans()
     s, usage = svc(PlanTier.FREE, balance=0)
-    usage.add_tokens(UID, T0.date(), 4_000, at=T0)
+    # Seeded from the catalog, not a literal -- this test previously pinned 4,000
+    # and silently stopped testing anything the moment the limit was raised: the
+    # seed fell under the new ceiling, so the credit check fired first and the
+    # ordering this exists to prove went unverified.
+    usage.add_tokens(UID, T0.date(), free.daily_token_limit, at=T0)
     with pytest.raises(DailyTokenLimitError):
         s.check_chat_allowed(UID, PlanTier.FREE)
+
+
+def test_chat_and_planning_meter_separately():
+    """Exhausting one feature must not disable the other -- they are different
+    features sharing only a founder."""
+    free, _, _ = all_plans()
+    s, usage = svc(PlanTier.FREE)
+    usage.add_tokens(UID, T0.date(), free.daily_token_limit, at=T0, source="chat")
+
+    with pytest.raises(DailyTokenLimitError):
+        s.check_chat_allowed(UID, PlanTier.FREE, source="chat")
+    # Planning still has its whole allowance.
+    s.check_chat_allowed(UID, PlanTier.FREE, source="planning")
+
+    usage.add_tokens(UID, T0.date(), free.planning_daily_token_limit,
+                     at=T0, source="planning")
+    with pytest.raises(DailyTokenLimitError):
+        s.check_chat_allowed(UID, PlanTier.FREE, source="planning")
 
 
 def test_out_of_credits_blocks():
@@ -330,13 +392,39 @@ def test_free_call_claim_is_atomic_under_forced_interleaving():
 # ── rollout flag ────────────────────────────────────────────────────────────
 
 
-def test_enforcement_is_off_by_default():
-    """The gate ships dormant: its storage tables do not exist until the blocked
-    migrations run, so enabling it early would 500 every chat request."""
+def test_enforcement_defaults_off_in_code_but_env_and_settings_can_enable_it():
+    """The gate no longer ships dormant -- its storage exists and this deployment
+    turns it on in .env -- so asserting the *ambient* value would just assert what
+    the local .env happens to say. Pin the resolution order instead, which is the
+    part that can actually break.
+
+    That order matters: it read only os.environ before, which meant
+    PLAN_ENFORCEMENT_ENABLED=true in .env was ignored (pydantic-settings parses
+    .env into Settings and never exports it to the environment), so the flag
+    looked set and enforcement stayed silently off.
+    """
     import os
+
     from app.api.v1.plans.dependencies import enforcement_enabled
-    os.environ.pop("PLAN_ENFORCEMENT_ENABLED", None)
-    assert enforcement_enabled() is False
+    from app.core.config import settings
+
+    original_env = os.environ.pop("PLAN_ENFORCEMENT_ENABLED", None)
+    original_setting = settings.PLAN_ENFORCEMENT_ENABLED
+    try:
+        assert type(settings).model_fields["PLAN_ENFORCEMENT_ENABLED"].default is False
+
+        settings.PLAN_ENFORCEMENT_ENABLED = False
+        assert enforcement_enabled() is False          # falls back to settings
+        settings.PLAN_ENFORCEMENT_ENABLED = True
+        assert enforcement_enabled() is True           # .env can enable it
+
+        os.environ["PLAN_ENFORCEMENT_ENABLED"] = "false"
+        assert enforcement_enabled() is False          # the environment still wins
+    finally:
+        settings.PLAN_ENFORCEMENT_ENABLED = original_setting
+        os.environ.pop("PLAN_ENFORCEMENT_ENABLED", None)
+        if original_env is not None:
+            os.environ["PLAN_ENFORCEMENT_ENABLED"] = original_env
 
 
 @pytest.mark.parametrize("value,expected", [("1", True), ("true", True), ("YES", True),

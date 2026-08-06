@@ -44,6 +44,10 @@ class DailyUsage:
     founder_id: int
     usage_date: date
     tokens_used: int
+    #: Which metered feature this counter belongs to (catalog.SOURCE_*). Chat and
+    #: planning are budgeted independently, so one exhausting its ceiling must not
+    #: disable the other -- that separation is this field.
+    source: str = "chat"
 
     def remaining(self, limit: int) -> int:
         return max(0, limit - self.tokens_used)
@@ -67,6 +71,7 @@ class DailyTokenUsageRow(Base):
     founder_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("founders.founder_id", ondelete="CASCADE"), primary_key=True)
     usage_date: Mapped[date] = mapped_column(Date, primary_key=True)
+    source: Mapped[str] = mapped_column(String(16), primary_key=True, server_default="chat")
     tokens_used: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now())
@@ -86,13 +91,16 @@ class CallUsageRow(Base):
 # --- repository --------------------------------------------------------------
 
 class UsageRepository(abc.ABC):
+    # `source` defaults to chat throughout: chat is the only caller that predates
+    # the split, so every existing call site keeps its old meaning and only the
+    # planning path has to say what it is.
     @abc.abstractmethod
-    def get_daily(self, founder_id: int, day: date) -> DailyUsage: ...
+    def get_daily(self, founder_id: int, day: date, *, source: str = "chat") -> DailyUsage: ...
 
     @abc.abstractmethod
     def add_tokens(self, founder_id: int, day: date, tokens: int, *,
-                   at: datetime) -> DailyUsage:
-        """Increment atomically and return the new total."""
+                   at: datetime, source: str = "chat") -> DailyUsage:
+        """Increment atomically and return the new total for that source."""
 
     @abc.abstractmethod
     def get_calls(self, founder_id: int, period: str) -> CallUsage: ...
@@ -123,19 +131,21 @@ class UsageRepository(abc.ABC):
 
 class InMemoryUsageRepository(UsageRepository):
     def __init__(self) -> None:
-        self._tokens: dict[tuple[int, date], int] = {}
+        self._tokens: dict[tuple[int, date, str], int] = {}
         self._calls: dict[tuple[int, str], int] = {}
         self._lock = threading.RLock()
 
-    def get_daily(self, founder_id: int, day: date) -> DailyUsage:
+    def get_daily(self, founder_id: int, day: date, *, source: str = "chat") -> DailyUsage:
         with self._lock:
-            return DailyUsage(founder_id, day, self._tokens.get((founder_id, day), 0))
+            used = self._tokens.get((founder_id, day, source), 0)
+            return DailyUsage(founder_id, day, used, source)
 
-    def add_tokens(self, founder_id: int, day: date, tokens: int, *, at: datetime) -> DailyUsage:
+    def add_tokens(self, founder_id: int, day: date, tokens: int, *,
+                   at: datetime, source: str = "chat") -> DailyUsage:
         with self._lock:
-            key = (founder_id, day)
+            key = (founder_id, day, source)
             self._tokens[key] = self._tokens.get(key, 0) + max(0, tokens)
-            return DailyUsage(founder_id, day, self._tokens[key])
+            return DailyUsage(founder_id, day, self._tokens[key], source)
 
     def get_calls(self, founder_id: int, period: str) -> CallUsage:
         with self._lock:
@@ -191,24 +201,26 @@ class SqlAlchemyUsageRepository(UsageRepository):
             self.db.rollback()
             return fallback
 
-    def get_daily(self, founder_id: int, day: date) -> DailyUsage:
+    def get_daily(self, founder_id: int, day: date, *, source: str = "chat") -> DailyUsage:
         used = self._safe(lambda: self.db.execute(
             _text("""select tokens_used from daily_token_usage
-                      where founder_id = :f and usage_date = :d"""),
-            {"f": founder_id, "d": day}).scalar(), 0)
-        return DailyUsage(founder_id, day, int(used or 0))
+                      where founder_id = :f and usage_date = :d and source = :s"""),
+            {"f": founder_id, "d": day, "s": source}).scalar(), 0)
+        return DailyUsage(founder_id, day, int(used or 0), source)
 
-    def add_tokens(self, founder_id: int, day: date, tokens: int, *, at: datetime) -> DailyUsage:
+    def add_tokens(self, founder_id: int, day: date, tokens: int, *,
+                   at: datetime, source: str = "chat") -> DailyUsage:
         total = self._safe(lambda: self.db.execute(
-            _text("""insert into daily_token_usage (founder_id, usage_date, tokens_used, updated_at)
-                     values (:f, :d, :t, :at)
-                     on conflict (founder_id, usage_date) do update
+            _text("""insert into daily_token_usage
+                         (founder_id, usage_date, source, tokens_used, updated_at)
+                     values (:f, :d, :s, :t, :at)
+                     on conflict (founder_id, usage_date, source) do update
                         set tokens_used = daily_token_usage.tokens_used + excluded.tokens_used,
                             updated_at = excluded.updated_at
                      returning tokens_used"""),
-            {"f": founder_id, "d": day, "t": max(0, tokens), "at": at}).scalar(), 0)
+            {"f": founder_id, "d": day, "s": source, "t": max(0, tokens), "at": at}).scalar(), 0)
         self._safe(lambda: self.db.commit(), None)
-        return DailyUsage(founder_id, day, int(total or 0))
+        return DailyUsage(founder_id, day, int(total or 0), source)
 
     def get_calls(self, founder_id: int, period: str) -> CallUsage:
         used = self._safe(lambda: self.db.execute(

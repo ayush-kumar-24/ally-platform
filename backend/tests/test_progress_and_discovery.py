@@ -1,6 +1,7 @@
 """Profile progress/validation + discovery-call booking, against seeded founders."""
 
 import uuid
+from types import SimpleNamespace
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -26,6 +27,13 @@ def founder_client():
         text("select create_founder_on_signup(:u,:n,:e,:p,:t,:i,:b)"),
         dict(u=str(uid), n="Disc Test", e=f"t{uid.hex[:8]}@x.com", p="v1", t="v1", i="127.0.0.1", b="test"),
     )
+    # Signup lands on Free, which includes zero free discovery calls. These tests
+    # exercise the booking mechanism, not the paywall, so put the founder on a
+    # tier that includes a call -- otherwise every booking test asserts 402 and
+    # the thing they exist to cover goes untested. The paywall itself is covered
+    # by test_free_tier_cannot_book_without_paying below.
+    conn.execute(text("update founders set plan_type = 'starter' where user_id = :u"),
+                 {"u": str(uid)})
     app.dependency_overrides[get_db] = lambda: session
     app.dependency_overrides[get_current_founder] = lambda: AuthUser(id=str(uid), email="x@y.com", provider="test")
     try:
@@ -88,6 +96,28 @@ def test_slots_returns_future_weekday_slots(founder_client):
     assert len(slots) > 0
     now = datetime.now(timezone.utc)
     assert all(datetime.fromisoformat(s) > now for s in slots)
+
+
+def test_free_tier_cannot_book_without_paying(founder_client):
+    """Free includes no discovery calls (free_calls_per_month=0), so booking is a
+    402 rather than a 201.
+
+    Worth pinning: this only became reachable when PLAN_ENFORCEMENT_ENABLED was
+    turned on. It means invited test users on Free cannot book a discovery call
+    at all -- correct per the catalog, and a real product consequence rather than
+    a test detail.
+    """
+    from app.api.deps import get_founder_record
+    founder = founder_client.get("/api/v1/profile").json()
+    app.dependency_overrides[get_founder_record] = lambda: SimpleNamespace(
+        founder_id=founder["founder_id"], plan_type="free")
+    try:
+        when = (datetime.now(timezone.utc) + timedelta(days=2)).isoformat()
+        r = founder_client.post("/api/v1/discovery/book", json={"scheduled_at": when})
+        assert r.status_code == 402, r.text
+        assert r.json()["error"] == "NoFreeCallsRemainingError"
+    finally:
+        app.dependency_overrides.pop(get_founder_record, None)
 
 
 def test_book_creates_confirmed_call(founder_client):
