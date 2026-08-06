@@ -20,6 +20,7 @@ from app.core.auth.base import AuthUser
 from app.core.config import settings
 from app.core.logger import logger
 from app.models import Founder
+from app.plans.catalog import PLANS, PlanTier
 from app.repositories import founder_repository
 
 
@@ -53,9 +54,15 @@ def ensure_founder(identity: AuthUser, db: Session, ip_address: str = "0.0.0.0")
     if not settings.ENABLE_FOUNDER_PROVISIONING or identity.provider == "dev":
         return None
 
+    # The grant amount comes from the catalog, never from the stored procedure:
+    # a number baked into a function body would drift from catalog.py silently,
+    # and nothing could test that it had. Every founder starts on Free, so this
+    # is Free's one-time grant.
+    signup_credits = PLANS[PlanTier.FREE].signup_credits
+
     try:
         founder_id = db.execute(
-            text("SELECT create_founder_on_signup(:u, :n, :e, :p, :t, :i, :b)"),
+            text("SELECT create_founder_on_signup(:u, :n, :e, :p, :t, :i, :b, :c)"),
             {
                 "u": str(user_uuid),
                 "n": _display_name(identity),
@@ -64,6 +71,7 @@ def ensure_founder(identity: AuthUser, db: Session, ip_address: str = "0.0.0.0")
                 "t": settings.TERMS_VERSION,
                 "i": ip_address,
                 "b": identity.provider,
+                "c": signup_credits,
             },
         ).scalar()
         db.commit()
