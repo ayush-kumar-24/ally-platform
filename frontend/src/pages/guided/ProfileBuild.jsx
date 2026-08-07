@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
-import { saveOnboardingProfile } from '../../services/profile';
+import { getProfile, saveOnboardingProfile, toGuidedAnswers } from '../../services/profile';
+import { readable } from '../../utils/profileDisplay';
 import { useVoiceInput } from '../../hooks/useVoiceInput';
 import {
   QUESTIONS,
@@ -14,13 +15,33 @@ import {
 import { createReplyPicker } from '../../data/onboardingReplies';
 
 /* Onboarding is deliberately offline: every question, option and reply is
-   defined in src/data/onboarding*.js. Nothing here calls an LLM. The only
-   network call is the one at the end that persists the answers. */
+   defined in src/data/onboarding*.js. Nothing here calls an LLM. Two network
+   calls happen along the way -- see "resume support" below. */
 
 const reduce = typeof window !== 'undefined' && window.matchMedia
   ? window.matchMedia('(prefers-reduced-motion: reduce)').matches : false;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, reduce ? Math.min(ms, 50) : ms));
+
+/* --- resume support ---------------------------------------------------------
+   Each answer is PATCHed to its owning /profile/* section as soon as it's
+   given (see `answer()`), not batched up for the one call `finish()` used to
+   make alone. That's what makes resume cross-device: the backend, not this
+   browser, is the source of truth for how far a founder got, so picking the
+   wizard back up on a different device sees the same progress a moment later.
+   `finish()` still sends the full batch at the end too -- cheap and
+   idempotent, and a backstop for any single in-flight PATCH that didn't land.
+
+   On mount, the founder's actual saved answers are fetched and used to find
+   the first still-unanswered question (`isFilled` mirrors the backend's own
+   `_is_filled` in profile_progress.py, so the two can't disagree about what
+   counts as answered) rather than always starting at question 1. */
+function isFilled(value) {
+  if (value === null || value === undefined) return false;
+  if (typeof value === 'string') return value.trim() !== '';
+  if (Array.isArray(value)) return value.length > 0;
+  return true;
+}
 
 /** Option lists are either plain strings or {label, value} pairs. */
 const optLabel = (o) => (typeof o === 'string' ? o : o.label);
@@ -62,6 +83,11 @@ export default function ProfileBuild() {
   const qiRef = useRef(0);
   const awaitingRef = useRef(false);
   const profileRef = useRef({});
+  // What each answered field showed in the transcript/side panel (the founder's
+  // own words, or an option's label) -- kept separately from `profileRef`
+  // because that holds the stored DB value (e.g. 'first_time'), which is never
+  // what should be redisplayed. Only used to repaint the side panel on resume.
+  const displayRef = useRef({});
   const started = useRef(false);
   const noteTimer = useRef(null);
   const replyRef = useRef(createReplyPicker());
@@ -217,10 +243,24 @@ export default function ProfileBuild() {
     addMe(shown);
     setInput('');
     if (taRef.current) taRef.current.style.height = 'auto';
-    profileRef.current = { ...profileRef.current, [q.key]: stored, ...(extra || {}) };
+    const turn = { [q.key]: stored, ...(extra || {}) };
+    profileRef.current = { ...profileRef.current, ...turn };
+    displayRef.current = { ...displayRef.current, [q.key]: shown };
     confirmField(q.key, shown, true);
     const nextQi = i + 1;
     qiRef.current = nextQi;
+    // Save just this turn's answer immediately -- see the "resume support"
+    // note near the top of this file. Fire-and-forget like finish()'s own
+    // save: a founder mid-flow should never be blocked on a network round
+    // trip between questions, and a dropped PATCH here is still covered by
+    // finish()'s full resend at the end (or, if they leave before finishing,
+    // the founder simply resumes from the last question that DID land next
+    // time -- worse than losing nothing, much better than losing everything).
+    saveOnboardingProfile(turn).catch(() => {
+      // Silent: the founder is mid-conversation with Ally, not filling out a
+      // form, so surfacing a save error here would be a non-sequitur. Nothing
+      // is lost from their perspective either way -- see the comment above.
+    });
 
     await sleep(600);
     const answered = QUESTIONS.filter((x) => profileRef.current[x.key] !== undefined).length;
@@ -255,7 +295,50 @@ export default function ProfileBuild() {
   useEffect(() => {
     if (!introReady || started.current) return;
     started.current = true;
+
     (async () => {
+      // The founder's ACTUAL saved progress -- not a same-device guess -- so
+      // this resumes correctly even on a device that never asked any of these
+      // questions before (see the "resume support" note near the top of this
+      // file). Fails open to a fresh start: signed-out, offline, or genuinely
+      // nothing saved yet all look the same here (empty answers), and all
+      // three correctly fall through to starting at question 1 below.
+      let answers = {};
+      try {
+        answers = toGuidedAnswers(await getProfile());
+      } catch {
+        answers = {};
+      }
+
+      const firstUnanswered = QUESTIONS.findIndex((x) => !isFilled(answers[x.key]));
+      // -1 means every mapped field is already filled -- treat as done rather
+      // than looping past the end of QUESTIONS. GuidedLayout/Login already
+      // redirect a founder whose profile is fully complete straight to /app,
+      // so reaching this component at all should mean there's a real gap;
+      // this only guards the rare edge where that check raced this fetch.
+      const startAt = firstUnanswered === -1 ? QUESTION_COUNT : firstUnanswered;
+
+      if (startAt > 0) {
+        const filled = QUESTIONS.filter((x) => isFilled(answers[x.key]));
+        profileRef.current = Object.fromEntries(filled.map((x) => [x.key, answers[x.key]]));
+        displayRef.current = Object.fromEntries(
+          filled.map((x) => [x.key, readable(x.key, answers[x.key])]),
+        );
+        qiRef.current = startAt;
+
+        setEmptyGone(true);
+        setFields(Object.fromEntries(
+          filled.map((x) => [x.key, { status: 'on', text: displayRef.current[x.key] }]),
+        ));
+        setSectionsOpen(Object.fromEntries(filled.map((x) => [x.section, true])));
+        setUndTarget(Math.round((startAt / QUESTION_COUNT) * 100));
+
+        addAlly(`Welcome back, ${first} — picking up right where we left off.`);
+        await sleep(700);
+        askQ(startAt);
+        return;
+      }
+
       addAlly(`Welcome to GoXL AI, ${first}.`);
       await sleep(700);
       addAlly('Every entrepreneur has a unique story, a different challenge, and a bold vision for the future. In just a few minutes, help me understand yours.');
