@@ -145,11 +145,11 @@ export default function AdminSystem() {
             <table className="adm-table">
               <thead>
                 <tr>
-                  <th className="adm-nosort">Key</th>
-                  <th className="adm-nosort">Description</th>
-                  <th className="adm-nosort">State</th>
-                  <th className="adm-nosort">Updated</th>
-                  {mayManage && <th className="adm-nosort" />}
+                  <th scope="col" className="adm-nosort">Key</th>
+                  <th scope="col" className="adm-nosort">Description</th>
+                  <th scope="col" className="adm-nosort">State</th>
+                  <th scope="col" className="adm-nosort">Updated</th>
+                  {mayManage && <th scope="col" className="adm-nosort"><span className="sr-only">Actions</span></th>}
                 </tr>
               </thead>
               <tbody>
@@ -236,12 +236,12 @@ export default function AdminSystem() {
             <table className="adm-table">
               <thead>
                 <tr>
-                  <th className="adm-nosort">Title</th>
-                  <th className="adm-nosort">Severity</th>
-                  <th className="adm-nosort">Audience</th>
-                  <th className="adm-nosort">State</th>
-                  <th className="adm-nosort">Created</th>
-                  {mayManage && <th className="adm-nosort" />}
+                  <th scope="col" className="adm-nosort">Title</th>
+                  <th scope="col" className="adm-nosort">Severity</th>
+                  <th scope="col" className="adm-nosort">Audience</th>
+                  <th scope="col" className="adm-nosort">State</th>
+                  <th scope="col" className="adm-nosort">Created</th>
+                  {mayManage && <th scope="col" className="adm-nosort"><span className="sr-only">Actions</span></th>}
                 </tr>
               </thead>
               <tbody>

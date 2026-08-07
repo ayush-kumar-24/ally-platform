@@ -6,7 +6,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://REPLACE-ME.awsapprunner.com/api/:path*"
+      "destination": "http://ally-backend-alb-1963623573.ap-south-1.elb.amazonaws.com/api/:path*"
     },
     {
       "source": "/((?!.*\\.).*)",

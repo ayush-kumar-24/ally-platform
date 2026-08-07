@@ -4,6 +4,7 @@ import PlanGate from '../components/PlanGate';
 import { FEATURES } from '../services/plans';
 import { addTask, listTasks, setTaskStatus } from '../services/planning';
 import { ApiError } from '../services/api';
+import { greetingNow } from '../utils/helpers';
 
 /* There were five suggestion chips here -- "Investor meeting at 10", "Call
    Rahul", "Review CAC" and so on. They were somebody's imagined day, and
@@ -124,9 +125,13 @@ function PlanYourDayInner() {
       <div className="plan-head stagger d1">
         <div style={{ textSelf: 'flex-start' }}>
           <div className="pl-input-hint" style={{ fontSize: '15px', fontWeight: 650, color: '#b7895f', marginBottom: '8px' }}>
-            Good evening, {firstName} 👋
+            {/* Was hardcoded "Good evening" — shown to everyone, all day.
+                Dashboard.jsx already uses the shared helper. */}
+            {greetingNow()}, {firstName} 👋
           </div>
-          <h1 className="plan-title" style={{ fontFamily: 'var(--display)', fontSize: '32px', fontWeight: 800, color: 'var(--forest, #1b4332)', margin: '0 0 6px' }}>Plan Your Day</h1>
+          {/* Demoted from h1: PlatformLayout's topbar already renders an h1 for
+              every /app/* route, so this made two per page. */}
+          <h2 className="plan-title" style={{ fontFamily: 'var(--display)', fontSize: '32px', fontWeight: 800, color: 'var(--forest, #1b4332)', margin: '0 0 6px' }}>Plan Your Day</h2>
           <p className="plan-sub" style={{ fontFamily: 'var(--body)', fontSize: '13.5px', color: 'var(--muted, #556458)', margin: 0 }}>
             Set today's priorities. Ally will keep you accountable and remind you to stay on track.
           </p>
@@ -163,14 +168,32 @@ function PlanYourDayInner() {
         </div>
       </div>
 
-      {/* Mode selection tabs */}
-      <div className="pl-tabs stagger d2" style={{ marginTop: 24 }}>
-        <div
+      {/* Mode selection tabs.
+
+          These were click-only <div>s: not focusable, no role, no key handler.
+          The manual-task path was the only way to add a task by typing, and a
+          keyboard user could never reach it. Real <button>s in a tablist, with
+          arrow keys and a roving tabindex. */}
+      <div className="pl-tabs stagger d2" style={{ marginTop: 24 }} role="tablist" aria-label="Planning mode">
+        <button
+          type="button"
+          role="tab"
+          id="pl-tab-ally"
+          aria-selected={activeTab === 'ally'}
+          aria-controls="pl-panel-ally"
+          tabIndex={activeTab === 'ally' ? 0 : -1}
           className={`pl-tab ${activeTab === 'ally' ? 'active' : ''}`}
           onClick={() => setActiveTab('ally')}
+          onKeyDown={(e) => {
+            if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+              e.preventDefault();
+              setActiveTab('manual');
+              document.getElementById('pl-tab-manual')?.focus();
+            }
+          }}
         >
           <div className="pl-tab-ic">
-            <svg viewBox="0 0 24 24">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
             </svg>
           </div>
@@ -178,14 +201,27 @@ function PlanYourDayInner() {
             <span className="pl-tab-title">Plan with Ally</span>
             <span className="pl-tab-desc">Just talk — I'll organize it.</span>
           </div>
-        </div>
+        </button>
 
-        <div
+        <button
+          type="button"
+          role="tab"
+          id="pl-tab-manual"
+          aria-selected={activeTab === 'manual'}
+          aria-controls="pl-panel-manual"
+          tabIndex={activeTab === 'manual' ? 0 : -1}
           className={`pl-tab ${activeTab === 'manual' ? 'active' : ''}`}
           onClick={() => setActiveTab('manual')}
+          onKeyDown={(e) => {
+            if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+              e.preventDefault();
+              setActiveTab('ally');
+              document.getElementById('pl-tab-ally')?.focus();
+            }
+          }}
         >
           <div className="pl-tab-ic">
-            <svg viewBox="0 0 24 24">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
             </svg>
           </div>
@@ -193,7 +229,7 @@ function PlanYourDayInner() {
             <span className="pl-tab-title">Plan manually</span>
             <span className="pl-tab-desc">Create tasks yourself.</span>
           </div>
-        </div>
+        </button>
       </div>
 
       {/* Content wrapper */}
@@ -201,7 +237,7 @@ function PlanYourDayInner() {
         <div className="plan-main">
           {/* Ask Ally card */}
           {activeTab === 'ally' ? (
-            <div className="pl-input-card">
+            <div className="pl-input-card" id="pl-panel-ally" role="tabpanel" aria-labelledby="pl-tab-ally">
               <div className="pl-input-header">
                 <div className="pl-input-avatar">
                   <svg viewBox="0 0 24 24">
@@ -241,12 +277,14 @@ function PlanYourDayInner() {
               </div>
             </div>
           ) : (
-            <div className="pl-input-card" style={{ gap: '12px' }}>
+            <div className="pl-input-card" style={{ gap: '12px' }} id="pl-panel-manual" role="tabpanel" aria-labelledby="pl-tab-manual">
               <div className="pl-input-header">
                 <span className="pl-input-title">Add task manually</span>
               </div>
               <div style={{ display: 'flex', gap: '10px' }}>
+                <label className="sr-only" htmlFor="pl-manual-task">Task description</label>
                 <input
+                  id="pl-manual-task"
                   type="text"
                   className="pl-textarea"
                   style={{ minHeight: 'auto', height: '40px', padding: '0 12px' }}

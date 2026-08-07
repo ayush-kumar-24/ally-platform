@@ -55,7 +55,9 @@ export default function Problem() {
           Don't diagnose it — just describe it. Ally will find what's really causing it.
         </p>
 
+        <label className="sr-only" htmlFor="gp-problem">Describe the problem you are facing</label>
         <textarea
+          id="gp-problem"
           className="j-input"
           value={problem}
           onChange={(e) => setProblem(e.target.value)}

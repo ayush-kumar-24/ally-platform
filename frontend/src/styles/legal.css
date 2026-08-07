@@ -5,6 +5,7 @@
 /* ── Page shell ── */
 .legal-page {
   min-height: 100vh;
+  min-height: 100svh;
   background: var(--forest-night, #06140d);
   color: var(--on-dark, #eaf3ee);
   font-family: var(--body, 'Inter', system-ui, sans-serif);

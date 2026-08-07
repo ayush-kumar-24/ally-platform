@@ -391,6 +391,8 @@ export default function AllyChat() {
             <input
               ref={fileInputRef}
               type="file"
+              aria-label="Attach a file or image"
+              tabIndex={-1}
               style={{ display: 'none' }}
               onChange={handleFileSelected}
             />

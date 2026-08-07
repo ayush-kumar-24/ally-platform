@@ -618,3 +618,9 @@
   margin: 0;
   line-height: 1.4;
 }
+
+/* plan.css likewise had no breakpoints; .plan-grid (defined in platform.css)
+   stayed 1.55fr/1fr all the way down. */
+@media (max-width: 860px) {
+  .plan-grid { grid-template-columns: minmax(0, 1fr); }
+}

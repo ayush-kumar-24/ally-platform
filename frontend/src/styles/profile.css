@@ -123,7 +123,9 @@
 
 .pr-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  /* minmax(0,·) stops a long unbreakable value (an email, an ID) from
+     blowing the track out to min-content and overflowing the page. */
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 6px 28px;
   text-align: left;
 }
@@ -552,3 +554,9 @@
   to   { transform: translateY(0);   opacity: 1; }
 }
 
+
+/* profile.css had no media queries at all: the two-column key/value grid stayed
+   two columns down to 320px, leaving ~150px per column for names and emails. */
+@media (max-width: 760px) {
+  .pr-grid { grid-template-columns: minmax(0, 1fr); }
+}

@@ -94,10 +94,10 @@ export default function AdminDashboard() {
             <table className="adm-table">
               <thead>
                 <tr>
-                  <th className="adm-nosort">ID</th>
-                  <th className="adm-nosort">Name</th>
-                  <th className="adm-nosort">Email</th>
-                  <th className="adm-nosort">Status</th>
+                  <th scope="col" className="adm-nosort">ID</th>
+                  <th scope="col" className="adm-nosort">Name</th>
+                  <th scope="col" className="adm-nosort">Email</th>
+                  <th scope="col" className="adm-nosort">Status</th>
                   <th className="adm-nosort adm-num">Credits</th>
                 </tr>
               </thead>

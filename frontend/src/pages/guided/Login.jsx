@@ -5,7 +5,7 @@ import AuthTransition from '../../components/AuthTransition';
 import { CURRENT_VERSIONS, flushPendingConsent, recordConsent, savePendingConsent } from '../../services/consents';
 import { consumeOAuthRedirect, signInWithGoogle, signInWithLinkedIn, startDevSession } from '../../services/auth';
 import { get } from '../../services/api';
-import { supabaseConfigured } from '../../services/supabaseClient';
+import { supabaseConfigured } from '../../services/supabaseConfig';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -29,7 +29,20 @@ export default function Login() {
   useEffect(() => {
     if (!supabaseConfigured) return;
     (async () => {
-      const founder = await consumeOAuthRedirect();
+      /* consumeOAuthRedirect POSTs /auth/session, which throws ApiError on any
+         failure. With no catch that became an unhandled rejection and the
+         founder — who has just come back from Google having signed in
+         successfully — was dropped on this screen with no message at all,
+         indistinguishable from the sign-in never having started. */
+      let founder;
+      try {
+        founder = await consumeOAuthRedirect();
+      } catch {
+        setValidationError(
+          "We couldn't finish signing you in. Please try again.",
+        );
+        return;
+      }
       if (!founder) return;
 
       let profile = null;
@@ -105,7 +118,7 @@ export default function Login() {
     if (supabaseConfigured && (provider === 'google' || provider === 'linkedin')) {
       try {
         await (provider === 'google' ? signInWithGoogle() : signInWithLinkedIn());
-      } catch (err) {
+      } catch {
         setValidationError(`Could not start ${provider === 'google' ? 'Google' : 'LinkedIn'} sign-in. Please try again.`);
         inFlight.current = false;
         setSubmitting(false);
@@ -188,16 +201,23 @@ export default function Login() {
         <p className="j-sub">In about 20 minutes, Ally learns how you lead and finds what's really holding your business back. You'll leave with a clarity report and your next move.</p>
         
         {validationError && (
-          <div className="consent-error" role="alert">
+          <div className="consent-error" role="alert" id="consent-error">
             {validationError}
           </div>
         )}
 
         <div className="consent-container">
           <label className="consent-item">
-            <input 
-              type="checkbox" 
+            {/* This is the gate handleAuth refuses to proceed without, but
+                nothing said so programmatically — the error appeared visually
+                with no link back to the field it blamed. */}
+            <input
+              type="checkbox"
               id="consent-terms"
+              required
+              aria-required="true"
+              aria-invalid={validationError && !agreeTerms ? 'true' : undefined}
+              aria-describedby={validationError ? 'consent-error' : undefined}
               checked={agreeTerms}
               disabled={submitting}
               onChange={(e) => {

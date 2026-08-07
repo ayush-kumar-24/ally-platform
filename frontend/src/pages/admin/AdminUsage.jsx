@@ -145,9 +145,9 @@ export default function AdminUsage() {
             <table className="adm-table">
               <thead>
                 <tr>
-                  <th className="adm-nosort">Founder</th>
-                  <th className="adm-nosort">Email</th>
-                  <th className="adm-nosort">Plan</th>
+                  <th scope="col" className="adm-nosort">Founder</th>
+                  <th scope="col" className="adm-nosort">Email</th>
+                  <th scope="col" className="adm-nosort">Plan</th>
                   <th className="adm-nosort adm-num">Tokens</th>
                   <th className="adm-nosort adm-num">Est. cost</th>
                 </tr>

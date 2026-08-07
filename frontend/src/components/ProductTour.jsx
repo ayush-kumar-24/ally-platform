@@ -1,8 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { markTourSeen } from '../services/dashboard';
+import { useCallAccess } from '../hooks/useCallAccess';
 
+/* Steps are filtered per founder before use -- see `steps` below. A step whose
+   sidebar item is hidden has nothing to spotlight: position() looks up
+   [data-nav="..."] and would find nothing, leaving the highlight stranded over
+   a tour stop the founder cannot visit anyway. */
 const TOUR_STEPS = [
   { nav: '/app/ally-chat', emoji: '💬', title: 'Chat with Ally', text: 'Ask questions, brainstorm ideas and make better decisions with Ally anytime.' },
   { nav: '/app/plan', emoji: '📅', title: 'Plan Your Day', text: 'Create your daily goals manually or with Ally — with reminders and preparation support.' },
@@ -16,6 +21,11 @@ const TOUR_STEPS = [
 export default function ProductTour() {
   const navigate = useNavigate();
   const { tourOpen, endTour, sidebarCollapsed, toggleSidebar, sidebarOpen, openSidebar, closeSidebar } = useApp();
+  const { canBook: canBookCall } = useCallAccess();
+  const steps = useMemo(
+    () => TOUR_STEPS.filter((s) => s.nav !== '/app/discovery-call' || canBookCall),
+    [canBookCall],
+  );
   const [stepIndex, setStepIndex] = useState(0);
   const [spotStyle, setSpotStyle] = useState({ opacity: 0 });
   const [popStyle, setPopStyle] = useState({});
@@ -44,7 +54,7 @@ export default function ProductTour() {
   }, [tourOpen]);
 
   const position = () => {
-    const step = TOUR_STEPS[stepIndex];
+    const step = steps[stepIndex];
     if (!step || step.final) return;
     const target = document.querySelector(`[data-nav="${step.nav}"]`);
     const pop = document.getElementById('tourPop');
@@ -78,7 +88,7 @@ export default function ProductTour() {
   // (re)render current step
   useEffect(() => {
     if (!tourOpen) return;
-    const step = TOUR_STEPS[stepIndex];
+    const step = steps[stepIndex];
     if (!step) return;
     setPopShow(false);
     if (step.final) {
@@ -141,8 +151,8 @@ export default function ProductTour() {
 
   if (!tourOpen) return null;
 
-  const step = TOUR_STEPS[stepIndex];
-  const isLast = stepIndex >= TOUR_STEPS.length - 1;
+  const step = steps[stepIndex];
+  const isLast = stepIndex >= steps.length - 1;
   const handleNext = () => {
     if (isLast) finish();
     else setStepIndex((i) => i + 1);
@@ -164,7 +174,7 @@ export default function ProductTour() {
         <div className="tp-x">{step.text}</div>
         <div className="tp-foot">
           <div className="tp-dots">
-            {TOUR_STEPS.map((_, i) => (
+            {steps.map((_, i) => (
               <i key={i} className={i === stepIndex ? 'on' : ''} />
             ))}
           </div>

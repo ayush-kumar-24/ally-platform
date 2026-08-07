@@ -1,5 +1,4 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
 import { MOCK_PLANS } from '../data/mockData';
 import { getProfile } from '../services/profile';
 import { getCatalog, getMyPlan } from '../services/plans';
@@ -119,7 +118,8 @@ function PlansView({ annual, setAnnual, onSelectPlan, currentPlan }) {
           <span className="lv" />
           Transparent Pricing
         </div>
-        <h1>Simple plans, <em>powerful</em> clarity</h1>
+        {/* Demoted from h1: PlatformLayout's topbar already renders the page h1. */}
+        <h2>Simple plans, <em>powerful</em> clarity</h2>
         <p>Start free. Upgrade when you need more diagnoses, deeper insights, or team features.</p>
       </div>
 
@@ -216,9 +216,9 @@ function PlansView({ annual, setAnnual, onSelectPlan, currentPlan }) {
         <table className="cmp">
           <thead>
             <tr>
-              <th style={{ textAlign: 'left', padding: '16px' }}>Feature</th>
+              <th scope="col" style={{ textAlign: 'left', padding: '16px' }}>Feature</th>
               {PLANS.map(p => (
-                <th key={p.id} className={p.popular ? 'cmp-col-pop' : ''}>
+                <th scope="col" key={p.id} className={p.popular ? 'cmp-col-pop' : ''}>
                   <div className="cmp-pn">{p.name}</div>
                   <div className="cmp-pp">{p.price === 0 ? 'Free' : `₹${(annual ? Math.floor(p.price * 0.8) : p.price).toLocaleString()}/mo`}</div>
                 </th>
@@ -229,10 +229,14 @@ function PlansView({ annual, setAnnual, onSelectPlan, currentPlan }) {
             {COMPARE_ROWS.map((row, i) => (
               <tr key={i} style={{ background: i % 2 === 0 ? 'transparent' : 'rgba(6,20,13,.02)' }}>
                 <td style={{ fontWeight: 600, color: '#16241c', fontSize: 13 }}>{row.label}</td>
-                <td><CmpCell val={row.free} /></td>
-                <td className="cmp-col-pop"><CmpCell val={row.pro} /></td>
-                
-                
+                {/* The header maps every plan but the body emitted only `free`
+                    and `pro`, so Starter had a column heading and no cells and
+                    every value under it was shifted one column left. */}
+                {PLANS.map(p => (
+                  <td key={p.id} className={p.popular ? 'cmp-col-pop' : ''}>
+                    <CmpCell val={row[p.id]} />
+                  </td>
+                ))}
               </tr>
             ))}
           </tbody>
@@ -252,19 +256,37 @@ const PAYMENT_METHODS = [
 ];
 
 function CheckoutView({ plan, annual, onBack, onSuccess }) {
-  // Prefill from the signed-in founder rather than a placeholder identity.
-  const [founder, setFounder] = useState(null);
-  useEffect(() => { getProfile().then(setFounder).catch(() => setFounder(null)); }, []);
   const [method, setMethod] = useState('card');
   const [form, setForm] = useState({
-    name: founder?.full_name ?? '',
-    email: founder?.email ?? '',
+    name: '',
+    email: '',
     card: '',
     expiry: '',
     cvv: '',
     upi: '',
     bank: '',
   });
+
+  /* Prefill from the signed-in founder rather than a placeholder identity.
+     This used to read `founder` inside useState's initializer, which runs only
+     on the first render — before the profile request had resolved — so Name and
+     Email were permanently blank no matter what came back. Merging in an effect
+     is what actually lands the values, and it leaves anything the founder has
+     already typed alone. */
+  useEffect(() => {
+    let cancelled = false;
+    getProfile()
+      .then((p) => {
+        if (cancelled || !p) return;
+        setForm(prev => ({
+          ...prev,
+          name: prev.name || p.full_name || '',
+          email: prev.email || p.email || '',
+        }));
+      })
+      .catch(() => { /* leave the fields empty for the founder to fill in */ });
+    return () => { cancelled = true; };
+  }, []);
   const [errors, setErrors] = useState({});
   const [processing, setProcessing] = useState(false);
 
@@ -294,12 +316,21 @@ function CheckoutView({ plan, annual, onBack, onSuccess }) {
     return e;
   };
 
+  /* NOTE: this does not charge anything — it waits 2.2s and reports success.
+     There is no processor integration behind this screen yet. Tracked as a
+     blocker in the QA report; the timer handling below is the part that is
+     fixed here (it previously kept running after unmount and called
+     setProcessing on a dead component). */
+  const payTimer = useRef(null);
+  useEffect(() => () => clearTimeout(payTimer.current), []);
+
   const handleSubmit = e => {
     e.preventDefault();
+    if (processing) return;
     const errs = validate();
     if (Object.keys(errs).length) { setErrors(errs); return; }
     setProcessing(true);
-    setTimeout(() => {
+    payTimer.current = setTimeout(() => {
       setProcessing(false);
       onSuccess(plan);
     }, 2200);
@@ -649,7 +680,6 @@ function StatusView({ onUpgrade, currentPlan }) {
    ROOT COMPONENT
 ═══════════════════════════════════════════ */
 export default function Billing() {
-  const navigate = useNavigate();
   const [view, setView] = useState('plans'); // 'plans' | 'checkout' | 'success' | 'status'
   const [annual, setAnnual] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState(null);

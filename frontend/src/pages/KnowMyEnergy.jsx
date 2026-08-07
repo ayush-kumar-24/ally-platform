@@ -17,7 +17,7 @@ function ComingSoon() {
   return (
     <div className="dc-container">
       <div className="pr-sec-head stagger d1">
-        <h3 className="pr-sec-title">Know My Energy</h3>
+        <h2 className="pr-sec-title">Know My Energy</h2>
         <span className="pr-sec-sub">Understand how your energy moves through the week.</span>
       </div>
 

@@ -7,6 +7,14 @@ export default function AuthTransition({ onNavigate, onComplete }) {
   const [logoStyle, setLogoStyle] = useState(null);
   const firedEndRef = useRef(false);
   const navigatedRef = useRef(false);
+  /* Held in refs so the effect below can stay keyed on `phase` alone without
+     capturing a stale copy of either callback — Login re-renders while this is
+     on screen (submitting, validationError), so the closure this effect kept
+     could easily be one from a previous render. */
+  const onNavigateRef = useRef(onNavigate);
+  const onCompleteRef = useRef(onComplete);
+  onNavigateRef.current = onNavigate;
+  onCompleteRef.current = onComplete;
 
   const endVideo = () => {
     if (firedEndRef.current) return;
@@ -20,15 +28,15 @@ export default function AuthTransition({ onNavigate, onComplete }) {
   }, []);
 
   useEffect(() => {
-    if (phase !== 'settling') return;
-    if (navigatedRef.current) return;
+    if (phase !== 'settling') return undefined;
+    if (navigatedRef.current) return undefined;
     navigatedRef.current = true;
-    onNavigate();
+    onNavigateRef.current();
 
     const raf = requestAnimationFrame(() => {
       const target = document.querySelector('.j-avatar');
       if (!target) {
-        onComplete();
+        onCompleteRef.current();
         return;
       }
       const rect = target.getBoundingClientRect();

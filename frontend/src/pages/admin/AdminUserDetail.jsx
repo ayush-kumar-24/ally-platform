@@ -222,13 +222,13 @@ export default function AdminUserDetail() {
             <table className="adm-table">
               <thead>
                 <tr>
-                  <th className="adm-nosort">When</th>
-                  <th className="adm-nosort">Type</th>
+                  <th scope="col" className="adm-nosort">When</th>
+                  <th scope="col" className="adm-nosort">Type</th>
                   <th className="adm-nosort adm-num">Amount</th>
                   <th className="adm-nosort adm-num">Before</th>
                   <th className="adm-nosort adm-num">After</th>
-                  <th className="adm-nosort">Reason</th>
-                  <th className="adm-nosort">Admin</th>
+                  <th scope="col" className="adm-nosort">Reason</th>
+                  <th scope="col" className="adm-nosort">Admin</th>
                 </tr>
               </thead>
               <tbody>
@@ -262,10 +262,10 @@ export default function AdminUserDetail() {
             <table className="adm-table">
               <thead>
                 <tr>
-                  <th className="adm-nosort">When</th>
-                  <th className="adm-nosort">Kind</th>
-                  <th className="adm-nosort">Event</th>
-                  <th className="adm-nosort">Detail</th>
+                  <th scope="col" className="adm-nosort">When</th>
+                  <th scope="col" className="adm-nosort">Kind</th>
+                  <th scope="col" className="adm-nosort">Event</th>
+                  <th scope="col" className="adm-nosort">Detail</th>
                 </tr>
               </thead>
               <tbody>

@@ -36,14 +36,28 @@ export default function AdminLayout() {
 
   useEffect(load, []);
 
+  /* The loading and error branches returned a bare <div>, so on those states —
+     which is what anyone without admin access, or anyone hitting a backend
+     outage, actually sees — the page had no main landmark and no h1 for the
+     skip link or a landmark menu to target. */
   if (loading) {
-    return <div className="adm"><Loading label="Checking admin access…" /></div>;
+    return (
+      <div className="adm">
+        <main id="main-content" tabIndex={-1} className="adm-main">
+          <h1 className="sr-only">Ally Admin</h1>
+          <Loading label="Checking admin access…" />
+        </main>
+      </div>
+    );
   }
   if (error) {
     // A non-admin lands here. Say so plainly rather than rendering an empty shell.
     return (
       <div className="adm">
-        <ErrorState error={error} onRetry={load} />
+        <main id="main-content" tabIndex={-1} className="adm-main">
+          <h1 className="sr-only">Ally Admin</h1>
+          <ErrorState error={error} onRetry={load} />
+        </main>
       </div>
     );
   }
@@ -53,7 +67,7 @@ export default function AdminLayout() {
   return (
     <div className="adm">
       <header className="adm-topbar">
-        <span className="adm-brand">Ally Admin</span>
+        <h1 className="adm-brand">Ally Admin</h1>
         <span className="adm-badge">Internal</span>
         <nav className="adm-nav">
           {visible.map(l => (
@@ -67,7 +81,7 @@ export default function AdminLayout() {
           {me.email} · {me.role.replace('_', ' ')}
         </span>
       </header>
-      <main className="adm-main">
+      <main id="main-content" tabIndex={-1} className="adm-main">
         <Outlet context={{ me }} />
       </main>
     </div>

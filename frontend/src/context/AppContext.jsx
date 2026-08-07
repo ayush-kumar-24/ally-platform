@@ -79,9 +79,16 @@ export function AppProvider({ children }) {
   const openSidebar = useCallback(() => setSidebarOpen(true), []);
   const closeSidebar = useCallback(() => setSidebarOpen(false), []);
 
+  /* The timer was neither tracked nor cleared: a second toast within the
+     3s window inherited the first one's pending timeout and vanished early,
+     and the last timer outlived unmount. */
+  const toastTimer = useRef(null);
+  useEffect(() => () => clearTimeout(toastTimer.current), []);
+
   const showToast = useCallback((msg, duration = 3000) => {
+    clearTimeout(toastTimer.current);
     setToast(msg);
-    setTimeout(() => setToast(null), duration);
+    toastTimer.current = setTimeout(() => setToast(null), duration);
   }, []);
 
   const navigate = useCallback((view) => {

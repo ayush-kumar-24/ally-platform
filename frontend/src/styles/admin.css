@@ -18,6 +18,7 @@
   --adm-warn: #92400e;
 
   min-height: 100vh;
+  min-height: 100svh;
   background: var(--adm-bg);
   color: var(--adm-ink);
   font-family: var(--body, system-ui, sans-serif);
@@ -31,7 +32,9 @@
   background: #10151b; color: #e8edf2;
   position: sticky; top: 0; z-index: 20;
 }
-.adm-brand { font-weight: 700; letter-spacing: .02em; }
+/* Now an <h1> (was a <span>, leaving the admin panel with no page heading);
+   reset the UA heading margins/size so the topbar looks unchanged. */
+.adm-brand { font-weight: 700; letter-spacing: .02em; font-size: 15px; margin: 0; }
 .adm-badge {
   font-size: 10px; text-transform: uppercase; letter-spacing: .1em;
   background: #b91c1c; color: #fff; padding: 3px 7px; border-radius: 4px;
@@ -153,9 +156,33 @@
 .adm-pagination-btns { display: flex; gap: 8px; }
 
 /* ── Detail ── */
-.adm-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+.adm-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr)); }
 .adm-kv { display: grid; grid-template-columns: 150px 1fr; gap: 6px 12px; font-size: 13px; }
 .adm-kv dt { color: var(--adm-muted); }
 .adm-kv dd { margin: 0; word-break: break-word; }
 .adm-stat { font-size: 26px; font-weight: 800; }
 .adm-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* The admin panel shipped with exactly one media query (reduced motion) and no
+   layout breakpoints, so .adm-kv held its fixed 150px label column on a 375px
+   screen — ~149px left for the value. Tables are already scroll-wrapped in
+   .adm-table-wrap; this covers the non-table surfaces. */
+@media (max-width: 760px) {
+  .adm-kv { grid-template-columns: minmax(0, 1fr); gap: 2px 0; }
+  .adm-kv dt { margin-top: 8px; }
+  .adm-main { padding: 14px; }
+  .adm-topbar { flex-wrap: wrap; row-gap: 8px; }
+}
+
+/* Sortable column headers are now real buttons (they were click handlers on the
+   <th>, unreachable from the keyboard). Keep them looking like header text. */
+.adm-sort-btn {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-align: inherit;
+}
+.adm-sort-btn:hover { text-decoration: underline; }

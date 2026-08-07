@@ -95,15 +95,15 @@ export default function AdminAuditLog() {
               <table className="adm-table">
                 <thead>
                   <tr>
-                    <th className="adm-nosort">When</th>
-                    <th className="adm-nosort">Admin</th>
-                    <th className="adm-nosort">Role</th>
-                    <th className="adm-nosort">Action</th>
-                    <th className="adm-nosort">Target</th>
-                    <th className="adm-nosort">Old</th>
-                    <th className="adm-nosort">New</th>
-                    <th className="adm-nosort">IP</th>
-                    <th className="adm-nosort">Result</th>
+                    <th scope="col" className="adm-nosort">When</th>
+                    <th scope="col" className="adm-nosort">Admin</th>
+                    <th scope="col" className="adm-nosort">Role</th>
+                    <th scope="col" className="adm-nosort">Action</th>
+                    <th scope="col" className="adm-nosort">Target</th>
+                    <th scope="col" className="adm-nosort">Old</th>
+                    <th scope="col" className="adm-nosort">New</th>
+                    <th scope="col" className="adm-nosort">IP</th>
+                    <th scope="col" className="adm-nosort">Result</th>
                   </tr>
                 </thead>
                 <tbody>

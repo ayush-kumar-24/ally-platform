@@ -38,7 +38,7 @@ export function initializeAnalytics(measurementId = 'G-MOCKTRACKINGID') {
     });
 
     isAnalyticsInitialized = true;
-    console.log('[Consent] Google Analytics script initialized.');
+    if (import.meta.env.DEV) console.debug('[Consent] Google Analytics initialized.');
   } catch (error) {
     console.error('[Consent] Failed to load Google Analytics:', error);
   }
@@ -55,29 +55,34 @@ export function initializeMarketing(pixelId = 'MOCK_PIXEL_ID') {
   }
 
   try {
-    // Standard Facebook Pixel integration code
-    !(function (f, b, e, v, n, t, s) {
-      if (f.fbq) return;
-      n = f.fbq = function () {
-        n.callMethod ? n.callMethod.apply(n, arguments) : n.queue.push(arguments);
+    /* Meta's own snippet, de-minified. Functionally identical to the copy-paste
+       version — the original relied on a leading `!` and a bare ternary as
+       statements, which are expressions evaluated purely for side effects. */
+    const src = 'https://connect.facebook.net/en_US/fbevents.js';
+    if (!window.fbq) {
+      const fbq = function (...args) {
+        if (fbq.callMethod) fbq.callMethod.apply(fbq, args);
+        else fbq.queue.push(args);
       };
-      if (!f._fbq) f._fbq = n;
-      n.push = n;
-      n.loaded = !0;
-      n.version = '2.0';
-      n.queue = [];
-      t = b.createElement(e);
-      t.async = !0;
-      t.src = v;
-      s = b.getElementsByTagName(e)[0];
-      s.parentNode.insertBefore(t, s);
-    })(window, document, 'script', 'https://connect.facebook.net/en_US/fbevents.js');
+      fbq.push = fbq;
+      fbq.loaded = true;
+      fbq.version = '2.0';
+      fbq.queue = [];
+      window.fbq = fbq;
+      if (!window._fbq) window._fbq = fbq;
+
+      const script = document.createElement('script');
+      script.async = true;
+      script.src = src;
+      const first = document.getElementsByTagName('script')[0];
+      first.parentNode.insertBefore(script, first);
+    }
 
     window.fbq('init', pixelId);
     window.fbq('track', 'PageView');
 
     isMarketingInitialized = true;
-    console.log('[Consent] Meta Pixel script initialized.');
+    if (import.meta.env.DEV) console.debug('[Consent] Meta Pixel initialized.');
   } catch (error) {
     console.error('[Consent] Failed to load Meta Pixel:', error);
   }
