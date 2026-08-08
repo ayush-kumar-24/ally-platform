@@ -52,6 +52,21 @@ export default function Login() {
         // Provisioning races the very first request sometimes; the rest of the
         // app re-fetches /profile on its own, so a miss here isn't fatal.
       }
+
+      /* A returning founder who already finished onboarding must not be sent
+         back through it. GuidedLayout has its own profile_completed guard,
+         but it only runs once per mount -- and this component mounted BEFORE
+         the token existed (that's the whole point of this effect), so by the
+         time the guard could re-check, it never fires again. This is the one
+         place the answer is actually knowable at the moment it matters: right
+         after the session is established, with the freshly-fetched profile in
+         hand. Skip the "signing you in" transition and the 14-step shell
+         entirely -- there is nothing to resume into. */
+      if (profile?.profile_completed) {
+        navigate('/app', { replace: true });
+        return;
+      }
+
       let stored = null;
       try {
         stored = await flushPendingConsent();
