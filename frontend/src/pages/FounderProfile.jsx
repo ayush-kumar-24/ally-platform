@@ -189,7 +189,7 @@ export default function FounderProfile() {
     await logout();
     navigate('/', { replace: true });
   };
-  const { user, setUser, showToast } = useApp();
+  const { setUser, showToast } = useApp();
   const [editing, setEditing] = useState(false);
 
   // Privacy Center state
@@ -210,12 +210,12 @@ export default function FounderProfile() {
         const status = await getPrivacyStatus();
         setPrivacyState(status.state ?? null);
         setPrivacyRequests(status.requests ?? []);
-      } catch (_) {
+      } catch {
         // Fall back to the legacy queue endpoint so the history still renders.
         try {
           const data = await get('/settings/privacy');
           setPrivacyRequests(data.items ?? []);
-        } catch (_) { /* backend down — leave empty */ }
+        } catch { /* backend down — leave empty */ }
       } finally {
         setRequestsLoaded(true);
       }
@@ -308,7 +308,7 @@ export default function FounderProfile() {
   const [form, setForm] = useState({
     name: '', email: '', phone: '', linkedin: '', location: '',
   });
-  const [profileLoaded, setProfileLoaded] = useState(false);
+  const [, setProfileLoaded] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -430,10 +430,20 @@ export default function FounderProfile() {
                 boxShadow: '0 0 0 3px rgba(255,255,255,0.08), 0 8px 24px -6px rgba(0,0,0,0.5)'
               }}
             >
-              AS
+              {/* Was the literal "AS" — a mock founder's initials, rendered
+                  directly above every real founder's own name. */}
+              {form.name
+                .split(' ')
+                .filter(Boolean)
+                .slice(0, 2)
+                .map(w => w[0].toUpperCase())
+                .join('') || '?'}
             </div>
+            {/* Icon-only, and previously had neither a type nor a name. */}
             <button
               className="fp-cam"
+              type="button"
+              aria-label="Change profile photo"
               style={{
                 position: 'absolute',
                 right: '-2px',
@@ -558,9 +568,10 @@ export default function FounderProfile() {
 
         <div className="pr-grid">
           <div className="pr-field">
-            <div className="pr-lbl">Full Name</div>
+            <label className="pr-lbl" htmlFor="pr-name">Full Name</label>
             {editing ? (
               <input
+                id="pr-name"
                 className="pr-input"
                 value={form.name}
                 onChange={e => setForm({ ...form, name: e.target.value })}
@@ -585,9 +596,10 @@ export default function FounderProfile() {
           </div>
 
           <div className="pr-field">
-            <div className="pr-lbl">Linkedin</div>
+            <label className="pr-lbl" htmlFor="pr-linkedin">LinkedIn</label>
             {editing ? (
               <input
+                id="pr-linkedin"
                 className="pr-input"
                 value={form.linkedin}
                 onChange={e => setForm({ ...form, linkedin: e.target.value })}
@@ -1035,7 +1047,11 @@ export default function FounderProfile() {
           </div>
           <button
             className="pr-danger-btn"
-            onClick={() => setPendingAction(PRIVACY_ACTIONS.find(a => a.type === 'withdraw_consent'))}
+            /* Was 'withdraw_consent': clicking "Delete account" and confirming
+               opened the withdraw-consent dialog and POSTed /privacy/withdraw,
+               so the account was never scheduled for erasure — while the user
+               was told it had been. */
+            onClick={() => setPendingAction(PRIVACY_ACTIONS.find(a => a.type === 'delete_account'))}
             type="button"
             id="delete-account-btn"
           >

@@ -15,7 +15,7 @@ export function useLocalStorage(key, initialValue) {
     setStoredValue(valueToStore);
     try {
       localStorage.setItem(key, JSON.stringify(valueToStore));
-    } catch (e) {}
+    } catch {}
   }, [key, storedValue]);
 
   return [storedValue, setValue];

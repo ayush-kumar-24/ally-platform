@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { useNavigate } from 'react-router-dom';
+import { useCallAccess } from '../hooks/useCallAccess';
 
 const FAQS = [
   {
@@ -32,6 +33,7 @@ const FAQS = [
 export default function HelpSupport() {
   const { showToast } = useApp();
   const navigate = useNavigate();
+  const { canBook: canBookCall } = useCallAccess();
   const [openFaq, setOpenFaq] = useState(null);
 
   const toggleFaq = (idx) => {
@@ -186,19 +188,35 @@ export default function HelpSupport() {
             key={idx}
             className={`hp-faq-row ${openFaq === idx ? 'open' : ''}`}
           >
+            {/* The trigger announced no expanded/collapsed state, and the answer
+                panel stayed in the DOM (hidden by CSS only) — so all six answers
+                were read out continuously regardless of what was open. */}
             <button
               className="hp-faq-trigger"
               onClick={() => toggleFaq(idx)}
               type="button"
+              id={`faq-trigger-${idx}`}
+              aria-expanded={openFaq === idx}
+              aria-controls={`faq-panel-${idx}`}
             >
               <span className="hp-faq-q">{faq.q}</span>
-              <span className="hp-faq-chevron">
+              <span className="hp-faq-chevron" aria-hidden="true">
                 <svg viewBox="0 0 24 24">
                   <polyline points="6 9 12 15 18 9" />
                 </svg>
               </span>
             </button>
-            <div className="hp-faq-answer">
+            {/* `inert`, not `hidden`: the panel collapses via a max-height
+                transition, and display:none would kill the animation. inert
+                takes it out of the accessibility tree and the tab order while
+                leaving it animatable. */}
+            <div
+              className="hp-faq-answer"
+              id={`faq-panel-${idx}`}
+              role="region"
+              aria-labelledby={`faq-trigger-${idx}`}
+              inert={openFaq !== idx}
+            >
               <div className="hp-faq-answer-inner">{faq.a}</div>
             </div>
           </div>
@@ -226,19 +244,24 @@ export default function HelpSupport() {
             </svg>
             Email support
           </button>
-          <button
-            className="hp-footer-btn-ghost"
-            onClick={() => navigate('/app/discovery-call')}
-            type="button"
-          >
-            <svg viewBox="0 0 24 24">
-              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-              <line x1="16" y1="2" x2="16" y2="6" />
-              <line x1="8" y1="2" x2="8" y2="6" />
-              <line x1="3" y1="10" x2="21" y2="10" />
-            </svg>
-            Book discovery call
-          </button>
+          {/* A support page is the worst place to offer something they cannot
+              have -- someone reaches it precisely because they are already
+              stuck. */}
+          {canBookCall && (
+            <button
+              className="hp-footer-btn-ghost"
+              onClick={() => navigate('/app/discovery-call')}
+              type="button"
+            >
+              <svg viewBox="0 0 24 24">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                <line x1="16" y1="2" x2="16" y2="6" />
+                <line x1="8" y1="2" x2="8" y2="6" />
+                <line x1="3" y1="10" x2="21" y2="10" />
+              </svg>
+              Book discovery call
+            </button>
+          )}
           <button
             className="hp-footer-btn-ghost"
             onClick={() => navigate('/app/ally-chat')}

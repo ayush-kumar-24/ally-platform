@@ -80,6 +80,41 @@ a { color: inherit; text-decoration: none; }
 :focus-visible { outline: 2.5px solid var(--color-emerald-bright); outline-offset: 3px; border-radius: 8px; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0; }
 
+/* Skip link — offscreen until focused, then pinned top-left above everything.
+   The splash screen sits at z-index 9999, so this has to clear it. */
+.skip-link {
+  position: fixed;
+  top: 0; left: 0;
+  transform: translateY(-120%);
+  z-index: 10000;
+  padding: 12px 18px;
+  background: var(--color-forest);
+  color: var(--color-on-dark);
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  font-weight: 600;
+  border-radius: 0 0 10px 0;
+  transition: transform .18s ease;
+}
+.skip-link:focus { transform: translateY(0); }
+/* main is focusable only as a skip-link target; never draw a ring around the
+   whole page when it receives focus programmatically. */
+#main-content:focus { outline: none; }
+
+/* main.jsx loads onboarding-supplement.css and onboarding-questions.css AFTER
+   this file, and both null the outline on their inputs at the same specificity
+   as the :focus-visible rule above — so source order wins and the guided flow's
+   search, free-text and modal fields lose their focus ring entirely. Restated
+   here at a higher specificity so the ring survives regardless of import order. */
+.ob-search:focus-visible,
+.ob-other:focus-visible,
+.modal-textarea:focus-visible,
+.j-input:focus-visible,
+.sc-f input:focus-visible {
+  outline: 2.5px solid var(--color-emerald-bright);
+  outline-offset: 2px;
+}
+
 /* ── Shared keyframe animations ── */
 @keyframes float-orb {
   0%, 100% { transform: translate3d(0, 0, 0) scale(1); }

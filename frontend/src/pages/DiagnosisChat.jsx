@@ -27,13 +27,18 @@ export default function DiagnosisChat() {
   const [sessionId, setSessionId] = useState(null);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
-  const [kgVisible, setKgVisible] = useState(true);
+  const [kgVisible] = useState(true);
   const kgRef = useRef(null);
   const scrollRef = useRef(null);
 
+  /* The draw timer had no cleanup and this effect runs on every message, so a
+     new orphaned timeout was created for each one and any pending timers kept
+     touching the DOM after unmount. */
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    if (kgRef.current) setTimeout(() => kgRef.current?.classList.add('draw'), 800);
+    if (!kgRef.current) return undefined;
+    const t = setTimeout(() => kgRef.current?.classList.add('draw'), 800);
+    return () => clearTimeout(t);
   }, [messages]);
 
   // Resume if a session is in progress, otherwise start one. The server owns the
@@ -143,7 +148,10 @@ export default function DiagnosisChat() {
         </div>
 
         {/* Messages */}
-        <div className="chat-scroll" ref={scrollRef}>
+        {/* AllyChat's transcript is a labelled live region; this one -- the
+            product's core 20-minute journey -- announced nothing at all, so no
+            question Ally asked ever reached a screen reader. */}
+        <div className="chat-scroll" ref={scrollRef} role="log" aria-live="polite" aria-label="Your diagnosis with Ally">
           {messages.map((m, i) => (
             <div key={i} className={`msg ${m.role}`}>
               {/* Was the literal string 'RV' -- the mock founder's initials,
@@ -181,7 +189,9 @@ export default function DiagnosisChat() {
         {/* Input */}
         <div className="chat-input">
           <div className="ci-row">
+            <label className="sr-only" htmlFor="dg-answer">Your answer to Ally</label>
             <textarea
+              id="dg-answer"
               rows={1}
               placeholder={done ? 'Your diagnosis is complete.' : "Answer Ally's question or ask anything..."}
               value={input}
@@ -193,14 +203,16 @@ export default function DiagnosisChat() {
             />
             <button
               className={`ci-btn${voice.status === 'recording' ? ' recording' : ''}`}
+              type="button"
               title="Voice input"
+              aria-label="Voice input"
               aria-pressed={voice.status === 'recording'}
               disabled={busy || done || voice.status === 'transcribing'}
               onClick={voice.toggle}
             >
               <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/></svg>
             </button>
-            <button className="ci-btn send" title="Send" type="button"
+            <button className="ci-btn send" title="Send" aria-label="Send answer" type="button"
                     disabled={busy || done || !input.trim()}
                     onClick={() => answer(input)}>
               <svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
@@ -217,7 +229,7 @@ export default function DiagnosisChat() {
       {/* Knowledge Graph Panel */}
       {kgVisible && (
         <div className="kg-panel">
-          <h3>Live knowledge graph</h3>
+          <h2>Live knowledge graph</h2>
           <p className="kp-sub">How Ally is connecting what you say to the underlying cause.</p>
           <div className="kg" ref={kgRef}>
             <svg viewBox="0 0 260 210" preserveAspectRatio="xMidYMid meet">

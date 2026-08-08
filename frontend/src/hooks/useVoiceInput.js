@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { startRecording, transcribeAudio, VoiceUpgradeRequiredError } from '../services/voice';
 
 /**
@@ -12,14 +12,32 @@ import { startRecording, transcribeAudio, VoiceUpgradeRequiredError } from '../s
 export function useVoiceInput({ context, onTranscribed, onUpgradeRequired, onError }) {
   const [status, setStatus] = useState('idle'); // idle | recording | transcribing
   const sessionRef = useRef(null);
+  const alive = useRef(true);
+
+  /* startRecording() holds a live getUserMedia stream, and only cancel() stops
+     its tracks. Nothing called cancel() on unmount, so navigating away from
+     AllyChat / DiagnosisChat / ProfileBuild mid-recording left the microphone
+     open — with the browser's recording indicator lit — until the tab closed.
+     The alive flag additionally stops the async continuations below from
+     setting state on an unmounted component. */
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+      sessionRef.current?.cancel();
+      sessionRef.current = null;
+    };
+  }, []);
 
   const start = useCallback(async () => {
     if (status !== 'idle') return;
     try {
-      sessionRef.current = await startRecording();
+      const session = await startRecording();
+      if (!alive.current) { session.cancel(); return; }
+      sessionRef.current = session;
       setStatus('recording');
     } catch (err) {
-      onError?.(err);
+      if (alive.current) onError?.(err);
     }
   }, [status, onError]);
 
@@ -31,15 +49,16 @@ export function useVoiceInput({ context, onTranscribed, onUpgradeRequired, onErr
     try {
       const blob = await session.stop();
       const text = await transcribeAudio(blob, context);
-      onTranscribed?.(text);
+      if (alive.current) onTranscribed?.(text);
     } catch (err) {
+      if (!alive.current) return;
       if (err instanceof VoiceUpgradeRequiredError) {
         onUpgradeRequired?.();
       } else {
         onError?.(err);
       }
     } finally {
-      setStatus('idle');
+      if (alive.current) setStatus('idle');
     }
   }, [context, onTranscribed, onUpgradeRequired, onError]);
 

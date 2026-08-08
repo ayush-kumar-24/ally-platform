@@ -5,32 +5,32 @@
  * resulting session). We never talk to Supabase for anything else — no direct
  * table access, no RLS-dependent queries — the backend's own API is the single
  * source of truth for everything except "who did Google say this is."
+ *
+ * Importing this module pulls in the Supabase SDK, so it is loaded on demand by
+ * services/auth.js rather than statically. Anything that only needs to know
+ * *whether* social login is available should import `supabaseConfigured` from
+ * ./supabaseConfig, which costs nothing.
  */
 
 import { createClient } from '@supabase/supabase-js';
+import { supabaseConfigured } from './supabaseConfig';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-export const supabaseConfigured = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
-
-if (!supabaseConfigured) {
-  // eslint-disable-next-line no-console
-  console.warn(
-    'VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY are not set — social login is disabled.'
-  );
-}
+export { supabaseConfigured };
 
 // Only construct the client when configured; callers must check
 // `supabaseConfigured` first (auth.js does this for every export).
 export const supabase = supabaseConfigured
-  ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      auth: {
-        // We read the session once on page load and hand it to our own backend
-        // (POST /auth/session) -- Supabase's own session/refresh cycle is not
-        // used afterward, so there's nothing to gain from persisting it.
-        persistSession: false,
-        detectSessionInUrl: true,
+  ? createClient(
+      import.meta.env.VITE_SUPABASE_URL,
+      import.meta.env.VITE_SUPABASE_ANON_KEY,
+      {
+        auth: {
+          // We read the session once on page load and hand it to our own backend
+          // (POST /auth/session) -- Supabase's own session/refresh cycle is not
+          // used afterward, so there's nothing to gain from persisting it.
+          persistSession: false,
+          detectSessionInUrl: true,
+        },
       },
-    })
+    )
   : null;

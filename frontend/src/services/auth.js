@@ -16,7 +16,18 @@
  */
 
 import { clearTokens, getRefreshToken, post, setTokens } from './api';
-import { supabase, supabaseConfigured } from './supabaseClient';
+import { supabaseConfigured } from './supabaseConfig';
+
+/**
+ * The Supabase SDK is ~40 kB gzipped and is needed only during the OAuth
+ * handshake, so it is fetched at the moment a provider button is pressed
+ * rather than shipped to every visitor who loads the landing page. Vite
+ * caches the module, so repeat calls do not re-download it.
+ */
+async function getSupabase() {
+  const { supabase } = await import('./supabaseClient');
+  return supabase;
+}
 
 export class AuthNotConfiguredError extends Error {
   constructor() {
@@ -27,6 +38,7 @@ export class AuthNotConfiguredError extends Error {
 
 async function signInWithProvider(provider) {
   if (!supabaseConfigured) throw new AuthNotConfiguredError();
+  const supabase = await getSupabase();
   const { error } = await supabase.auth.signInWithOAuth({
     provider,
     options: { redirectTo: window.location.origin + '/guided/login' },
@@ -71,7 +83,7 @@ export async function logout() {
     clearTokens();
     localStorage.removeItem('ally_founder');
     if (supabaseConfigured) {
-      try { await supabase.auth.signOut(); } catch { /* nothing left to do */ }
+      try { await (await getSupabase()).auth.signOut(); } catch { /* nothing left to do */ }
     }
   }
 }
@@ -107,6 +119,7 @@ export async function startDevSession() {
 export async function consumeOAuthRedirect() {
   if (!supabaseConfigured) return null;
 
+  const supabase = await getSupabase();
   const { data, error } = await supabase.auth.getSession();
   if (error || !data?.session?.access_token) return null;
 
@@ -114,7 +127,7 @@ export async function consumeOAuthRedirect() {
   // Done with the Supabase client session either way -- our own tokens take
   // over next, and persistSession is already off, but this also clears the
   // in-memory session so a stale one can't be read again on re-render.
-  await supabase.auth.signOut();
+  await (await getSupabase()).auth.signOut();
 
   // api.js's request interceptor overwrites the Authorization header with
   // whatever's in localStorage on every call -- clear any leftover backend

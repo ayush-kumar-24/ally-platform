@@ -2,8 +2,10 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { completionPercent, loadDashboard, markTourSeen, relativeDay } from '../services/dashboard';
+import { DnaLoading } from '../components/DnaState';
 import FeedbackPrompt from '../components/FeedbackPrompt';
 import { FEEDBACK } from '../services/feedback';
+import { useCallAccess } from '../hooks/useCallAccess';
 import {
   IconArrowRight,
   IconChat,
@@ -89,6 +91,8 @@ export default function Dashboard() {
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  // Every discovery-call surface on this page hangs off this one signal.
+  const { canBook: canBookCall } = useCallAccess();
 
   const load = useCallback(() => {
     setLoading(true);
@@ -148,7 +152,25 @@ export default function Dashboard() {
   // closed. Defaults to showing when the overview hasn't loaded -- a founder
   // who has genuinely never seen it should still be offered it.
   const profileComplete = profilePct === 100;
-  const tourUnseen = overview?.welcome?.show_tour !== false;
+  /* Gated on the overview actually having arrived. This defaulted to `true`
+     while loading, so the celebration banner rendered on mount and then
+     vanished a moment later — a large block appearing and disappearing at the
+     top of the page on every visit. */
+  const tourUnseen = Boolean(overview) && overview.welcome?.show_tour !== false;
+
+  /* `loading` was computed and never read: the page mounted its full chrome
+     with zero-value fallbacks and then reflowed once the six sources resolved,
+     so a returning founder briefly saw "no diagnosis yet / no reports / no
+     conversations" before their real data replaced it. */
+  if (loading && !data) {
+    return (
+      <div className="dash-page">
+        <div className="dash-inner">
+          <DnaLoading label="Loading your dashboard…" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="dash-page">
@@ -157,7 +179,9 @@ export default function Dashboard() {
           <section className="dash-banner">
             <div className="dash-banner-ic">🎉</div>
             <div className="dash-banner-body">
-              <h3>Congratulations, {firstName}. Your Founder Profile is now complete.</h3>
+              {/* h2, not h3: this banner renders above the "How can Ally help
+                  you today?" h2, so an h3 here gave the page h1 → h3 → h2. */}
+              <h2>Congratulations, {firstName}. Your Founder Profile is now complete.</h2>
               <p>
                 You've unlocked the complete Ally experience. Beyond diagnosis, Ally can now
                 become your daily thinking partner.
@@ -297,7 +321,12 @@ export default function Dashboard() {
             <Pill active={reports > 0}>Report</Pill>
             <Pill active={hasHealth}>Next steps</Pill>
             {/* Was hardcoded false, so a founder who had booked a call still saw it unlit. */}
-            <Pill active={(metrics?.discovery_calls_booked ?? 0) > 0}>Discovery call</Pill>
+            {/* A progress track ending in a step they cannot take reads as an
+                incomplete journey rather than a finished one. Kept only if it
+                is reachable, or already done. */}
+            {(canBookCall || (metrics?.discovery_calls_booked ?? 0) > 0) && (
+              <Pill active={(metrics?.discovery_calls_booked ?? 0) > 0}>Discovery call</Pill>
+            )}
           </div>
 
           <div className="dash-stats">
@@ -385,6 +414,13 @@ export default function Dashboard() {
               </div>
             </section>
 
+            {/* Hidden entirely when they cannot book, EXCEPT when they already
+                have a call on the books -- an existing booking is theirs and
+                hiding it would be worse than advertising the feature. Hiding
+                beats an upsell slot here: the dashboard already carries a plan
+                card doing that job, and a second one turns the page into a
+                pitch. */}
+            {(canBookCall || hasCall) && (
             <section className="dash-section">
               <div className="dash-section-head">
                 <div className="dash-section-title">Upcoming discovery call</div>
@@ -427,6 +463,7 @@ export default function Dashboard() {
                 </div>
               )}
             </section>
+            )}
           </div>
 
           <div className="dash-stack">
@@ -459,6 +496,11 @@ export default function Dashboard() {
                     <b>{plan ? plan.credits_balance : '—'}</b>
                   </div>
                 </div>
+                {/* With no allowance left this row read "₹300 per call", which
+                    quotes a price for something the founder cannot actually buy
+                    -- there is no payment flow in the app yet. Quoting a price
+                    you cannot take is worse than saying nothing. */}
+                {canBookCall && (
                 <div>
                   <div className="dash-meter-row">
                     <span>Free discovery calls</span>
@@ -471,6 +513,7 @@ export default function Dashboard() {
                     </b>
                   </div>
                 </div>
+                )}
               </div>
               <div className="dash-plan-actions">
                 <button className="btn btn-em" type="button" onClick={() => navigate('/app/billing')}>

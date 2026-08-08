@@ -64,6 +64,22 @@ export default function ProfileBuild() {
   const profileRef = useRef({});
   const started = useRef(false);
   const noteTimer = useRef(null);
+  /* Abandoning onboarding mid-question used to fire a burst of setState calls on
+     an unmounted component: the note timer was only ever cleared by the *next*
+     bumpUnd, confirmField's two nested timeouts kept no handle at all, and the
+     `await sleep(...)` chains in askQ/answer simply carried on. `alive` gates
+     the async continuations; fieldTimers collects the rest. */
+  const alive = useRef(true);
+  const fieldTimers = useRef([]);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+      clearTimeout(noteTimer.current);
+      fieldTimers.current.forEach(clearTimeout);
+      fieldTimers.current = [];
+    };
+  }, []);
   const replyRef = useRef(createReplyPicker());
 
   const scrollToBottom = () => {
@@ -126,10 +142,14 @@ export default function ProfileBuild() {
     setSectionsOpen((o) => ({ ...o, [q.section]: true }));
     if (animate && !reduce) {
       setFields((f) => ({ ...f, [key]: { status: 'building', text } }));
-      setTimeout(() => {
+      fieldTimers.current.push(setTimeout(() => {
+        if (!alive.current) return;
         setFields((f) => ({ ...f, [key]: { status: 'on', text, justin: true } }));
-        setTimeout(() => setFields((f) => ({ ...f, [key]: { ...f[key], justin: false } })), 800);
-      }, 560);
+        fieldTimers.current.push(setTimeout(() => {
+          if (!alive.current) return;
+          setFields((f) => ({ ...f, [key]: { ...f[key], justin: false } }));
+        }, 800));
+      }, 560));
     } else {
       setFields((f) => ({ ...f, [key]: { status: 'on', text } }));
     }
@@ -184,7 +204,7 @@ export default function ProfileBuild() {
     if (i >= QUESTION_COUNT) { finish(); return; }
     const q = QUESTIONS[i];
     setTyping(true);
-    await sleep(820);
+    await sleep(820); if (!alive.current) return;
     setTyping(false);
     addAlly(questionText(q));
     if (q.prompt) addAlly(q.prompt);
@@ -222,20 +242,20 @@ export default function ProfileBuild() {
     const nextQi = i + 1;
     qiRef.current = nextQi;
 
-    await sleep(600);
+    await sleep(600); if (!alive.current) return;
     const answered = QUESTIONS.filter((x) => profileRef.current[x.key] !== undefined).length;
     bumpUnd(Math.round((answered / QUESTION_COUNT) * 100), 'Ally learned something new');
 
     setTyping(true);
-    await sleep(900);
+    await sleep(900); if (!alive.current) return;
     setTyping(false);
     if (nextQi < QUESTION_COUNT) {
       addAlly(replyRef.current(q.key, replyInput, { first }));
-      await sleep(640);
+      await sleep(640); if (!alive.current) return;
       askQ(nextQi);
     } else {
       addAlly(replyRef.current(q.key, replyInput, { first }));
-      await sleep(640);
+      await sleep(640); if (!alive.current) return;
       finish();
     }
   }, [addMe, confirmField, bumpUnd, addAlly, askQ, finish, first]);
@@ -257,9 +277,9 @@ export default function ProfileBuild() {
     started.current = true;
     (async () => {
       addAlly(`Welcome to GoXL AI, ${first}.`);
-      await sleep(700);
+      await sleep(700); if (!alive.current) return;
       addAlly('Every entrepreneur has a unique story, a different challenge, and a bold vision for the future. In just a few minutes, help me understand yours.');
-      await sleep(900);
+      await sleep(900); if (!alive.current) return;
       askQ(0);
     })();
   }, [introReady]);
@@ -464,6 +484,7 @@ export default function ProfileBuild() {
             <input
               className="ob-other"
               type="text"
+              aria-label={q.otherPlaceholder || 'Tell us more'}
               value={otherText}
               placeholder={q.otherPlaceholder || 'Tell me more…'}
               onChange={(e) => setOtherText(e.target.value)}
@@ -530,9 +551,13 @@ export default function ProfileBuild() {
 
   return (
     <section className="view chat-view active" id="v-profile">
+      {/* This step had no h1 at all — every sibling guided page has one, so a
+          screen-reader user landing here got no page title. */}
+      <h1 className="sr-only">Building your founder profile</h1>
       <div className="chat">
         <div className="chat-main">
-          <div className="chat-scroll" ref={scrollRef} aria-live="polite">
+          {/* aria-live alone announced nothing useful without a role or a name. */}
+          <div className="chat-scroll" ref={scrollRef} role="log" aria-live="polite" aria-label="Your conversation with Ally">
             {messages.map((m, i) => (
               <div key={i} className={`msg ${m.who === 'me' ? 'me' : 'ally'}`}>
                 <span className={`m-av ${m.who === 'me' ? 'me' : 'ally'}`}>{m.who === 'me' ? initial : 'A'}</span>
@@ -554,7 +579,7 @@ export default function ProfileBuild() {
         </div>
 
         <aside className="kg-panel prof-panel" aria-label="Your Founder DNA">
-          <h3>Building Your Founder DNA</h3>
+          <h2>Building Your Founder DNA</h2>
           <p className="kp-sub">Every answer helps Ally understand how you think, build, and lead.</p>
           <div className="understanding">
             <div className="und-row"><span className="und-l">Understanding</span><span className="und-pct">{undDisplay}%</span></div>

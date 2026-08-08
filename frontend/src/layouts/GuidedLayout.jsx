@@ -111,7 +111,7 @@ export default function GuidedLayout() {
         </a>
 
         <div className="gn-center">
-          <button className="gn-back" onClick={handleBack} title="Go back">
+          <button className="gn-back" type="button" onClick={handleBack} aria-label="Go back" title="Go back">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <polyline points="15 18 9 12 15 6"/>
             </svg>
@@ -127,9 +127,9 @@ export default function GuidedLayout() {
         <button className="gn-exit" onClick={handleExit}>Exit</button>
       </nav>
 
-      <div className="view-wrap" style={{ position: 'relative', zIndex: 1, flex: 1, minHeight: 0 }}>
+      <main id="main-content" tabIndex={-1} className="view-wrap" style={{ position: 'relative', zIndex: 1, flex: 1, minHeight: 0 }}>
         <Outlet />
-      </div>
+      </main>
     </div>
   );
 }

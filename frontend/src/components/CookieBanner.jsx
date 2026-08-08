@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { triggerTrackingScripts } from '../utils/cookieUtils';
 
 export default function CookieBanner() {
@@ -6,6 +6,8 @@ export default function CookieBanner() {
   const [showCustomize, setShowCustomize] = useState(false);
   const [analytics, setAnalytics] = useState(false);
   const [marketing, setMarketing] = useState(false);
+  const cardRef = useRef(null);
+  const restoreFocusTo = useRef(null);
 
   useEffect(() => {
     // 1. Check if user already set their cookie preferences
@@ -15,7 +17,7 @@ export default function CookieBanner() {
         const parsed = JSON.parse(savedConsent);
         // Trigger scripts if consent was previously granted
         triggerTrackingScripts(parsed);
-      } catch (e) {
+      } catch {
         // Fallback for corrupted data
         setIsOpen(true);
       }
@@ -24,6 +26,45 @@ export default function CookieBanner() {
       setIsOpen(true);
     }
   }, []);
+
+  /* This renders over every route from App.jsx and blocks the page visually,
+     but had none of the behaviour that makes a dialog a dialog: focus stayed
+     wherever it was, Tab walked straight out into the page behind, and focus
+     was never returned afterwards. A keyboard user could tab the entire site
+     underneath a consent gate without ever reaching its buttons.
+
+     Deliberately NO Escape-to-close: silently dismissing a consent gate would
+     record no choice at all. The buttons are the only way out. */
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    restoreFocusTo.current = document.activeElement;
+
+    const SELECTOR = 'button:not([disabled]), input:not([disabled]), a[href]';
+    const first = cardRef.current?.querySelector(SELECTOR);
+    first?.focus();
+
+    const onKeyDown = (e) => {
+      if (e.key !== 'Tab' || !cardRef.current) return;
+      const items = [...cardRef.current.querySelectorAll(SELECTOR)]
+        .filter(el => el.offsetParent !== null);
+      if (!items.length) return;
+      const firstEl = items[0];
+      const lastEl = items[items.length - 1];
+      if (e.shiftKey && document.activeElement === firstEl) {
+        e.preventDefault();
+        lastEl.focus();
+      } else if (!e.shiftKey && document.activeElement === lastEl) {
+        e.preventDefault();
+        firstEl.focus();
+      }
+    };
+
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      if (restoreFocusTo.current instanceof HTMLElement) restoreFocusTo.current.focus();
+    };
+  }, [isOpen]);
 
   const savePreferences = (preferences) => {
     localStorage.setItem('ally_cookie_consent', JSON.stringify(preferences));
@@ -64,8 +105,14 @@ export default function CookieBanner() {
   if (!isOpen) return null;
 
   return (
-    <div className="cookie-banner-overlay" role="dialog" aria-labelledby="cookie-banner-title">
-      <div className="cookie-banner-card">
+    <div
+      className="cookie-banner-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="cookie-banner-title"
+      aria-describedby="cookie-banner-desc"
+    >
+      <div className="cookie-banner-card" ref={cardRef}>
         <div className="cookie-banner-header">
           <div className="cookie-banner-icon-wrapper">
             <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" className="text-emerald">
@@ -75,22 +122,25 @@ export default function CookieBanner() {
           </div>
           <div className="cookie-banner-title-area">
             <h3 id="cookie-banner-title">We value your privacy</h3>
-            <p className="cookie-banner-desc">
+            <p className="cookie-banner-desc" id="cookie-banner-desc">
               We use cookies to enhance your experience, analyze site usage, and support our marketing efforts. By default, non-essential cookies are blocked.
             </p>
           </div>
         </div>
 
         {showCustomize && (
-          <div className="cookie-customize-panel">
+          <div className="cookie-customize-panel" id="cookie-customize-panel">
             <div className="cookie-option">
               <div className="cookie-option-info">
                 <span className="cookie-option-name">Essential Cookies</span>
                 <span className="cookie-option-desc">Necessary for the platform to function. Cannot be disabled.</span>
               </div>
+              {/* The label wraps only the visual slider span — the visible name
+                  sits in a sibling div — so without aria-label all three of
+                  these announced as a bare "checkbox" on a consent surface. */}
               <label className="cookie-switch disabled">
-                <input type="checkbox" checked disabled />
-                <span className="cookie-slider"></span>
+                <input type="checkbox" checked disabled readOnly aria-label="Essential cookies (always on)" />
+                <span className="cookie-slider" aria-hidden="true"></span>
               </label>
             </div>
 
@@ -100,12 +150,13 @@ export default function CookieBanner() {
                 <span className="cookie-option-desc">Help us understand how visitors interact with the platform.</span>
               </div>
               <label className="cookie-switch">
-                <input 
-                  type="checkbox" 
-                  checked={analytics} 
-                  onChange={(e) => setAnalytics(e.target.checked)} 
+                <input
+                  type="checkbox"
+                  aria-label="Performance and analytics cookies"
+                  checked={analytics}
+                  onChange={(e) => setAnalytics(e.target.checked)}
                 />
-                <span className="cookie-slider"></span>
+                <span className="cookie-slider" aria-hidden="true"></span>
               </label>
             </div>
 
@@ -115,12 +166,13 @@ export default function CookieBanner() {
                 <span className="cookie-option-desc">Used to deliver relevant advertisements and track campaigns.</span>
               </div>
               <label className="cookie-switch">
-                <input 
-                  type="checkbox" 
-                  checked={marketing} 
-                  onChange={(e) => setMarketing(e.target.checked)} 
+                <input
+                  type="checkbox"
+                  aria-label="Marketing and advertising cookies"
+                  checked={marketing}
+                  onChange={(e) => setMarketing(e.target.checked)}
                 />
-                <span className="cookie-slider"></span>
+                <span className="cookie-slider" aria-hidden="true"></span>
               </label>
             </div>
           </div>
@@ -128,10 +180,12 @@ export default function CookieBanner() {
 
         <div className="cookie-banner-actions">
           <div className="cookie-banner-left-actions">
-            <button 
-              className="cookie-btn cookie-btn-link" 
+            <button
+              className="cookie-btn cookie-btn-link"
               onClick={() => setShowCustomize(!showCustomize)}
               type="button"
+              aria-expanded={showCustomize}
+              aria-controls="cookie-customize-panel"
             >
               {showCustomize ? 'Hide Customization' : 'Customize Preferences'}
             </button>

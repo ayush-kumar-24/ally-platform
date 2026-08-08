@@ -263,7 +263,7 @@ export default function LandingPage() {
     }
   };
 
-  const runDemoCycle = (idx, force = false) => {
+  const runDemoCycle = (idx) => {
     clearTimers();
     const d = DIMS[idx];
     if (!d) return;
@@ -395,13 +395,17 @@ export default function LandingPage() {
           <div className="lnl-mark">Go<span className="x">XL</span></div>
         </a>
 
-        <div className="lp-nav-links" role="list">
-          <a href="#lp-story" onClick={(e) => { e.preventDefault(); scrollToId('lp-story'); }}>Our Story</a>
-          <a href="#lp-engine" onClick={(e) => { e.preventDefault(); scrollToId('lp-engine'); }}>Inside the Engine</a>
-          <a href="#lp-features" onClick={(e) => { e.preventDefault(); scrollToId('lp-features'); }}>Why Ally</a>
-          <a href="#lp-how" onClick={(e) => { e.preventDefault(); scrollToId('lp-how'); }}>The Clarity Method</a>
-          <a href="#lp-final" onClick={(e) => { e.preventDefault(); scrollToId('lp-final'); }}>Get Started</a>
-        </div>
+        {/* role="list" on a div whose children are bare <a>s breaks the
+            accessibility tree contract (a list must contain listitems), so the
+            count was reported wrong or not at all. Real markup instead — the
+            footer at the bottom of this file already does it this way. */}
+        <ul className="lp-nav-links">
+          <li><a href="#lp-story" onClick={(e) => { e.preventDefault(); scrollToId('lp-story'); }}>Our Story</a></li>
+          <li><a href="#lp-engine" onClick={(e) => { e.preventDefault(); scrollToId('lp-engine'); }}>Inside the Engine</a></li>
+          <li><a href="#lp-features" onClick={(e) => { e.preventDefault(); scrollToId('lp-features'); }}>Why Ally</a></li>
+          <li><a href="#lp-how" onClick={(e) => { e.preventDefault(); scrollToId('lp-how'); }}>The Clarity Method</a></li>
+          <li><a href="#lp-final" onClick={(e) => { e.preventDefault(); scrollToId('lp-final'); }}>Get Started</a></li>
+        </ul>
 
         <div className={`lp-nav-cta ${scrolled ? 'lp-show-auth' : ''}`}>
           <button className="lp-auth-btn lp-nav-auth" onClick={goToLogin} data-lp-login="google" type="button">
@@ -473,10 +477,12 @@ export default function LandingPage() {
         </div>
 
         {/* scroll cue */}
-        <div className="lp-scroll-cue" aria-hidden="true" onClick={() => scrollToId('lp-engine')} style={{ cursor: 'pointer' }}>
+        {/* Was a click-only div that was also aria-hidden: clickable, but not
+            focusable, not keyboard-operable and invisible to assistive tech. */}
+        <button type="button" className="lp-scroll-cue" onClick={() => scrollToId('lp-engine')} style={{ cursor: 'pointer', background: 'none', border: 0 }}>
           <span>Scroll to explore</span>
-          <div className="track"><i></i></div>
-        </div>
+          <div className="track" aria-hidden="true"><i></i></div>
+        </button>
       </section>
 
       {/* ── OUR STORY · Why GoXL exists ──────────────────────────── */}
@@ -887,7 +893,7 @@ export default function LandingPage() {
               <a className="footer-mail" href="mailto:info@goxl.in">info@goxl.in</a>
             </div>
             <div>
-              <h4>Product</h4>
+              <h3>Product</h3>
               <ul>
                 <li><a href="#lp-engine" onClick={(e) => { e.preventDefault(); scrollToId('lp-engine'); }}>The Engine</a></li>
                 <li><a href="#lp-how" onClick={(e) => { e.preventDefault(); scrollToId('lp-how'); }}>How it Works</a></li>
@@ -896,7 +902,7 @@ export default function LandingPage() {
               </ul>
             </div>
             <div>
-              <h4>Company</h4>
+              <h3>Company</h3>
               <ul>
                 <li><a href="#lp-features" onClick={(e) => { e.preventDefault(); scrollToId('lp-features'); }}>What Ally does</a></li>
                 <li><a href="#lp-how" onClick={(e) => { e.preventDefault(); scrollToId('lp-how'); }}>Our method</a></li>
@@ -904,7 +910,7 @@ export default function LandingPage() {
               </ul>
             </div>
             <div>
-              <h4>Get started</h4>
+              <h3>Get started</h3>
               <ul>
                 <li><a href="#lp-final" onClick={(e) => { e.preventDefault(); scrollToId('lp-final'); }}>Start a diagnosis</a></li>
                 <li><a href="#lp-final" onClick={(e) => { e.preventDefault(); scrollToId('lp-final'); }}>See a sample report</a></li>

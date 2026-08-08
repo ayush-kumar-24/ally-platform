@@ -6,7 +6,7 @@
  * never held the progress in the first place.
  */
 
-import { get, post, prune } from './api';
+import { get, post } from './api';
 
 /** Begin a new diagnosis. Returns the first question. */
 export function startDiagnosis() {

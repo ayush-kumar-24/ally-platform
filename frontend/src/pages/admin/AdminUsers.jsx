@@ -137,11 +137,20 @@ export default function AdminUsers() {
                     {COLUMNS.map(c => (
                       <th
                         key={c.key}
+                        scope="col"
                         className={`${c.sortable ? '' : 'adm-nosort'} ${c.numeric ? 'adm-num' : ''}`}
-                        onClick={c.sortable ? () => toggleSort(c.key) : undefined}
                         aria-sort={sortBy === c.key ? (descending ? 'descending' : 'ascending') : 'none'}
                       >
-                        {c.label}{sortBy === c.key ? (descending ? ' ↓' : ' ↑') : ''}
+                        {/* Sorting was an onClick on the <th> itself — not
+                            focusable and not keyboard-operable. The button is
+                            the control; the th keeps aria-sort. */}
+                        {c.sortable ? (
+                          <button type="button" className="adm-sort-btn" onClick={() => toggleSort(c.key)}>
+                            {c.label}{sortBy === c.key ? (descending ? ' ↓' : ' ↑') : ''}
+                          </button>
+                        ) : (
+                          <>{c.label}</>
+                        )}
                       </th>
                     ))}
                   </tr>

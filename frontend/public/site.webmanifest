@@ -1,0 +1,24 @@
+{
+  "name": "Ally — Founder DNA Platform by GoXL",
+  "short_name": "Ally",
+  "description": "AI that diagnoses the founder first, then the business.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#06140d",
+  "theme_color": "#06140d",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/ally-logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

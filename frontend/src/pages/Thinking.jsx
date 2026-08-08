@@ -3,10 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { getBusinessPillars } from '../services/reference';
 import { getLatestReport } from '../services/reports';
 
+/* "(6/10)" was a fixed string shown to every founder regardless of how much had
+   actually been scanned, as was the "Root cause hypothesis formed" step. The
+   backend does not report per-step progress during this wait, so the labels no
+   longer quote counts they cannot know. */
 const TIMELINE = [
   { label: 'Founder DNA mapped', done: true },
-  { label: 'Business dimensions scanned (6/10)', done: true },
-  { label: 'Root cause hypothesis formed', now: true },
+  { label: 'Business dimensions scanned', done: true },
+  { label: 'Forming a root-cause hypothesis', now: true },
   { label: 'Cross-referencing evidence', done: false },
   { label: 'Generating clarity report', done: false },
 ];
@@ -18,14 +22,26 @@ export default function Thinking() {
   const [dimensions, setDimensions] = useState([]);
   const [waited, setWaited] = useState(0);
 
+  /* This mapped each pillar down to a bare string, but the markup below reads
+     `s.name` and `s.status` off each item — so every row rendered an empty name
+     and a status pill permanently reading "done". Keep the shape the markup
+     expects, and tolerate the API returning plain strings. */
   useEffect(() => {
+    let cancelled = false;
     getBusinessPillars()
-      .then(res => setDimensions((res.pillars ?? res.items ?? []).map(p => p.name ?? p.label ?? p)))
-      .catch(() => setDimensions([]));
+      .then(res => {
+        if (cancelled) return;
+        setDimensions((res.pillars ?? res.items ?? []).map(p => (
+          typeof p === 'string'
+            ? { name: p, status: null }
+            : { name: p.name ?? p.label ?? '', status: p.status ?? null }
+        )));
+      })
+      .catch(() => { if (!cancelled) setDimensions([]); });
+    return () => { cancelled = true; };
   }, []);
 
   const navigate = useNavigate();
-  const [confidence, setConfidence] = useState(0);
   // This screen is the wait between the last answer and the report existing, so
   // it polls for the real thing rather than running a fixed-length animation and
   // hoping the report arrived. Gives up after ~2 minutes rather than spinning
@@ -49,15 +65,17 @@ export default function Thinking() {
 
   const stalled = waited > 30;
 
-  const confRef = useRef(null);
   const scanRefs = useRef([]);
 
   useEffect(() => {
     // Indeterminate progress: the real work happens server-side and does not
     // report a percentage, so showing a specific number would be theatre.
-    scanRefs.current.forEach((el, i) => {
-      if (el) setTimeout(() => { el.style.width = '100%'; }, 400 + i * 150);
-    });
+    // Timers are collected and cleared — this effect re-runs whenever the
+    // dimension count changes, and previously left one orphan per row behind.
+    const timers = scanRefs.current.map((el, i) => (
+      el ? setTimeout(() => { el.style.width = '100%'; }, 400 + i * 150) : null
+    ));
+    return () => timers.forEach(t => t && clearTimeout(t));
   }, [dimensions.length]);
 
   return (
@@ -114,7 +132,12 @@ export default function Thinking() {
                   <div key={i} className={`scan-c${s.status === 'busy' ? ' busy' : ' ok'}`}>
                     <div className="s-top">
                       <span className="s-n">{s.name}</span>
-                      <span className={`s-st ${s.status}`}>{s.status === 'busy' ? 'scanning' : 'done'}</span>
+                      {/* Only claim a state the server actually reported. This
+                          used to print "done" next to every dimension whether or
+                          not anything had been scanned. */}
+                      {s.status && (
+                        <span className={`s-st ${s.status}`}>{s.status === 'busy' ? 'scanning' : 'done'}</span>
+                      )}
                     </div>
                     <div className="s-bar"><i ref={el => scanRefs.current[i] = el} /></div>
                   </div>
@@ -122,14 +145,23 @@ export default function Thinking() {
               </div>
             </div>
 
+            {/* "Confidence Evolution" showed a hard 0% and a "2 still
+                processing" count that were both fixed strings — setConfidence
+                was never called and nothing tracked per-dimension progress. The
+                server does not expose a confidence figure during the wait, so
+                this now says it is working rather than quoting a number it does
+                not have. */}
             <div className="panel" style={{ marginTop: 12 }}>
-              <h3>Confidence Evolution</h3>
+              <h3>Reasoning depth</h3>
               <div className="conf-evo">
-                <div className="ce-big">{confidence}<span className="u">%</span></div>
                 <div className="ce-track">
-                  <div className="ce-fill" style={{ width: `${confidence}%`, transition: 'width 1.4s cubic-bezier(.22,1,.3,1)' }} />
+                  <div className="ce-fill ce-indeterminate" />
                 </div>
-                <div className="ce-note">Based on {dimensions.length} scanned dimensions · 2 still processing</div>
+                <div className="ce-note">
+                  {dimensions.length
+                    ? `Weighing ${dimensions.length} business dimensions against your founder profile.`
+                    : 'Weighing your business dimensions against your founder profile.'}
+                </div>
               </div>
             </div>
 

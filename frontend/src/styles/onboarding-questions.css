@@ -66,7 +66,7 @@
   border-radius: 14px;
   padding: 11px 16px;
   color: #eaf3ee;
-  font-family: 'Inter', system-ui, sans-serif;
+  font-family: var(--body);
   font-size: 14.5px;
   outline: none;
   transition: border-color .25s;
@@ -130,7 +130,7 @@
   border-radius: 14px;
   padding: 10px 16px;
   color: #eaf3ee;
-  font-family: 'Inter', system-ui, sans-serif;
+  font-family: var(--body);
   font-size: 14px;
   outline: none;
   transition: border-color .25s;
@@ -227,7 +227,7 @@
   border-radius: 12px;
   padding: 10px 13px;
   color: #eaf3ee;
-  font-family: 'Inter', system-ui, sans-serif;
+  font-family: var(--body);
   font-size: 13.5px;
   line-height: 1.5;
   resize: vertical;
@@ -257,6 +257,90 @@
 .star:focus-visible { outline: 2px solid rgba(16, 185, 129, .7); outline-offset: 1px; }
 .star:disabled { cursor: not-allowed; }
 .stars-label { margin-left: 8px; font-size: 12.5px; font-weight: 500; color: #a7c0b4; }
+
+/* --- the Feedback page (sidebar: YOUR FEEDBACK) ---------------------------- */
+.fb-page-grid {
+  display: grid;
+  grid-template-columns: 1.55fr 1fr;
+  gap: 18px;
+  align-items: start;
+}
+
+/* NOTE: this page renders on the LIGHT app theme inside a white .hp-card
+   (help.css), not on the dark modal surface. Everything here uses the light
+   tokens -- --ink / --muted-2 / --bd -- because the translucent-white values
+   the dark panels use (rgba(255,255,255,.05) fills, #eaf3ee text) turn into
+   near-invisible on white: unselected chips read as blurred ghosts and typed
+   textarea text disappears entirely against the box it sits in. */
+.fb-topics { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.fb-topic {
+  padding: 8px 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  font-family: var(--body);
+  color: var(--ink, #16241c);
+  background: #fdfcf7;
+  border: 1px solid var(--bd, #e7e0d6);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all .18s var(--ease);
+}
+.fb-topic:hover {
+  border-color: var(--emerald, #10b981);
+  background: var(--ivory-2, #fbf7f2);
+}
+.fb-topic.on {
+  color: #ffffff;
+  background: var(--emerald-dark, #0c7a54);
+  border-color: var(--emerald-dark, #0c7a54);
+}
+.fb-topic:focus-visible { outline: 2px solid var(--emerald, #10b981); outline-offset: 2px; }
+
+.fb-textarea {
+  width: 100%;
+  margin-top: 14px;
+  background: #ffffff;
+  border: 1px solid var(--bd, #e7e0d6);
+  border-radius: 12px;
+  padding: 12px 14px;
+  color: var(--ink, #16241c);
+  font-family: var(--body);
+  font-size: 13.5px;
+  line-height: 1.6;
+  resize: vertical;
+  outline: none;
+  transition: border-color .2s;
+}
+.fb-textarea::placeholder { color: var(--muted-2, #6c7a70); }
+.fb-textarea:focus { border-color: var(--emerald, #10b981); }
+
+.fb-send-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 14px;
+}
+.fb-send-note { font-size: 12px; line-height: 1.45; color: var(--muted-2, #6c7a70); }
+.fb-send-row .btn:disabled { opacity: .45; cursor: not-allowed; }
+
+.fb-aside-copy { margin: 12px 0 0; font-size: 13px; line-height: 1.6; color: var(--muted, #556458); }
+.fb-aside-copy.small { font-size: 12.5px; color: var(--muted-2, #6c7a70); }
+.fb-rate-btn { margin-top: 14px; width: 100%; justify-content: center; }
+.fb-aside-divider {
+  height: 1px;
+  margin: 18px 0 2px;
+  background: var(--bd, #e7e0d6);
+}
+
+@media (max-width: 900px) {
+  .fb-page-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 560px) {
+  .fb-send-row { flex-direction: column; align-items: stretch; }
+  .fb-send-row .btn { width: 100%; justify-content: center; }
+  .fb-send-note { order: 2; text-align: center; }
+}
 
 /* the dashboard's own feedback card */
 .dash-feedback-open {
