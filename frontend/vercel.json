@@ -6,7 +6,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://REPLACE-ME.awsapprunner.com/api/:path*"
+      "destination": "https://api.goxlally.ai/api/:path*"
     },
     {
       "source": "/((?!.*\\.).*)",
