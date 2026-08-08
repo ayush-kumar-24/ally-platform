@@ -77,7 +77,7 @@ Values that must differ from `backend/.env.example`'s development defaults:
 | `SUPABASE_JWT_SECRET` | Supabase → Settings → API → JWT Secret | verifies the token the browser presents |
 | `SECRET_KEY` | `python -c "import secrets; print(secrets.token_urlsafe(48))"` | signs this app's own tokens |
 | `DATABASE_URL` | the **6543** transaction-pooler URI, not 5432 | see above |
-| `CORS_ORIGINS` | not required | the Vercel rewrite keeps the browser same-origin, so nothing cross-origin ever reaches this API |
+| `CORS_ORIGINS` | `https://goxlally.ai,https://www.goxlally.ai` | belt-and-suspenders: the Vercel rewrite keeps normal browser traffic same-origin so this shouldn't matter day to day, but anything that calls the API directly (not through the rewrite) needs these two allowed |
 | `ANTHROPIC_API_KEY` | | diagnosis reasoning + the founder's first impression |
 | `OPENAI_API_KEY` | | chat + voice transcription |
 

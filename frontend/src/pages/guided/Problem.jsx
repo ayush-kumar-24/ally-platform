@@ -2,9 +2,13 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { updateBusinessSection } from '../../services/profile';
+import { primary } from '../../utils/profileDisplay';
 
 function buildExamples(profile) {
-  const suggestions = [profile.challenges, 'Growth flatlined', 'Users don\'t activate', 'Cash feels tight'].filter(Boolean);
+  // profile.challenges is a jsonb array (current_challenges) -- primary() reads
+  // it back as one plain string instead of handing the raw array to setProblem,
+  // which made `problem` a non-string and crashed handleContinue's `.trim()`.
+  const suggestions = [primary('challenges', profile.challenges), 'Growth flatlined', 'Users don\'t activate', 'Cash feels tight'].filter(Boolean);
   return Array.from(new Set(suggestions)).slice(0, 3);
 }
 
