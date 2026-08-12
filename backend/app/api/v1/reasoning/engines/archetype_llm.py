@@ -35,6 +35,7 @@ from decimal import Decimal
 from app.api.v1.reasoning.engines.archetype import ArchetypeEngine, ArchetypeMatch
 from app.core.logger import logger
 from app.services.llm.base import LLMError, LLMMessage, LLMRequest, LLMRole
+from app.services.llm.text import run_sync
 
 _SYSTEM = (
     "You classify a startup founder into exactly one archetype from a fixed list. "
@@ -133,7 +134,12 @@ class LLMArchetypeAssigner:
             response_format={"type": "json_object"},
         )
         # The pipeline stage is synchronous; the provider interface is not.
-        response = asyncio.run(
+        # `run_sync` (not a bare asyncio.run) because this is reached from
+        # ReasoningService.analyze_session, itself already running on an
+        # active event loop -- confirmed live: a bare asyncio.run() here
+        # raised "cannot be called from a running event loop" every time,
+        # even after fixing the same bug one level up in trigger.py.
+        response = run_sync(
             asyncio.wait_for(self.provider.generate(request), self.timeout_seconds)
         )
         return json.loads(response.text)
