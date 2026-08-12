@@ -10,10 +10,13 @@
  *    dev proxy forwards to the FastAPI backend on :8000 — see vite.config.js)
  *  - 20s request timeout, JSON headers
  *  - Authorization: Bearer <access_token> from localStorage on every request
- *  - Automatic refresh: on 401, trades the refresh token at POST /auth/refresh
- *    (rotating — each refresh token works exactly once), stores the new pair,
- *    and retries the original request. Concurrent 401s share ONE refresh
- *    flight so a burst of requests can't burn the single-use token.
+ *  - Automatic refresh: on 401, calls POST /auth/refresh — the refresh token
+ *    itself is never seen here, it rides as the HttpOnly ally_refresh_token
+ *    cookie the backend set on login (see api/v1/auth/routes.py), which is
+ *    why every request below sets withCredentials: true. Stores the new
+ *    access token and retries the original request. Concurrent 401s share
+ *    ONE refresh flight so a burst of requests can't burn the single-use
+ *    (rotating) refresh token.
  *  - Centralized error handling: every failure is normalized to ApiError
  *    { status, detail, data } — callers never touch axios error internals.
  */
@@ -27,22 +30,33 @@ const BASE_URL =
 const TIMEOUT_MS = 20_000;
 
 // ── Token storage ────────────────────────────────────────────────────────────
+//
+// The refresh token is NOT stored here, or anywhere in JS-reachable storage
+// at all -- it used to live in localStorage alongside the access token,
+// which is readable by any script on the page (XSS, a compromised
+// dependency, a malicious extension). It now lives only in the HttpOnly
+// ally_refresh_token cookie the backend sets; this file never reads or
+// writes it, it just makes sure every auth-relevant request carries cookies
+// (withCredentials below) so the browser attaches it automatically.
+//
+// The access token stays in localStorage: short-lived (minutes, not the
+// refresh token's 30 days), and every request already needs it read
+// synchronously for the Authorization header, which a cookie can't do for a
+// value JS needs to put in a header rather than have the browser attach.
 
 const ACCESS_KEY = 'ally.access_token';
-const REFRESH_KEY = 'ally.refresh_token';
 
 export const getAccessToken = () => localStorage.getItem(ACCESS_KEY);
-export const getRefreshToken = () => localStorage.getItem(REFRESH_KEY);
 
-/** Store a token pair (e.g. from /auth/session, /auth/resume, /auth/refresh). */
-export function setTokens({ access_token, refresh_token }) {
+/** Store the access token (e.g. from /auth/session, /auth/resume, /auth/refresh).
+ *  The refresh token in the same response body is always null -- see
+ *  TokenPair's docstring on the backend -- so there is nothing to store for it. */
+export function setTokens({ access_token }) {
   if (access_token) localStorage.setItem(ACCESS_KEY, access_token);
-  if (refresh_token) localStorage.setItem(REFRESH_KEY, refresh_token);
 }
 
 export function clearTokens() {
   localStorage.removeItem(ACCESS_KEY);
-  localStorage.removeItem(REFRESH_KEY);
 }
 
 /** Optional app-level hook: called once when a session can't be recovered
@@ -94,6 +108,10 @@ const api = axios.create({
   baseURL: BASE_URL,
   timeout: TIMEOUT_MS,
   headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+  // Required for the browser to send/receive the HttpOnly ally_refresh_token
+  // cookie at all -- without this, /auth/refresh, /resume and /logout would
+  // never see it even though the backend sets and reads it correctly.
+  withCredentials: true,
 });
 
 // Attach Bearer token
@@ -108,21 +126,19 @@ api.interceptors.request.use((config) => {
 let refreshFlight = null; // Promise<string new access token> while a refresh is in progress
 
 async function refreshTokens() {
-  const refresh_token = getRefreshToken();
-  if (!refresh_token) {
-    // No wired onAuthFailure handler meant this path used to fail silently on
-    // whatever page the founder happened to be on -- e.g. a diagnosis page
-    // reporting "couldn't reach the server" when the real problem was simply
-    // "you are not signed in."
-    authFailureHandler?.();
-    throw new ApiError(401, 'No session — please sign in.');
-  }
+  // No client-side way to pre-check "is there a session" anymore -- the
+  // refresh token lives only in the HttpOnly cookie, which JS cannot read
+  // (that's the point). The backend is the one that finds out whether it's
+  // there and valid; a missing/expired/revoked cookie surfaces as this call
+  // itself failing below, same as any other rejected refresh.
   try {
     // Bare axios (not `api`): must not recurse through these interceptors.
+    // withCredentials still required here for the same reason as the `api`
+    // instance -- this is the call that actually reads/sets the cookie.
     const { data } = await axios.post(
       `${BASE_URL}/auth/refresh`,
-      { refresh_token },
-      { timeout: TIMEOUT_MS, headers: { 'Content-Type': 'application/json' } },
+      {},
+      { timeout: TIMEOUT_MS, headers: { 'Content-Type': 'application/json' }, withCredentials: true },
     );
     setTokens(data);
     return data.access_token;
