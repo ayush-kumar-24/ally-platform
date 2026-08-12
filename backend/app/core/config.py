@@ -46,6 +46,19 @@ class Settings(BaseSettings):
     SUPABASE_URL: str = ""
     SUPABASE_JWT_SECRET: str = ""
 
+    # Shared secret Supabase sends back on its Auth webhook (configured on the
+    # Supabase project's "Send webhook" auth hook). Verified against the
+    # `X-Webhook-Secret` header on every inbound call -- an unauthenticated
+    # caller must not be able to trigger someone else's account deletion by
+    # guessing a founder's Supabase user_id. Empty means the endpoint refuses
+    # every request rather than silently trusting an unsigned one.
+    SUPABASE_WEBHOOK_SECRET: str = ""
+
+    # Shared secret for internal-only endpoints with no founder in the request
+    # at all (the deletion-sweep trigger an external scheduler calls). Same
+    # fail-closed rule: empty means refuse, never "open by default".
+    INTERNAL_JOBS_SECRET: str = ""
+
     # --- Security ---
     # Signs the session tokens THIS backend issues (see below). Keep it secret.
     SECRET_KEY: str

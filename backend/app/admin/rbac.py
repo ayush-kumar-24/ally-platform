@@ -38,6 +38,13 @@ class Capability(str, Enum):
     EDIT_USER_PROFILE = "edit_user_profile"
     RESET_DIAGNOSIS = "reset_diagnosis"
     RESET_CONVERSATIONS = "reset_conversations"
+    # Recovery, not destruction -- same admin tier as the other "undo" actions
+    # above, not the super-admin-only DELETE_USER below. A founder whose
+    # Supabase identity was deleted by mistake (or a compromised account) has
+    # no way to log back in and cancel their own pending erasure; this is the
+    # only path back for them, so it deliberately is NOT locked behind the
+    # same tier as actions that destroy data.
+    CANCEL_DELETION = "cancel_deletion"
     # --- super-admin-only mutations -------------------------------------
     TRANSFER_CREDITS = "transfer_credits"
     MODIFY_SUBSCRIPTION = "modify_subscription"
@@ -60,6 +67,7 @@ _ADMIN: frozenset[Capability] = frozenset({
     Capability.EDIT_USER_PROFILE,
     Capability.RESET_DIAGNOSIS,
     Capability.RESET_CONVERSATIONS,
+    Capability.CANCEL_DELETION,
 })
 
 # Super Admin holds every capability -- stated as "all of them" so a capability

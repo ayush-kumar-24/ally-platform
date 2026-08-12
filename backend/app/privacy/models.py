@@ -46,10 +46,15 @@ class PrivacyState:
     processing_restricted_at: datetime | None
     deletion_requested_at: datetime | None
     deletion_scheduled_at: datetime | None
+    deletion_executed_at: datetime | None = None
 
     @property
     def deletion_pending(self) -> bool:
-        return self.deletion_requested_at is not None
+        """Requested, and the sweep has not yet run. Distinct from merely
+        "requested at some point" -- once executed, the request is history,
+        not a pending state that should still gate processing (may_process)
+        or read as cancellable."""
+        return self.deletion_requested_at is not None and self.deletion_executed_at is None
 
 
 @dataclass(frozen=True)

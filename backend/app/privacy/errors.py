@@ -22,3 +22,15 @@ class DeletionAlreadyRequestedError(PrivacyError):
 class FounderNotFoundError(PrivacyError):
     def __init__(self, founder_id: int):
         super().__init__(f"No founder {founder_id} exists.", status_code=404)
+
+
+class NoDeletionToCancelError(PrivacyError):
+    """Nothing pending: either never requested, or the sweep already ran --
+    cancelling after execution would be a no-op that reads like it undid
+    something it cannot actually undo."""
+
+    def __init__(self, founder_id: int):
+        super().__init__(
+            f"Founder {founder_id} has no pending deletion to cancel.",
+            status_code=409,
+        )

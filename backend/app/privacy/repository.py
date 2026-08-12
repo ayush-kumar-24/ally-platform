@@ -12,6 +12,7 @@ import abc
 import threading
 from datetime import datetime
 
+from app.privacy.errors import NoDeletionToCancelError
 from app.privacy.models import ExportBundle, PrivacyAction, PrivacyState
 
 
@@ -38,6 +39,18 @@ class PrivacyRepository(abc.ABC):
 
     @abc.abstractmethod
     def list_requests(self, founder_id: int) -> list[PrivacyAction]: ...
+
+    @abc.abstractmethod
+    def find_due_for_deletion(self, now: datetime) -> list[int]:
+        """founder_ids whose grace window has passed and whose sweep has not
+        yet run -- deletion_scheduled_at <= now AND deletion_executed_at IS
+        NULL. The scheduled-sweep caller's whole worklist."""
+
+    @abc.abstractmethod
+    def cancel_deletion(self, founder_id: int) -> PrivacyState:
+        """Clear a pending (not-yet-executed) deletion request. Refuses
+        silently-doing-nothing-useful once deletion_executed_at is set --
+        the sweep already ran, there is nothing left to cancel."""
 
 
 class InMemoryPrivacyRepository(PrivacyRepository):
@@ -75,7 +88,8 @@ class InMemoryPrivacyRepository(PrivacyRepository):
                 processing_restricted=restricted,
                 processing_restricted_at=at if restricted else None,
                 deletion_requested_at=current.deletion_requested_at,
-                deletion_scheduled_at=current.deletion_scheduled_at)
+                deletion_scheduled_at=current.deletion_scheduled_at,
+                deletion_executed_at=current.deletion_executed_at)
             self._states[founder_id] = state
             return state
 
@@ -105,3 +119,28 @@ class InMemoryPrivacyRepository(PrivacyRepository):
     def list_requests(self, founder_id: int) -> list[PrivacyAction]:
         with self._lock:
             return [r for r in reversed(self._requests) if r.founder_id == founder_id]
+
+    def find_due_for_deletion(self, now: datetime) -> list[int]:
+        with self._lock:
+            return sorted(
+                fid for fid, s in self._states.items()
+                if s.deletion_scheduled_at is not None
+                and s.deletion_scheduled_at <= now
+                and s.deletion_executed_at is None
+            )
+
+    def cancel_deletion(self, founder_id: int) -> PrivacyState:
+        with self._lock:
+            current = self.get_state(founder_id)
+            if not current.deletion_pending:
+                raise NoDeletionToCancelError(founder_id)
+            state = PrivacyState(
+                founder_id=founder_id,
+                processing_restricted=current.processing_restricted,
+                processing_restricted_at=current.processing_restricted_at,
+                deletion_requested_at=None,
+                deletion_scheduled_at=None,
+                deletion_executed_at=None,
+            )
+            self._states[founder_id] = state
+            return state

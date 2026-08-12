@@ -33,6 +33,7 @@ from app.api.v1.ally.rag.sql_repository import SqlVectorRetrievalRepository
 from app.api.v1.ally.prompts.grounding import default_grounded_prompt_manager
 from app.ai_chat.builders.context_window import ContextWindowBuilder
 from app.ai_chat.execution.chat_execution import ChatExecutionService
+from app.ai_chat.execution.llm_call_logging import record_chat_llm_call
 from app.ai_chat.repositories.sql_conversation import SqlConversationRepository
 from app.ai_chat.services.conversation import build_conversation_service
 from app.ai_chat.streaming.service import StreamingChatService
@@ -161,8 +162,21 @@ class Container:
             default_min_similarity=Decimal(str(settings.RETRIEVAL_MIN_SIMILARITY)),
         )
 
-    def knowledge_graph(self):
-        return self._kg_service
+    def knowledge_graph(self, db: Session | None = None):
+        """SQL-backed (root_cause<->problem via root_causes.problem_id,
+        root_cause<->intervention via interventions.root_cause_ids/
+        secondary_root_cause_ids -- real FK-shaped data, no new schema) when a
+        request DB session is available; otherwise the empty in-memory
+        fallback, same convention as retrieval(db)/memory(db). Partial
+        coverage: blind_spot and recommendation edges have no backing data
+        anywhere in the pipeline yet (see sql_repository.py's own note) and
+        stay empty either way. Request-scoped, not held in __init__, for the
+        same reason retrieval/memory aren't: it needs the request's own DB
+        session."""
+        if db is None:
+            return self._kg_service
+        from app.api.v1.ally.kg.sql_repository import SqlKnowledgeGraphRepository
+        return build_knowledge_graph_service(SqlKnowledgeGraphRepository(db))
 
     def prompt_manager(self):
         return self._prompt_manager
@@ -190,7 +204,7 @@ class Container:
             conversation_service=self.conversation_service(db),
             memory=self.memory(db),
             retrieval=self.retrieval(db),
-            knowledge_graph=self._kg_service,
+            knowledge_graph=self.knowledge_graph(db),
             attachments=self.attachment_service(db),
             planning=self.planning_service(db),
         )
@@ -201,13 +215,19 @@ class Container:
     def chat_execution(self, db: Session) -> ChatExecutionService:
         """Assemble a request-scoped ChatExecutionService: the per-request context
         builder, DB-backed conversation store, context-window builder, grounded
-        prompt manager and execution service."""
+        prompt manager and execution service. suggestion_service is wired here too
+        so send_message can generate suggestions right after a turn, while its
+        context_window/ai_response are actually available -- see
+        ChatExecutionService.send_message step 8."""
         return ChatExecutionService(
             context_builder=self.context_builder(db),
             conversation_service=self.conversation_service(db),
             context_window_builder=self.context_window_builder(db),
             prompt_manager=self._grounded_prompt_manager,
             execution=self._execution_service,
+            suggestion_service=self.suggestion_service(db),
+            call_logger=record_chat_llm_call,
+            memory=self.memory(db),
         )
 
     def streaming_chat(self, db: Session) -> StreamingChatService:
@@ -295,12 +315,14 @@ class Container:
         """Request-scoped panel service. The audit repository is DB-backed so the
         trail survives restarts."""
         from app.admin.conversations import SqlAlchemyConversationReadRepository
+        from app.privacy.db_repository import SqlAlchemyPrivacyRepository
         return AdminPanelService(
             SqlAlchemyAdminUserRepository(db),
             credits=self.credit_service(db),
             audit=AuditRecorder(SqlAlchemyPanelAuditRepository(db)),
             conversations=SqlAlchemyConversationReadRepository(db),
             report_regenerator=None,   # wire once the generator exposes a re-run entry point
+            privacy=SqlAlchemyPrivacyRepository(db),
         )
 
     def insights_service(self, db: Session):
