@@ -149,6 +149,54 @@ async function refreshTokens() {
   }
 }
 
+/**
+ * Restore a session purely from the HttpOnly refresh cookie -- for the
+ * moment the app mounts with no access token in localStorage (a fresh tab,
+ * or one that lost it) but the cookie may still be valid. Distinct from
+ * refreshTokens() above: that one fires reactively off a 401 mid-session and
+ * cascades into onAuthFailure when it fails; this one is a plain yes/no
+ * probe a caller (RequireAuth) makes ITS OWN decision from -- "no valid
+ * cookie" is an entirely normal, silent outcome here (most first visits),
+ * not a failure worth notifying anyone about.
+ *
+ * Bare axios, not `api`: must not recurse through the interceptor below,
+ * same reason as refreshTokens().
+ *
+ * Returns the founder object on success, or null on any failure (no cookie,
+ * expired, revoked, network error) -- never throws, so a caller can always
+ * just check truthiness rather than wrap this in try/catch.
+ */
+// Single-flight, same reason as refreshFlight below and the same bug shape:
+// the refresh token is single-use/rotating (routes.py: "the old refresh
+// token is revoked as part of this call"), so two concurrent resume calls
+// race on the SAME cookie value -- the first rotates it, the second is
+// then presenting an already-revoked token and gets a 401. Live-confirmed
+// this actually happens, not just a theoretical race: React 18 StrictMode
+// double-invokes effects in dev, so RequireAuth's mount fired resumeSession()
+// twice a few ms apart, and the app landed on the login page despite a
+// perfectly valid session existing seconds earlier. The same shape would hit
+// production too with two tabs mounting around the same moment. Sharing one
+// in-flight promise across every concurrent caller closes it the same way
+// refreshFlight already does for the 401-triggered path.
+let resumeFlight = null;
+
+export function resumeSession() {
+  resumeFlight ??= (async () => {
+    try {
+      const { data } = await axios.post(
+        `${BASE_URL}/auth/resume`,
+        {},
+        { timeout: TIMEOUT_MS, headers: { 'Content-Type': 'application/json' }, withCredentials: true },
+      );
+      setTokens(data);
+      return data.founder;
+    } catch {
+      return null;
+    }
+  })().finally(() => { resumeFlight = null; });
+  return resumeFlight;
+}
+
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
