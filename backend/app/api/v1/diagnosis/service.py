@@ -1,9 +1,11 @@
 """Business logic for the diagnosis assessment flow.
 
-Owns the transaction boundary: each public method commits once, or lets the
-exception propagate so `get_db` discards the connection with nothing partially
-written. In particular an answer and the session-progress update it causes are
-committed together -- never one without the other.
+Owns the transaction boundary. `submit_answer` commits in two short steps
+rather than one long one -- see its docstring for why: holding a single
+transaction open across the LLM calls in between let a pooled/proxied
+Postgres connection (Supabase's pooler, live-confirmed) get killed mid-query
+while idle-in-transaction, failing the whole request after the answer had
+already been written. Every other public method still commits once.
 """
 
 from datetime import datetime, timedelta, timezone
@@ -199,6 +201,19 @@ class DiagnosisService:
         scores it (persisted on the answer), and re-ranks the deterministic
         shortlist to pick the next question. It fails open to the deterministic
         pick on any error, so the flow always progresses.
+
+        Two commits, not one: the answer itself is written and committed
+        FIRST, before the two LLM calls below (the advisor pick, then
+        incremental confidence). Live-confirmed the old single-transaction
+        version could sit idle-in-transaction across both of those for tens of
+        seconds, long enough for Supabase's pooled connection to be closed out
+        from under it -- the request then died with a raw SSL/connection error
+        on whatever query ran next, even though the answer itself was fine.
+        Committing the answer first means that failure mode now costs a
+        recoverable progress-update retry instead of a lost answer or a 500 to
+        the founder. The recovery path just below (an existing answer for the
+        current question is a retry of THIS call, not a duplicate submission)
+        is what makes that retry safe.
         """
         session = self.repository.get_active_session_for_founder(founder.founder_id)
         if session is None:
@@ -217,27 +232,68 @@ class DiagnosisService:
         if question is None:
             raise QuestionMismatchError(f"Question {question_id} does not exist.")
 
-        if self.repository.get_answer(session.session_id, question_id) is not None:
-            raise DuplicateAnswerError()
+        answer = self.repository.get_answer(session.session_id, question_id)
+        if answer is not None:
+            # Not a duplicate submission -- a genuine one would target a
+            # question_id that is no longer session.current_question_id, and
+            # that is already rejected above by the mismatch check. Reaching
+            # here means: same session, same still-current question, an
+            # answer already on file for it. The only way that happens is a
+            # previous call to this method got as far as committing the
+            # answer and then failed before its second commit (the pooler
+            # drop this docstring describes). Resume from here instead of
+            # raising DuplicateAnswerError at a founder who only answered once.
+            logger.info(
+                "Answer already saved; resuming the progress-update step "
+                "that did not complete last time",
+                extra={
+                    "founder_id": founder.founder_id,
+                    "session_id": session.session_id,
+                    "question_id": question_id,
+                },
+            )
+        else:
+            answer = Answer(
+                session_id=session.session_id,
+                founder_id=founder.founder_id,
+                question_id=question_id,
+                answer_text=answer_text,
+                is_follow_up=False,
+                is_distress_flagged=False,
+                answered_at=_utcnow(),
+            )
+            self.repository.add_answer(answer)
+            try:
+                self.db.commit()
+            except IntegrityError as exc:
+                self.db.rollback()
+                logger.error(
+                    "Integrity error saving answer",
+                    extra={"founder_id": founder.founder_id},
+                    exc_info=exc,
+                )
+                raise DiagnosisPersistenceError("Could not save the answer.")
+            except SQLAlchemyError as exc:
+                self.db.rollback()
+                logger.error(
+                    "Database error saving answer",
+                    extra={"founder_id": founder.founder_id},
+                    exc_info=exc,
+                )
+                raise DiagnosisPersistenceError("Could not save the answer.")
 
-        answer = Answer(
-            session_id=session.session_id,
-            founder_id=founder.founder_id,
-            question_id=question_id,
-            answer_text=answer_text,
-            is_follow_up=False,
-            is_distress_flagged=False,
-            answered_at=_utcnow(),
-        )
-        self.repository.add_answer(answer)
-
-        # Choose the next question BEFORE opening the write transaction's commit:
-        # the advisor call is network I/O and must not fail the answer save. It
-        # returns the deterministic pick on any problem.
+        # The answer is safely committed from here on. Everything below is the
+        # slow part (two LLM calls) and touches only session-progress fields,
+        # which the recovery path above can always redo from scratch.
         next_question = await self._choose_next_question(session, founder, question, answer)
 
         try:
-            session.questions_answered_count += 1
+            # Derived from the actual row count, not incremented -- a retry
+            # through the recovery path above must not double-count an answer
+            # it did not just add.
+            session.questions_answered_count = len(
+                self.repository.get_answered_question_ids(session.session_id)
+            )
             session.last_activity_at = _utcnow()
             session.updated_at = _utcnow()
 
@@ -254,19 +310,19 @@ class DiagnosisService:
         except IntegrityError as exc:
             self.db.rollback()
             logger.error(
-                "Integrity error saving answer",
+                "Integrity error saving diagnosis progress",
                 extra={"founder_id": founder.founder_id},
                 exc_info=exc,
             )
-            raise DiagnosisPersistenceError("Could not save the answer.")
+            raise DiagnosisPersistenceError("Could not save your progress. Please try again.")
         except SQLAlchemyError as exc:
             self.db.rollback()
             logger.error(
-                "Database error saving answer",
+                "Database error saving diagnosis progress",
                 extra={"founder_id": founder.founder_id},
                 exc_info=exc,
             )
-            raise DiagnosisPersistenceError("Could not save the answer.")
+            raise DiagnosisPersistenceError("Could not save your progress. Please try again.")
 
         self.db.refresh(session)
         return session, next_question
