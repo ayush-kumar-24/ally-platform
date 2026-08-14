@@ -74,9 +74,28 @@ class ReportNarrative:
                 {"key": s.key, "heading": s.heading, "prose": s.prose, "facts": s.facts}
                 for s in self.sections
             ],
+            "exposes_numeric_scores": self.exposes_numeric_scores,
             "unpopulated_sections": list(self.unpopulated_sections),
             "narrator_provenance": self.narrator_provenance,
         }
+
+    @classmethod
+    def from_dict(cls, report_id: int, data: dict) -> "ReportNarrative":
+        """Reconstruct from `as_dict()`'s output -- the read side of the
+        report-narrative cache (see narrative_snapshot on founder_reports).
+        Round-trips every field `_build_narrative`'s callers actually read."""
+        return cls(
+            report_id=report_id,
+            variant=ReportVariant(data["variant"]),
+            tone_persona=data.get("tone_persona"),
+            sections=tuple(
+                Section(key=s["key"], heading=s["heading"], prose=s["prose"], facts=s.get("facts") or {})
+                for s in data.get("sections", [])
+            ),
+            exposes_numeric_scores=data.get("exposes_numeric_scores", False),
+            unpopulated_sections=tuple(data.get("unpopulated_sections", UNPOPULATED_SECTIONS)),
+            narrator_provenance=data.get("narrator_provenance") or {},
+        )
 
 
 class ReportNarrativeGenerator:

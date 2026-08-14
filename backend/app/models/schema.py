@@ -1387,6 +1387,9 @@ class FounderReports(Base):
     top_root_cause_ids: Mapped[Optional[dict]] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
     recommended_intervention_ids: Mapped[Optional[dict]] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
     session_state_at_generation: Mapped[Optional[str]] = mapped_column(String(30))
+    # Full ReportNarrative.as_dict() output, cached on first build. Lazily
+    # populated -- see _build_narrative in app/api/v1/reports/routes.py.
+    narrative_snapshot: Mapped[Optional[dict]] = mapped_column(JSONB)
 
     founder: Mapped['Founders'] = relationship('Founders', back_populates='founder_reports')
     session: Mapped['Sessions'] = relationship('Sessions', back_populates='founder_reports')

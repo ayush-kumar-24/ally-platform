@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import {
   createConversation,
-  getConversation,
+  getConversationMessages,
   listConversations,
   sendMessage,
   toUiMessage,
@@ -46,6 +46,15 @@ export default function AllyChat() {
   const scrollRef = useRef(null);
   const taRef = useRef(null);
   const fileInputRef = useRef(null);
+  // { text, requestId } of the last send() that failed, or null. Live-
+  // confirmed a send can succeed fully server-side (message saved, Ally
+  // replied) while the client's own timeout fires first and tells the
+  // founder to resend -- if they do, this lets the retry reuse the SAME
+  // request_id instead of minting a new one, so the backend's idempotent-
+  // replay path (ChatExecutionService.send_message) recognises it as the
+  // same turn rather than running the LLM call a second time. Only reused
+  // when the resent text is unchanged; an edited retry is a new message.
+  const lastFailedRef = useRef(null);
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -68,7 +77,7 @@ export default function AllyChat() {
     setThreadError(false);
     setSendError(null);
     try {
-      const conv = await getConversation(id);
+      const conv = await getConversationMessages(id);
       setMessages((conv.messages ?? []).map(toUiMessage));
     } catch {
       /* This used to just setMessages([]), which rendered the "New
@@ -99,6 +108,12 @@ export default function AllyChat() {
     setTyping(true);
     setSending(true);
 
+    // Reuse the failed attempt's own request_id when resending the SAME text
+    // unchanged -- see lastFailedRef above. Anything else (first send, or the
+    // founder edited the text before resending) is a genuinely new message.
+    const failed = lastFailedRef.current;
+    const requestId = failed && failed.text === text ? failed.requestId : crypto.randomUUID();
+
     try {
       // Create the conversation lazily, on the first message, so an abandoned
       // "New chat" click never leaves an empty thread in the founder's history.
@@ -110,7 +125,8 @@ export default function AllyChat() {
         setConversations(prev => [created, ...prev]);
       }
 
-      const res = await sendMessage({ message: text, conversationId: convId });
+      const res = await sendMessage({ message: text, conversationId: convId, requestId });
+      lastFailedRef.current = null;
 
       // The API answers with `ok: false` and an empty `answer` when it cannot
       // ground a reply -- most often because this founder has no diagnosis yet, so
@@ -146,15 +162,22 @@ export default function AllyChat() {
       // 403/402/429 are the plan gate doing its job -- show what it means and
       // what to do about it, rather than a generic failure.
       const limit = explainLimit(err);
+      const isNetwork = err instanceof ApiError && err.isNetwork;
       if (limit) {
         setLimitNotice(limit);
       } else {
         setSendError(
-          err instanceof ApiError && err.isNetwork
+          isNetwork
             ? "Couldn't reach the server — check your connection and send again."
             : "Couldn't send that just now. Your message is still here — try again.",
         );
       }
+      // Only a network/timeout failure means the server never told us the
+      // outcome -- it may have completed the turn anyway (live-confirmed:
+      // slow-but-successful sends can outlast the client timeout). A plan-
+      // gate rejection or another real error response means it definitely
+      // did NOT complete, so a resend there is unambiguously a fresh attempt.
+      lastFailedRef.current = isNetwork ? { text, requestId } : null;
     } finally {
       setTyping(false);
       setSending(false);
