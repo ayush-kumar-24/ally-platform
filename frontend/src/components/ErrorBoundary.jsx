@@ -1,4 +1,5 @@
 import React from 'react';
+import { reportError } from '../services/errorReporting';
 
 /* ─────────────────────────────────────────────
    ErrorBoundary
@@ -23,8 +24,8 @@ class ErrorBoundary extends React.Component {
 
   componentDidCatch(error, errorInfo) {
     this.setState({ errorInfo });
-    // In production you could forward to Sentry / LogRocket here
     console.error('[ErrorBoundary] Caught rendering error:', error, errorInfo);
+    reportError(error, { source: 'error_boundary', componentStack: errorInfo?.componentStack });
   }
 
   handleReset = () => {

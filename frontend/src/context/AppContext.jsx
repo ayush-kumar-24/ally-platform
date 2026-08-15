@@ -6,6 +6,7 @@ import { getAccessToken } from '../services/api';
 import { getProfile } from '../services/profile';
 import { listNotifications, markAllRead, toDisplay } from '../services/notifications';
 import { isDueOrOverdue, listTasks } from '../services/planning';
+import { firstSafe } from '../utils/looksLikeToken';
 
 const AppContext = createContext(null);
 
@@ -16,15 +17,21 @@ const AppContext = createContext(null);
  * clarity score of 72, the role "CEO & Co-founder", a location in Mumbai and
  * the label "Pro" regardless of what they actually pay. Nothing reads those
  * fields any more, and a real founder must not inherit a fake one's details.
+ *
+ * firstSafe, not a plain `|| ''`: live-reproduced elsewhere (Login.jsx) that a
+ * dev-mode backend can hand back a raw token synthesized into a placeholder
+ * email for a founder who hasn't provisioned yet. profile here should always
+ * be genuine server data, but this costs nothing and closes the same class of
+ * bug regardless of which path a bad value arrives through.
  */
 function toUser(profile) {
-  const name = profile?.full_name || '';
+  const name = firstSafe([profile?.full_name]);
   return {
     avatar: null,
     name,
     initials: name.split(' ').filter(Boolean).slice(0, 2)
       .map(w => w[0].toUpperCase()).join('') || '?',
-    email: profile?.email || '',
+    email: firstSafe([profile?.email]),
     company: profile?.business_name || '',
     plan: profile?.plan_type || 'free',
     founderId: profile?.founder_id ?? null,

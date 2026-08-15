@@ -6,6 +6,7 @@ import { CURRENT_VERSIONS, flushPendingConsent, recordConsent, savePendingConsen
 import { consumeOAuthRedirect, signInWithGoogle, signInWithLinkedIn, startDevSession } from '../../services/auth';
 import { get } from '../../services/api';
 import { supabaseConfigured } from '../../services/supabaseConfig';
+import { firstSafe } from '../../utils/looksLikeToken';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -79,8 +80,13 @@ export default function Login() {
         // 'google' | 'linkedin_oidc' -- whichever the founder actually used,
         // read from the backend's own response rather than assumed.
         authProvider: founder.provider,
-        name: profile?.full_name || founder.email || prev?.name,
-        email: founder.email || prev?.email,
+        // firstSafe, not a plain ||: live-reproduced with a dev-mode backend,
+        // founder.email can itself be a synthesized "<raw token>@ally.local"
+        // placeholder for a founder who hasn't provisioned yet -- a fallback
+        // chain that trusts it blindly renders a 250-character JWT as the
+        // founder's name on their very first screen. See looksLikeToken.js.
+        name: firstSafe([profile?.full_name, founder.email, prev?.name]),
+        email: firstSafe([founder.email, prev?.email]),
         plan_type: profile?.plan_type || prev?.plan_type,
         consents: stored ? {
           termsAccepted: true,
@@ -172,13 +178,16 @@ export default function Login() {
       return;
     }
 
-    const devName = devProfile?.full_name || '';
+    // firstSafe, not a plain ||: see the OAuth branch above -- the same
+    // token-as-placeholder-email shape can come back here too if
+    // VITE_DEV_FOUNDER_TOKEN isn't a real uuid.
+    const devName = firstSafe([devProfile?.full_name]);
 
     setUser(prev => ({
       ...prev,
       authProvider: provider,
       name: devName,
-      email: devProfile?.email || devFounder?.email || '',
+      email: firstSafe([devProfile?.email, devFounder?.email]),
       initials: devName.split(' ').filter(Boolean).slice(0, 2)
         .map(w => w[0].toUpperCase()).join('') || '?',
       consents: {

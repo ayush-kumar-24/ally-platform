@@ -5,7 +5,12 @@ export default function Resume() {
   const navigate = useNavigate();
   const { user } = useApp();
 
-  const firstName = user?.name ? user.name.split(' ')[0] : 'Ayush';
+  // Was a hardcoded real person's name ("Ayush", presumably a team member's
+  // test account) shown to every founder with no name yet -- the exact
+  // fabricated-identity pattern already fixed everywhere else in guided/
+  // (see Welcome.jsx's own note on this). 'there' is a neutral placeholder,
+  // never someone else's actual name.
+  const firstName = user?.name ? user.name.split(' ')[0] : 'there';
 
   return (
     <section className="view j-stage active" id="v-resume">
