@@ -17,6 +17,7 @@ from app.api.v1.intelligence.routes import router as intelligence_router
 from app.api.v1.knowledge.routes import router as knowledge_router
 from app.api.v1.notifications.routes import router as notifications_router
 from app.api.v1.feedback.router import router as feedback_router
+from app.api.v1.frontend_errors.router import router as frontend_errors_router
 from app.api.v1.impression.router import router as impression_router
 from app.api.v1.profile.routes import router as profile_router
 from app.api.v1.reference.routes import router as reference_router
@@ -24,6 +25,8 @@ from app.api.v1.reports.routes import router as reports_router
 from app.api.v1.settings.routes import router as settings_router
 from app.api.v1.settings.router import router as settings_preferences_router
 from app.api.v1.voice.router import router as voice_router
+from app.api.v1.webhooks.supabase import router as webhooks_supabase_router
+from app.api.v1.webhooks.internal_jobs import router as internal_jobs_router
 from app.db.session import engine
 
 api_router = APIRouter(prefix="/api/v1")
@@ -32,6 +35,7 @@ api_router.include_router(auth_router)
 api_router.include_router(profile_router)
 api_router.include_router(impression_router)
 api_router.include_router(feedback_router)
+api_router.include_router(frontend_errors_router)
 api_router.include_router(discovery_router)
 api_router.include_router(diagnosis_router)
 api_router.include_router(settings_router)
@@ -53,6 +57,8 @@ api_router.include_router(plans_router)
 # /admin/credits, /admin/audit vs /admin/founders, /admin/announcements).
 api_router.include_router(admin_panel_router)
 api_router.include_router(admin_panel_router_v2)
+api_router.include_router(webhooks_supabase_router)
+api_router.include_router(internal_jobs_router)
 
 
 @api_router.get("/health")

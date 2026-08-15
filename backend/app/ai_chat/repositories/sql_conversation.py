@@ -201,6 +201,20 @@ class SqlConversationRepository(ConversationRepository):
             for sequence, r in enumerate(rows)
         )
 
+    def find_messages_by_request_id(
+        self, conversation_id: str, request_id: str,
+    ) -> tuple[ConversationMessage, ...]:
+        # Filters the already-sequenced list rather than querying metadata
+        # directly -- request_id lookups are rare (only the idempotent-retry
+        # path) and small per-conversation, so reusing list_messages keeps
+        # `sequence` correct (it is position-in-conversation, not
+        # position-in-this-filtered-set) without a second query shape to
+        # keep in sync with the JSONB metadata layout.
+        return tuple(
+            m for m in self.list_messages(conversation_id)
+            if (m.metadata or {}).get("request_id") == request_id
+        )
+
     # --- summaries (non-durable -- see module docstring) --------------------
 
     def save_summary(self, summary: ConversationSummary) -> None:

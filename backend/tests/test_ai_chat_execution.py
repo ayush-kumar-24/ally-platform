@@ -43,6 +43,7 @@ from app.api.v1.ally.rag import (
     KnowledgeChunk,
     build_retrieval_service,
 )
+from app.models.enums import StageGroup
 from types import SimpleNamespace
 
 D = Decimal
@@ -72,6 +73,12 @@ def _ids():
 
 class WorldContextRepo:
     _STAGES = {5: "Growth / Scaling", 6: "Early Traction"}
+    # stage_order drives AllyContextBuilder's stage_groups (which retrieval's
+    # stage filter actually reads -- rag_documents.stage_relevance is tagged
+    # with the question bank's stage-GROUP vocabulary, not stage names).
+    # 6 -> Stage 1->10+, 3 -> Stage 0->1: arbitrary but internally consistent
+    # with the seeded chunk below, which is what these tests actually check.
+    _STAGE_ORDERS = {5: 6, 6: 3}
     _INDUSTRIES = {3: "SaaS", 4: "Fintech"}
 
     def __init__(self):
@@ -87,7 +94,8 @@ class WorldContextRepo:
         return SimpleNamespace(founder_id=fid, **f) if f else None
 
     def get_stage(self, sid):
-        return SimpleNamespace(stage_name=self._STAGES.get(sid, "Growth / Scaling"))
+        return SimpleNamespace(stage_name=self._STAGES.get(sid, "Growth / Scaling"),
+                               stage_order=self._STAGE_ORDERS.get(sid, 6))
 
     def get_industry(self, iid):
         return SimpleNamespace(industry_name=self._INDUSTRIES.get(iid, "SaaS"))
@@ -117,8 +125,11 @@ class WorldContextRepo:
 
 
 def _retrieval():
+    # stage="Stage 1->10+" (not the stage NAME "Growth / Scaling") to match
+    # what founder 1 (stage_order=6, see WorldContextRepo) actually resolves
+    # to via stage_groups -- the vocabulary retrieval's stage filter reads.
     chunk = KnowledgeChunk("c1", "rag_chunks", 1, "Guided onboarding lifts activation.",
-                           D("0.7"), stage="Growth / Scaling", industry="SaaS",
+                           D("0.7"), stage=StageGroup.STAGE_1_TO_10_PLUS.value, industry="SaaS",
                            category="Sales & Revenue", root_cause_ids=(10,))
     return build_retrieval_service(InMemoryVectorRetrievalRepository([chunk]))
 
@@ -267,6 +278,54 @@ def test_assistant_reply_is_persisted():
     last = w.conversations.get_history(r.conversation_id)[-1]
     assert last.role == MessageRole.ASSISTANT and last.content == ANSWER
     assert w.conversations.get_conversation(r.conversation_id).unread_count == 1
+
+
+# --- idempotent replay (retried request_id) ---------------------------------
+
+
+def test_retried_request_id_does_not_call_the_llm_again():
+    """Live-reproduced gap: a client timeout can fire after the server has
+    actually completed the turn, and the founder is told to resend. Resending
+    with the SAME request_id must return the original answer without a
+    second LLM call or a duplicated turn in history."""
+    capturing = CapturingExecution(build_execution_service({"mock": MockLLMProvider(content=VALID_BODY)}))
+    w = ChatWorld(execution=capturing)
+    first = w.send(message="hi", request_id="retry-1")
+    assert len(capturing.requests) == 1
+
+    second = w.send(message="hi", conversation_id=first.conversation_id, request_id="retry-1")
+    assert len(capturing.requests) == 1                          # no second LLM call
+    assert second.ok and second.answer == first.answer
+    assert second.assistant_message_id == first.assistant_message_id
+
+    history = w.conversations.get_history(first.conversation_id)
+    assert [m.role for m in history] == [MessageRole.USER, MessageRole.ASSISTANT]  # not duplicated
+
+
+def test_request_id_only_on_user_message_still_runs():
+    """A request_id present on a user message but with no assistant reply yet
+    (e.g. the process died mid-turn before persisting one) must NOT be treated
+    as already-complete -- that would silently answer nothing forever."""
+    capturing = CapturingExecution(build_execution_service({"mock": MockLLMProvider(content=VALID_BODY)}))
+    w = ChatWorld(execution=capturing)
+    cid = w.send(message="setup").conversation_id                # 1 LLM call
+    w.conversations.append_message(cid, MessageRole.USER, "orphaned", metadata={"request_id": "orphan-1"})
+
+    r = w.send(message="orphaned", conversation_id=cid, request_id="orphan-1")
+    assert len(capturing.requests) == 2                           # ran normally, not replayed
+    assert r.ok and r.answer == ANSWER
+
+
+def test_different_request_id_with_same_text_is_a_new_turn():
+    """An edited-and-resent (or genuinely repeated) message with a NEW
+    request_id is a real new message, not a replay -- the frontend only
+    reuses the id when resending the exact failed attempt unchanged."""
+    capturing = CapturingExecution(build_execution_service({"mock": MockLLMProvider(content=VALID_BODY)}))
+    w = ChatWorld(execution=capturing)
+    first = w.send(message="hi", request_id="a")
+    w.send(message="hi", conversation_id=first.conversation_id, request_id="b")
+    assert len(capturing.requests) == 2
+    assert w.conversations.get_conversation(first.conversation_id).message_count == 4
 
 
 def test_conversation_survives_multiple_turns():

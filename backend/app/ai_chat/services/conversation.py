@@ -138,6 +138,20 @@ class ConversationService:
         self._require(conversation_id)
         return self.repository.list_messages(conversation_id)
 
+    def find_turn_by_request_id(
+        self, conversation_id: str, request_id: str,
+    ) -> tuple[ConversationMessage | None, ConversationMessage | None]:
+        """(user_message, assistant_message) already persisted under this
+        request_id, or None for either half not yet written. Lets a caller
+        detect "this exact send was already completed by a prior attempt"
+        and hand back that result instead of re-running it -- see
+        ChatExecutionService.send_message."""
+        self._require(conversation_id)
+        found = self.repository.find_messages_by_request_id(conversation_id, request_id)
+        user = next((m for m in found if m.role == MessageRole.USER), None)
+        assistant = next((m for m in found if m.role == MessageRole.ASSISTANT), None)
+        return user, assistant
+
     def list_conversations(
         self, founder_id: int, *, include_archived: bool = False, include_deleted: bool = False,
     ) -> tuple[Conversation, ...]:

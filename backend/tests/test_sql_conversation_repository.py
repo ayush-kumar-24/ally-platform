@@ -128,6 +128,30 @@ def test_important_and_token_usage_round_trip(founder_id):
     db.close()
 
 
+def test_find_turn_by_request_id_round_trips_through_the_db(founder_id):
+    """The idempotent-replay lookup (ChatExecutionService.send_message) has to
+    survive a real DB round-trip through JSONB metadata, not just the
+    in-memory repository's dict filter."""
+    db = SessionLocal()
+    s = svc(db)
+    conv = s.create_conversation(founder_id)
+    s.append_message(conv.conversation_id, U, "hi", metadata={"request_id": "req-1"})
+    s.append_message(conv.conversation_id, A, "hello", metadata={"request_id": "req-1"})
+    s.append_message(conv.conversation_id, U, "unrelated", metadata={"request_id": "req-2"})
+    db.commit()
+
+    user, assistant = s.find_turn_by_request_id(conv.conversation_id, "req-1")
+    assert user is not None and user.content == "hi"
+    assert assistant is not None and assistant.content == "hello"
+
+    only_user, no_assistant = s.find_turn_by_request_id(conv.conversation_id, "req-2")
+    assert only_user is not None and no_assistant is None
+
+    miss_user, miss_assistant = s.find_turn_by_request_id(conv.conversation_id, "never-sent")
+    assert miss_user is None and miss_assistant is None
+    db.close()
+
+
 def test_token_stats_roll_up_persists(founder_id):
     db = SessionLocal()
     s = svc(db)

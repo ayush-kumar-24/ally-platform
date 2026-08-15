@@ -118,6 +118,28 @@ class ConversationListResponse(BaseModel):
     total: int
 
 
+class MessageResponse(BaseModel):
+    message_id: str
+    conversation_id: str
+    role: str
+    content: str
+    created_at: datetime
+    sequence: int
+
+    @classmethod
+    def from_domain(cls, m) -> "MessageResponse":
+        return cls(
+            message_id=m.message_id, conversation_id=m.conversation_id,
+            role=m.role.value, content=m.content, created_at=m.created_at,
+            sequence=m.sequence,
+        )
+
+
+class ConversationMessagesResponse(BaseModel):
+    conversation_id: str
+    messages: list[MessageResponse]
+
+
 # --- attachments ------------------------------------------------------------
 
 
