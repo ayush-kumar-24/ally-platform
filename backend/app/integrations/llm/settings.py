@@ -51,7 +51,13 @@ class LLMSettings:
         self.openai_base_url = e.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
 
         self.anthropic_api_key = e.get("ANTHROPIC_API_KEY")
-        self.anthropic_model = e.get("ANTHROPIC_MODEL", "claude-3-5-sonnet-latest")
+        # "claude-3-5-sonnet-latest" (the old default here) no longer resolves --
+        # Anthropic's real API returns 404 not_found_error for it. Same silent-
+        # mock-fallback failure mode as the OpenAI max_tokens bug next to this
+        # file: FailoverLLMProvider swallows the error with no logging, so the
+        # anthropic fallback link never actually worked, undetected. Confirmed
+        # empirically; claude-sonnet-5 verified live against the real API.
+        self.anthropic_model = e.get("ANTHROPIC_MODEL", "claude-sonnet-5")
         self.anthropic_base_url = e.get("ANTHROPIC_BASE_URL", "https://api.anthropic.com")
 
         self.gemini_api_key = e.get("GEMINI_API_KEY")

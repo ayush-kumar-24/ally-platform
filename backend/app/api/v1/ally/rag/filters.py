@@ -45,7 +45,12 @@ def build_filters(
     band = context.business_health.band if context.business_health is not None else None
 
     return RetrievalFilters(
-        stages=_ordered_unique([founder.stage_name]),
+        # rag_documents.stage_relevance is tagged with the diagnosis question
+        # bank's stage-GROUP vocabulary ("Stage 0->1", "Stage 1->10+", ...),
+        # not individual stage names ("Early Traction", "Validation", ...) --
+        # using stage_name here matched nothing for any stage-tagged document,
+        # silently and permanently. See FounderProfileContext.stage_groups.
+        stages=_ordered_unique(founder.stage_groups),
         industry=founder.industry,
         root_cause_ids=root_cause_ids,
         categories=categories,

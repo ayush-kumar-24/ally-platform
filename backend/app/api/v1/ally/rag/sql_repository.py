@@ -63,7 +63,10 @@ _RESTRICTED_CLAUSE = (
     "AND (c.metadata_tags->>'retrieval_scope' IS DISTINCT FROM 'recommendation_only' "
     "AND c.metadata_tags->>'content_class' IS DISTINCT FROM 'sales_collateral')"
 )
-_STAGE_CLAUSE = "AND (d.stage_relevance IS NULL OR d.stage_relevance = ANY(:stages))"
+_STAGE_CLAUSE = (
+    "AND (d.stage_relevance IS NULL OR d.stage_relevance = 'All' "
+    "OR d.stage_relevance = ANY(:stages))"
+)
 _INDUSTRY_CLAUSE = "AND (d.industry_tag IS NULL OR d.industry_tag = :industry)"
 
 

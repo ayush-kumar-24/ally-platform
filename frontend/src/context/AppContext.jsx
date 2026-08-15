@@ -163,12 +163,22 @@ export function AppProvider({ children }) {
   // session, so the same overdue task doesn't re-toast every interval.
   const remindedTaskIds = useRef(new Set());
   const checkTaskReminders = useCallback(async () => {
+    // AppContext wraps the whole app, including the public marketing/landing
+    // page -- without this guard, every anonymous visitor's browser fired a
+    // GET /planning/plans on load. Live-confirmed on production: the backend
+    // answers that unauthenticated call with a raw 500 (should be 401), so
+    // this was not just wasted traffic but a real, always-on production
+    // error for every single landing-page visit. The catch below already
+    // intended "no session yet" to be silent -- skipping the call entirely
+    // for a signed-out visitor gets the same outcome without ever making it.
+    if (!getAccessToken()) return;
     let tasks;
     try {
       tasks = await listTasks();
     } catch {
-      // No session yet, feature not on this plan (403), or offline -- silent,
-      // same as the /profile fetch above. Not an error worth surfacing here.
+      // Session expired between mount and this call, feature not on this
+      // plan (403), or offline -- silent, same as the /profile fetch above.
+      // Not an error worth surfacing here.
       return;
     }
     const due = tasks.filter(isDueOrOverdue).filter(t => !remindedTaskIds.current.has(t.task_id));

@@ -64,7 +64,14 @@ class OpenAIAdapter(RequestAdapter):
                 {"role": "user", "content": request.user},
             ],
             "temperature": float(request.temperature),
-            "max_tokens": request.max_tokens,
+            # Current models (gpt-5.x and later) reject `max_tokens` outright --
+            # "Unsupported parameter... Use 'max_completion_tokens' instead"
+            # (HTTP 400). That 400 was being swallowed by FailoverLLMProvider's
+            # blanket except-and-continue with no logging, so every real OpenAI
+            # call failed silently and every chat reply came from the mock
+            # fallback with ok=True and no visible error anywhere. Confirmed
+            # empirically against the real API with the configured OPENAI_MODEL.
+            "max_completion_tokens": request.max_tokens,
         }
         if options.response_format == "json":
             payload["response_format"] = {"type": "json_object"}
@@ -90,7 +97,12 @@ class OpenAIAdapter(RequestAdapter):
 
 class ClaudeAdapter(RequestAdapter):
     provider_name = "anthropic"
-    default_model = "claude-3-5-sonnet-latest"
+    # claude-3-5-sonnet-latest no longer resolves (Anthropic 404s it) -- see
+    # the same stale-default fix in app/integrations/llm/settings.py. This
+    # class attribute is a fallback for direct construction without an
+    # explicit model; nothing in the live app relies on it today, but keeping
+    # a second stale copy around is how this drifted in the first place.
+    default_model = "claude-sonnet-5"
     _API_VERSION = "2023-06-01"
 
     def endpoint(self, base_url, model, api_key):
@@ -103,9 +115,15 @@ class ClaudeAdapter(RequestAdapter):
         payload: dict = {
             "model": model,
             "max_tokens": request.max_tokens,
-            "temperature": float(request.temperature),
             "system": request.system,          # system is a top-level field for Claude
             "messages": [{"role": "user", "content": request.user}],
+            # `temperature` deliberately omitted: the Claude 5 family (sonnet-5,
+            # opus-5 -- confirmed empirically; haiku-4-5 still accepts it)
+            # rejects it outright with HTTP 400 "`temperature` is deprecated
+            # for this model." Sending it unconditionally broke every real
+            # Anthropic call the moment reasoning-tier routing started
+            # actually reaching this provider (previously it was only ever a
+            # silent, unlogged failover link -- see FailoverLLMProvider).
         }
         if options.tools:
             payload["tools"] = list(options.tools)

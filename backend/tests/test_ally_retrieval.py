@@ -29,7 +29,14 @@ D = Decimal
 
 
 def make_ctx(*, conf="80", distress=False, stage="Growth / Scaling", industry="SaaS"):
-    founder = FounderProfileContext(1, "Asha", 5, stage, industry)
+    # stage_groups drives the retrieval filter (build_filters reads THIS, not
+    # stage_name -- rag_documents.stage_relevance is tagged with the question
+    # bank's stage-GROUP vocabulary, not individual stage names). Reusing
+    # `stage` here rather than a separate group value keeps every chunk
+    # fixture below ("stage=Growth / Scaling") matching as before -- this
+    # suite tests the ranking algorithm's string-matching behaviour, not the
+    # real production vocabulary.
+    founder = FounderProfileContext(1, "Asha", 5, stage, industry, stage_groups=(stage,))
     diagnosis = DiagnosisContext(
         session_id=42, overall_confidence=D(conf), routing_state="validate",
         distress_mode=distress, session_state="stable", executive_summary="s",

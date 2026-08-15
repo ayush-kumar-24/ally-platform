@@ -62,7 +62,11 @@ def test_openai_maps_request_and_response():
         body = json.loads(request.content)
         assert body["model"] == "gpt-4o-mini"
         assert body["messages"][0]["role"] == "system" and body["messages"][1]["role"] == "user"
-        assert body["temperature"] == 0.7 and body["max_tokens"] == 100
+        # max_completion_tokens, not max_tokens -- current models (gpt-5.x+)
+        # reject max_tokens outright (HTTP 400), which was silently swallowed
+        # by FailoverLLMProvider and fell through to the mock provider on
+        # every real chat turn until this was traced and fixed.
+        assert body["temperature"] == 0.7 and body["max_completion_tokens"] == 100
         return httpx.Response(200, json={
             "choices": [{"message": {"content": "Real answer."}, "finish_reason": "stop"}],
             "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},

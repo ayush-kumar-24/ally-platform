@@ -78,12 +78,27 @@ def resolve_stage_groups(founder: Founder) -> list[str]:
     than none: onboarding may be incomplete, and returning zero questions would
     dead-end the assessment on the first request.
     """
-    stage = founder.stage
-    if stage is None:
+    return stage_groups_for(founder.stage)
+
+
+def stage_groups_for(stage) -> list[str]:
+    """Same mapping as `resolve_stage_groups`, but over a `FounderStage` row
+    (or None) directly rather than a full `Founder` ORM object with a loaded
+    `.stage` relationship. Callers that already fetched the stage separately
+    (e.g. AllyContextBuilder, which looks it up by id rather than relying on
+    relationship loading) use this instead of needing a founder object shaped
+    exactly like the diagnosis module's own -- one mapping, two entry points.
+    """
+    # getattr, not stage.stage_order: a real FounderStage row always has this
+    # (NOT NULL column), but a stage that exists without a readable order is
+    # the same "we don't actually know" situation as no stage at all -- fail
+    # open to every group rather than raise, same convention as stage is None.
+    order = getattr(stage, "stage_order", None)
+    if stage is None or order is None:
         return [group.value for group in StageGroup]
 
     for max_order, group in _STAGE_ORDER_TO_GROUP:
-        if stage.stage_order <= max_order:
+        if order <= max_order:
             return [group.value]
 
     return [StageGroup.STAGE_1_TO_10_PLUS.value]
