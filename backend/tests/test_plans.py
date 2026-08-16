@@ -73,7 +73,7 @@ def test_free_is_currently_a_testing_allowance_and_outgrants_paid_tiers():
 def test_daily_limits():
     free, starter, pro = all_plans()
     assert (free.daily_token_limit, starter.daily_token_limit, pro.daily_token_limit) \
-        == (40_000, 6_000, 8_000)
+        == (4_000, 6_000, 8_000)
     # Planning meters separately, and only Free is sized for it so far.
     assert free.planning_daily_token_limit == 7_700
     assert starter.planning_daily_token_limit == 0
