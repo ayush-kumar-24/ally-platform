@@ -3,11 +3,19 @@
 regardless of whether they had ever actually started one -- a founder who had
 never run a diagnosis saw the same "fully used" state as one who genuinely had.
 _diagnosis_usage (plans/router.py) reuses the exact count/limit
-_check_monthly_diagnosis_limit (diagnosis/service.py) already enforces, so the
+_check_diagnosis_allowance (diagnosis/service.py) already enforces, so the
 two can never disagree.
+
+The limit is a LIFETIME cap on COMPLETED diagnoses, not a monthly one on
+started sessions -- changed after a live account was found stuck showing
+"2 / 1" from two duplicate in-progress sessions a race condition had created,
+neither of which the founder had ever finished. Counting starts (any status,
+any month) made that number technically accurate but operationally useless:
+it could go over the cap while the founder had never received a single
+report. Counting completions, lifetime, is what "you get one free diagnosis"
+actually promises.
 """
 
-from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
@@ -50,17 +58,16 @@ def founder(client):
     cleanup.close()
 
 
-def test_no_sessions_this_month_reports_zero_used(client, founder):
+def test_no_sessions_reports_zero_used(client, founder):
     _fid, _uid, access = founder
     r = client.get(BASE, headers={"Authorization": f"Bearer {access}"})
     assert r.status_code == 200
     assert r.json()["diagnosis_usage"] == {"used": 0, "limit": 1}
 
 
-def test_a_session_started_this_month_counts_even_if_abandoned(client, founder):
-    """count_sessions_started_since counts by START, not completion -- an
-    abandoned session still spent the founder's monthly allowance, and the
-    usage meter must reflect that, not just completed diagnoses."""
+def test_an_abandoned_session_does_not_count(client, founder):
+    """Only a completed diagnosis has reached a report. An abandoned one must
+    not spend the founder's one lifetime slot -- they never got anything for it."""
     fid, _uid, access = founder
     db = SessionLocal()
     db.execute(text(
@@ -71,20 +78,36 @@ def test_a_session_started_this_month_counts_even_if_abandoned(client, founder):
     db.close()
 
     r = client.get(BASE, headers={"Authorization": f"Bearer {access}"})
-    assert r.json()["diagnosis_usage"] == {"used": 1, "limit": 1}
+    assert r.json()["diagnosis_usage"] == {"used": 0, "limit": 1}
 
 
-def test_a_session_started_last_month_does_not_count(client, founder):
-    """The window is the calendar month, not a rolling count -- a session from
-    before this month must not still be charged against this month's limit."""
+def test_an_in_progress_session_does_not_count(client, founder):
+    """A session being resumed right now is not "used" until it completes --
+    otherwise the act of resuming would itself look like exhausting the cap."""
     fid, _uid, access = founder
-    last_month = datetime.now(timezone.utc).replace(day=1) - timedelta(days=1)
     db = SessionLocal()
     db.execute(text(
-        "insert into sessions (founder_id, status, started_at) values (:f, 'abandoned', :s)"
-    ), {"f": fid, "s": last_month})
+        "insert into sessions (founder_id, status, started_at) "
+        "values (:f, 'in_progress', now())"
+    ), {"f": fid})
     db.commit()
     db.close()
 
     r = client.get(BASE, headers={"Authorization": f"Bearer {access}"})
     assert r.json()["diagnosis_usage"] == {"used": 0, "limit": 1}
+
+
+def test_a_completed_session_counts_no_matter_how_long_ago(client, founder):
+    """Lifetime, not monthly -- a diagnosis completed last year still spent the
+    founder's one free slot today. There is no reset date to check against."""
+    fid, _uid, access = founder
+    db = SessionLocal()
+    db.execute(text(
+        "insert into sessions (founder_id, status, started_at) "
+        "values (:f, 'completed', now() - interval '400 days')"
+    ), {"f": fid})
+    db.commit()
+    db.close()
+
+    r = client.get(BASE, headers={"Authorization": f"Bearer {access}"})
+    assert r.json()["diagnosis_usage"] == {"used": 1, "limit": 1}

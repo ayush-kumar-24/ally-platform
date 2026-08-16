@@ -59,9 +59,19 @@ export function requiredPlanFor(catalog, feature) {
  * Turn a 402/403/429 from a gated call into something worth showing a person.
  * Each status means a different next step, which is why the backend keeps them
  * distinct rather than collapsing everything into one 403.
+ *
+ * DiagnosisAlreadyCompletedError is also a 429 (see plans/errors.py -- grouped
+ * with the other "you've used your allotment" errors) but it must never say
+ * "resets tomorrow": it never resets. `error.code`, the backend's own error
+ * class name, is what tells the two apart -- checking status alone would show
+ * a false promise that waiting helps.
  */
 export function explainLimit(error) {
   if (!error) return null;
+  if (error.code === 'DiagnosisAlreadyCompletedError') {
+    return { kind: 'completed', title: 'Diagnosis already completed',
+             message: error.detail || "You've used your one free diagnosis." };
+  }
   if (error.status === 403) {
     return { kind: 'upgrade', title: 'Not on your plan',
              message: error.detail || 'Upgrade to unlock this feature.' };

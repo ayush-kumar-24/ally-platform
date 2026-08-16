@@ -23,6 +23,7 @@ fields, and one founder_reports row carrying both the founder report (in
 from __future__ import annotations
 
 import time
+from collections.abc import Sequence
 from dataclasses import replace
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -530,7 +531,7 @@ class ReasoningService:
                 session.session_id,
                 self._build_internal_report_row(
                     session, founder, report.report_id, internal_report,
-                    distress_assessment,
+                    distress_assessment, scored,
                 ),
             )
 
@@ -601,17 +602,45 @@ class ReasoningService:
 
     def _build_internal_report_row(
         self, session, founder: Founder, report_id: int, internal_report,
-        distress_assessment=None,
+        distress_assessment=None, scored: Sequence[ScoredRootCause] = (),
     ) -> InternalIntelligenceReport:
         """Map the internal report onto internal_intelligence_reports.
 
         `psychological_state` reuses the session-state vocabulary (which the
         table's CHECK enforces). `internal_notes` carries the rendered consultant
         report. `distress_signals` captures the distress-flagged symptoms.
-        `blind_spot_ids` and `behaviour_pattern_ids` are left empty: the current
-        deterministic pipeline does not produce those, and inventing them is out
-        of scope. The review columns default to the un-reviewed state.
+
+        `blind_spot_ids` and `behaviour_pattern_ids` used to be left empty
+        unconditionally -- not because blind_spots/behaviour_patterns had no
+        data (20 and 27 real seeded rows respectively), but because nothing
+        ever queried them. Both tables link to root causes by CODE
+        ("RC-019"), the same convention `recommendation.py` already resolves
+        interventions through, so this reuses that exact resolve-then-match
+        shape rather than inventing a new one. Best-effort: a lookup failure
+        here must not fail the whole report.
         """
+        blind_spot_ids: list[int] = []
+        behaviour_pattern_ids: list[int] = []
+        if scored:
+            try:
+                root_causes = self.repository.get_root_causes_by_ids(
+                    s.root_cause_id for s in scored
+                )
+                codes = [
+                    rc.root_cause_code
+                    for rc in root_causes.values()
+                    if rc.root_cause_code
+                ]
+                if codes:
+                    blind_spot_ids = self.repository.get_blind_spot_ids_by_root_cause_codes(codes)
+                    behaviour_pattern_ids = (
+                        self.repository.get_behaviour_pattern_ids_by_root_cause_codes(codes)
+                    )
+            except Exception:  # noqa: BLE001 -- optional enrichment, never blocks the report
+                logger.warning(
+                    "blind spot / behaviour pattern lookup failed; leaving empty",
+                    extra={"session_id": session.session_id},
+                )
         distress_signals = [
             {
                 "category": s.category,
@@ -639,6 +668,8 @@ class ReasoningService:
             psychological_state=session.session_state,
             distress_signals=distress_signals,
             internal_notes=MarkdownReportRenderer().render_internal(internal_report),
+            blind_spot_ids=blind_spot_ids,
+            behaviour_pattern_ids=behaviour_pattern_ids,
         )
 
     def _business_dna(self, business_health) -> dict | None:

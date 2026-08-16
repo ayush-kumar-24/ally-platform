@@ -80,6 +80,12 @@ export class ApiError extends Error {
     this.status = status;
     this.detail = detail;
     this.data = data;
+    // The machine-readable error class name our own backend's AppError handler
+    // always sends (see middleware/error_handler.py: {"error": cls.__name__, ...}).
+    // Lets a caller branch on the exact error type instead of guessing from status
+    // + message text, which is what explainLimit() needs to tell "daily limit,
+    // resets tomorrow" apart from "lifetime allowance already used, never resets".
+    this.code = data?.error ?? null;
   }
 
   get isNetwork() { return this.status === null; }
@@ -89,7 +95,18 @@ export class ApiError extends Error {
 function normalizeError(err) {
   if (err.response) {
     const { status, data } = err.response;
+    // Live-confirmed gap: every error this backend raises -- AppError subclasses,
+    // FastAPI's own HTTPException, and its 422 validation handler -- serialises as
+    // {"error": "<ClassName>", "message": "..."}. There is no "detail" key
+    // anywhere in this backend's responses. Reading data?.detail here always came
+    // back undefined, so every custom message (plan limits, auth failures,
+    // diagnosis rules) silently fell through to axios's generic
+    // "Request failed with status code 422" -- which is exactly what showed up
+    // raw on the production sign-up screen. `message` is checked first because
+    // it is what this backend actually sends; `detail` is kept after it only in
+    // case a future/third-party endpoint ever uses the FastAPI-default shape.
     const detail =
+      (typeof data?.message === 'string' && data.message) ||
       (typeof data?.detail === 'string' && data.detail) ||
       (Array.isArray(data?.detail) && data.detail[0]?.msg) || // FastAPI 422 shape
       err.message ||

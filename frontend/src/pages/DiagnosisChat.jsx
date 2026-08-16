@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { normalise, resumeOrStart, submitAnswer } from '../services/diagnosis';
+import { explainLimit } from '../services/plans';
 import { useVoiceInput } from '../hooks/useVoiceInput';
 import FeedbackPrompt from '../components/FeedbackPrompt';
 import { FEEDBACK } from '../services/feedback';
@@ -27,6 +28,11 @@ export default function DiagnosisChat() {
   const [sessionId, setSessionId] = useState(null);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
+  // Set only when the founder has already completed their one free diagnosis
+  // (DiagnosisAlreadyCompletedError). This blocks the diagnosis screen
+  // entirely -- there is no partial state to resume into, so nothing below it
+  // renders at all. See the resumeOrStart().catch below.
+  const [blocked, setBlocked] = useState(null);
   const [kgVisible] = useState(true);
   const kgRef = useRef(null);
   const scrollRef = useRef(null);
@@ -54,14 +60,30 @@ export default function DiagnosisChat() {
         setAnswered(session.answered ?? 0);
         setCategory(session.question?.category ?? null);
         if (session.question?.text) {
-          setMessages([{ role: 'ally', text: session.question.text, time: clock() }]);
+          // A greeting precedes the first question on a genuine fresh start
+          // only -- resuming reloads the same in-progress session (page
+          // refresh, closed tab), and re-greeting there would read as Ally
+          // forgetting the conversation was already underway.
+          const opening = session.resumed
+            ? []
+            : [{ role: 'ally', time: clock(),
+                text: "Hi, I'm Ally. Let's get started — I'll ask about 30 questions, adapting as we go, so answer honestly and we'll get to your report as fast as your answers let us." }];
+          setMessages([...opening, { role: 'ally', text: session.question.text, time: clock() }]);
         }
       })
-      .catch(() => {
-        if (!cancelled) {
-          setMessages([{ role: 'ally', time: clock(),
-            text: "I couldn't start your diagnosis just now. Please refresh to try again." }]);
+      .catch((error) => {
+        if (cancelled) return;
+        const limit = explainLimit(error);
+        if (limit?.kind === 'completed') {
+          // Not a transient failure -- the founder's one free diagnosis is
+          // already spent, and starting is never going to succeed here. The
+          // chat UI never mounts for this founder; it stays blocked at the
+          // message below until they upgrade or go read their report.
+          setBlocked(limit.message);
+          return;
         }
+        setMessages([{ role: 'ally', time: clock(),
+          text: "I couldn't start your diagnosis just now. Please refresh to try again." }]);
       });
     return () => { cancelled = true; };
   }, []);
@@ -126,6 +148,31 @@ export default function DiagnosisChat() {
     .filter(m => m.role === 'me' && m.text.trim())
     .slice(-3)
     .map(m => (m.text.length > 22 ? `${m.text.slice(0, 21).trimEnd()}…` : m.text));
+
+  if (blocked) {
+    return (
+      <div
+        style={{
+          height: 'calc(100vh - 64px)', display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center', textAlign: 'center',
+          gap: '16px', padding: '32px', maxWidth: '480px', margin: '0 auto',
+        }}
+        role="status"
+      >
+        <div style={{ fontSize: '40px' }} aria-hidden="true">✅</div>
+        <h2 style={{ margin: 0 }}>Diagnosis already completed</h2>
+        <p style={{ color: 'var(--muted-2)', margin: 0 }}>{blocked}</p>
+        <button
+          type="button"
+          className="btn-primary"
+          onClick={() => navigate('/app/report')}
+          style={{ marginTop: '8px' }}
+        >
+          View your report
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="chat" style={{ height: 'calc(100vh - 64px)' }}>

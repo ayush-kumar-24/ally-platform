@@ -27,7 +27,12 @@ const AppContext = createContext(null);
 function toUser(profile) {
   const name = firstSafe([profile?.full_name]);
   return {
-    avatar: null,
+    // Was always null -- the profile page's own avatar upload (POST
+    // /profile/avatar) had nowhere else to show up, so a founder who set a
+    // real photo still saw plain initials everywhere outside that one page
+    // (sidebar, chat). Same field, read here so it flows through everywhere
+    // AppContext's user object does.
+    avatar: profile?.avatar_url || null,
     name,
     initials: name.split(' ').filter(Boolean).slice(0, 2)
       .map(w => w[0].toUpperCase()).join('') || '?',

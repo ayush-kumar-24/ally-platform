@@ -20,6 +20,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.api.v1.chat import dependencies as deps
+from app.api.v1.plans.dependencies import ChatGate, chat_gate
 from app.ai_chat import build_conversation_service
 from app.ai_chat.attachments import build_attachment_service
 from app.ai_chat.builders.context_window import ContextWindowBuilder
@@ -128,6 +129,17 @@ def world():
         deps.get_link_extractor: lambda: links,
         deps.get_chat_service: lambda: chat,
         deps.get_streaming_service: lambda: stream,
+        # This suite (see module docstring) validates the chat pipeline itself --
+        # conversations, attachments, concurrency -- not plan enforcement, which
+        # has its own dedicated tests. Without this override, PLAN_ENFORCEMENT_ENABLED
+        # locally (true in .env) sends every message through the REAL entitlement
+        # gate against whatever founder_id=1 actually is in the database. That
+        # was silently riding on the old 40,000 token/day Free ceiling; dropping
+        # it to 4,000 (2026-08-16 product decision) started failing
+        # test_100_concurrent_messages with a bare KeyError, because a handful of
+        # the 100 calls got a real 429 mid-run instead of the mocked answer.
+        chat_gate: lambda: ChatGate(founder_id=founder["id"], tier="free",
+                                    service=None, enforced=False),
     }
     app.dependency_overrides.update(overrides)
     yield SimpleNamespace(client=TestClient(app), conv=conv, att=att, sug=sug, founder=founder)

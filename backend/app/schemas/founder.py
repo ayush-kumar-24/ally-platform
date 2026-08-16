@@ -102,11 +102,16 @@ class FounderRead(BaseModel):
 
     website: str | None = None
     linkedin_url: str | None = None
+    avatar_url: str | None = None
     preferred_language: str | None = None
     notification_preferences: Any | None = None
 
     created_at: datetime | None = None
     updated_at: datetime | None = None
+
+
+class AvatarUploadResponse(BaseModel):
+    avatar_url: str
 
 
 class FounderUpdate(BaseModel):

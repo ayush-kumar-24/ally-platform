@@ -249,8 +249,18 @@ export default function PlatformLayout() {
         <div className="sb-foot">
           <button className="sb-user" onClick={() => handleNav('/app/profile')}>
             {/* 'RV' was a mock founder's initials and 'Growth stage - founder' a
-                placeholder, both shown to every real user under their own name. */}
-            <div className="sb-av">{user.initials || '?'}</div>
+                placeholder, both shown to every real user under their own name.
+                A real avatar (POST /profile/avatar, profile page) previously
+                only ever showed on the profile page itself -- AppContext's
+                user.avatar was hardcoded null, so the sidebar always fell back
+                to initials even for a founder who had set a real photo. */}
+            <div className="sb-av" style={user.avatar ? { padding: 0, overflow: 'hidden' } : undefined}>
+              {user.avatar ? (
+                <img src={user.avatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }} />
+              ) : (
+                user.initials || '?'
+              )}
+            </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div className="u-name">{user?.name || 'Your account'}</div>
               <div className="u-stage">{user?.email || 'View profile'}</div>

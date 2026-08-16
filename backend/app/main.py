@@ -33,8 +33,11 @@ from dotenv import load_dotenv
 # is already sitting in the shell/machine environment.
 load_dotenv(override=True)
 
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
+from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core.config import settings
@@ -93,6 +96,17 @@ from app.api.v1.reasoning.trigger import get_reasoning_trigger
 app.dependency_overrides[get_session_completion_notifier] = get_reasoning_trigger
 
 app.include_router(api_router)
+
+# Local disk storage for uploaded profile photos (see api/v1/profile/avatar.py).
+# A real cloud bucket (S3 / Supabase Storage) is the right home for this in
+# production -- files here do not survive a redeploy on infrastructure with an
+# ephemeral filesystem (e.g. a container replaced rather than updated in
+# place). Swapping the storage backend is scoped to that one module; nothing
+# else references the filesystem path directly.
+UPLOAD_DIR = Path(__file__).resolve().parent.parent / "uploads"
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+(UPLOAD_DIR / "avatars").mkdir(exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 
 @app.get("/")
