@@ -11,12 +11,25 @@ import '@fontsource-variable/fraunces';
 import '@fontsource-variable/fraunces/wght-italic.css';    // serif hero <em> italic
 import { AppProvider } from './context/AppContext';
 import ErrorBoundary from './components/ErrorBoundary';
+import { reportError } from './services/errorReporting';
 import App from './App';
 import './index.css';
 import './styles/onboarding-supplement.css';
 import './styles/onboarding-questions.css';
 import './styles/animations.css';
 import './styles/tour.css';
+
+// ErrorBoundary (below) only catches errors React's render phase throws
+// through its own tree -- by design, React error boundaries do NOT catch
+// errors from event handlers, timers, or async code/rejected promises. These
+// two listeners are what catch that other, larger class of real production
+// errors, which would otherwise be invisible even with ErrorBoundary in place.
+window.addEventListener('error', (event) => {
+  reportError(event.error ?? event.message, { source: 'window_error' });
+});
+window.addEventListener('unhandledrejection', (event) => {
+  reportError(event.reason, { source: 'unhandled_rejection' });
+});
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

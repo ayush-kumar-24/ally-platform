@@ -47,6 +47,15 @@ class ConversationRepository(abc.ABC):
     @abc.abstractmethod
     def list_messages(self, conversation_id: str) -> tuple[ConversationMessage, ...]: ...
 
+    @abc.abstractmethod
+    def find_messages_by_request_id(
+        self, conversation_id: str, request_id: str,
+    ) -> tuple[ConversationMessage, ...]:
+        """Messages tagged with this request_id in this conversation -- at most
+        one user + one assistant message, since both halves of a turn share the
+        id (see ChatExecutionService.send_message). Used to make a retried
+        send_message idempotent instead of duplicating the turn."""
+
     # --- summaries -------------------------------------------------------
     @abc.abstractmethod
     def save_summary(self, summary: ConversationSummary) -> None: ...
@@ -109,6 +118,15 @@ class InMemoryConversationRepository(ConversationRepository):
             msgs = list(self._messages.get(conversation_id, ()))
         msgs.sort(key=lambda m: m.sequence)
         return tuple(msgs)
+
+    def find_messages_by_request_id(
+        self, conversation_id: str, request_id: str,
+    ) -> tuple[ConversationMessage, ...]:
+        with self._lock:
+            msgs = list(self._messages.get(conversation_id, ()))
+        matched = [m for m in msgs if (m.metadata or {}).get("request_id") == request_id]
+        matched.sort(key=lambda m: m.sequence)
+        return tuple(matched)
 
     # --- summaries -------------------------------------------------------
 

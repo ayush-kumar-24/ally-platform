@@ -46,12 +46,18 @@ class Settings(BaseSettings):
     SUPABASE_URL: str = ""
     SUPABASE_JWT_SECRET: str = ""
 
-    # Shared secret for inbound Supabase/ops webhooks (app/api/v1/webhooks). Must be
-    # configured as the same value on both sides -- Supabase's Database Webhooks
-    # "Add a header" field, and whatever external scheduler (cron, GitHub Actions,
-    # a Render Cron Job) triggers the deletion sweep. Empty means every webhook call
-    # is rejected (fails closed) rather than left open by omission.
+    # Shared secret Supabase sends back on its Auth webhook (configured on the
+    # Supabase project's "Send webhook" auth hook). Verified against the
+    # `X-Webhook-Secret` header on every inbound call -- an unauthenticated
+    # caller must not be able to trigger someone else's account deletion by
+    # guessing a founder's Supabase user_id. Empty means the endpoint refuses
+    # every request rather than silently trusting an unsigned one.
     SUPABASE_WEBHOOK_SECRET: str = ""
+
+    # Shared secret for internal-only endpoints with no founder in the request
+    # at all (the deletion-sweep trigger an external scheduler calls). Same
+    # fail-closed rule: empty means refuse, never "open by default".
+    INTERNAL_JOBS_SECRET: str = ""
 
     # --- Security ---
     # Signs the session tokens THIS backend issues (see below). Keep it secret.
@@ -65,6 +71,36 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
+
+    # The refresh token used to be returned in the /auth/session and /auth/
+    # resume JSON bodies, same as the access token -- which meant the only
+    # place for a browser client to keep it was localStorage, fully readable
+    # by any JS on the page (XSS, a compromised script, a malicious
+    # extension). It is now ALSO set as an HttpOnly cookie the browser
+    # handles automatically; /auth/refresh, /resume and /logout read it from
+    # there first and only fall back to a body field for non-browser callers
+    # that cannot use cookies (a mobile app, a script).
+    #
+    # REFRESH_COOKIE_SECURE must be True in production (cookie is dropped
+    # entirely over plain HTTP otherwise, which is correct) -- False only
+    # exists so local http://localhost dev isn't forced onto TLS.
+    #
+    # REFRESH_COOKIE_SAMESITE defaults to "lax": correct and simplest if the
+    # frontend proxies /api to the backend (same browser-visible origin, per
+    # the "Verify Vercel /api proxy to api.goxlally.ai" roadmap item -- once
+    # that's confirmed, "lax" is right and nothing else here needs to
+    # change). If the frontend and backend ever end up on genuinely
+    # different origins with no proxy, this must become "none" (which
+    # itself requires REFRESH_COOKIE_SECURE=True, the browser rejects
+    # SameSite=None over plain HTTP).
+    #
+    # REFRESH_COOKIE_DOMAIN empty means a host-only cookie -- correct for a
+    # single api.goxlally.ai host. Only set this to ".goxlally.ai" if the
+    # cookie genuinely needs to be shared across multiple subdomains.
+    REFRESH_COOKIE_NAME: str = "ally_refresh_token"
+    REFRESH_COOKIE_SECURE: bool = True
+    REFRESH_COOKIE_SAMESITE: str = "lax"
+    REFRESH_COOKIE_DOMAIN: str = ""
 
     # --- Plan enforcement ---
     # The quota gate (daily token ceilings + credit balance). Was dormant while

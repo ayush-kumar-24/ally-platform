@@ -26,7 +26,7 @@
  * mount" step and no session parsed out of the URL.
  */
 
-import { clearTokens, getRefreshToken, post, setTokens } from './api';
+import { clearTokens, post, setTokens } from './api';
 import { supabaseConfigured } from './supabaseConfig';
 
 /**
@@ -216,13 +216,18 @@ export async function signInWithPassword(email, password) {
  * dropping it client-side would leave a working credential in the wild), then
  * every local trace of the founder is cleared.
  *
+ * The refresh token itself is never read here -- it rides as the HttpOnly
+ * cookie (api.js's withCredentials), and the backend clears that cookie as
+ * part of this same call. Always attempted (no more "if there's a token"
+ * guard): there is no client-side way to know whether the cookie is present,
+ * and POSTing with none just means the backend has nothing to revoke.
+ *
  * Never throws: a founder pressing sign out must end up signed out even if the
  * revoke call fails, so the local clear happens either way.
  */
 export async function logout() {
-  const refresh_token = getRefreshToken();
   try {
-    if (refresh_token) await post('/auth/logout', { refresh_token });
+    await post('/auth/logout');
   } catch {
     // Offline, or the token was already revoked. Clearing locally still matters.
   } finally {

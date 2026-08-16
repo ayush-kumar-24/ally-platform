@@ -19,6 +19,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_founder_record
+from app.api.v1.diagnosis.repository import DiagnosisRepository
 from app.db.session import get_db
 from app.api.v1.plans.dependencies import _plan_context, get_entitlement_service
 from app.models import Founder
@@ -29,6 +30,7 @@ from app.plans.catalog import (
     TOPUP_PRICE_INR,
     Feature,
     all_plans,
+    get_plan,
 )
 
 router = APIRouter(prefix="/plans", tags=["plans"])
@@ -91,6 +93,22 @@ def _trial_status(expires_at) -> dict | None:
     }
 
 
+def _diagnosis_usage(db: Session, founder: Founder) -> dict:
+    """This calendar month's diagnosis usage, the same count and limit
+    `_check_monthly_diagnosis_limit` (diagnosis/service.py) actually enforces
+    -- computed here, not duplicated, so the profile page's usage meter can
+    never disagree with what starting a diagnosis would actually do.
+
+    limit <= 0 means unlimited (matches the enforcement side's convention).
+    """
+    plan = get_plan(getattr(founder, "plan_type", None))
+    limit = plan.diagnoses_per_month
+    now = datetime.now(timezone.utc)
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    used = DiagnosisRepository(db).count_sessions_started_since(founder.founder_id, month_start)
+    return {"used": used, "limit": limit if limit > 0 else None}
+
+
 @router.get("/me", response_model=dict, summary="My plan, limits and usage")
 def my_entitlements(founder: Founder = Depends(get_founder_record),
                     service=Depends(get_entitlement_service),
@@ -116,6 +134,7 @@ def my_entitlements(founder: Founder = Depends(get_founder_record),
         "free_calls_remaining": e.free_calls_remaining,
         "call_price_inr": e.call_price_inr,
         "trial": _trial_status(trial_expires_at),
+        "diagnosis_usage": _diagnosis_usage(db, founder),
     }
 
 

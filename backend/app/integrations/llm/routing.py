@@ -28,6 +28,7 @@ from app.api.v1.ally.execution.schemas import (
     ProviderRequest,
     ProviderResponse,
 )
+from app.core.logger import logger
 from app.api.v1.ally.execution.service import AIExecutionService, build_execution_service
 from app.integrations.llm.anthropic_provider import ClaudeProvider
 from app.integrations.llm.errors import LLMUnavailableError
@@ -94,10 +95,26 @@ class FailoverLLMProvider(LLMProvider):
 
     def generate(self, request: ProviderRequest) -> ProviderResponse:
         last_exc: Exception | None = None
-        for _name, provider in self._ordered():
+        for name, provider in self._ordered():
             try:
                 return provider.generate(request)  # provider records its own health
             except Exception as exc:               # noqa: BLE001 -- try the next link
+                # This used to be silent. A real provider failing here (bad
+                # model id, unsupported param, expired key) fell through to
+                # the next link in the chain -- reaching mock, or a *different*
+                # real provider than the one actually configured -- with no
+                # trace anywhere: metadata().name reports "auto" regardless of
+                # which link answered, so a healthy-looking ok=True response
+                # could silently be MockLLMProvider's canned text while both
+                # real providers were failing every single call underneath it.
+                # That happened here: OpenAI 400'd on an unsupported param and
+                # Anthropic 404'd on a stale model id, and nothing surfaced
+                # either until this was traced by hand. Log so it can't hide
+                # again -- this is the one place that ever sees the failure.
+                logger.warning(
+                    "llm provider failed in failover chain; trying next",
+                    extra={"stage": "llm_failover", "provider": name, "error": str(exc)},
+                )
                 last_exc = exc
                 continue
         raise last_exc or LLMUnavailableError("failover: all providers exhausted")
@@ -197,10 +214,20 @@ def build_failover_execution(
     failover = FailoverLLMProvider(chain, registry)
 
     primary_model = _MODELS.get(chain_names[0], _MODELS["mock"])(settings)
+    # Reasoning-tier turns (see AIRequest.reasoning_required) route straight to
+    # anthropic when it's actually configured -- not through "auto", which
+    # would try openai first with an anthropic model name and burn a doomed
+    # attempt every single reasoning turn before falling through. No anthropic
+    # key -> same graceful degrade as everywhere else here: falls back to the
+    # default chain, so reasoning_required silently becomes a no-op rather
+    # than an error.
+    reasoning_available = "anthropic" in providers
     router = AIRouter(RoutingPolicy(
         default_provider="auto",
         default_model=primary_model,
         distress_model=primary_model,
+        reasoning_provider="anthropic" if reasoning_available else "auto",
+        reasoning_model=_MODELS["anthropic"](settings) if reasoning_available else primary_model,
         default_temperature=config.temperature,
     ))
     registry_map: dict[str, LLMProvider] = {"auto": failover, **providers}

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { get, post } from '../services/api';
-import { getProfile, updateProfile } from '../services/profile';
+import { getProfile, getProgress, updateProfile } from '../services/profile';
 import { logout } from '../services/auth';
 import { getCatalog, getMyPlan } from '../services/plans';
 import {
@@ -166,12 +166,19 @@ export default function FounderProfile() {
   /* The real plan, so this page stops insisting everyone is on Free. */
   const [plan, setPlan] = useState(null);
   const [tiers, setTiers] = useState([]);
+  // The "DNA mapped" ring below used to hardcode 100% for every founder,
+  // whether their profile was 5% or fully filled in. /profile/progress
+  // already computes this server-side (same number /profile/validate's
+  // "what's missing" list is built from); this just reads it instead of
+  // asserting a number that was never true for most founders.
+  const [progressPct, setProgressPct] = useState(null);
   useEffect(() => {
     let cancelled = false;
     // /plans/me knows which tier they are on; the monthly price lives on the
     // /plans catalog, so the figure shown is the same one the pricing page quotes.
     getMyPlan().then(p => { if (!cancelled) setPlan(p); }).catch(() => {});
     getCatalog().then(c => { if (!cancelled) setTiers(c?.plans || []); }).catch(() => {});
+    getProgress().then(p => { if (!cancelled && p) setProgressPct(p.percent); }).catch(() => {});
     return () => { cancelled = true; };
   }, []);
   const planTier = plan?.tier || 'free';
@@ -500,7 +507,9 @@ export default function FounderProfile() {
           </div>
         </div>
 
-        {/* Ring Score */}
+        {/* Ring Score -- real /profile/progress percent, not a fixed 100%.
+            circumference = 2*pi*r(44) =~ 276.46; offset 0 is a full ring, so
+            an EMPTY profile needs the full circumference as its offset, not 0. */}
         <div style={{ flexShrink: 0, textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
           <div className="rep-ring" style={{ width: '74px', height: '74px' }}>
             <svg viewBox="0 0 100 100">
@@ -511,11 +520,11 @@ export default function FounderProfile() {
                 cy="50"
                 r="44"
                 strokeWidth="8"
-                style={{ strokeDasharray: 276, strokeDashoffset: 0 }}
+                style={{ strokeDasharray: 276, strokeDashoffset: 276 * (1 - (progressPct ?? 0) / 100) }}
               />
             </svg>
             <div className="rep-ring-c">
-              <b style={{ fontSize: '20px' }}>100%</b>
+              <b style={{ fontSize: '20px' }}>{progressPct != null ? `${progressPct}%` : '—'}</b>
               <small style={{ fontSize: '6.5px', letterSpacing: '0.08em', marginTop: '1px' }}>DNA</small>
             </div>
           </div>
@@ -724,7 +733,14 @@ export default function FounderProfile() {
 
         {/* Usage meters list */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '26px' }}>
-          {/* Chat usage */}
+          {/* Chat usage -- live-confirmed this row and the diagnosis row below
+              it were hardcoded literal text ("18 / 20", "1 / 1") for every
+              founder regardless of their actual plan or usage; a founder who
+              had never run a diagnosis at all saw "1 / 1", indistinguishable
+              from having used their only free one. Both now read the same
+              /plans/me response this page already fetches (see `plan` above)
+              -- daily_tokens_used/_limit are the identical numbers the chat
+              gate itself enforces, not a second, divergeable copy. */}
           <div className="pr-usage-row">
             <div className="pr-usage-label-row">
               <div className="pr-usage-title">
@@ -733,14 +749,26 @@ export default function FounderProfile() {
                 </svg>
                 AI Chat with Ally
               </div>
-              <span className="pr-usage-val">18 / 20</span>
+              <span className="pr-usage-val">
+                {plan ? `${plan.daily_tokens_used ?? 0} / ${plan.daily_token_limit ?? 0}` : '— / —'}
+              </span>
             </div>
             <div className="pr-usage-track">
-              <div className="pr-usage-fill" style={{ width: '90%' }} />
+              <div
+                className="pr-usage-fill"
+                style={{
+                  width: plan?.daily_token_limit
+                    ? `${Math.min(100, Math.round((plan.daily_tokens_used / plan.daily_token_limit) * 100))}%`
+                    : '0%',
+                }}
+              />
             </div>
           </div>
 
-          {/* Business diagnosis usage */}
+          {/* Business diagnosis usage -- diagnosis_usage.limit is null for an
+              unlimited plan (0 in the catalog means "no cap", per
+              diagnosis/service.py's own convention); shown as an unbounded
+              meter rather than inventing a denominator. */}
           <div className="pr-usage-row">
             <div className="pr-usage-label-row">
               <div className="pr-usage-title">
@@ -751,10 +779,23 @@ export default function FounderProfile() {
                 </svg>
                 AI Business Diagnosis
               </div>
-              <span className="pr-usage-val">1 / 1</span>
+              <span className="pr-usage-val">
+                {plan
+                  ? (plan.diagnosis_usage?.limit != null
+                      ? `${plan.diagnosis_usage.used} / ${plan.diagnosis_usage.limit}`
+                      : `${plan.diagnosis_usage?.used ?? 0} this month`)
+                  : '— / —'}
+              </span>
             </div>
             <div className="pr-usage-track">
-              <div className="pr-usage-fill" style={{ width: '100%' }} />
+              <div
+                className="pr-usage-fill"
+                style={{
+                  width: plan?.diagnosis_usage?.limit
+                    ? `${Math.min(100, Math.round((plan.diagnosis_usage.used / plan.diagnosis_usage.limit) * 100))}%`
+                    : '0%',
+                }}
+              />
             </div>
           </div>
 

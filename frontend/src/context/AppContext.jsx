@@ -6,6 +6,7 @@ import { getAccessToken } from '../services/api';
 import { getProfile } from '../services/profile';
 import { listNotifications, markAllRead, toDisplay } from '../services/notifications';
 import { isDueOrOverdue, listTasks } from '../services/planning';
+import { firstSafe } from '../utils/looksLikeToken';
 
 const AppContext = createContext(null);
 
@@ -16,15 +17,21 @@ const AppContext = createContext(null);
  * clarity score of 72, the role "CEO & Co-founder", a location in Mumbai and
  * the label "Pro" regardless of what they actually pay. Nothing reads those
  * fields any more, and a real founder must not inherit a fake one's details.
+ *
+ * firstSafe, not a plain `|| ''`: live-reproduced elsewhere (Login.jsx) that a
+ * dev-mode backend can hand back a raw token synthesized into a placeholder
+ * email for a founder who hasn't provisioned yet. profile here should always
+ * be genuine server data, but this costs nothing and closes the same class of
+ * bug regardless of which path a bad value arrives through.
  */
 function toUser(profile) {
-  const name = profile?.full_name || '';
+  const name = firstSafe([profile?.full_name]);
   return {
     avatar: null,
     name,
     initials: name.split(' ').filter(Boolean).slice(0, 2)
       .map(w => w[0].toUpperCase()).join('') || '?',
-    email: profile?.email || '',
+    email: firstSafe([profile?.email]),
     company: profile?.business_name || '',
     plan: profile?.plan_type || 'free',
     founderId: profile?.founder_id ?? null,
@@ -163,12 +170,22 @@ export function AppProvider({ children }) {
   // session, so the same overdue task doesn't re-toast every interval.
   const remindedTaskIds = useRef(new Set());
   const checkTaskReminders = useCallback(async () => {
+    // AppContext wraps the whole app, including the public marketing/landing
+    // page -- without this guard, every anonymous visitor's browser fired a
+    // GET /planning/plans on load. Live-confirmed on production: the backend
+    // answers that unauthenticated call with a raw 500 (should be 401), so
+    // this was not just wasted traffic but a real, always-on production
+    // error for every single landing-page visit. The catch below already
+    // intended "no session yet" to be silent -- skipping the call entirely
+    // for a signed-out visitor gets the same outcome without ever making it.
+    if (!getAccessToken()) return;
     let tasks;
     try {
       tasks = await listTasks();
     } catch {
-      // No session yet, feature not on this plan (403), or offline -- silent,
-      // same as the /profile fetch above. Not an error worth surfacing here.
+      // Session expired between mount and this call, feature not on this
+      // plan (403), or offline -- silent, same as the /profile fetch above.
+      // Not an error worth surfacing here.
       return;
     }
     const due = tasks.filter(isDueOrOverdue).filter(t => !remindedTaskIds.current.has(t.task_id));

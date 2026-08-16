@@ -15,10 +15,15 @@ from datetime import datetime
 
 from sqlalchemy import text
 
-from app.privacy.deletion_repository import DeletionRepository, DueDeletion
-from app.privacy.errors import FounderNotFoundError
+from app.privacy.errors import FounderNotFoundError, NoDeletionToCancelError
 from app.privacy.models import ExportBundle, PrivacyAction, PrivacyState
 from app.privacy.repository import PrivacyRepository
+# Restored during the origin/main merge: SqlAlchemyDeletionRepository below is
+# local-only (upstream has no such class), so its base class import was dropped
+# when this file's conflicting hunks resolved to the upstream side. See the
+# NoDeletionPendingError note in errors.py -- the duplicate deletion pipelines
+# still need reconciling; this only keeps the module importable meanwhile.
+from app.privacy.deletion_repository import DeletionRepository
 
 # Sections included in a self-service export, as (label, SQL). Each is scoped to the
 # founder by :fid. Kept as an explicit list rather than "every table with a
@@ -57,13 +62,15 @@ class SqlAlchemyPrivacyRepository(PrivacyRepository):
     # --- state ----------------------------------------------------------
 
     def get_state(self, founder_id: int) -> PrivacyState:
-        # `processing_restricted_at` arrives with a migration that may not have run.
-        # Falling back to the deletion columns keeps the Privacy Center usable
-        # instead of 500-ing the whole page over one absent column.
+        # `processing_restricted_at` / `deletion_executed_at` each arrived with
+        # their own migration that may not have run yet in every environment.
+        # Falling back keeps the Privacy Center usable instead of 500-ing the
+        # whole page over one absent column.
         try:
             row = self.db.execute(
                 text("""select founder_id, processing_restricted_at,
-                               deletion_requested_at, deletion_scheduled_at
+                               deletion_requested_at, deletion_scheduled_at,
+                               deletion_executed_at
                         from founders where founder_id = :fid"""),
                 {"fid": founder_id},
             ).mappings().first()
@@ -74,7 +81,8 @@ class SqlAlchemyPrivacyRepository(PrivacyRepository):
                         from founders where founder_id = :fid"""),
                 {"fid": founder_id},
             ).mappings().first()
-            row = dict(legacy) | {"processing_restricted_at": None} if legacy else None
+            row = (dict(legacy) | {"processing_restricted_at": None, "deletion_executed_at": None}
+                   if legacy else None)
         if row is None:
             raise FounderNotFoundError(founder_id)
         return PrivacyState(
@@ -83,6 +91,7 @@ class SqlAlchemyPrivacyRepository(PrivacyRepository):
             processing_restricted_at=row["processing_restricted_at"],
             deletion_requested_at=row["deletion_requested_at"],
             deletion_scheduled_at=row["deletion_scheduled_at"],
+            deletion_executed_at=row.get("deletion_executed_at"),
         )
 
     def set_restriction(self, founder_id: int, *, restricted: bool, at: datetime) -> PrivacyState:
@@ -186,6 +195,32 @@ class SqlAlchemyPrivacyRepository(PrivacyRepository):
             {"fid": founder_id},
         ).mappings().all()
         return [_to_action(r) for r in rows]
+
+    # --- execution ---------------------------------------------------------
+
+    def find_due_for_deletion(self, now: datetime) -> list[int]:
+        rows = self.db.execute(
+            text("""select founder_id from founders
+                     where deletion_scheduled_at is not null
+                       and deletion_scheduled_at <= :now
+                       and deletion_executed_at is null
+                     order by deletion_scheduled_at asc"""),
+            {"now": now},
+        ).all()
+        return [r[0] for r in rows]
+
+    def cancel_deletion(self, founder_id: int) -> PrivacyState:
+        state = self.get_state(founder_id)
+        if not state.deletion_pending:
+            raise NoDeletionToCancelError(founder_id)
+        self.db.execute(
+            text("""update founders
+                       set deletion_requested_at = null, deletion_scheduled_at = null
+                     where founder_id = :fid"""),
+            {"fid": founder_id},
+        )
+        self.db.commit()
+        return self.get_state(founder_id)
 
 
 def _to_action(row) -> PrivacyAction:

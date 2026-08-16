@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import ProductTour from '../components/ProductTour';
 import { greetingNow } from '../utils/helpers';
 import { getOverview } from '../services/dashboard';
+import { firstSafe } from '../utils/looksLikeToken';
 import { useCallAccess } from '../hooks/useCallAccess';
 import {
   IconDashboard,
@@ -116,10 +117,23 @@ export default function PlatformLayout() {
   const { canBook: canBookCall } = useCallAccess();
 
   const [hasReport, setHasReport] = useState(true);
+  // Independent of AppContext's user.name -- live-confirmed a real gap: right
+  // after a fresh login, this header could render "there" for several
+  // seconds (or longer) while Dashboard.jsx's OWN greeting, fetched from this
+  // exact same endpoint, already showed the real name correctly. Whatever
+  // causes AppContext's hydration to lag (timing between the login flow's
+  // setUser and this component's mount, or a missed re-run), this component
+  // sees every route change (it's the persistent chrome, not the routed
+  // page), so it does not need to depend on that context value alone.
+  const [founderName, setFounderName] = useState(null);
   useEffect(() => {
     let cancelled = false;
     getOverview()
-      .then(o => { if (!cancelled && o) setHasReport(Boolean(o.latest_diagnosis?.available)); })
+      .then(o => {
+        if (cancelled || !o) return;
+        setHasReport(Boolean(o.latest_diagnosis?.available));
+        if (o.founder_name) setFounderName(o.founder_name);
+      })
       .catch(() => { /* leave unlocked rather than guess */ });
     return () => { cancelled = true; };
   }, []);
@@ -155,7 +169,10 @@ export default function PlatformLayout() {
 
   const currentLabel = NAV_GROUPS.flatMap(g => g.items).find(i => isActive(i.path))?.label || 'Dashboard';
   const isDashboard = location.pathname === '/app' || location.pathname === '/app/';
-  const firstName = (user?.name || '').split(' ')[0] || 'there';
+  // founder_name (this component's own fetch) first, user?.name (AppContext)
+  // as a fallback for the brief window before that fetch resolves -- see the
+  // founderName state above for why AppContext alone was not reliable enough.
+  const firstName = firstSafe([founderName, user?.name]).split(' ')[0] || 'there';
 
   return (
     <div className="platform" style={{ '--sb': sidebarCollapsed ? '68px' : '248px' }}>

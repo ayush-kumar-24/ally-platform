@@ -155,6 +155,25 @@ def reset_conversations(founder_id: int, payload: ConfirmRequest,
             "rows_affected": service.reset_conversations(admin, founder_id, ip=ip)}
 
 
+@router.post("/users/{founder_id}/cancel-deletion", response_model=dict,
+             summary="Cancel a founder's pending account erasure")
+def cancel_pending_deletion(founder_id: int, payload: ConfirmRequest,
+                            ip: str | None = Depends(client_ip),
+                            admin: PanelAdmin = Depends(get_panel_admin),
+                            service=Depends(get_panel_service)) -> dict:
+    """For the one case a founder cannot cancel their own pending deletion via
+    the Privacy Center: a Supabase-webhook-triggered erasure, where their
+    identity is already gone and they can only reach support out-of-band.
+    `reason` is required here (not just `confirm`) -- reversing an erasure
+    request needs a human explanation on the record, not just a checkbox."""
+    if not payload.confirm:
+        raise ConfirmationRequiredError("deletion cancellation")
+    if not payload.reason:
+        raise ConfirmationRequiredError("deletion cancellation (reason required)")
+    state = service.cancel_pending_deletion(admin, founder_id, reason=payload.reason, ip=ip)
+    return {"founder_id": founder_id, "deletion_pending": state.deletion_pending}
+
+
 @router.delete("/users/{founder_id}", response_model=UserSummaryResponse,
                summary="Delete a user (soft-delete / ban)")
 def delete_user(founder_id: int, payload: ConfirmRequest,

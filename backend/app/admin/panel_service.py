@@ -71,7 +71,7 @@ class AdminPanelService:
         # need them report that they are unconfigured rather than failing obscurely.
         self.conversations = conversations
         self.report_regenerator = report_regenerator
-        self.privacy = privacy
+        self.privacy = privacy  # PrivacyRepository -- backs cancel_pending_deletion
         self._now = clock or (lambda: datetime.now(timezone.utc))
 
     # --- reads ------------------------------------------------------------
@@ -146,6 +146,30 @@ class AdminPanelService:
                           resource=f"founder:{founder_id}", target_user_id=founder_id,
                           ip_address=ip, new_value={"rows_affected": affected})
         return affected
+
+    def cancel_pending_deletion(self, admin, founder_id: int, *, reason: str,
+                                ip: str | None = None):
+        """Clear a founder's scheduled erasure before the sweep runs.
+
+        The one case this exists for: a Supabase-webhook-triggered deletion,
+        where the founder structurally cannot log back in to cancel it
+        themselves (their identity is already gone) and their only recourse
+        is contacting support out-of-band. `reason` is required (not
+        optional, unlike most audited actions here) because reversing an
+        erasure request is exactly the kind of action that needs a human
+        explanation on the record, not just a timestamp.
+        """
+        require(admin.role, Capability.CANCEL_DELETION)
+        if self.privacy is None:
+            raise InvalidSearchError("deletion cancellation is not configured")
+        self._require_user(founder_id)
+        state = self.privacy.cancel_deletion(founder_id)
+        self.audit.record(
+            admin=admin, action="user.cancel_deletion", resource=f"founder:{founder_id}",
+            target_user_id=founder_id, ip_address=ip, reason=reason,
+            old_value="deletion_pending", new_value="cancelled",
+        )
+        return state
 
     def delete_user(self, admin, founder_id: int, *, reason: str | None = None,
                     ip: str | None = None) -> UserSummary:

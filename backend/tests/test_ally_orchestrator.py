@@ -40,6 +40,7 @@ from app.api.v1.ally.rag import (
     KnowledgeChunk,
     build_retrieval_service,
 )
+from app.models.enums import StageGroup
 
 T0 = datetime(2026, 7, 27, 12, 0, 0, tzinfo=timezone.utc)
 VALID_BODY = json.dumps({"content": "Here is your grounded answer.", "response_type": "answer",
@@ -64,7 +65,10 @@ class FakeContextRepo:
         return SimpleNamespace(founder_id=fid, full_name="Asha", stage_id=5, industry_mapped_id=3)
 
     def get_stage(self, sid):
-        return SimpleNamespace(stage_name="Growth / Scaling")
+        # stage_order=6 -> Stage 1->10+ via stage_groups (see resolve_stage_groups),
+        # the vocabulary retrieval's stage filter actually reads -- must match
+        # the seeded chunk's stage tag below.
+        return SimpleNamespace(stage_name="Growth / Scaling", stage_order=6)
 
     def get_industry(self, iid):
         return SimpleNamespace(industry_name="SaaS")
@@ -105,7 +109,7 @@ def prompt_manager():
 
 def retrieval_service():
     chunk = KnowledgeChunk("c1", "rag", 1, "activation tips", Decimal("0.7"),
-                           stage="Growth / Scaling", industry="SaaS",
+                           stage=StageGroup.STAGE_1_TO_10_PLUS.value, industry="SaaS",
                            category="Sales & Revenue", root_cause_ids=(10,))
     return build_retrieval_service(InMemoryVectorRetrievalRepository([chunk]))
 

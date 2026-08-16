@@ -355,6 +355,11 @@ class Founders(Base):
     data_retention_expires_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
     deletion_requested_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
     deletion_scheduled_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
+    # Set once the deletion sweep actually runs for this founder -- distinct from
+    # deletion_scheduled_at (when it becomes eligible) so "due" and "done" are
+    # never conflated. NULL means either never requested, or requested but not
+    # yet executed (including "still inside the grace window").
+    deletion_executed_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
     founder_motivation: Mapped[Optional[str]] = mapped_column(Text)
     working_relationship: Mapped[Optional[str]] = mapped_column(String(30))
     support_preferences: Mapped[Optional[dict]] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))

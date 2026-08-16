@@ -22,6 +22,7 @@ import { CURRENT_VERSIONS, flushPendingConsent, recordConsent, savePendingConsen
 import { sendEmailOtp, signInWithPassword, startDevSession, verifyOtpAndSetPassword } from '../../services/auth';
 import { get } from '../../services/api';
 import { supabaseConfigured } from '../../services/supabaseConfig';
+import { firstSafe } from '../../utils/looksLikeToken';
 
 /** Keep in step with the minimum length configured in the Supabase dashboard.
  *  Checking here too means a too-short password is caught before the round trip,
@@ -101,6 +102,20 @@ export default function Login() {
       // Provisioning races the very first request sometimes; the rest of the
       // app re-fetches /profile on its own, so a miss here isn't fatal.
     }
+    /* A returning founder who already finished onboarding must not be sent back
+       through it. GuidedLayout has its own profile_completed guard, but it only
+       runs once per mount -- and this component mounted BEFORE the token
+       existed, so by the time the guard could re-check, it never fires again.
+       This is the one place the answer is knowable at the moment it matters:
+       right after the session is established, with the freshly-fetched profile
+       in hand. Skip the "signing you in" transition and the 14-step shell --
+       there is nothing to resume into. (Carried over from origin/main's OAuth
+       mount effect, which this email/OTP flow replaced.) */
+    if (profile?.profile_completed) {
+      navigate('/app', { replace: true });
+      return;
+    }
+
     let stored = null;
     try {
       stored = await flushPendingConsent();
@@ -108,12 +123,17 @@ export default function Login() {
       // Stays pending in localStorage; flushed again on the next app load.
     }
 
-    const name = profile?.full_name || founder.email || '';
+    /* firstSafe, not a plain ||: founder.email can itself be a synthesized
+       "<raw token>@ally.local" placeholder for a founder who hasn't provisioned
+       yet, and a fallback chain that trusts it blindly renders a 250-character
+       JWT as the founder's name on their very first screen. See
+       looksLikeToken.js. */
+    const name = firstSafe([profile?.full_name, founder.email]);
     setUser((prev) => ({
       ...prev,
       authProvider: founder.provider,
       name: name || prev?.name,
-      email: founder.email || prev?.email,
+      email: firstSafe([founder.email, prev?.email]),
       initials: name.split(' ').filter(Boolean).slice(0, 2)
         .map((w) => w[0].toUpperCase()).join('') || '?',
       plan_type: profile?.plan_type || prev?.plan_type,

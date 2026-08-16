@@ -96,3 +96,11 @@ class GraphView:
 def root_cause_node_id(root_cause_id: int) -> str:
     """Canonical node id for a root cause -- the traversal entry point."""
     return f"{NodeType.ROOT_CAUSE.value}:{root_cause_id}"
+
+
+def problem_node_id(problem_id: int) -> str:
+    return f"{NodeType.PROBLEM.value}:{problem_id}"
+
+
+def intervention_node_id(intervention_id: int) -> str:
+    return f"{NodeType.INTERVENTION.value}:{intervention_id}"

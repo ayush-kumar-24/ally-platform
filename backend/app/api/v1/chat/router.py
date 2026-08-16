@@ -18,7 +18,6 @@ from app.api.v1.chat.dependencies import (
     get_chat_service,
     get_conversation_service,
     get_current_founder_id,
-    get_link_extractor,
     get_streaming_service,
     get_suggestion_service,
 )
@@ -29,9 +28,12 @@ from app.api.v1.chat.responses import (
     AttachmentListResponse,
     AttachmentResponse,
     ConversationListResponse,
+    ConversationMessagesResponse,
     ConversationResponse,
     FeedbackResponse,
+    MessageResponse,
     SuggestionCollectionResponse,
+    SuggestionResponse,
 )
 from app.api.v1.chat.schemas import (
     CreateConversationRequest,
@@ -152,6 +154,27 @@ def get_conversation(
     return ConversationResponse.from_domain(owned_conversation(service, conversation_id, founder_id))
 
 
+@router.get("/conversations/{conversation_id}/messages", response_model=ConversationMessagesResponse,
+            summary="Conversation transcript")
+def get_conversation_messages(
+    conversation_id: str,
+    founder_id: int = Depends(get_current_founder_id),
+    service=Depends(get_conversation_service),
+) -> ConversationMessagesResponse:
+    """The actual transcript -- GET /conversations/{id} above returns only the
+    header (title, counts, timestamps). Opening a past conversation needs both;
+    the frontend previously had nowhere to get this from at all, so every
+    reopened conversation rendered empty regardless of how many messages it
+    really had. ConversationService.get_history already existed and was never
+    wired to a route."""
+    owned_conversation(service, conversation_id, founder_id)
+    messages = service.get_history(conversation_id)
+    return ConversationMessagesResponse(
+        conversation_id=conversation_id,
+        messages=[MessageResponse.from_domain(m) for m in messages],
+    )
+
+
 @router.delete("/conversations/{conversation_id}", response_model=ConversationResponse,
                summary="Archive a conversation")
 def archive_conversation(
@@ -243,21 +266,28 @@ def restore_attachment(
 
 
 @router.get("/conversations/{conversation_id}/suggestions", response_model=SuggestionCollectionResponse,
-            summary="Generate suggestions for a conversation")
+            summary="List suggestions already generated for a conversation")
 def get_suggestions(
     conversation_id: str,
     founder_id: int = Depends(get_current_founder_id),
     conversations=Depends(get_conversation_service),
-    attachments=Depends(get_attachment_service),
-    links=Depends(get_link_extractor),
     service=Depends(get_suggestion_service),
 ) -> SuggestionCollectionResponse:
-    conversation = owned_conversation(conversations, conversation_id, founder_id)
-    conversation_attachments = attachments.list_attachments(conversation_id)
-    conversation_links = links.from_messages(conversations.get_history(conversation_id))
-    collection = service.generate_suggestions(
-        conversation, attachments=conversation_attachments, links=conversation_links)
-    return SuggestionCollectionResponse.from_domain(collection)
+    """Lists what ChatExecutionService already generated right after the last
+    chat turn (see send_message step 8) -- it does NOT regenerate here.
+    Regenerating on every GET, without that turn's context_window/ai_response
+    in hand, is what previously left the AI-response-aware rules
+    (rule_follow_up, rule_clarification) permanently unable to fire: this
+    endpoint had no way to reconstruct what only the chat turn itself knows.
+    """
+    owned_conversation(conversations, conversation_id, founder_id)
+    suggestions = service.list_suggestions(conversation_id)
+    return SuggestionCollectionResponse(
+        conversation_id=conversation_id, founder_id=founder_id,
+        suggestions=[SuggestionResponse.from_domain(s) for s in suggestions],
+        generated=len(suggestions), returned=len(suggestions),
+        suppressed=0, limited=False,
+    )
 
 
 @router.post("/suggestions/{suggestion_id}/feedback", response_model=FeedbackResponse,

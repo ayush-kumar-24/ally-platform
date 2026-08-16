@@ -50,12 +50,12 @@ class ReportsRepository:
     # --- shares -----------------------------------------------------------
     def create_share(
         self, db: Session, *, founder_id: int, report_id: int, token: str,
-        base_url: str, ttl_days: int = 30,
+        base_url: str, ttl_hours: int = 24,
     ) -> ReportShares:
         share = ReportShares(
             founder_id=founder_id, report_id=report_id, share_token=token,
             share_url=f"{base_url}/api/v1/reports/shared/{token}",
-            expires_at=datetime.now(timezone.utc) + timedelta(days=ttl_days),
+            expires_at=datetime.now(timezone.utc) + timedelta(hours=ttl_hours),
             is_active=True, access_count=0,
         )
         db.add(share)

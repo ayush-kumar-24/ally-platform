@@ -18,7 +18,7 @@ from typing import Any, Mapping
 # this only when the SHAPE of the context changes (a field added/removed/retyped),
 # so downstream consumers (Prompt Manager, Memory, RAG, Router, Orchestrator) can
 # branch on the structure they were built against and evolve without breaking.
-ALLY_CONTEXT_SCHEMA_VERSION = "v1"
+ALLY_CONTEXT_SCHEMA_VERSION = "v2"
 
 
 @dataclass(frozen=True)
@@ -28,6 +28,15 @@ class FounderProfileContext:
     stage_id: int | None
     stage_name: str | None
     industry: str | None
+    # The diagnosis question bank's stage GROUP(s) ("Stage 0->1", "Stage 1->10+",
+    # ...) this founder is eligible for -- see
+    # app.api.v1.diagnosis.engine.resolve_stage_groups, the single source of
+    # truth for this mapping (no DB column backs it). Deliberately NOT
+    # `stage_name` ("Early Traction", "Validation", ...): rag_documents.
+    # stage_relevance is tagged with the GROUP vocabulary, not individual stage
+    # names, and using the wrong one here silently zeroed out chat retrieval's
+    # stage filter for every document that was actually stage-tagged.
+    stage_groups: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

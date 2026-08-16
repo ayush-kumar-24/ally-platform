@@ -38,7 +38,27 @@ def _envelope(error: str, message: str, request_id: str, detail: str | None = No
 
 async def app_error_handler(request: Request, exc: AppError):
     request_id = getattr(request.state, "request_id", str(uuid.uuid4()))
-    logger.warning("Handled app error", extra={"request_id": request_id, "path": request.url.path})
+    # Every AppError subclass across the app funnels through this one handler
+    # -- AuthError, diagnosis errors, OutOfCreditsError/DailyTokenLimitError/
+    # FeatureNotInPlanError, privacy, admin, all of it. The log line used to
+    # carry only request_id + path, so "Handled app error" told you nothing
+    # about WHAT happened or WHO it happened to, even though both were sitting
+    # right here (exc.__class__.__name__/exc.message, and founder_id already
+    # set on request.state by the auth dependency by this point in the
+    # request -- confirmed live: the very next "Request handled" log line for
+    # the same request_id already had it). Same info the response body always
+    # had; the log just wasn't given a copy of it.
+    extra = {
+        "request_id": request_id,
+        "path": request.url.path,
+        "error_type": exc.__class__.__name__,
+        "error_message": exc.message,
+        "status_code": exc.status_code,
+    }
+    founder_id = getattr(request.state, "founder_id", None)
+    if founder_id:
+        extra["founder_id"] = founder_id
+    logger.warning("Handled app error", extra=extra)
     return JSONResponse(
         status_code=exc.status_code,
         content=_envelope(exc.__class__.__name__, exc.message, request_id),

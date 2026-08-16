@@ -146,8 +146,9 @@ def test_schema_version_is_present_on_every_context():
     # Carried automatically on both answerable and non-answerable contexts.
     full = AllyContextBuilder(full_repo()).build(1)
     empty = AllyContextBuilder(FakeRepo(f=founder(), rep=None)).build(1)
-    assert full.schema_version == ALLY_CONTEXT_SCHEMA_VERSION == "v1"
-    assert empty.schema_version == "v1"
+    # v2: FounderProfileContext gained stage_groups (see AllyContextBuilder._profile).
+    assert full.schema_version == ALLY_CONTEXT_SCHEMA_VERSION == "v2"
+    assert empty.schema_version == "v2"
 
 
 def test_no_report_is_valid_but_not_answerable():

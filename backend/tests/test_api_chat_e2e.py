@@ -112,7 +112,11 @@ def world():
     chat = ChatExecutionService(
         context_builder=AllyContextBuilder(WorldContextRepo()), conversation_service=conv,
         context_window_builder=window, prompt_manager=default_grounded_prompt_manager(),
-        execution=build_execution_service({"mock": MockLLMProvider(content=VALID_BODY)}))
+        execution=build_execution_service({"mock": MockLLMProvider(content=VALID_BODY)}),
+        # Suggestions are now generated inline right after a chat turn (see
+        # ChatExecutionService.send_message step 8) -- wired to the SAME `sug`
+        # instance the GET /suggestions endpoint override reads from below.
+        suggestion_service=sug)
     stream = StreamingChatService(chat_service=chat, conversation_service=conv)
 
     founder = {"id": 1}
@@ -185,6 +189,41 @@ def test_unknown_founder_404(world):
 
 def test_missing_conversation_404(world):
     assert world.client.get(f"{BASE}/conversations/nope").status_code == 404
+
+
+def test_conversation_messages_endpoint_returns_the_transcript(world):
+    """Regression test for the gap live verification found: GET
+    /conversations/{id} only ever returned the header (title, counts,
+    timestamps), never the messages, so reopening a past conversation always
+    rendered empty in the UI regardless of how many messages it had."""
+    c = world.client
+    cid = c.post(f"{BASE}/conversations", json={"title": "Growth"}).json()["conversation_id"]
+    c.post(f"{BASE}/message", json={"message": "How do I improve activation?",
+                                    "conversation_id": cid})
+
+    body = c.get(f"{BASE}/conversations/{cid}/messages").json()
+    assert body["conversation_id"] == cid
+    assert [m["role"] for m in body["messages"]] == ["user", "assistant"]
+    assert body["messages"][0]["content"] == "How do I improve activation?"
+    assert body["messages"][1]["content"] == ANSWER
+    # sequence is 0-based and in send order -- what the UI relies on to render
+    # the transcript top-to-bottom without re-sorting client-side.
+    assert [m["sequence"] for m in body["messages"]] == [0, 1]
+
+
+def test_conversation_messages_endpoint_ownership_and_404(world):
+    c = world.client
+    assert c.get(f"{BASE}/conversations/nope/messages").status_code == 404
+    # founder 2's request against founder 1's conversation -- must not leak
+    # another founder's transcript. owned_conversation reports a foreign
+    # resource as NotFound (never disclosed), same as every other
+    # conversation-scoped endpoint here -- so 404, not 403.
+    cid = _new_conversation(c)
+    world.founder["id"] = 2
+    try:
+        assert c.get(f"{BASE}/conversations/{cid}/messages").status_code == 404
+    finally:
+        world.founder["id"] = 1
 
 
 def test_chat_in_archived_conversation_409(world):
@@ -327,7 +366,10 @@ def test_load_concurrent_sessions(world):
 def test_openapi_documents_every_chat_endpoint(world):
     schema = world.client.get("/openapi.json").json()
     paths = {p for p in schema["paths"] if p.startswith("/api/v1/chat/")}
-    assert len(paths) == 11
+    # 12, not 11: /conversations/{id}/messages was added -- GET /conversations/{id}
+    # only ever returned the header (title, counts, timestamps), never the
+    # transcript, so reopening a past conversation always rendered empty.
+    assert len(paths) == 12
     # every operation documents a response model (no undocumented responses)
     for path, ops in schema["paths"].items():
         if path.startswith("/api/v1/chat/"):

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { factList, loadDna } from '../services/reports';
 import { DnaError, DnaLoading, DnaNoReport, DnaNoSection } from '../components/DnaState';
 
@@ -63,9 +63,20 @@ function FounderDNAView({ section, report }) {
 export default function FounderDNA() {
   const [state, setState] = useState({ status: 'loading' });
 
+  // Guards against two overlapping loads (React StrictMode's double-invoked
+  // mount effect in dev, or any fast remount in production) landing their
+  // setState calls out of order -- live-confirmed this let a superseded
+  // call's late failure overwrite an already-successful render with an
+  // error screen, even though the data had loaded fine. Only the most
+  // recently started load is allowed to write state.
+  const loadIdRef = useRef(0);
+
   const load = useCallback(() => {
+    const id = ++loadIdRef.current;
     setState({ status: 'loading' });
-    loadDna('founder').then(setState);
+    loadDna('founder').then((result) => {
+      if (id === loadIdRef.current) setState(result);
+    });
   }, []);
 
   useEffect(load, [load]);

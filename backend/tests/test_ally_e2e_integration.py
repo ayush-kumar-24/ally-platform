@@ -58,6 +58,7 @@ from app.api.v1.ally.rag import (
     KnowledgeChunk,
     build_retrieval_service,
 )
+from app.models.enums import StageGroup
 
 T0 = datetime(2026, 7, 28, 9, 0, 0, tzinfo=timezone.utc)
 ANSWER = "Here is your grounded answer."
@@ -97,6 +98,12 @@ class WorldContextRepo:
     """
 
     _STAGES = {5: "Growth / Scaling", 6: "Early Traction"}
+    # stage_order drives AllyContextBuilder's stage_groups (which retrieval's
+    # stage filter actually reads -- rag_documents.stage_relevance is tagged
+    # with the question bank's stage-GROUP vocabulary, not stage names).
+    # 6 -> Stage 1->10+, 3 -> Stage 0->1: arbitrary but internally consistent
+    # with the seeded chunk below, which is what these tests actually check.
+    _STAGE_ORDERS = {5: 6, 6: 3}
     _INDUSTRIES = {3: "SaaS", 4: "Fintech"}
 
     def __init__(self):
@@ -112,7 +119,8 @@ class WorldContextRepo:
         return SimpleNamespace(founder_id=fid, **f) if f else None
 
     def get_stage(self, sid):
-        return SimpleNamespace(stage_name=self._STAGES.get(sid, "Growth / Scaling"))
+        return SimpleNamespace(stage_name=self._STAGES.get(sid, "Growth / Scaling"),
+                               stage_order=self._STAGE_ORDERS.get(sid, 6))
 
     def get_industry(self, iid):
         return SimpleNamespace(industry_name=self._INDUSTRIES.get(iid, "SaaS"))
@@ -142,8 +150,11 @@ class WorldContextRepo:
 
 
 def _retrieval_service():
+    # stage="Stage 1->10+" (not the stage NAME "Growth / Scaling") to match
+    # what founder 1 (stage_order=6, see the context repo above) actually
+    # resolves to via stage_groups -- the vocabulary retrieval's stage filter reads.
     chunk = KnowledgeChunk("c1", "rag_chunks", 1, "Guided onboarding lifts activation.",
-                           Decimal("0.7"), stage="Growth / Scaling", industry="SaaS",
+                           Decimal("0.7"), stage=StageGroup.STAGE_1_TO_10_PLUS.value, industry="SaaS",
                            category="Sales & Revenue", root_cause_ids=(10,))
     return build_retrieval_service(InMemoryVectorRetrievalRepository([chunk]))
 

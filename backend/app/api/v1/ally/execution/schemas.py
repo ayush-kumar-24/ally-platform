@@ -77,7 +77,15 @@ class AIRequest:
     """What the Execution Service receives. The prompt (built upstream by M2 from
     M1/M3/M4) is what gets sent; the optional overrides let a caller pin a
     provider/model/params. Routing signals (distress, category) are read off the
-    prompt -- the execution layer never rebuilds a prompt."""
+    prompt -- the execution layer never rebuilds a prompt.
+
+    `reasoning_required` is the one exception: it's set by the caller (chat
+    execution), not read off the prompt, because it depends on the founder's
+    raw message text plus whether grounded data was actually available for
+    this turn -- neither of which the prompt/router should need to know about
+    to stay vendor- and content-neutral. See
+    app.ai_chat.execution.reasoning_classifier.needs_reasoning. Distress wins
+    outright over this if both are true (see AIRouter.route)."""
 
     prompt: RenderedPrompt
     response_type: str = ResponseType.ANSWER.value
@@ -85,6 +93,7 @@ class AIRequest:
     requested_model: str | None = None
     temperature: Decimal | None = None
     max_tokens: int | None = None
+    reasoning_required: bool = False
 
 
 @dataclass(frozen=True)

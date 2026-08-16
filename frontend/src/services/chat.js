@@ -20,6 +20,17 @@ export function getConversation(conversationId) {
   return get(`/chat/conversations/${conversationId}`);
 }
 
+/**
+ * The actual transcript. getConversation() above returns only the header
+ * (title, counts, timestamps) -- the messages themselves live here, on their
+ * own endpoint. Previously there was nowhere to get them from at all, so
+ * reopening a past conversation always rendered empty regardless of how many
+ * messages it really had.
+ */
+export function getConversationMessages(conversationId) {
+  return get(`/chat/conversations/${conversationId}/messages`);
+}
+
 export function archiveConversation(conversationId) {
   return del(`/chat/conversations/${conversationId}`);
 }

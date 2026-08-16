@@ -23,6 +23,7 @@ from app.api.v1.ally.context.schemas import (
     InternalIntelligenceContext,
     RootCauseContext,
 )
+from app.api.v1.diagnosis.engine import stage_groups_for
 
 
 class AllyContextBuilder:
@@ -72,6 +73,7 @@ class AllyContextBuilder:
             stage_id=getattr(founder, "stage_id", None),
             stage_name=getattr(stage, "stage_name", None) if stage else None,
             industry=getattr(industry, "industry_name", None) if industry else None,
+            stage_groups=tuple(stage_groups_for(stage)),
         )
 
     def _diagnosis(self, report, session, insights: Mapping[str, Any]) -> DiagnosisContext:
