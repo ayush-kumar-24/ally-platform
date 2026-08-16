@@ -16,7 +16,6 @@ into any subsystem's internals.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from sqlalchemy.orm import Session
@@ -26,7 +25,6 @@ from app.api.v1.ally.context.repository import AllyContextRepository
 from app.integrations.llm.routing import build_failover_execution
 from app.api.v1.ally.kg.repository import InMemoryKnowledgeGraphRepository
 from app.api.v1.ally.kg.service import build_knowledge_graph_service
-from app.api.v1.ally.kg.sql_repository import SqlKnowledgeGraphRepository
 from app.api.v1.ally.memory.sql_repository import build_db_memory_service
 from app.api.v1.ally.prompts.library import default_prompt_manager
 from app.api.v1.ally.rag.repository import InMemoryVectorRetrievalRepository
@@ -54,11 +52,9 @@ from app.planning.db_repository import SqlAlchemyPlanningRepository
 from app.planning.service import PlanningService
 from app.consents.db_repository import SqlAlchemyConsentRepository
 from app.consents.service import ConsentService
-from app.privacy.db_repository import SqlAlchemyDeletionRepository, SqlAlchemyPrivacyRepository
-from app.privacy.executor import DeletionExecutor
+from app.privacy.db_repository import SqlAlchemyPrivacyRepository
 from app.privacy.service import PrivacyService
 from app.core.config import settings
-from app.core.logger import logger
 from app.services import embeddings
 from app.admin.panel_audit import AuditRecorder, SqlAlchemyPanelAuditRepository
 from app.admin.panel_service import AdminPanelService
@@ -86,15 +82,6 @@ class Container:
         # --- Services built over those stores (stateless wrappers) ---
         self._retrieval_service = build_retrieval_service(self._retrieval_repository)
         self._kg_service = build_knowledge_graph_service(self._kg_repository)
-        # knowledge_graph(db) below caches the SQL-loaded catalogue for this long.
-        # root_causes/problems/blind_spots/interventions are curated reference data
-        # (thousands of rows total, changed by a content update, not by founder
-        # activity) -- reloading all four tables on every single chat message would
-        # add a real query cost to the hot path for data that is not changing turn
-        # to turn. A cold process rebuilds once; every process picks up an edit
-        # within one TTL window without needing a restart or an invalidation signal.
-        self._kg_cache = None
-        self._kg_cache_built_at = None
 
         # --- Prompt library + LLM execution (register real providers here) ---
         self._prompt_manager = default_prompt_manager()
@@ -311,16 +298,6 @@ class Container:
             SqlAlchemyPrivacyRepository(db),
             consent_service=self.consent_service(db),
         )
-
-    # --- Account-deletion executor (DB-backed, per-request) ---------------
-
-    def deletion_executor(self, db: Session) -> DeletionExecutor:
-        """The sweep that turns a scheduled erasure into a real one once the grace
-        period has passed. Invoked by the /webhooks/deletion-sweep endpoint (see
-        app/api/v1/webhooks) on an externally-driven schedule -- this process has
-        no in-process scheduler of its own, matching credits' settle-on-access
-        philosophy of not depending on a cron existing at all."""
-        return DeletionExecutor(SqlAlchemyDeletionRepository(db))
 
     # --- Admin Panel (DB-backed, per-request) -----------------------------
 

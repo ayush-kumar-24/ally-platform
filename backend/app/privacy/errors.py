@@ -34,19 +34,3 @@ class NoDeletionToCancelError(PrivacyError):
             f"Founder {founder_id} has no pending deletion to cancel.",
             status_code=409,
         )
-
-
-# MERGE ARTEFACT -- needs a decision, see below.
-#
-# Two account-deletion implementations were developed in parallel: origin/main's
-# reviewed "unified account-deletion pipeline" (d1d1992), which raises
-# NoDeletionToCancelError, and an unreviewed local one (privacy/executor.py and
-# privacy/deletion_repository.py, neither of which exists upstream) which raises
-# NoDeletionPendingError from privacy/service.py and tests/test_privacy_executor.py.
-#
-# The merge kept both, so the module imported a name the reviewed errors.py does
-# not define and the whole app failed at import. This alias is the smallest thing
-# that makes the tree run WITHOUT deleting anyone's work -- it is not a design
-# decision, and the duplicate pipelines still need to be reconciled by whoever
-# owns the DPDP deletion path. Remove this alias once that is settled.
-NoDeletionPendingError = NoDeletionToCancelError

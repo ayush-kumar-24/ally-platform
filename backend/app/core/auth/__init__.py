@@ -6,7 +6,6 @@ Layout mirrors how the pieces are swapped:
   supabase_provider.py verifies the login token from Supabase Auth
   factory.py           picks the identity provider from AUTH_PROVIDER
   tokens.py            the session tokens THIS backend issues (access/refresh)
-  cookies.py           how the refresh token is carried (httpOnly cookie)
   session_store.py     refresh-token revocation (logout, rotation)
   dependencies.py      FastAPI dependencies routes actually use
 
@@ -18,11 +17,6 @@ Import from the package, not the modules.
 """
 
 from app.core.auth.base import AuthError, AuthProvider, AuthUser
-from app.core.auth.cookies import (
-    clear_refresh_cookie,
-    read_refresh_cookie,
-    set_refresh_cookie,
-)
 from app.core.auth.dependencies import get_current_founder, get_upstream_identity
 from app.core.auth.factory import get_auth_provider
 from app.core.auth.session_store import get_session_store
@@ -49,7 +43,4 @@ __all__ = [
     "create_refresh_token",
     "decode_token",
     "identity_from_claims",
-    "set_refresh_cookie",
-    "clear_refresh_cookie",
-    "read_refresh_cookie",
 ]

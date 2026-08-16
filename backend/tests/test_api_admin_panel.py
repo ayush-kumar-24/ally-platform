@@ -24,7 +24,6 @@ from app.api.v1.admin.panel_dependencies import (
 )
 from app.credits import InMemoryCreditRepository, build_credit_service
 from app.main import app
-from app.privacy import InMemoryPrivacyRepository, build_privacy_service
 
 BASE = "/api/v1/admin"
 T0 = datetime(2026, 8, 2, 12, 0, tzinfo=timezone.utc)
@@ -47,18 +46,17 @@ def client():
                                    clock=lambda: T0)
     audit_repo = InMemoryPanelAuditRepository()
     c = count(1)
-    privacy = build_privacy_service(InMemoryPrivacyRepository(), clock=lambda: T0)
     service = AdminPanelService(
         repo, credits=credits,
         audit=AuditRecorder(audit_repo, clock=lambda: T0, id_factory=lambda: f"e-{next(c)}"),
-        clock=lambda: T0, privacy=privacy)
+        clock=lambda: T0)
 
     current = {"role": PanelRole.SUPER_ADMIN}
     app.dependency_overrides[get_panel_admin] = lambda: PanelAdmin(
         admin_id=99, email="admin@goxl.in", role=current["role"])
     app.dependency_overrides[get_panel_service] = lambda: service
     yield SimpleNamespace(http=TestClient(app), current=current, service=service,
-                          audit=audit_repo, privacy=privacy)
+                          audit=audit_repo)
     for dep in (get_panel_admin, get_panel_service):
         app.dependency_overrides.pop(dep, None)
 
@@ -232,43 +230,6 @@ def test_delete_requires_confirmation_and_super_admin(client):
 
 def test_missing_user_404(client):
     assert client.http.get(f"{BASE}/users/4242").status_code == 404
-
-
-# --- cancel deletion ---------------------------------------------------------
-
-
-def test_cancel_deletion_requires_confirmation_and_super_admin(client):
-    client.privacy.request_account_deletion(1)
-
-    as_role(client, PanelRole.ADMIN)
-    assert client.http.post(f"{BASE}/users/1/cancel-deletion", json=YES).status_code == 403
-
-    as_role(client, PanelRole.SUPER_ADMIN)
-    assert client.http.post(f"{BASE}/users/1/cancel-deletion",
-                            json={"confirm": False}).status_code == 422
-
-    r = client.http.post(f"{BASE}/users/1/cancel-deletion", json=YES)
-    assert r.status_code == 200
-    assert r.json()["deletion_pending"] is False
-    assert client.privacy.get_state(1).deletion_pending is False
-
-
-def test_cancel_deletion_without_pending_request_409(client):
-    as_role(client, PanelRole.SUPER_ADMIN)
-    assert client.http.post(f"{BASE}/users/1/cancel-deletion", json=YES).status_code == 409
-
-
-def test_cancel_deletion_missing_user_404(client):
-    as_role(client, PanelRole.SUPER_ADMIN)
-    assert client.http.post(f"{BASE}/users/4242/cancel-deletion", json=YES).status_code == 404
-
-
-def test_cancel_deletion_is_audited(client):
-    client.privacy.request_account_deletion(2)
-    as_role(client, PanelRole.SUPER_ADMIN)
-    client.http.post(f"{BASE}/users/2/cancel-deletion", json={"confirm": True, "reason": "support call"})
-    events, _ = client.audit.list(target_user_id=2)
-    assert any(e.action == "user.cancel_deletion" and e.reason == "support call" for e in events)
 
 
 # --- subscription -----------------------------------------------------------

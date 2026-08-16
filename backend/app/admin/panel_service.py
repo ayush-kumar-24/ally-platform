@@ -185,29 +185,6 @@ class AdminPanelService:
                           old_value=before.status.value, new_value=UserStatus.BANNED.value)
         return after
 
-    def cancel_deletion(self, admin, founder_id: int, *, reason: str | None = None,
-                        ip: str | None = None) -> dict:
-        """Rescind a founder's pending erasure request -- e.g. support confirmed by
-        phone that the request wasn't the founder, or a mistaken self-service call.
-
-        Delegates to PrivacyService rather than writing `founders` directly, so
-        there is exactly one code path that implements "what cancelling a deletion
-        means" (see PrivacyService.cancel_account_deletion) whether the caller is
-        the founder themselves or an admin acting for them.
-        """
-        require(admin.role, Capability.MANAGE_ACCOUNT_DELETION)
-        if self.privacy is None:
-            raise InvalidSearchError("account-deletion management is not configured")
-        self._require_user(founder_id)
-        state, action = self.privacy.cancel_account_deletion(founder_id)
-        self.audit.record(admin=admin, action="user.cancel_deletion",
-                          resource=f"founder:{founder_id}", target_user_id=founder_id,
-                          ip_address=ip, reason=reason,
-                          old_value={"deletion_pending": True},
-                          new_value={"deletion_pending": state.deletion_pending,
-                                     "request_id": action.request_id})
-        return {"founder_id": founder_id, "deletion_pending": state.deletion_pending}
-
     # --- credits ----------------------------------------------------------
 
     def adjust_credits(self, admin, founder_id: int, *, operation: CreditOperation,

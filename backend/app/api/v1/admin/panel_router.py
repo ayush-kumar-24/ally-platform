@@ -8,7 +8,6 @@
     POST   /admin/users/{id}/reset-diagnosis
     POST   /admin/users/{id}/reset-conversations
     DELETE /admin/users/{id}               soft-delete (ban)
-    POST   /admin/users/{id}/cancel-deletion  rescind a pending account-erasure request
     GET    /admin/users/{id}/credits       ledger for one user
     POST   /admin/users/{id}/credits       adjust credits (Super Admin only)
     PATCH  /admin/users/{id}/subscription  plan / expiry / credit grants
@@ -184,17 +183,6 @@ def delete_user(founder_id: int, payload: ConfirmRequest,
         raise ConfirmationRequiredError("user deletion")
     return UserSummaryResponse.from_domain(
         service.delete_user(admin, founder_id, reason=payload.reason, ip=ip))
-
-
-@router.post("/users/{founder_id}/cancel-deletion", response_model=dict,
-             summary="Cancel a user's pending account-erasure request (Super Admin)")
-def cancel_deletion(founder_id: int, payload: ConfirmRequest,
-                    ip: str | None = Depends(client_ip),
-                    admin: PanelAdmin = Depends(get_panel_admin),
-                    service=Depends(get_panel_service)) -> dict:
-    if not payload.confirm:
-        raise ConfirmationRequiredError("deletion cancellation")
-    return service.cancel_deletion(admin, founder_id, reason=payload.reason, ip=ip)
 
 
 # --- credits ----------------------------------------------------------------

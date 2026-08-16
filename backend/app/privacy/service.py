@@ -34,7 +34,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Callable
 
-from app.privacy.errors import DeletionAlreadyRequestedError, NoDeletionPendingError
+from app.privacy.errors import DeletionAlreadyRequestedError
 from app.privacy.models import ExportBundle, PrivacyAction, PrivacyState
 from app.privacy.repository import PrivacyRepository
 
@@ -85,27 +85,6 @@ class PrivacyService:
             founder_id, request_type="withdraw_consent",
             details=f"Account erasure requested; scheduled for {scheduled:%Y-%m-%d}",
             at=now, due_by=scheduled)
-        return new_state, action
-
-    def cancel_account_deletion(self, founder_id: int) -> tuple[PrivacyState, PrivacyAction]:
-        """Rescind a pending erasure request during its grace window.
-
-        Self-service counterpart to request_account_deletion -- a founder who
-        changed their mind (or an admin acting for them, see AdminPanelService)
-        should not need to wait out the 30 days or contact support to be believed.
-        Refuses when nothing is pending so the caller cannot be told "cancelled"
-        about a deletion that was never scheduled.
-        """
-        state = self.repository.get_state(founder_id)
-        if not state.deletion_pending:
-            raise NoDeletionPendingError(founder_id)
-
-        now = self._now()
-        new_state = self.repository.cancel_deletion(founder_id, at=now)
-        action = self.repository.log_request(
-            founder_id, request_type="withdraw_consent",
-            details="Account erasure request cancelled before the grace period ended",
-            at=now, due_by=None)
         return new_state, action
 
     # --- Art 7(3): withdraw consent ---------------------------------------

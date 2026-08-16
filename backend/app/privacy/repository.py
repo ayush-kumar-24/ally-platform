@@ -33,12 +33,6 @@ class PrivacyRepository(abc.ABC):
                           scheduled_at: datetime) -> PrivacyState: ...
 
     @abc.abstractmethod
-    def cancel_deletion(self, founder_id: int, *, at: datetime) -> PrivacyState:
-        """Rescind a pending erasure request during its grace window. Clears the
-        deletion timestamps and marks the tracking record cancelled rather than
-        deleting it, so "someone asked, then changed their mind" stays visible."""
-
-    @abc.abstractmethod
     def log_request(self, founder_id: int, *, request_type: str, details: str | None,
                     at: datetime, due_by: datetime | None) -> PrivacyAction:
         """Append to the privacy_requests audit trail."""
@@ -109,18 +103,6 @@ class InMemoryPrivacyRepository(PrivacyRepository):
                 processing_restricted_at=current.processing_restricted_at,
                 deletion_requested_at=requested_at,
                 deletion_scheduled_at=scheduled_at)
-            self._states[founder_id] = state
-            return state
-
-    def cancel_deletion(self, founder_id: int, *, at: datetime) -> PrivacyState:
-        with self._lock:
-            current = self.get_state(founder_id)
-            state = PrivacyState(
-                founder_id=founder_id,
-                processing_restricted=current.processing_restricted,
-                processing_restricted_at=current.processing_restricted_at,
-                deletion_requested_at=None,
-                deletion_scheduled_at=None)
             self._states[founder_id] = state
             return state
 

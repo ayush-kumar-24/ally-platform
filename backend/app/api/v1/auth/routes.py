@@ -40,7 +40,6 @@ from app.core.auth import (
     REFRESH,
     AuthError,
     AuthUser,
-    clear_refresh_cookie,
     create_access_token,
     create_refresh_token,
     decode_token,
@@ -49,8 +48,6 @@ from app.core.auth import (
     get_session_store,
     get_upstream_identity,
     identity_from_claims,
-    read_refresh_cookie,
-    set_refresh_cookie,
 )
 from app.core.config import settings
 from app.db.session import get_db
@@ -136,7 +133,7 @@ async def start_session(
     identity: AuthUser = Depends(get_upstream_identity),
     db: Session = Depends(get_db),
 ):
-    """Exchange a verified Supabase token for backend tokens.
+    """Exchange a verified Google/LinkedIn (Supabase) token for backend tokens.
 
     On a real first login this also creates the founder row (provisioning); on
     later logins it just finds it. Send the Supabase access token as the bearer
@@ -164,10 +161,8 @@ async def refresh_session(
 ):
     """Trade a valid, non-revoked refresh token for a fresh token pair.
 
-    Reads the token from the httpOnly cookie, or from the body for callers that
-    don't have one. The old refresh token is revoked as part of this call
-    (rotation), so a refresh token works exactly once -- which is also why the
-    cookie is re-set here with the new one.
+    The old refresh token is revoked as part of this call (rotation), so a
+    refresh token works exactly once.
     """
     token = _incoming_refresh_token(request, payload)
     claims = decode_token(token, REFRESH)
@@ -192,8 +187,8 @@ async def resume_session(
     """Restore a session on app reload from a stored refresh token.
 
     Like /session, but the starting point is our refresh token rather than a
-    fresh Supabase login -- so a returning user who still holds a valid refresh
-    token is brought back in without retyping their password. The
+    fresh Google/LinkedIn login -- so a returning user who still holds a valid
+    refresh token is brought back in without bouncing through the provider. The
     refresh token is rotated (the old one is revoked), and the caller gets a new
     pair plus their identity, ready to rehydrate the UI.
 
@@ -229,11 +224,6 @@ async def logout(
     Access tokens are short-lived and not individually tracked, so they remain
     valid until they expire -- keep their lifetime short. Revoking the refresh
     token is what actually ends the session.
-
-    Always succeeds: the cookie is cleared first, and a token that is missing or
-    no longer decodes has nothing left to revoke. Answering 401 here would leave
-    the browser holding the very cookie it asked us to get rid of -- a logout
-    that doesn't log you out, with no way for the client to recover.
     """
     token = _incoming_refresh_token(request, payload)
     claims = decode_token(token, REFRESH)

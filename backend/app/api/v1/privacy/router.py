@@ -1,11 +1,10 @@
 """Privacy Center endpoints -- additive, transport only.
 
-    GET    /privacy/export             download everything we hold (Art 15 + 20)
-    DELETE /privacy/account            schedule account erasure (Art 17)
-    POST   /privacy/account/cancel     cancel a pending erasure during its grace window
-    POST   /privacy/withdraw           withdraw consent, pause processing (Art 7(3))
-    POST   /privacy/restrict           restrict / resume processing (Art 18)
-    GET    /privacy/status             current standing + request history
+    GET    /privacy/export     download everything we hold (Art 15 + 20)
+    DELETE /privacy/account    schedule account erasure (Art 17)
+    POST   /privacy/withdraw   withdraw consent, pause processing (Art 7(3))
+    POST   /privacy/restrict   restrict / resume processing (Art 18)
+    GET    /privacy/status     current standing + request history
 
 Every endpoint delegates to PrivacyService; no business logic here.
 """
@@ -58,20 +57,6 @@ def delete_account(
         request=PrivacyActionResponse.from_domain(action),
         message=(f"Account deletion scheduled for {state.deletion_scheduled_at:%d %b %Y}. "
                  f"You have {DELETION_GRACE_DAYS} days to contact support if this was a mistake."),
-    )
-
-
-@router.post("/account/cancel", response_model=PrivacyActionResult,
-             summary="Cancel a pending account deletion before the grace period ends")
-def cancel_account_deletion(
-    founder_id: int = Depends(get_current_founder_id),
-    service: PrivacyService = Depends(get_privacy_service),
-) -> PrivacyActionResult:
-    state, action = service.cancel_account_deletion(founder_id)
-    return PrivacyActionResult(
-        state=PrivacyStateResponse.from_domain(state),
-        request=PrivacyActionResponse.from_domain(action),
-        message="Account deletion cancelled. Your account remains active.",
     )
 
 

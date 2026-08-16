@@ -52,7 +52,6 @@ class Capability(str, Enum):
     DELETE_USER = "delete_user"
     CHANGE_USER_ROLE = "change_user_role"
     SYSTEM_SETTINGS = "system_settings"
-    MANAGE_ACCOUNT_DELETION = "manage_account_deletion"
 
 
 _SUPPORT: frozenset[Capability] = frozenset({
