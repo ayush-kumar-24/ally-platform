@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
-import { normalise, resumeOrStart, submitAnswer } from '../services/diagnosis';
+import { getCurrentSession, normalise, resumeOrStart, submitAnswer } from '../services/diagnosis';
 import { explainLimit } from '../services/plans';
 import { useVoiceInput } from '../hooks/useVoiceInput';
 import FeedbackPrompt from '../components/FeedbackPrompt';
@@ -45,7 +45,7 @@ export default function DiagnosisChat() {
     if (!kgRef.current) return undefined;
     const t = setTimeout(() => kgRef.current?.classList.add('draw'), 800);
     return () => clearTimeout(t);
-  }, [messages]);
+  }, [messages, busy]);
 
   // Resume if a session is in progress, otherwise start one. The server owns the
   // progress, which is what makes closing the tab mid-diagnosis safe.
@@ -120,6 +120,43 @@ export default function DiagnosisChat() {
         // there is nothing to ask, so this never strands anyone.
       }
     } catch {
+      // Live-reproduced: a client-side timeout on this call does not mean the
+      // server failed -- the answer-scoring pipeline routinely runs 12-15s and
+      // has hit 23s, and the server goes on to save successfully after the
+      // client has already given up and shown a "failed" message. Blindly
+      // saying "try again" is actively wrong there: resubmitting the same
+      // question_id after the server already advanced past it gets rejected
+      // with 409 QuestionMismatchError, which read as a second, worse failure
+      // for an answer that was never actually lost. Check server truth first.
+      try {
+        const raw = await getCurrentSession();
+        const current = raw ? normalise(raw, true) : null;
+        if (current?.question?.id && current.question.id !== question?.id) {
+          // The server did move on -- the answer saved. Silently reconcile
+          // instead of alarming the founder over nothing.
+          setQuestion(current.question);
+          if (typeof current.answered === 'number') setAnswered(current.answered);
+          setCategory(current.question.category ?? null);
+          setMessages(prev => [...prev, {
+            role: 'ally', time: clock(), text: current.question.text,
+          }]);
+          return;
+        }
+        if (raw === null) {
+          // No active session at all -- it genuinely completed while we were
+          // waiting on this request (the last answer crossed the confidence
+          // threshold or the 30-question cap).
+          setDone(true);
+          setMessages(prev => [...prev, {
+            role: 'ally', time: clock(),
+            text: 'That completes your diagnosis. I am building your report now.',
+          }]);
+          return;
+        }
+      } catch {
+        // The reconciliation check itself failed -- fall through to the
+        // honest "didn't save" message below, since we genuinely don't know.
+      }
       setMessages(prev => [...prev, {
         role: 'ally', time: clock(),
         text: "That didn't save. Your answer wasn't lost — try sending it again.",
@@ -174,8 +211,14 @@ export default function DiagnosisChat() {
     );
   }
 
+  /* height:100%, not a guessed calc(100vh-64px) -- #main-content
+     (PlatformLayout.jsx) is itself flex:1/overflowY:auto, so any mismatch
+     between a guessed absolute height here and its real available space
+     makes #main-content become the active scroll container instead of
+     .chat-scroll below, leaving the actual message history unscrollable.
+     Matches the same fix already applied to AllyChat's .ac wrapper. */
   return (
-    <div className="chat" style={{ height: 'calc(100vh - 64px)' }}>
+    <div className="chat" style={{ height: '100%' }}>
       <div className="chat-main">
         {/* Which area the diagnosis is in, plus real progress. The count comes
             from the session the server returns; there is no total to show
@@ -212,6 +255,21 @@ export default function DiagnosisChat() {
               </div>
             </div>
           ))}
+          {/* Nothing showed while the answer was being interpreted and the next
+              question chosen -- a real gap, since that round-trip runs an LLM
+              classification plus a confidence recompute and routinely takes
+              12-15s. Reuses AllyChat's own `.typing` dots for the same visual
+              language across both chat surfaces, rather than a new animation. */}
+          {busy && (
+            <div className="typing" aria-live="polite" aria-label="Ally is thinking">
+              <div className="m-av ally" aria-hidden="true">🤝</div>
+              <div className="bubble">
+                <div className="td">
+                  <span /><span /><span />
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Was three buttons with no onClick at all, captioned with a fictional

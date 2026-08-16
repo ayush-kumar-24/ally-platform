@@ -71,29 +71,30 @@ class DailyTokenLimitError(PlanError):
         self.resets_at = resets_at
 
 
-class MonthlyDiagnosisLimitError(PlanError):
-    """429 -- the founder has started their allowance of diagnoses this month.
+class DiagnosisAlreadyCompletedError(PlanError):
+    """429 -- the founder has completed their lifetime allowance of diagnoses.
 
     A count, not a token ceiling: diagnosis is deliberately unmetered so nobody
     hits a wall halfway through an assessment, which leaves the number of runs as
     the only thing bounding what it costs.
 
-    Resuming an in-progress diagnosis is never blocked by this -- only starting a
-    new one -- so this cannot strand a founder mid-assessment.
+    Lifetime, not monthly: unlike the daily token ceiling this never resets, so
+    there is no `resets_at` here -- once the free plan's one diagnosis reaches a
+    report, that plan's diagnosis allowance is permanently spent. Resuming an
+    in-progress diagnosis is never blocked by this -- only STARTING a new one
+    once the founder already has a completed report -- so this can never strand
+    someone mid-assessment.
     """
 
-    def __init__(self, used: int, limit: int, resets_at):
-        # %-d is glibc-only and raises on Windows, so build the day number itself.
-        when = f"{resets_at.day} {resets_at:%B}"
+    def __init__(self, used: int, limit: int):
         noun = "diagnosis" if limit == 1 else "diagnoses"
         super().__init__(
-            f"You have used all {limit} {noun} included this month "
-            f"({used} of {limit}). Your next one is available from {when}.",
+            f"You have completed your {limit} free {noun}. You can't start "
+            f"another -- take a look at your report instead.",
             status_code=429,
         )
         self.used = used
         self.limit = limit
-        self.resets_at = resets_at
 
 
 class NoFreeCallsRemainingError(PlanError):
