@@ -76,14 +76,20 @@ export default function HelpSupport() {
           <div className="hp-contact-rows">
             <div className="hp-contact-line">
               <span className="hp-contact-lbl">Email</span>
-              <a href="mailto:support@goxl.ai" className="hp-contact-val link">
-                support@goxl.ai
+              {/* info@goxl.in, not support@goxl.ai: every other contact point in
+                  the product (landing footer, 404, Terms, Privacy, Feedback)
+                  already uses info@goxl.in, and goxl.ai is a different domain
+                  from both goxl.in and goxlally.ai -- so this was the one link
+                  pointing at a mailbox nothing else claims exists. */}
+              <a href="mailto:info@goxl.in" className="hp-contact-val link">
+                info@goxl.in
               </a>
             </div>
-            <div className="hp-contact-line">
-              <span className="hp-contact-lbl">Phone</span>
-              <span className="hp-contact-val">+91 XXXXX XXXXX</span>
-            </div>
+            {/* Phone row removed: it shipped as the literal placeholder
+                "+91 XXXXX XXXXX", which on a support page reads as an abandoned
+                product. Restore it as a real tel: link once there is a number
+                someone actually answers -- an unanswered line is worse than
+                none, since email already sets a 3-hour expectation below. */}
             <div className="hp-contact-line">
               <span className="hp-contact-lbl">Hours</span>
               <span className="hp-contact-val">Mon–Fri · 9 AM – 6 PM IST</span>

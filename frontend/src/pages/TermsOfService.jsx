@@ -16,7 +16,12 @@ const SECTIONS = [
   {
     id: 'accounts',
     title: '3. User Accounts & Authentication',
-    content: `Access to the Platform is granted via OAuth 2.0 authentication through Google or LinkedIn. You are responsible for maintaining the confidentiality of your account session and for all activities that occur under your account. You agree to immediately notify GoXL of any unauthorised use of your account at info@goxl.in. GoXL reserves the right to suspend or terminate accounts that violate these Terms.`,
+    // Rewritten when sign-in moved from Google/LinkedIn OAuth to email + one-time
+    // code + password. The old wording named an authentication method the
+    // Platform no longer offers, which in a Terms document is a statement of fact
+    // that had stopped being true -- and it is the section a founder reads to
+    // understand what protects their account.
+    content: `Access to the Platform is granted by verifying your email address with a one-time code sent to that address, after which you set a password for subsequent sign-ins. You are responsible for keeping your password and your access to that email account secure, and for all activities that occur under your account. You agree to immediately notify GoXL of any unauthorised use of your account at info@goxl.in. GoXL reserves the right to suspend or terminate accounts that violate these Terms.`,
   },
   {
     id: 'data',

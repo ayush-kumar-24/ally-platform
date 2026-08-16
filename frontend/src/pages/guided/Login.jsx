@@ -1,11 +1,48 @@
+/**
+ * Login — email as the identifier, an emailed OTP to prove it, a password for
+ * next time.
+ *
+ * Three steps, all on this one screen (nothing redirects away and back, so
+ * unlike the OAuth flow this replaces there is no session to pick up on mount):
+ *
+ *   'password'  returning founder types email + password
+ *   'email'     first time here, or forgot the password: type email, get a code
+ *   'code'      type the code and choose a password -> signed in
+ *
+ * The 'email' -> 'code' path is the ONLY one that can create an account, so the
+ * consent gate lives there. A founder signing in with a password consented when
+ * they signed up.
+ */
+
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import AuthTransition from '../../components/AuthTransition';
 import { CURRENT_VERSIONS, flushPendingConsent, recordConsent, savePendingConsent } from '../../services/consents';
-import { consumeOAuthRedirect, signInWithGoogle, signInWithLinkedIn, startDevSession } from '../../services/auth';
+import { sendEmailOtp, signInWithPassword, startDevSession, verifyOtpAndSetPassword } from '../../services/auth';
 import { get } from '../../services/api';
 import { supabaseConfigured } from '../../services/supabaseConfig';
+
+/** Keep in step with the minimum length configured in the Supabase dashboard.
+ *  Checking here too means a too-short password is caught before the round trip,
+ *  with a message that names the actual requirement. */
+const MIN_PASSWORD_LENGTH = 8;
+
+/** Must be >= the "Minimum interval between emails" configured in Supabase's SMTP
+ *  settings (60s), or the Resend button unlocks while Supabase is still refusing
+ *  to send -- the founder presses a button we just told them was ready and gets
+ *  an error. This timer starts when the send RESPONDS, i.e. slightly after
+ *  Supabase's own window opened, so equal values are safe with room to spare. */
+const RESEND_COOLDOWN_SECONDS = 60;
+
+/** Supabase's OTP length is a project setting, not a constant -- this project
+ *  issues 8 digits, the Supabase default is 6, and it can be raised to 10.
+ *  Hard-coding 6 here (as this did) capped the input via maxLength and silently
+ *  truncated an 8-digit code to its first 6, so verification failed for every
+ *  founder with no visible reason. Accept the whole configurable range instead,
+ *  so changing that setting in the dashboard can never lock anyone out. */
+const OTP_MIN_LENGTH = 6;
+const OTP_MAX_LENGTH = 10;
 
 export default function Login() {
   const navigate = useNavigate();
@@ -13,77 +50,132 @@ export default function Login() {
   // Where they were going before the session ran out, if anywhere.
   const returnTo = location.state?.from || '/guided/welcome';
   const { setUser } = useApp();
+
+  const [step, setStep] = useState('password');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [code, setCode] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+
   const [showAuthTransition, setShowAuthTransition] = useState(false);
   const [agreeTerms, setAgreeTerms] = useState(false);
   const [agreeDiagnosis, setAgreeDiagnosis] = useState(false);
   const [validationError, setValidationError] = useState('');
+  const [notice, setNotice] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  // Ref, not state: state updates are async, so two clicks in the same tick would
-  // both see `submitting === false` and both fire. The ref flips synchronously.
+  const [cooldown, setCooldown] = useState(0);
+  // Ref, not state: state updates are async, so two submits in the same tick
+  // would both see `submitting === false` and both fire. The ref flips
+  // synchronously.
   const inFlight = useRef(false);
 
-  // Google/LinkedIn redirect the whole page away and back -- this picks the
-  // session up on the return trip. No-ops (returns null fast) on every other
-  // load, since consumeOAuthRedirect only finds something when the URL
-  // actually carries a fresh Supabase session.
   useEffect(() => {
-    if (!supabaseConfigured) return;
-    (async () => {
-      /* consumeOAuthRedirect POSTs /auth/session, which throws ApiError on any
-         failure. With no catch that became an unhandled rejection and the
-         founder — who has just come back from Google having signed in
-         successfully — was dropped on this screen with no message at all,
-         indistinguishable from the sign-in never having started. */
-      let founder;
-      try {
-        founder = await consumeOAuthRedirect();
-      } catch {
-        setValidationError(
-          "We couldn't finish signing you in. Please try again.",
-        );
-        return;
-      }
-      if (!founder) return;
+    if (cooldown <= 0) return undefined;
+    const timer = setTimeout(() => setCooldown((s) => s - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [cooldown]);
 
-      let profile = null;
-      try {
-        profile = await get('/profile');
-      } catch {
-        // Provisioning races the very first request sometimes; the rest of the
-        // app re-fetches /profile on its own, so a miss here isn't fatal.
-      }
-      let stored = null;
-      try {
-        stored = await flushPendingConsent();
-      } catch {
-        // Stays pending in localStorage; flushed again on the next app load.
-      }
+  const release = () => {
+    inFlight.current = false;
+    setSubmitting(false);
+  };
 
-      setUser((prev) => ({
-        ...prev,
-        // 'google' | 'linkedin_oidc' -- whichever the founder actually used,
-        // read from the backend's own response rather than assumed.
-        authProvider: founder.provider,
-        name: profile?.full_name || founder.email || prev?.name,
-        email: founder.email || prev?.email,
-        plan_type: profile?.plan_type || prev?.plan_type,
-        consents: stored ? {
-          termsAccepted: true,
-          termsVersion: stored.terms_version,
-          privacyVersion: stored.privacy_version,
-          diagnosisConsent: stored.agree_diagnosis,
-          consentedAt: stored.consented_at,
-          consentId: stored.consent_id,
-          synced: true,
-        } : prev?.consents,
-      }));
-      setShowAuthTransition(true);
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const goToStep = (next) => {
+    setStep(next);
+    setValidationError('');
+    setNotice('');
+  };
 
-  const handleAuth = async (provider) => {
+  /**
+   * Everything that happens once a backend session exists, whichever door they
+   * came through: rehydrate the profile, flush any consent captured before the
+   * session existed, then play the transition into the app.
+   */
+  const finishSignIn = async (founder) => {
+    let profile = null;
+    try {
+      profile = await get('/profile');
+    } catch {
+      // Provisioning races the very first request sometimes; the rest of the
+      // app re-fetches /profile on its own, so a miss here isn't fatal.
+    }
+    let stored = null;
+    try {
+      stored = await flushPendingConsent();
+    } catch {
+      // Stays pending in localStorage; flushed again on the next app load.
+    }
+
+    const name = profile?.full_name || founder.email || '';
+    setUser((prev) => ({
+      ...prev,
+      authProvider: founder.provider,
+      name: name || prev?.name,
+      email: founder.email || prev?.email,
+      initials: name.split(' ').filter(Boolean).slice(0, 2)
+        .map((w) => w[0].toUpperCase()).join('') || '?',
+      plan_type: profile?.plan_type || prev?.plan_type,
+      consents: stored ? {
+        termsAccepted: true,
+        termsVersion: stored.terms_version,
+        privacyVersion: stored.privacy_version,
+        diagnosisConsent: stored.agree_diagnosis,
+        consentedAt: stored.consented_at,
+        consentId: stored.consent_id,
+        synced: true,
+      } : prev?.consents,
+    }));
+    setSubmitting(false);
+    setShowAuthTransition(true);
+  };
+
+  // ── Returning founder: email + password ───────────────────────────────────
+
+  const handlePasswordSignIn = async (e) => {
+    e.preventDefault();
     if (inFlight.current) return;
+    if (!email.trim() || !password) {
+      setValidationError('Please enter your email and password.');
+      return;
+    }
+    inFlight.current = true;
+    setSubmitting(true);
+    setValidationError('');
+
+    try {
+      const founder = await signInWithPassword(email, password);
+      await finishSignIn(founder);
+      inFlight.current = false;
+    } catch (err) {
+      setValidationError(err.message || 'We could not sign you in. Please try again.');
+      release();
+    }
+  };
+
+  // ── First time / forgot password: send the code ───────────────────────────
+
+  const sendCode = async ({ isResend }) => {
+    try {
+      await sendEmailOtp(email);
+      setCooldown(RESEND_COOLDOWN_SECONDS);
+      setNotice(`We sent a 6-digit code to ${email.trim()}. It expires in a few minutes.`);
+      if (!isResend) setStep('code');
+      return true;
+    } catch (err) {
+      setValidationError(err.message || "We couldn't send that code. Please try again.");
+      return false;
+    }
+  };
+
+  const handleSendCode = async (e) => {
+    e.preventDefault();
+    if (inFlight.current) return;
+    if (!email.trim()) {
+      setValidationError('Please enter your email address.');
+      return;
+    }
     if (!agreeTerms) {
       setValidationError('Please agree to the Terms of Service and Privacy Policy to continue.');
       return;
@@ -91,96 +183,147 @@ export default function Login() {
     inFlight.current = true;
     setSubmitting(true);
     setValidationError('');
+    setNotice('');
 
+    /* Capture consent before the account exists. recordConsent needs a session,
+       which there isn't one of yet, so in practice this stores locally and
+       finishSignIn flushes it the moment a session appears. A 422 is different:
+       the server rejected the consent itself (bad version, terms not accepted),
+       and that must not be waved through. */
     const choices = { agreeTerms: true, agreeDiagnosis };
-    let stored = null;
     try {
-      stored = await recordConsent(choices);
+      await recordConsent(choices);
     } catch (err) {
-      // A 422 means the server rejected the consent itself (bad version, terms not
-      // accepted) — that is a real failure and must not be waved through.
       if (err.status === 422) {
         setValidationError(err.detail || 'We could not record your consent. Please try again.');
-        inFlight.current = false;
-        setSubmitting(false);
+        release();
         return;
       }
-      // Anything else (offline, or no session yet because sign-in is still
-      // simulated) — hold the consent locally and flush it once a session exists,
-      // so the user's actual choice is never silently lost.
       savePendingConsent(choices);
     }
 
-    // Real sign-in: redirect to the provider now. The rest of this function
-    // (the simulated identity below) is skipped entirely -- the mount-time
-    // effect above picks the flow back up once the provider redirects here,
-    // and flushes the pending consent captured just above.
-    if (supabaseConfigured && (provider === 'google' || provider === 'linkedin')) {
-      try {
-        await (provider === 'google' ? signInWithGoogle() : signInWithLinkedIn());
-      } catch {
-        setValidationError(`Could not start ${provider === 'google' ? 'Google' : 'LinkedIn'} sign-in. Please try again.`);
-        inFlight.current = false;
-        setSubmitting(false);
-      }
-      return; // navigates away on success; nothing left to do
-    }
+    await sendCode({ isResend: false });
+    release();
+  };
 
-    // Supabase isn't configured (local dev). Establish a real backend session
-    // against the dev founder rather than inventing an identity: a fabricated
-    // name is worse than none -- the founder can't tell it's fake -- and with no
-    // token nothing they enter downstream can actually save.
+  const handleResend = async () => {
+    if (inFlight.current || cooldown > 0) return;
+    inFlight.current = true;
+    setSubmitting(true);
+    setValidationError('');
+    await sendCode({ isResend: true });
+    release();
+  };
+
+  // ── Verify the code and choose a password ─────────────────────────────────
+
+  const handleVerify = async (e) => {
+    e.preventDefault();
+    if (inFlight.current) return;
+    if (code.trim().length < OTP_MIN_LENGTH) {
+      setValidationError('Please enter the full code from your email.');
+      return;
+    }
+    if (!fullName.trim()) {
+      setValidationError('Please tell us your name.');
+      return;
+    }
+    if (newPassword.length < MIN_PASSWORD_LENGTH) {
+      setValidationError(`Please choose a password of at least ${MIN_PASSWORD_LENGTH} characters.`);
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setValidationError('Those two passwords do not match.');
+      return;
+    }
+    inFlight.current = true;
+    setSubmitting(true);
+    setValidationError('');
+    setNotice('');
+
+    try {
+      const founder = await verifyOtpAndSetPassword(email, code, newPassword, fullName);
+      await finishSignIn(founder);
+      inFlight.current = false;
+    } catch (err) {
+      setValidationError(err.message || 'We could not verify that code. Please try again.');
+      release();
+    }
+  };
+
+  // ── Local development, with no Supabase configured ────────────────────────
+
+  const handleDevSignIn = async () => {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setSubmitting(true);
+    setValidationError('');
+
     let devFounder = null;
-    let devProfile = null;
     try {
       devFounder = await startDevSession();
-      if (devFounder) devProfile = await get('/profile');
     } catch {
-      // Backend down, or no dev founder configured. Fall through with no
-      // identity; AppContext re-hydrates from /profile once a session exists.
+      // Backend down, or no dev founder configured -- handled just below.
     }
 
     /* No real provider AND no dev token (this is what production looks like
-       right now, with Supabase unconfigured): there is no way to get a session
-       here, full stop. The old code fell through anyway -- set a mostly-empty
-       user, play the "signing you in" animation, and navigate into a guarded
-       route with no token. GuidedLayout's own auth check then bounced straight
-       back here, so the founder watched the animation play and landed back on
-       this exact screen -- indistinguishable from nothing having happened. Say
-       so instead of performing a sign-in that cannot succeed. */
+       with Supabase unconfigured): there is no way to get a session here, full
+       stop. Falling through anyway would play the "signing you in" animation
+       and navigate into a guarded route with no token, which GuidedLayout
+       bounces straight back to this screen -- indistinguishable from nothing
+       having happened. Say so instead of performing a sign-in that cannot
+       succeed. */
     if (!devFounder) {
-      setValidationError(
-        'Sign-in is not available in this environment yet. Please try again shortly.',
-      );
-      inFlight.current = false;
-      setSubmitting(false);
+      setValidationError('Sign-in is not available in this environment yet. Please try again shortly.');
+      release();
       return;
     }
 
-    const devName = devProfile?.full_name || '';
-
-    setUser(prev => ({
-      ...prev,
-      authProvider: provider,
-      name: devName,
-      email: devProfile?.email || devFounder?.email || '',
-      initials: devName.split(' ').filter(Boolean).slice(0, 2)
-        .map(w => w[0].toUpperCase()).join('') || '?',
-      consents: {
-        termsAccepted: true,
-        termsVersion: stored?.terms_version ?? CURRENT_VERSIONS.terms,
-        privacyVersion: stored?.privacy_version ?? CURRENT_VERSIONS.privacy,
-        diagnosisConsent: stored?.agree_diagnosis ?? agreeDiagnosis,
-        // Server-stamped when persisted; only falls back to client time when the
-        // record is still pending sync.
-        consentedAt: stored?.consented_at ?? new Date().toISOString(),
-        consentId: stored?.consent_id ?? null,
-        synced: stored !== null,
-      }
-    }));
-    setSubmitting(false);
-    setShowAuthTransition(true);
+    await finishSignIn(devFounder);
+    inFlight.current = false;
   };
+
+  // ── Render ────────────────────────────────────────────────────────────────
+
+  const consentGate = (
+    <div className="consent-container">
+      <label className="consent-item">
+        {/* This is the gate handleSendCode refuses to proceed without, but
+            nothing said so programmatically — the error appeared visually with
+            no link back to the field it blamed. */}
+        <input
+          type="checkbox"
+          id="consent-terms"
+          required
+          aria-required="true"
+          aria-invalid={validationError && !agreeTerms ? 'true' : undefined}
+          aria-describedby={validationError ? 'consent-error' : undefined}
+          checked={agreeTerms}
+          disabled={submitting}
+          onChange={(e) => {
+            setAgreeTerms(e.target.checked);
+            if (e.target.checked) setValidationError('');
+          }}
+        />
+        <span className="consent-text">
+          I agree to the <a href="/terms" target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>Terms of Service</a> and <a href="/privacy" target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>Privacy Policy</a> <span className="version-tag">v{CURRENT_VERSIONS.terms}</span> <span className="req">*</span>
+        </span>
+      </label>
+
+      <label className="consent-item">
+        <input
+          type="checkbox"
+          id="consent-diagnosis"
+          checked={agreeDiagnosis}
+          disabled={submitting}
+          onChange={(e) => setAgreeDiagnosis(e.target.checked)}
+        />
+        <span className="consent-text">
+          I consent to the collection and processing of my business's diagnostic information as described in the Privacy Policy.
+        </span>
+      </label>
+    </div>
+  );
 
   return (
     <section className="view j-stage active auth-active" id="v-login">
@@ -199,74 +342,137 @@ export default function Login() {
         <div className="j-eye"><span className="lv"></span> GoXL &middot; Ally</div>
         <h1 className="j-title">Meet Ally, your <em>founder DNA</em> engine.</h1>
         <p className="j-sub">In about 20 minutes, Ally learns how you lead and finds what's really holding your business back. You'll leave with a clarity report and your next move.</p>
-        
+
         {validationError && (
           <div className="consent-error" role="alert" id="consent-error">
             {validationError}
           </div>
         )}
+        {notice && !validationError && (
+          <div className="auth-notice" role="status">{notice}</div>
+        )}
 
-        <div className="consent-container">
-          <label className="consent-item">
-            {/* This is the gate handleAuth refuses to proceed without, but
-                nothing said so programmatically — the error appeared visually
-                with no link back to the field it blamed. */}
-            <input
-              type="checkbox"
-              id="consent-terms"
-              required
-              aria-required="true"
-              aria-invalid={validationError && !agreeTerms ? 'true' : undefined}
-              aria-describedby={validationError ? 'consent-error' : undefined}
-              checked={agreeTerms}
-              disabled={submitting}
-              onChange={(e) => {
-                setAgreeTerms(e.target.checked);
-                if (e.target.checked) setValidationError('');
-              }}
-            />
-            <span className="consent-text">
-              I agree to the <a href="/terms" target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>Terms of Service</a> and <a href="/privacy" target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>Privacy Policy</a> <span className="version-tag">v{CURRENT_VERSIONS.terms}</span> <span className="req">*</span>
-            </span>
-          </label>
-          
-          <label className="consent-item">
-            <input 
-              type="checkbox" 
-              id="consent-diagnosis"
-              checked={agreeDiagnosis}
-              disabled={submitting}
-              onChange={(e) => setAgreeDiagnosis(e.target.checked)}
-            />
-            <span className="consent-text">
-              I consent to the collection and processing of my business's diagnostic information as described in the Privacy Policy.
-            </span>
-          </label>
-        </div>
+        {!supabaseConfigured ? (
+          <div className="auth-form">
+            <button className="auth-btn auth-submit" type="button" onClick={handleDevSignIn}
+                    disabled={submitting} aria-busy={submitting}>
+              Continue (local development)
+            </button>
+          </div>
+        ) : step === 'password' ? (
+          <form className="auth-form" onSubmit={handlePasswordSignIn} noValidate>
+            <label className="auth-field">
+              <span className="auth-label">Email</span>
+              <input className="auth-input" type="email" name="email" autoComplete="username"
+                     inputMode="email" placeholder="you@company.com" value={email}
+                     disabled={submitting}
+                     onChange={(e) => { setEmail(e.target.value); setValidationError(''); }} />
+            </label>
+            <label className="auth-field">
+              <span className="auth-label">Password</span>
+              <input className="auth-input" type="password" name="password"
+                     autoComplete="current-password" placeholder="Your password" value={password}
+                     disabled={submitting}
+                     onChange={(e) => { setPassword(e.target.value); setValidationError(''); }} />
+            </label>
+            <button className="auth-btn auth-submit" type="submit"
+                    disabled={submitting} aria-busy={submitting}>
+              Sign in
+            </button>
+            <p className="auth-alt">
+              First time here, or forgotten your password?{' '}
+              <button type="button" className="auth-link-btn" disabled={submitting}
+                      onClick={() => goToStep('email')}>
+                Email me a code
+              </button>
+            </p>
+          </form>
+        ) : step === 'email' ? (
+          <form className="auth-form" onSubmit={handleSendCode} noValidate>
+            <label className="auth-field">
+              <span className="auth-label">Email</span>
+              <input className="auth-input" type="email" name="email" autoComplete="username"
+                     inputMode="email" placeholder="you@company.com" value={email} autoFocus
+                     disabled={submitting}
+                     onChange={(e) => { setEmail(e.target.value); setValidationError(''); }} />
+            </label>
 
-        <div className="j-auth">
-          <button className="auth-btn" onClick={() => handleAuth('google')} type="button"
-                  disabled={submitting} aria-busy={submitting}>
-            <svg className="g" viewBox="0 0 48 48" aria-hidden="true">
-              <path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.6l6.8-6.8C35.6 2.4 30.1 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.2 17.7 9.5 24 9.5z" />
-              <path fill="#4285F4" d="M46.1 24.6c0-1.6-.1-3.1-.4-4.6H24v9.1h12.4c-.5 2.9-2.1 5.3-4.6 7l7.1 5.5c4.2-3.9 6.6-9.6 6.6-16.4z" />
-              <path fill="#FBBC05" d="M10.5 28.3c-.5-1.4-.7-2.9-.7-4.3s.3-3 .7-4.3l-7.9-6.1C1 16.7 0 20.2 0 24s1 7.3 2.6 10.4l7.9-6.1z" />
-              <path fill="#34A853" d="M24 48c6.1 0 11.3-2 15-5.5l-7.1-5.5c-2 1.4-4.6 2.2-7.9 2.2-6.3 0-11.6-3.7-13.5-9.1l-7.9 6.1C6.5 42.6 14.6 48 24 48z" />
-            </svg>
-            Continue with Google
-          </button>
-          <button className="auth-btn li" onClick={() => handleAuth('linkedin')} type="button"
-                  disabled={submitting} aria-busy={submitting}>
-            <svg className="g" viewBox="0 0 24 24" fill="#fff" aria-hidden="true">
-              <path d="M4.98 3.5A2.5 2.5 0 1 0 5 8.5a2.5 2.5 0 0 0-.02-5zM3 9h4v12H3zM9 9h3.8v1.7h.05c.53-1 1.83-2.05 3.77-2.05 4.03 0 4.78 2.65 4.78 6.1V21H19.6v-5.3c0-1.26-.02-2.9-1.77-2.9-1.77 0-2.04 1.38-2.04 2.8V21H9z" />
-            </svg>
-            Continue with LinkedIn
-          </button>
-        </div>
+            {consentGate}
+
+            <button className="auth-btn auth-submit" type="submit"
+                    disabled={submitting} aria-busy={submitting}>
+              Send me a code
+            </button>
+            <p className="auth-alt">
+              Already have a password?{' '}
+              <button type="button" className="auth-link-btn" disabled={submitting}
+                      onClick={() => goToStep('password')}>
+                Sign in instead
+              </button>
+            </p>
+          </form>
+        ) : (
+          <form className="auth-form" onSubmit={handleVerify} noValidate>
+            <label className="auth-field">
+              <span className="auth-label">Code from your email</span>
+              <input className="auth-input auth-code" type="text" name="otp"
+                     autoComplete="one-time-code" inputMode="numeric" maxLength={OTP_MAX_LENGTH}
+                     placeholder="000000" value={code} autoFocus disabled={submitting}
+                     onChange={(e) => {
+                       setCode(e.target.value.replace(/\D/g, '').slice(0, OTP_MAX_LENGTH));
+                       setValidationError('');
+                     }} />
+            </label>
+            {/* Google used to supply this. Nothing else in onboarding asks for
+                it, and provisioning.py names the founder row from it — without
+                this field every new founder is provisioned, and greeted, as the
+                local part of their email address. */}
+            <label className="auth-field">
+              <span className="auth-label">Your name</span>
+              <input className="auth-input" type="text" name="name" autoComplete="name"
+                     placeholder="Priya Sharma" value={fullName} disabled={submitting}
+                     onChange={(e) => { setFullName(e.target.value); setValidationError(''); }} />
+            </label>
+            <label className="auth-field">
+              <span className="auth-label">Choose a password</span>
+              <input className="auth-input" type="password" name="new-password"
+                     autoComplete="new-password" placeholder={`At least ${MIN_PASSWORD_LENGTH} characters`}
+                     value={newPassword} disabled={submitting}
+                     onChange={(e) => { setNewPassword(e.target.value); setValidationError(''); }} />
+            </label>
+            <label className="auth-field">
+              <span className="auth-label">Confirm password</span>
+              <input className="auth-input" type="password" name="confirm-password"
+                     autoComplete="new-password" placeholder="Type it again"
+                     value={confirmPassword} disabled={submitting}
+                     onChange={(e) => { setConfirmPassword(e.target.value); setValidationError(''); }} />
+            </label>
+            <button className="auth-btn auth-submit" type="submit"
+                    disabled={submitting} aria-busy={submitting}>
+              Verify &amp; continue
+            </button>
+            <p className="auth-alt">
+              {cooldown > 0 ? (
+                <span className="auth-resend-wait">You can request a new code in {cooldown}s</span>
+              ) : (
+                <button type="button" className="auth-link-btn" disabled={submitting}
+                        onClick={handleResend}>
+                  Send a new code
+                </button>
+              )}
+              {' · '}
+              <button type="button" className="auth-link-btn" disabled={submitting}
+                      onClick={() => goToStep('email')}>
+                Use a different email
+              </button>
+            </p>
+          </form>
+        )}
+
         <p className="j-fine">
           Private &amp; encrypted &middot; we never share your business.{' '}
           {!supabaseConfigured && (
-            <span style={{ opacity: 0.7 }}>(Demo — simulated login, no account created)</span>
+            <span style={{ opacity: 0.7 }}>(Demo — Supabase not configured)</span>
           )}
         </p>
       </div>

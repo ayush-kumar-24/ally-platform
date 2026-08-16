@@ -47,7 +47,12 @@ export default function Tour() {
     () => (impression?.bullets?.length ? impression.bullets : buildFirstImpression(profile)),
     [impression, profile],
   );
-  const eyebrow = (profile.stage && STAGE_LABELS[profile.stage]) || 'first-impression';
+  /* Every STAGE_LABELS value is an adjective ("scale-building", "traction-led"),
+     so the eyebrow needs a noun after it -- rendered bare it read
+     "ALLY IS FORMING A SCALE BUILDING". The fallback is 'founder' rather than
+     'first-impression' for the same reason: "your founder read" is a sentence,
+     "your first-impression read" is a stutter. */
+  const eyebrow = (profile.stage && STAGE_LABELS[profile.stage]) || 'founder';
 
   useEffect(() => {
     setActive(0);
@@ -60,7 +65,9 @@ export default function Tour() {
       <div className="j-inner">
         <div className="j-eye">
           <span className="lv" />
-          Ally is forming a {eyebrow.replace('-', ' ')}
+          {/* Hyphen kept: these are compound adjectives, and "scale-building
+              read" is easier to parse than "scale building read". */}
+          Ally is forming your {eyebrow} read
         </div>
 
         <h1 className="j-title" style={{ textAlign: 'center', maxWidth: 'none' }}>

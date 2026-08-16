@@ -19,8 +19,8 @@ async def get_upstream_identity(
 ) -> AuthUser:
     """Verify the identity-provider token. Used ONLY at /auth/session.
 
-    This is the token the frontend receives from Supabase after Google/LinkedIn
-    login (or, on AWS later, from Cognito). It proves who the user is exactly
+    This is the token the frontend receives from Supabase after an OTP or
+    password login (or, on AWS later, from Cognito). It proves who the user is exactly
     once; after that the backend issues its own session tokens and this is not
     used again until the next login.
     """

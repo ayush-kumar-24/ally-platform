@@ -64,6 +64,17 @@ export function primary(key, value) {
 export function midSentence(text) {
   const s = String(text ?? '').trim();
   if (!s) return '';
-  // Leave anything containing an all-caps run of 2+ letters alone (MVP, D2C, AI, SaaS).
-  return /[A-Z]{2,}/.test(s) ? s : s.toLowerCase();
+  /* Decided per word, not for the whole string.
+     The old test was /[A-Z]{2,}/ over the entire value, which needed two
+     ADJACENT capitals -- so it protected MVP and AI but not D2C, B2B or SaaS,
+     whose capitals are separated by a digit or lowercase. "D2C" duly rendered as
+     "the lens of d2c". Testing the whole string also over-protected: any
+     two-capital phrase survived, so "Growth / Scaling" would have kept its caps
+     mid-sentence once the test was loosened.
+     A word is left alone when it carries 2+ capitals of its own (D2C, SaaS, MVP,
+     AI, B2B); ordinary words like "Growth" have one and are lowered. */
+  return s
+    .split(/(\s+)/)
+    .map((word) => ((word.match(/[A-Z]/g) || []).length >= 2 ? word : word.toLowerCase()))
+    .join('');
 }

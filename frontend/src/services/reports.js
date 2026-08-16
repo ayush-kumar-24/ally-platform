@@ -81,16 +81,33 @@ export async function loadDna(which) {
 /** Keys inside a fact object that describe the report's machinery, not the founder. */
 const INTERNAL_FACT_KEYS = new Set(['code', 'is_confident', 'tentative', 'narrator']);
 
+/** Top-level fact keys that drive rendering rather than telling the founder
+ *  anything: `cta` is a flag the discovery-call section sets for itself, and
+ *  surfaced as a fact it read "Cta: true". */
+const INTERNAL_TOP_LEVEL_KEYS = new Set(['cta']);
+
 function readable(value) {
   if (Array.isArray(value)) return value.map(readable).filter(Boolean).join(', ');
   if (value && typeof value === 'object') {
     // Nested objects (e.g. `archetype`) would otherwise render as "[object Object]".
     // Flatten to "Name · Motivation" style, dropping the internal bookkeeping.
+    //
+    // Booleans are dropped here rather than printed: this flattener throws the
+    // KEY away and joins only the values, so a bare "false" carries no meaning
+    // at all. Every business-DNA pillar carries `red_flag_triggered: false`,
+    // which rendered as "Founder Readiness · <band description> · false" and
+    // "Market Clarity · false" straight onto the report. Dropping them
+    // structurally also means the next flag someone adds to a nested fact can't
+    // leak the same way -- INTERNAL_FACT_KEYS only catches names known today.
     return Object.entries(value)
-      .filter(([k, v]) => !INTERNAL_FACT_KEYS.has(k) && v !== null && v !== undefined && v !== '')
+      .filter(([k, v]) => !INTERNAL_FACT_KEYS.has(k) && typeof v !== 'boolean'
+                          && v !== null && v !== undefined && v !== '')
       .map(([, v]) => readable(v))
       .join(' · ');
   }
+  // A top-level boolean keeps its label, so it stays -- but as words. `String(true)`
+  // put a literal "true" under the heading "Provisional" on the founder's report.
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
   return String(value);
 }
 
@@ -105,7 +122,7 @@ function readable(value) {
 export function factList(facts) {
   if (!facts || typeof facts !== 'object') return [];
   return Object.entries(facts)
-    .filter(([key, v]) => !key.startsWith('_') &&
+    .filter(([key, v]) => !key.startsWith('_') && !INTERNAL_TOP_LEVEL_KEYS.has(key) &&
                           v !== null && v !== undefined && v !== '' &&
                           !(Array.isArray(v) && v.length === 0))
     .map(([key, value]) => ({

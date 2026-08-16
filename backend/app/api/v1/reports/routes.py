@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_founder_record
-from app.api.v1.reports.generator import ReportNarrativeGenerator
+from app.api.v1.reports.generator import ReportNarrative, ReportNarrativeGenerator
 from app.api.v1.reports.gotenberg import GotenbergError, render_pdf
 from app.api.v1.reports.payload import build_report_payload
 from app.api.v1.reports.pdf import build_report_pdf
@@ -62,14 +62,39 @@ def _report_narrator(db: Session):
 
 
 def _build_narrative(db: Session, report: FounderReport):
+    """The report's narrative, generated once and cached forever after.
+
+    A report's underlying facts are fixed at generation time -- nothing
+    about session 54's answers changes because someone opened the report
+    page twice. Every caller of this function used to trigger a fresh
+    narrator run regardless, which with REPORT_NARRATIVE_LLM on meant the
+    full LLM section narrator (7 sequential provider calls, ~27s
+    live-measured) re-ran on every page view, DNA-tab switch, and PDF
+    export of a report nobody had changed. Lazily cached on
+    narrative_snapshot instead: first read generates and persists it,
+    every read after that is a plain column fetch.
+
+    Admin-triggered regeneration (panel_service.regenerate_report) clears
+    narrative_snapshot on the new report row it creates, so a founder whose
+    report is intentionally rebuilt still gets a fresh narrative once, not
+    forever -- this cache is per report_id, not per founder.
+    """
+    if report.narrative_snapshot is not None:
+        return ReportNarrative.from_dict(report.report_id, report.narrative_snapshot)
+
     payload = build_report_payload(db, report)
     framing = reports_repository.session_state_framing(db, report.session_state_at_generation)
     distress = None
     if report.distress_acknowledged_first or report.session_state_at_generation == "high_distress":
         distress = reports_repository.distress_protocol_text(db)
-    return ReportNarrativeGenerator(narrator=_report_narrator(db)).generate(
+    narrative = ReportNarrativeGenerator(narrator=_report_narrator(db)).generate(
         payload, session_framing=framing, distress_protocol=distress,
     )
+
+    report.narrative_snapshot = narrative.as_dict()
+    db.commit()
+
+    return narrative
 
 
 def _section(narrative, key: str) -> SectionOut | None:

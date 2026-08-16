@@ -1269,10 +1269,35 @@ body.auth-active .j-title{color:var(--auth-heading)}
 body.auth-active .j-title em{color:var(--auth-primary)}
 body.auth-active .j-sub{color:var(--auth-muted)}
 body.auth-active .j-fine{color:var(--auth-muted-2)}
-/* Google / LinkedIn buttons â†’ soft white cards, premium elevation */
+/* sign-in buttons â†’ soft white cards, premium elevation */
 body.auth-active .auth-btn{background:var(--auth-surface);color:#26362c;border:1px solid var(--auth-border);box-shadow:var(--auth-shadow)}
 body.auth-active .auth-btn:hover{border-color:var(--auth-border-2);box-shadow:0 16px 38px -12px rgba(6,20,13,.2)}
-body.auth-active .auth-btn.li{background:#0a66c2;color:#fff;border-color:#0a66c2}
+/* â”€â”€ email / OTP / password form â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+   Scoped to .auth-active only. The guided flow's own .j-input is styled for the
+   dark backdrop (white-on-transparent) and is unreadable on this warm ivory
+   canvas, so the login fields get their own light-surface treatment rather than
+   overriding a class the rest of onboarding depends on. */
+.auth-form{display:flex;flex-direction:column;gap:14px;max-width:360px;margin:28px auto 0;text-align:left}
+.auth-field{display:flex;flex-direction:column;gap:6px}
+.auth-label{font-size:12px;font-weight:600;letter-spacing:.02em;color:var(--auth-muted)}
+.auth-input{width:100%;background:var(--auth-surface);border:1px solid var(--auth-border);border-radius:13px;padding:13px 15px;color:var(--auth-text);font-family:var(--body);font-size:14.5px;outline:none;transition:border-color .25s,box-shadow .25s}
+.auth-input:focus{border-color:var(--auth-primary);box-shadow:0 0 0 3px var(--auth-ring)}
+.auth-input::placeholder{color:var(--auth-muted-2)}
+.auth-input:disabled{opacity:.6}
+.auth-code{letter-spacing:.5em;font-size:19px;font-weight:600;text-align:center;padding-left:calc(15px + .5em)}
+/* the one filled button on the screen â€” the others are all text links */
+.auth-btn.auth-submit{margin-top:4px}
+body.auth-active .auth-btn.auth-submit{background:var(--auth-primary-strong);color:#fff;border-color:var(--auth-primary-strong)}
+body.auth-active .auth-btn.auth-submit:hover{box-shadow:0 16px 38px -12px rgba(12,122,84,.45)}
+body.auth-active .auth-btn.auth-submit:disabled{opacity:.65;transform:none;cursor:default}
+.auth-alt{font-size:12.5px;line-height:1.6;color:var(--auth-muted);text-align:center;margin:2px 0 0}
+.auth-link-btn{background:none;border:0;padding:0;font:inherit;color:var(--auth-primary-strong);font-weight:600;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+.auth-link-btn:hover:not(:disabled){color:var(--auth-primary)}
+.auth-link-btn:disabled{opacity:.5;cursor:default}
+.auth-resend-wait{color:var(--auth-muted-2)}
+.auth-notice{max-width:380px;margin:16px auto -8px;background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.28);color:var(--auth-primary-strong);padding:10px 14px;border-radius:10px;font-size:12.5px;text-align:center}
+/* the consent gate sits inside the form on the code-request step */
+.auth-form .consent-container{margin:4px 0}
 /* secondary (ghost) buttons â†’ soft white with subtle border */
 body.auth-active .btn-dark-ghost{background:var(--auth-surface);color:var(--auth-heading);border:1px solid var(--auth-border)}
 body.auth-active .btn-dark-ghost:hover{background:var(--auth-surface-2);border-color:var(--auth-border-2)}

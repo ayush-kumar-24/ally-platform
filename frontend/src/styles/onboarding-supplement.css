@@ -155,6 +155,15 @@ body.guided .topbar,body.guided .j-rail{display:none!important}
 body.guided .platform{position:relative;z-index:1}
 body.guided .main{background:transparent;position:relative;z-index:1}
 body.guided .view-wrap{background:transparent}
+/* .view-wrap carries overflow-y:auto for the dashboard shell, where .platform is
+   height:100svh;overflow:hidden and .view-wrap is correctly the only scroller.
+   Guided pages have no .platform wrapper -- GuidedLayout is min-height:100vh, so
+   it GROWS past the viewport and the window becomes the real scroller. Leaving
+   overflow-y:auto here made .view-wrap a second scroll container taller than the
+   viewport: it captured the wheel, had almost no range of its own, and refused to
+   chain up to the window, so pages could only be moved by dragging the window
+   scrollbar. Hand scrolling back to the document. */
+body.guided .view-wrap{overflow:visible}
 body.guided .j-stage{padding-top:140px}
 body.guided .think,body.guided .call-view{padding-top:64px}
 body.guided .j-stage::before{display:none}          /* single ambient source = #guidedBg */

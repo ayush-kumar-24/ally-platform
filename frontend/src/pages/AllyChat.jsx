@@ -8,6 +8,11 @@ import {
   toUiMessage,
 } from '../services/chat';
 import { post, ApiError } from '../services/api';
+// Shared so the whole app switches greeting at the same hour. This page used to
+// define its own with a 17:00 afternoon cutoff while everywhere else used 18:00,
+// so between 5 and 6pm the dashboard said "Good afternoon" and this said
+// "Good evening" -- the exact bug greetingNow's docstring was written to end.
+import { greetingNow } from '../utils/helpers';
 import { useVoiceInput } from '../hooks/useVoiceInput';
 import { usePlan as usePlanGateEntitlements } from '../components/PlanGate';
 import { explainLimit, getMyPlan, can, FEATURES } from '../services/plans';
@@ -20,11 +25,6 @@ const PROMPT_CARDS = [
   { t: 'Help me hire my first employee', s: 'Scope the role and where to look' },
   { t: 'Create a GTM strategy', s: 'A go-to-market plan for launch' },
 ];
-
-function greeting() {
-  const h = new Date().getHours();
-  return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
-}
 
 export default function AllyChat() {
   const { user, showToast } = useApp();
@@ -323,7 +323,7 @@ export default function AllyChat() {
           ) : isEmpty ? (
             <div className="ac-empty">
               <div className="ac-av">✦</div>
-              <h2>{greeting()}, <em>{firstName}</em>. How can I help?</h2>
+              <h2>{greetingNow()}, <em>{firstName}</em>. How can I help?</h2>
               <p className="ac-lede">Ask me anything — marketing, sales, hiring, fundraising, pricing, growth or strategy. I'm your always-on thinking partner, no assessment required.</p>
               <div className="ac-cards">
                 {PROMPT_CARDS.map((c, i) => (

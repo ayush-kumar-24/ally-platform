@@ -10,8 +10,8 @@ save one step at a time:
 
 Each section has GET (read that slice) and PATCH (partial update). The founder
 row itself is created at login (see auth /session provisioning), so there is no
-create here -- these only read and update. Name and email come from the
-Google/LinkedIn login, so there is no separate company-details step.
+create here -- these only read and update. Email comes from the login itself, so
+there is no separate company-details step.
 """
 
 from fastapi import APIRouter, Depends

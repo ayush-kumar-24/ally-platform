@@ -62,7 +62,11 @@ def test_openai_maps_request_and_response():
         body = json.loads(request.content)
         assert body["model"] == "gpt-4o-mini"
         assert body["messages"][0]["role"] == "system" and body["messages"][1]["role"] == "user"
-        assert body["temperature"] == 0.7 and body["max_tokens"] == 100
+        # max_completion_tokens, not the deprecated max_tokens: the GPT-5 family
+        # rejects the latter with a 400, which the failover chain swallows into a
+        # silent fall-through to the mock provider.
+        assert body["temperature"] == 0.7 and body["max_completion_tokens"] == 100
+        assert "max_tokens" not in body
         return httpx.Response(200, json={
             "choices": [{"message": {"content": "Real answer."}, "finish_reason": "stop"}],
             "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},

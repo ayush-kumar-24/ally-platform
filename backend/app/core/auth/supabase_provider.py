@@ -1,8 +1,13 @@
 """Verifies the access token Supabase Auth issues to the frontend.
 
-The frontend does the Google/LinkedIn OAuth dance with Supabase directly and
-gets back a JWT; we only ever verify it. That means no password handling, no
-session storage, and no OAuth callback routes on our side.
+The frontend signs the founder in against Supabase directly -- an emailed OTP on
+first use, their password afterwards -- and gets back a JWT; we only ever verify
+it. Passwords are stored and checked by Supabase, so this backend still handles
+no credentials and needs no login or callback routes of its own.
+
+Which flow produced the token is invisible here, and deliberately so: it is
+verified by signature and claims alone, so adding or removing a sign-in method
+never touches this file.
 
 Two signing schemes exist, and which one a project uses is not a detail we get
 to choose:

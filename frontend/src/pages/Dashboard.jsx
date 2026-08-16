@@ -6,6 +6,7 @@ import { DnaLoading } from '../components/DnaState';
 import FeedbackPrompt from '../components/FeedbackPrompt';
 import { FEEDBACK } from '../services/feedback';
 import { useCallAccess } from '../hooks/useCallAccess';
+import { greetingNow } from '../utils/helpers';
 import {
   IconArrowRight,
   IconChat,
@@ -106,8 +107,8 @@ export default function Dashboard() {
   // Server name wins; the context value is the optimistic one set at login.
   const fullName = data?.profile?.full_name || user?.name || '';
   const firstName = fullName.split(' ')[0] || 'there';
-  const hour = new Date().getHours();
-  const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+  // Shared helper rather than a local copy -- three of these had drifted apart.
+  const greeting = greetingNow();
 
   // `available: false` means "no diagnosis yet" — a real answer, not a failure.
   // Distinguishing it from a fetch error is what lets a new founder see an honest

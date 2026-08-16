@@ -84,8 +84,15 @@ export default function GuidedLayout() {
     return <Navigate to="/guided/login" replace state={{ from: location.pathname }} />;
   }
 
+  // overflowX was 'hidden' here, which quietly broke scrolling on every guided
+  // page: when one overflow axis is hidden and the other is visible, CSS computes
+  // the visible one to `auto`, so this div became a scroll container exactly as
+  // tall as its own content -- a scroller with no scroll range that swallowed the
+  // wheel instead of letting it reach the window. `clip` clips the same way
+  // without forcing the other axis. Horizontal overflow is already held at the
+  // root by html,body{overflow-x:hidden} in platform.css.
   return (
-    <div style={{ position: 'relative', minHeight: '100vh', display: 'flex', flexDirection: 'column', overflowX: 'hidden' }}>
+    <div style={{ position: 'relative', minHeight: '100vh', display: 'flex', flexDirection: 'column', overflowX: 'clip' }}>
       <div id="guidedBg" style={{ display: 'block' }}>
         <div className="gb-orb o1" />
         <div className="gb-orb o2" />

@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     #
     # Supabase signs user access tokens ASYMMETRICALLY (ES256) and publishes the
     # public half at {SUPABASE_URL}/auth/v1/.well-known/jwks.json. That is what
-    # verifies a real Google/LinkedIn login, so SUPABASE_URL is the setting that
+    # verifies a real founder login, so SUPABASE_URL is the setting that
     # matters in production.
     #
     # SUPABASE_JWT_SECRET is the LEGACY shared HS256 secret. It still signs the
@@ -45,6 +45,13 @@ class Settings(BaseSettings):
     # nothing about user tokens; they are signed by a different key entirely.
     SUPABASE_URL: str = ""
     SUPABASE_JWT_SECRET: str = ""
+
+    # Shared secret for inbound Supabase/ops webhooks (app/api/v1/webhooks). Must be
+    # configured as the same value on both sides -- Supabase's Database Webhooks
+    # "Add a header" field, and whatever external scheduler (cron, GitHub Actions,
+    # a Render Cron Job) triggers the deletion sweep. Empty means every webhook call
+    # is rejected (fails closed) rather than left open by omission.
+    SUPABASE_WEBHOOK_SECRET: str = ""
 
     # --- Security ---
     # Signs the session tokens THIS backend issues (see below). Keep it secret.

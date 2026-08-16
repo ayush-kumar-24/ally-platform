@@ -11,7 +11,12 @@ const SECTIONS = [
   {
     id: 'data-collected',
     title: '2. Data We Collect',
-    content: `We collect the following categories of personal data: (a) Identity & Contact Data — your name, email address, and profile photo obtained via Google or LinkedIn OAuth; (b) Business Diagnostic Data — your responses to diagnostic questions about your business, including financial health, team dynamics, growth challenges, and strategic decisions; (c) Usage & Technical Data — IP address, browser type, device identifiers, pages visited, session duration, and click-path data; (d) Communication Data — any messages or queries you send us via email or the in-platform support feature; (e) Consent Records — timestamps and version numbers of the consents you have provided.`,
+    // (a) rewritten when sign-in moved off Google/LinkedIn OAuth. It declared a
+    // profile photo obtained via OAuth -- the email + one-time-code flow supplies
+    // no photo and no OAuth profile, so the policy was describing a collection
+    // that no longer happens, by a mechanism that no longer exists. Name is now
+    // self-declared by the founder at sign-up; email is verified by one-time code.
+    content: `We collect the following categories of personal data: (a) Identity & Contact Data — your email address, verified by a one-time code sent to it, and the name you provide when creating your account; (b) Business Diagnostic Data — your responses to diagnostic questions about your business, including financial health, team dynamics, growth challenges, and strategic decisions; (c) Usage & Technical Data — IP address, browser type, device identifiers, pages visited, session duration, and click-path data; (d) Communication Data — any messages or queries you send us via email or the in-platform support feature; (e) Consent Records — timestamps and version numbers of the consents you have provided.`,
   },
   {
     id: 'legal-basis',

@@ -10,9 +10,11 @@
     POST /settings/privacy        submit a new privacy request (queued for admin review)
 
 Note on scope: **profile settings** live on `/profile` (name + the 13 fields), so
-they are not duplicated here. **Password management** does not exist -- this is
-social login only (Google/LinkedIn), so credentials, password reset and 2FA are
-owned by the identity provider, surfaced read-only under /settings/security.
+they are not duplicated here. **Password management** does not exist *here*:
+founders do have a password, but Supabase owns it end to end, and a reset runs
+through the same emailed-OTP flow as first sign-in rather than any endpoint of
+ours. Credentials and 2FA stay with the identity provider, surfaced read-only
+under /settings/security.
 """
 
 from fastapi import APIRouter, Depends, Query, status
