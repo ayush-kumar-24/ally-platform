@@ -48,6 +48,16 @@ win32_setctime==1.2.0
 sentry-sdk[fastapi]==2.14.0
 psycopg==3.3.4
 psycopg-binary==3.3.4
+# Safety net for the psycopg3 migration: app/db/session.py passes
+# settings.DATABASE_URL straight to create_engine() with no explicit
+# "+psycopg" driver in code -- that suffix has to live in the URL itself
+# (see .env.example). Production's DATABASE_URL secret in AWS Secrets
+# Manager was never updated to include it, so SQLAlchemy falls back to its
+# default "postgresql://" DBAPI, which is psycopg2 -- confirmed live:
+# deploying without this crashed every task with `ModuleNotFoundError: No
+# module named 'psycopg2'` (revision 55, 2026-08-17). Keep this installed
+# until the production secret is confirmed to read postgresql+psycopg://.
+psycopg2-binary==2.9.10
 google-api-python-client==2.198.0
 google-auth==2.56.2
 pgvector==0.5.0
