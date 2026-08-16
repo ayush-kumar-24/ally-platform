@@ -21,7 +21,14 @@ COPY . .
 
 # Runs as the container's own user, not root -- App Runner has no opinion on
 # this, but there's no reason to run a network-facing process as root either.
-RUN useradd --create-home --shell /bin/bash ally
+# app/main.py creates ./uploads (and uploads/avatars) at import time as a
+# local fallback alongside S3 -- COPY above lands everything root-owned, so
+# without this chown that mkdir 403s and the container never starts.
+# Confirmed live: ECS task definition revision 56 crash-looped on exactly
+# this, PermissionError: [Errno 13] Permission denied: '/app/uploads'.
+RUN useradd --create-home --shell /bin/bash ally && \
+    mkdir -p /app/uploads/avatars && \
+    chown -R ally:ally /app
 USER ally
 
 EXPOSE 8000
