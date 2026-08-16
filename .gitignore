@@ -16,6 +16,9 @@ __pycache__/
 .coverage
 htmlcov/
 
+# --- User-uploaded runtime files (local-disk avatar storage; never source) ---
+backend/uploads/
+
 # --- Node / frontend ---
 node_modules/
 dist/
