@@ -8,7 +8,7 @@ while idle-in-transaction, failing the whole request after the answer had
 already been written. Every other public method still commits once.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from fastapi import status
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -22,7 +22,7 @@ from app.core.config import settings
 from app.core.logger import logger
 from app.middleware.error_handler import AppError
 from app.plans.catalog import get_plan
-from app.plans.errors import MonthlyDiagnosisLimitError
+from app.plans.errors import DiagnosisAlreadyCompletedError
 from app.models import (
     Answer,
     DiagnosisSession,
@@ -73,13 +73,16 @@ class DiagnosisService:
 
     # --- Public API ---
 
-    def _check_monthly_diagnosis_limit(self, founder: Founder) -> None:
-        """Bound how many diagnoses a founder may start in a calendar month.
+    def _check_diagnosis_allowance(self, founder: Founder) -> None:
+        """Bound how many diagnoses a founder may ever COMPLETE -- a lifetime
+        cap, not a monthly one.
 
         Diagnosis is unmetered by tokens on purpose, so a count is the only thing
-        limiting what it costs -- roughly 24,400 tokens a run. The window is the
-        calendar month rather than a rolling 30 days so "your next one is
-        available from 1 September" is something a founder can actually predict.
+        limiting what it costs -- roughly 24,400 tokens a run. Only completed
+        sessions count: a founder who abandoned one mid-way and starts fresh has
+        not "used" their diagnosis, since they never reached a report. (The
+        resume path in start_session already handles the in-progress case and
+        never reaches this check at all -- see there.)
 
         Fails OPEN on an unreadable plan or count: refusing a founder their
         diagnosis because a lookup failed is a worse outcome than serving one
@@ -87,13 +90,10 @@ class DiagnosisService:
         """
         try:
             plan = get_plan(founder.plan_type)
-            limit = plan.diagnoses_per_month
+            limit = plan.diagnosis_lifetime_limit
             if limit <= 0:                      # 0 = unlimited
                 return
-            now = _utcnow()
-            month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-            used = self.repository.count_sessions_started_since(
-                founder.founder_id, month_start)
+            used = self.repository.count_completed_sessions(founder.founder_id)
         except Exception:                       # noqa: BLE001
             logger.warning(
                 "Diagnosis limit check failed; allowing the diagnosis",
@@ -102,8 +102,7 @@ class DiagnosisService:
             return
 
         if used >= limit:
-            next_month = (month_start + timedelta(days=32)).replace(day=1)
-            raise MonthlyDiagnosisLimitError(used, limit, next_month)
+            raise DiagnosisAlreadyCompletedError(used, limit)
 
     def start_session(self, founder: Founder) -> tuple[DiagnosisSession, Question | None, bool]:
         """Start a diagnosis session, or resume the founder's active one.
@@ -115,6 +114,14 @@ class DiagnosisService:
 
         Returns (session, first_question, resumed).
         """
+        # Live-reproduced: without this lock, two near-simultaneous calls both
+        # read "no active session, 0 used this month" before either had
+        # committed -- both passed the check below and both created a
+        # session, turning a limit of 1 into 2. Held for the rest of this
+        # transaction; a concurrent second call blocks here until the first
+        # commits, then correctly sees the session it just created.
+        self.repository.lock_founder_for_diagnosis_start(founder.founder_id)
+
         existing = self.repository.get_active_session_for_founder(founder.founder_id)
         if existing is not None:
             logger.info(
@@ -127,7 +134,7 @@ class DiagnosisService:
         # Only a NEW diagnosis is bounded. The resume path above has already
         # returned, so an in-progress assessment can always be continued -- the
         # limit can never strand someone partway through.
-        self._check_monthly_diagnosis_limit(founder)
+        self._check_diagnosis_allowance(founder)
 
         session = DiagnosisSession(
             founder_id=founder.founder_id,

@@ -196,7 +196,7 @@ export default function FounderProfile() {
     await logout();
     navigate('/', { replace: true });
   };
-  const { setUser, showToast } = useApp();
+  const { setUser, showToast, startTour } = useApp();
   const [editing, setEditing] = useState(false);
 
   // Privacy Center state
@@ -312,10 +312,16 @@ export default function FounderProfile() {
 
   // Form fields. These were seeded with a fabricated person, so every founder
   // opened their profile and saw someone else's name, email and phone.
+  // phone/location dropped entirely -- product decision: not needed, and
+  // neither was ever persisted anyway (PATCH /profile had no field for
+  // either), so Edit silently did nothing for them.
   const [form, setForm] = useState({
-    name: '', email: '', phone: '', linkedin: '', location: '',
+    name: '', email: '', linkedin: '',
   });
   const [, setProfileLoaded] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const avatarInputRef = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -325,15 +331,39 @@ export default function FounderProfile() {
         setForm({
           name: p.full_name || '',
           email: p.email || '',
-          phone: p.phone || '',
           linkedin: p.linkedin_url || '',
-          location: p.location || '',
         });
+        if (p.avatar_url) setAvatarUrl(p.avatar_url);
       })
       .catch(() => { /* leave the fields empty rather than inventing values */ })
       .finally(() => { if (!cancelled) setProfileLoaded(true); });
     return () => { cancelled = true; };
   }, []);
+
+  /** Upload a new profile photo. Fails loudly (a toast) rather than silently
+   * -- a founder who just picked a photo and sees nothing happen assumes it
+   * worked, which is worse than being told it didn't. */
+  const handleAvatarSelected = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-selecting the same file later
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      showToast('That image is too large — please pick one under 5MB.');
+      return;
+    }
+    setUploadingAvatar(true);
+    try {
+      const form2 = new FormData();
+      form2.append('file', file);
+      const res = await post('/profile/avatar', form2, { headers: { 'Content-Type': undefined } });
+      setAvatarUrl(res.avatar_url);
+      showToast('Profile photo updated ✓');
+    } catch (err) {
+      showToast(err?.message || 'Could not upload that photo. Please try again.');
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
 
   // Preferences Switches
   const [switches, setSwitches] = useState({
@@ -433,24 +463,44 @@ export default function FounderProfile() {
                 fontWeight: 800,
                 fontSize: '24px',
                 color: '#06231a',
-                background: 'linear-gradient(135deg, #34d399, #A8D94A)',
-                boxShadow: '0 0 0 3px rgba(255,255,255,0.08), 0 8px 24px -6px rgba(0,0,0,0.5)'
+                background: avatarUrl ? undefined : 'linear-gradient(135deg, #34d399, #A8D94A)',
+                boxShadow: '0 0 0 3px rgba(255,255,255,0.08), 0 8px 24px -6px rgba(0,0,0,0.5)',
+                overflow: 'hidden',
               }}
             >
-              {/* Was the literal "AS" — a mock founder's initials, rendered
-                  directly above every real founder's own name. */}
-              {form.name
-                .split(' ')
-                .filter(Boolean)
-                .slice(0, 2)
-                .map(w => w[0].toUpperCase())
-                .join('') || '?'}
+              {avatarUrl ? (
+                <img
+                  src={avatarUrl}
+                  alt=""
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                />
+              ) : (
+                /* Was the literal "AS" — a mock founder's initials, rendered
+                   directly above every real founder's own name. */
+                form.name
+                  .split(' ')
+                  .filter(Boolean)
+                  .slice(0, 2)
+                  .map(w => w[0].toUpperCase())
+                  .join('') || '?'
+              )}
             </div>
-            {/* Icon-only, and previously had neither a type nor a name. */}
+            {/* Was dead -- no onClick at all -- now wired to a real upload
+                endpoint (see handleAvatarSelected below). */}
+            <input
+              ref={avatarInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              aria-label="Upload profile photo"
+              style={{ display: 'none' }}
+              onChange={handleAvatarSelected}
+            />
             <button
               className="fp-cam"
               type="button"
               aria-label="Change profile photo"
+              disabled={uploadingAvatar}
+              onClick={() => avatarInputRef.current?.click()}
               style={{
                 position: 'absolute',
                 right: '-2px',
@@ -462,8 +512,8 @@ export default function FounderProfile() {
                 placeItems: 'center',
                 background: '#0E2A1C',
                 border: '1.5px solid rgba(255,255,255,0.2)',
-                color: '#34d399',
-                cursor: 'pointer'
+                color: uploadingAvatar ? '#5c7568' : '#34d399',
+                cursor: uploadingAvatar ? 'wait' : 'pointer'
               }}
             >
               <svg viewBox="0 0 24 24" style={{ width: 12, height: 12, fill: 'none', stroke: 'currentColor', strokeWidth: 2 }}>
@@ -482,28 +532,12 @@ export default function FounderProfile() {
                 {form.email}
               </div>
             )}
-            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-              <span className="fp-hchip" style={{ fontSize: '11px', padding: '4px 9px' }}>
-                <svg viewBox="0 0 24 24" style={{ width: 12, height: 12, fill: 'none', stroke: '#34d399', strokeWidth: 2, marginRight: 4 }}>
-                  <path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z" />
-                  <circle cx="12" cy="10" r="3" />
-                </svg>
-                {form.location}
-              </span>
-              <span className="fp-hchip" style={{ fontSize: '11px', padding: '4px 9px' }}>
-                <svg viewBox="0 0 24 24" style={{ width: 12, height: 12, fill: 'none', stroke: '#34d399', strokeWidth: 2, marginRight: 4 }}>
-                  <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-                  <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-                </svg>
-                1
-              </span>
-              <span className="fp-hchip" style={{ fontSize: '11px', padding: '4px 9px' }}>
-                <svg viewBox="0 0 24 24" style={{ width: 12, height: 12, fill: 'none', stroke: '#34d399', strokeWidth: 2, marginRight: 4 }}>
-                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-                </svg>
-                1
-              </span>
-            </div>
+            {/* The location/link/star chip row that used to live here was
+                three pieces of fake UI: a location value duplicating the
+                field below, and two badges (link/star icon) hardcoded to the
+                literal text "1" with no backing data or function anywhere in
+                the app -- not clickable, not connected to anything. Removed
+                rather than invented a meaning for them. */}
           </div>
         </div>
 
@@ -597,32 +631,36 @@ export default function FounderProfile() {
             <div className="pr-val">{form.email || '—'}</div>
           </div>
 
-          <div className="pr-field">
-            <div className="pr-lbl">Phone</div>
-            {/* Not yet persisted anywhere: PATCH /profile has no phone field. Kept
-                read-only so an edit is never silently dropped on save. */}
-            <div className="pr-val">{form.phone || 'Not set'}</div>
-          </div>
+          {/* Phone and Location removed -- not needed here per product
+              decision, and neither was ever persisted (PATCH /profile has no
+              field for either), so Edit silently did nothing for them with
+              no indication why. */}
 
-          <div className="pr-field">
+          <div className="pr-field" style={{ gridColumn: '1 / -1' }}>
             <label className="pr-lbl" htmlFor="pr-linkedin">LinkedIn</label>
             {editing ? (
               <input
                 id="pr-linkedin"
+                type="url"
                 className="pr-input"
+                placeholder="https://linkedin.com/in/your-profile"
+                pattern="https?://.+"
                 value={form.linkedin}
                 onChange={e => setForm({ ...form, linkedin: e.target.value })}
               />
+            ) : form.linkedin ? (
+              <a
+                className="pr-val"
+                href={/^https?:\/\//.test(form.linkedin) ? form.linkedin : `https://${form.linkedin}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ color: 'var(--emerald, #10B981)', textDecoration: 'underline' }}
+              >
+                {form.linkedin}
+              </a>
             ) : (
-              <div className="pr-val">{form.linkedin}</div>
+              <div className="pr-val">Not set</div>
             )}
-          </div>
-
-          <div className="pr-field" style={{ gridColumn: '1 / -1' }}>
-            <div className="pr-lbl">Location</div>
-            {/* Not yet persisted anywhere: PATCH /profile has no location field. Kept
-                read-only so an edit is never silently dropped on save. */}
-            <div className="pr-val">{form.location || 'Not set'}</div>
           </div>
         </div>
       </div>
@@ -716,7 +754,11 @@ export default function FounderProfile() {
           Upgrade plan
         </button>
 
-        {/* Usage statistics header */}
+        {/* Usage statistics header -- was "This month's usage", which was
+            wrong for both rows below it: chat resets DAILY (daily_token_usage
+            is keyed by UTC date, not month) and diagnosis is a LIFETIME cap,
+            not a monthly one. Neither row is monthly, so the header no longer
+            claims a single shared window; each row states its own. */}
         <div
           style={{
             fontSize: '9.5px',
@@ -728,7 +770,7 @@ export default function FounderProfile() {
             textAlign: 'left'
           }}
         >
-          This month's usage
+          Usage
         </div>
 
         {/* Usage meters list */}
@@ -750,7 +792,7 @@ export default function FounderProfile() {
                 AI Chat with Ally
               </div>
               <span className="pr-usage-val">
-                {plan ? `${plan.daily_tokens_used ?? 0} / ${plan.daily_token_limit ?? 0}` : '— / —'}
+                {plan ? `${plan.daily_tokens_used ?? 0} / ${plan.daily_token_limit ?? 0} today` : '— / —'}
               </span>
             </div>
             <div className="pr-usage-track">
@@ -782,8 +824,8 @@ export default function FounderProfile() {
               <span className="pr-usage-val">
                 {plan
                   ? (plan.diagnosis_usage?.limit != null
-                      ? `${plan.diagnosis_usage.used} / ${plan.diagnosis_usage.limit}`
-                      : `${plan.diagnosis_usage?.used ?? 0} this month`)
+                      ? `${plan.diagnosis_usage.used} / ${plan.diagnosis_usage.limit} lifetime`
+                      : `${plan.diagnosis_usage?.used ?? 0} completed`)
                   : '— / —'}
               </span>
             </div>
@@ -799,52 +841,36 @@ export default function FounderProfile() {
             </div>
           </div>
 
-          {/* Document analysis */}
+          {/* Document analysis -- live product decision: this is included on
+              every plan, Free included, not a Pro-only feature. It has no
+              meter of its own because it doesn't spend a separate budget --
+              an uploaded document is analysed out of the same daily chat
+              token allowance shown above, so a second progress bar here would
+              just be showing the same number twice. Was previously a static
+              "Upgrade to Pro" badge over a disabled track with no backend
+              behind it at all -- pure fiction, removed. */}
           <div className="pr-usage-row">
             <div className="pr-usage-label-row">
-              <div className="pr-usage-title" style={{ color: 'var(--muted-2)' }}>
+              <div className="pr-usage-title">
                 <svg viewBox="0 0 24 24">
                   <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                   <polyline points="14 2 14 8 20 8" />
                 </svg>
                 Document Analysis
               </div>
-              <span
-                style={{
-                  fontSize: '8.5px',
-                  fontWeight: 800,
-                  letterSpacing: '0.04em',
-                  textTransform: 'uppercase',
-                  background: '#fef3c7',
-                  color: '#d97706',
-                  padding: '3px 8px',
-                  borderRadius: '4px',
-                  border: '1px solid #fde68a'
-                }}
-              >
-                Upgrade to Pro
+              <span className="pr-usage-val" style={{ color: 'var(--muted-2)', fontWeight: 700 }}>
+                Included
               </span>
             </div>
-            <div className="pr-usage-track" style={{ opacity: 0.5 }} />
-          </div>
-
-          {/* Team members usage */}
-          <div className="pr-usage-row">
-            <div className="pr-usage-label-row">
-              <div className="pr-usage-title">
-                <svg viewBox="0 0 24 24">
-                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                  <circle cx="9" cy="7" r="4" />
-                </svg>
-                Team Members
-              </div>
-              <span className="pr-usage-val">1 / 1</span>
-            </div>
-            <div className="pr-usage-track">
-              <div className="pr-usage-fill" style={{ width: '100%' }} />
+            <div style={{ fontSize: '11px', color: 'var(--muted-2)', marginTop: '2px' }}>
+              Upload a document to Ally Chat — it's analysed out of your chat allowance above.
             </div>
           </div>
         </div>
+        {/* Team Members was a hardcoded "1 / 1" with nothing behind it -- no
+            team-member model, no invite flow, no backend reference anywhere
+            in the codebase. Removed rather than wired up: not a real feature
+            for this product. */}
 
         {/* Renewal Reminder Switch Row */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--bd)', paddingTop: '20px' }}>
@@ -931,7 +957,7 @@ export default function FounderProfile() {
           </div>
           <button
             className="pr-row-btn"
-            onClick={() => showToast('Guided tour starting...')}
+            onClick={startTour}
             type="button"
           >
             <svg viewBox="0 0 24 24">

@@ -14,7 +14,10 @@ create here -- these only read and update. Email comes from the login itself, so
 there is no separate company-details step.
 """
 
-from fastapi import APIRouter, Depends
+import uuid
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, File, Request, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_founder_record
@@ -22,7 +25,7 @@ from app.db.session import get_db
 from app.middleware.error_handler import AppError
 from app.models import Founder
 from app.repositories import founder_context_repository, founder_repository
-from app.schemas.founder import FounderRead, FounderUpdate
+from app.schemas.founder import AvatarUploadResponse, FounderRead, FounderUpdate
 from app.schemas.founder_context import FounderContextRead, FounderContextUpdate
 from app.schemas.progress import ProgressResponse, ValidationResponse
 from app.schemas.sections import (
@@ -49,6 +52,72 @@ class UnknownStageError(AppError):
 async def read_profile(founder: Founder = Depends(get_founder_record)):
     """The signed-in founder's full profile."""
     return founder
+
+
+_AVATAR_CONTENT_TYPES = {
+    "image/png": "png", "image/jpeg": "jpg", "image/jpg": "jpg", "image/webp": "webp",
+}
+_MAX_AVATAR_BYTES = 5 * 1024 * 1024  # 5MB, matches the frontend's own check
+
+
+class InvalidAvatarError(AppError):
+    def __init__(self, message: str):
+        super().__init__(message, status_code=status.HTTP_422_UNPROCESSABLE_ENTITY)
+
+
+@router.post("/avatar", response_model=AvatarUploadResponse, status_code=status.HTTP_201_CREATED)
+async def upload_avatar(
+    request: Request,
+    file: UploadFile = File(...),
+    founder: Founder = Depends(get_founder_record),
+    db: Session = Depends(get_db),
+):
+    """Replace the founder's profile photo.
+
+    Live-confirmed gap: the camera button on the profile page had no
+    onClick at all, and there was no backend support for it whatsoever --
+    no upload endpoint, no storage, no column. This is the first real
+    version: local disk storage, served back via the /uploads static mount
+    (see main.py). A real deployment wants this on a cloud bucket instead
+    -- files here do not survive a redeploy onto a fresh container -- but
+    that is a storage-backend swap scoped to this one function, not a
+    reason to leave the feature fake in the meantime.
+
+    One file per founder (named by founder_id, extension only): a new
+    upload overwrites the old one rather than accumulating orphaned files
+    with nothing to ever clean them up.
+    """
+    content_type = (file.content_type or "").lower()
+    ext = _AVATAR_CONTENT_TYPES.get(content_type)
+    if ext is None:
+        raise InvalidAvatarError(
+            f"Unsupported image type {content_type!r} -- use PNG, JPEG or WEBP."
+        )
+
+    content = await file.read()
+    if len(content) > _MAX_AVATAR_BYTES:
+        raise InvalidAvatarError("That image is too large -- please pick one under 5MB.")
+    if not content:
+        raise InvalidAvatarError("That file is empty.")
+
+    upload_dir = Path(__file__).resolve().parents[4] / "uploads" / "avatars"
+    upload_dir.mkdir(parents=True, exist_ok=True)
+
+    # Wipe any previous avatar for this founder under a DIFFERENT extension
+    # first -- otherwise switching from a .png to a .jpg would leave the old
+    # .png sitting on disk forever, unreferenced but never deleted.
+    for old in upload_dir.glob(f"{founder.founder_id}.*"):
+        old.unlink(missing_ok=True)
+
+    # jti-free, cache-busting filename: a browser (or CDN in front of this
+    # later) must not keep serving yesterday's photo from cache under the
+    # same URL just because the founder_id is unchanged.
+    filename = f"{founder.founder_id}.{uuid.uuid4().hex[:8]}.{ext}"
+    (upload_dir / filename).write_bytes(content)
+
+    avatar_url = f"{str(request.base_url).rstrip('/')}/uploads/avatars/{filename}"
+    founder_repository.update(db, founder, {"avatar_url": avatar_url})
+    return AvatarUploadResponse(avatar_url=avatar_url)
 
 
 @router.patch("", response_model=FounderRead)

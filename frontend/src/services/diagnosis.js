@@ -34,10 +34,17 @@ export async function getCurrentSession() {
  * answering into another's session.
  */
 export function submitAnswer({ questionId, answer }) {
+  // Live-reproduced: this call runs an LLM answer classification AND an
+  // incremental confidence recompute in series, routinely taking 12-15s and
+  // observed at 23.7s once -- over api.js's default 20s timeout. When that
+  // happens the client gives up and shows a false failure while the server
+  // goes on to save the answer successfully seconds later; the founder's
+  // next "retry" then correctly 409s because the session already moved on.
+  // 45s gives real headroom without hiding a genuinely hung request forever.
   return post('/diagnosis/answer', {
     question_id: questionId,
     answer_text: answer,
-  });
+  }, { timeout: 45_000 });
 }
 
 /**

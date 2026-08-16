@@ -399,6 +399,7 @@ class Founders(Base):
     business_model: Mapped[Optional[str]] = mapped_column(String(30))
     website: Mapped[Optional[str]] = mapped_column(String(300))
     linkedin_url: Mapped[Optional[str]] = mapped_column(String(300))
+    avatar_url: Mapped[Optional[str]] = mapped_column(String(500))
     social_profiles: Mapped[Optional[dict]] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
     preferred_language: Mapped[Optional[str]] = mapped_column(String(10), server_default=text("'en'::character varying"))
     notification_preferences: Mapped[Optional[dict]] = mapped_column(JSONB, server_default=text('\'{"in_app_all": true, "email_reminders": true, "email_report_ready": true}\'::jsonb'))

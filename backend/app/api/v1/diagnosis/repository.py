@@ -20,6 +20,25 @@ class DiagnosisRepository:
 
     # --- Sessions ---
 
+    def lock_founder_for_diagnosis_start(self, founder_id: int) -> None:
+        """Row-level lock, held for the rest of this transaction.
+
+        Live-reproduced: two near-simultaneous POST /diagnosis/start calls for
+        the same founder both read "no active session, 0 used this month"
+        before either had committed, so both passed the monthly limit check
+        and both created an in-progress session -- a limit of 1 became 2, and
+        the "never fork the assessment" invariant start_session's own
+        docstring describes was violated. SELECT ... FOR UPDATE here blocks a
+        concurrent second call until the first one's transaction resolves, at
+        which point it correctly sees the just-created session and takes the
+        resume path instead of creating a duplicate. Scoped to one founder's
+        row -- does not serialize unrelated founders against each other.
+        """
+        self.db.execute(
+            _text("select founder_id from founders where founder_id = :f for update"),
+            {"f": founder_id},
+        )
+
     def get_session_by_id(self, session_id: int) -> DiagnosisSession | None:
         return self.db.get(DiagnosisSession, session_id)
 
@@ -50,6 +69,24 @@ class DiagnosisRepository:
             .where(
                 DiagnosisSession.founder_id == founder_id,
                 DiagnosisSession.started_at >= since,
+            )
+        ) or 0
+
+    def count_completed_sessions(self, founder_id: int) -> int:
+        """Diagnoses this founder has ever COMPLETED -- a lifetime count, not
+        scoped to a month.
+
+        Backs the lifetime diagnosis cap: an abandoned or still-in-progress
+        session must never count here, because the resume path must never be
+        blocked and a founder must never be told their one free diagnosis is
+        "used" before they have actually reached a report.
+        """
+        return self.db.scalar(
+            select(func.count())
+            .select_from(DiagnosisSession)
+            .where(
+                DiagnosisSession.founder_id == founder_id,
+                DiagnosisSession.status == SessionStatus.COMPLETED,
             )
         ) or 0
 

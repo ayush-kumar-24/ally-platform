@@ -13,7 +13,7 @@ from decimal import Decimal
 from sqlalchemy import delete, func, or_, select, text
 from sqlalchemy.orm import Session
 
-from app.models.schema import Archetypes
+from app.models.schema import Archetypes, BehaviourPatterns, BlindSpots
 from app.models import (
     AgentInterpretation,
     Answer,
@@ -281,6 +281,48 @@ class ReasoningRepository:
         ]
         stmt = select(Intervention).where(or_(*conditions))
         return list(self.db.execute(stmt).scalars().all())
+
+    def get_blind_spot_ids_by_root_cause_codes(
+        self, root_cause_codes: Sequence[str]
+    ) -> list[int]:
+        """blind_spots whose `linked_root_cause_ids` jsonb array contains any of
+        the given root-cause CODES -- same @> containment and same code-not-id
+        convention as `get_interventions_by_root_cause_codes` above, confirmed
+        against live data (blind_spots.linked_root_cause_ids holds "RC-019"
+        style codes, not integer ids).
+
+        Was always skipped by the reasoning report (internal_intelligence_
+        reports.blind_spot_ids stayed `[]` for every session) -- not because
+        blind_spots has no data (20 real seeded rows), but because nothing ever
+        queried it. AllyContext.blind_spot_ids and the knowledge graph's
+        *_TO_BLIND_SPOT edges already read this column; they were just always
+        empty upstream.
+        """
+        codes = [c for c in set(root_cause_codes) if c]
+        if not codes:
+            return []
+        conditions = [
+            BlindSpots.linked_root_cause_ids.op("@>")(func.jsonb_build_array(code))
+            for code in codes
+        ]
+        stmt = select(BlindSpots.blind_spot_id).where(or_(*conditions))
+        return [row[0] for row in self.db.execute(stmt).all()]
+
+    def get_behaviour_pattern_ids_by_root_cause_codes(
+        self, root_cause_codes: Sequence[str]
+    ) -> list[int]:
+        """behaviour_patterns whose `linked_root_cause_ids` jsonb array contains
+        any of the given root-cause CODES. Same convention and same "seeded but
+        never queried" history as blind_spots above (27 real seeded rows)."""
+        codes = [c for c in set(root_cause_codes) if c]
+        if not codes:
+            return []
+        conditions = [
+            BehaviourPatterns.linked_root_cause_ids.op("@>")(func.jsonb_build_array(code))
+            for code in codes
+        ]
+        stmt = select(BehaviourPatterns.pattern_id).where(or_(*conditions))
+        return [row[0] for row in self.db.execute(stmt).all()]
 
     # --- Output (writes; flush only) --------------------------------------
 

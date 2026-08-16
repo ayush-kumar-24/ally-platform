@@ -94,18 +94,20 @@ def _trial_status(expires_at) -> dict | None:
 
 
 def _diagnosis_usage(db: Session, founder: Founder) -> dict:
-    """This calendar month's diagnosis usage, the same count and limit
-    `_check_monthly_diagnosis_limit` (diagnosis/service.py) actually enforces
-    -- computed here, not duplicated, so the profile page's usage meter can
-    never disagree with what starting a diagnosis would actually do.
+    """The founder's LIFETIME diagnosis usage -- completed reports only, not
+    scoped to a month -- the same count and limit `_check_diagnosis_allowance`
+    (diagnosis/service.py) actually enforces, computed here rather than
+    duplicated so the profile page's usage meter can never disagree with what
+    starting a diagnosis would actually do.
+
+    An in-progress session a founder is resuming never appears here: it is not
+    "used" until it reaches a report, matching the enforcement side exactly.
 
     limit <= 0 means unlimited (matches the enforcement side's convention).
     """
     plan = get_plan(getattr(founder, "plan_type", None))
-    limit = plan.diagnoses_per_month
-    now = datetime.now(timezone.utc)
-    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    used = DiagnosisRepository(db).count_sessions_started_since(founder.founder_id, month_start)
+    limit = plan.diagnosis_lifetime_limit
+    used = DiagnosisRepository(db).count_completed_sessions(founder.founder_id)
     return {"used": used, "limit": limit if limit > 0 else None}
 
 

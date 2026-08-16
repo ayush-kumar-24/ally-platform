@@ -13,25 +13,32 @@ own daily ceiling -- 30 days x daily_tokens / TOKENS_PER_CREDIT. A plan that gra
 more credits than its daily limit allows anyone to spend would strand the remainder
 every month, which is a refund request waiting to happen.
 
-    Free     1,431 credits (once)  40,000 chat + 7,700 planning tokens/day
+    Free     1,431 credits (once)   4,000 chat + 7,700 planning tokens/day
     Starter    180 credits/month    6,000 tokens/day -> 180,000, all reachable
     Pro        240 credits/month    8,000 tokens/day -> 240,000, all reachable
 
 Free grants credits **once**, not monthly: a renewing free tier is an unbounded
 recurring cost per signup. It is a one-month trial that ends in a top-up decision.
 
+Free's chat ceiling is deliberately tight (4,000 tokens/day, ~16 messages).
+`daily_token_limit` below now matches that figure -- it previously still read
+40,000 (a leftover testing-phase value the docstring had already moved past
+without the field following), which is not exactly reachable under the signup
+credit grant below; the daily ceiling is the binding constraint on chat, not
+the credit balance, and credits simply drain far slower than the math below
+implies. Left as-is rather than re-derived, since shrinking the credit grant
+to match is a separate pricing decision this change does not make.
+
 Free is currently sized for the TESTING PHASE, not for a public free tier. The
 measured per-operation costs it is built from:
 
-    diagnosis   18,900 in + 5,500 out = 24,400   unmetered, once per month
+    diagnosis   18,900 in + 5,500 out = 24,400   unmetered, lifetime cap of 1
     chat         2,000 in +   400 out =  2,400   x 500 messages = 1,200,000
     planning       800 in +   300 out =  1,100   x 7/day x 30   =   231,000
                                                  total          = 1,431,000
 
-which is 1,431 credits at 1,000 tokens each, and exactly reachable:
-40,000 x 30 = 1,200,000 for chat, 7,700 x 30 = 231,000 for planning. At roughly
-Rs 168 per user per month this is a funded trial allowance -- shrink it before a
-public launch.
+which is 1,431 credits at 1,000 tokens each. At roughly Rs 168 per user per
+month this is a funded trial allowance -- shrink it before a public launch.
 
 Diagnosis is deliberately absent from the budget. It is unmetered so a founder can
 never hit a wall mid-diagnosis, which is also why it must stay capped by *count*
@@ -127,10 +134,13 @@ class Plan:
     #: Planning's own daily ceiling, metered separately from chat so exhausting
     #: one feature cannot disable the other. 0 = planning consumes no budget.
     planning_daily_token_limit: int = 0
-    #: Diagnoses a founder may START per calendar month. Diagnosis is unmetered by
-    #: tokens on purpose -- a founder must never hit a wall mid-assessment -- so a
-    #: count is the only thing bounding its cost. 0 = unlimited.
-    diagnoses_per_month: int = 1
+    #: Diagnoses a founder may ever COMPLETE, for the lifetime of the account --
+    #: not a monthly allowance that renews. Diagnosis is unmetered by tokens on
+    #: purpose (a founder must never hit a wall mid-assessment), so this count,
+    #: not a token ceiling, is what bounds its cost. Only completed diagnoses
+    #: count against it: an in-progress session a founder resumes is never
+    #: blocked, and never counts, until it reaches a report. 0 = unlimited.
+    diagnosis_lifetime_limit: int = 1
 
     @property
     def is_paid(self) -> bool:
@@ -162,7 +172,7 @@ PLANS: dict[PlanTier, Plan] = {
         price_inr=0,
         monthly_credits=0,          # one-time grant instead -- see signup_credits
         signup_credits=1_431,       # 1,200 chat + 231 planning; see module docstring
-        daily_token_limit=40_000,   # ~17 chat messages/day, 500/month
+        daily_token_limit=4_000,    # ~16 chat messages/day, matches this file's own docstring
         planning_daily_token_limit=7_700,   # 7 planning actions/day at 1,100 each
         free_calls_per_month=0,
         # Plan Your Day is normally paid, but the testing phase includes it: the
