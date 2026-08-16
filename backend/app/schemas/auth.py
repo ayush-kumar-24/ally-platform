@@ -27,13 +27,19 @@ class SessionResponse(TokenPair):
 
 
 class RefreshRequest(BaseModel):
+    """Browsers send the refresh token in the httpOnly cookie and post an empty
+    body; the field is the fallback for callers that have no cookie jar (scripts,
+    tests, the smoke test). Optional because "{}" from a browser is normal, not a
+    malformed request -- when neither source has a token the route answers 401,
+    which is what "you are not signed in" actually means."""
+
     model_config = ConfigDict(extra="forbid")
-    refresh_token: str
+    refresh_token: str | None = None
 
 
 class LogoutRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    refresh_token: str
+    refresh_token: str | None = None
 
 
 class AuthStatus(BaseModel):

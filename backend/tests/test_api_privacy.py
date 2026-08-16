@@ -65,6 +65,32 @@ def test_delete_account_twice_409(client):
     assert client.http.request("DELETE", f"{BASE}/account", json=YES).status_code == 409
 
 
+# --- POST /privacy/account/cancel -------------------------------------------
+
+
+def test_cancel_deletion_clears_pending_state(client):
+    client.http.request("DELETE", f"{BASE}/account", json=YES)
+    r = client.http.post(f"{BASE}/account/cancel")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["state"]["deletion_pending"] is False
+    assert body["state"]["deletion_scheduled_at"] is None
+    assert client.http.get(f"{BASE}/status").json()["state"]["deletion_pending"] is False
+
+
+def test_cancel_deletion_without_pending_request_409(client):
+    r = client.http.post(f"{BASE}/account/cancel")
+    assert r.status_code == 409
+
+
+def test_cancel_then_re_request_deletion_works(client):
+    client.http.request("DELETE", f"{BASE}/account", json=YES)
+    client.http.post(f"{BASE}/account/cancel")
+    r = client.http.request("DELETE", f"{BASE}/account", json=YES)
+    assert r.status_code == 200
+    assert r.json()["state"]["deletion_pending"] is True
+
+
 # --- POST /privacy/withdraw -------------------------------------------------
 
 

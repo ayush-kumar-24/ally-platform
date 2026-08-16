@@ -16,6 +16,7 @@ table. Neither is duplicated here.
 from app.privacy.errors import (
     DeletionAlreadyRequestedError,
     FounderNotFoundError,
+    NoDeletionPendingError,
     PrivacyError,
 )
 from app.privacy.models import ExportBundle, PrivacyAction, PrivacyState
@@ -34,6 +35,7 @@ __all__ = [
     "ExportBundle",
     "FounderNotFoundError",
     "InMemoryPrivacyRepository",
+    "NoDeletionPendingError",
     "PrivacyAction",
     "PrivacyError",
     "PrivacyRepository",

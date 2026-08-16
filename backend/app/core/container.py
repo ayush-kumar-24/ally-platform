@@ -16,6 +16,7 @@ into any subsystem's internals.
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from sqlalchemy.orm import Session
@@ -25,6 +26,7 @@ from app.api.v1.ally.context.repository import AllyContextRepository
 from app.integrations.llm.routing import build_failover_execution
 from app.api.v1.ally.kg.repository import InMemoryKnowledgeGraphRepository
 from app.api.v1.ally.kg.service import build_knowledge_graph_service
+from app.api.v1.ally.kg.sql_repository import SqlKnowledgeGraphRepository
 from app.api.v1.ally.memory.sql_repository import build_db_memory_service
 from app.api.v1.ally.prompts.library import default_prompt_manager
 from app.api.v1.ally.rag.repository import InMemoryVectorRetrievalRepository
@@ -51,9 +53,11 @@ from app.planning.db_repository import SqlAlchemyPlanningRepository
 from app.planning.service import PlanningService
 from app.consents.db_repository import SqlAlchemyConsentRepository
 from app.consents.service import ConsentService
-from app.privacy.db_repository import SqlAlchemyPrivacyRepository
+from app.privacy.db_repository import SqlAlchemyDeletionRepository, SqlAlchemyPrivacyRepository
+from app.privacy.executor import DeletionExecutor
 from app.privacy.service import PrivacyService
 from app.core.config import settings
+from app.core.logger import logger
 from app.services import embeddings
 from app.admin.panel_audit import AuditRecorder, SqlAlchemyPanelAuditRepository
 from app.admin.panel_service import AdminPanelService
@@ -81,6 +85,15 @@ class Container:
         # --- Services built over those stores (stateless wrappers) ---
         self._retrieval_service = build_retrieval_service(self._retrieval_repository)
         self._kg_service = build_knowledge_graph_service(self._kg_repository)
+        # knowledge_graph(db) below caches the SQL-loaded catalogue for this long.
+        # root_causes/problems/blind_spots/interventions are curated reference data
+        # (thousands of rows total, changed by a content update, not by founder
+        # activity) -- reloading all four tables on every single chat message would
+        # add a real query cost to the hot path for data that is not changing turn
+        # to turn. A cold process rebuilds once; every process picks up an edit
+        # within one TTL window without needing a restart or an invalidation signal.
+        self._kg_cache = None
+        self._kg_cache_built_at = None
 
         # --- Prompt library + LLM execution (register real providers here) ---
         self._prompt_manager = default_prompt_manager()
@@ -161,8 +174,35 @@ class Container:
             default_min_similarity=Decimal(str(settings.RETRIEVAL_MIN_SIMILARITY)),
         )
 
-    def knowledge_graph(self):
-        return self._kg_service
+    _KG_CACHE_TTL = timedelta(minutes=10)
+
+    def knowledge_graph(self, db: Session | None = None):
+        """SQL-backed (root_causes/problems/blind_spots/interventions) when a
+        request DB session is available; otherwise the empty in-memory fallback.
+        Same request-scoped-override shape as retrieval() above -- the catalogue
+        read needs a DB session, and a singleton built at process start would
+        serve an empty graph forever even once the DB is reachable.
+
+        Cached at the process level for _KG_CACHE_TTL (see __init__): this
+        catalogue is reference data, not per-request state, so rebuilding it on
+        every chat message would be pure waste. A held stale service is used if a
+        refresh attempt fails, rather than falling back to empty -- a slightly
+        outdated real graph beats discarding a working one over one bad request's
+        DB hiccup."""
+        if db is None:
+            return self._kg_service
+        now = datetime.now(timezone.utc)
+        if self._kg_cache is not None and self._kg_cache_built_at is not None \
+                and now - self._kg_cache_built_at < self._KG_CACHE_TTL:
+            return self._kg_cache
+        try:
+            fresh = build_knowledge_graph_service(SqlKnowledgeGraphRepository(db))
+        except Exception as exc:                                    # noqa: BLE001 - fail open
+            logger.warning("knowledge_graph(db) failed to build; serving stale/empty graph",
+                           extra={"stage": "kg_container", "error": str(exc)})
+            return self._kg_cache or self._kg_service
+        self._kg_cache, self._kg_cache_built_at = fresh, now
+        return fresh
 
     def prompt_manager(self):
         return self._prompt_manager
@@ -190,7 +230,7 @@ class Container:
             conversation_service=self.conversation_service(db),
             memory=self.memory(db),
             retrieval=self.retrieval(db),
-            knowledge_graph=self._kg_service,
+            knowledge_graph=self.knowledge_graph(db),
             attachments=self.attachment_service(db),
             planning=self.planning_service(db),
         )
@@ -279,6 +319,16 @@ class Container:
             consent_service=self.consent_service(db),
         )
 
+    # --- Account-deletion executor (DB-backed, per-request) ---------------
+
+    def deletion_executor(self, db: Session) -> DeletionExecutor:
+        """The sweep that turns a scheduled erasure into a real one once the grace
+        period has passed. Invoked by the /webhooks/deletion-sweep endpoint (see
+        app/api/v1/webhooks) on an externally-driven schedule -- this process has
+        no in-process scheduler of its own, matching credits' settle-on-access
+        philosophy of not depending on a cron existing at all."""
+        return DeletionExecutor(SqlAlchemyDeletionRepository(db))
+
     # --- Admin Panel (DB-backed, per-request) -----------------------------
 
     def panel_registry(self):
@@ -301,6 +351,7 @@ class Container:
             audit=AuditRecorder(SqlAlchemyPanelAuditRepository(db)),
             conversations=SqlAlchemyConversationReadRepository(db),
             report_regenerator=None,   # wire once the generator exposes a re-run entry point
+            privacy=self.privacy_service(db),
         )
 
     def insights_service(self, db: Session):

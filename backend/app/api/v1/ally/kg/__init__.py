@@ -12,6 +12,8 @@ from app.api.v1.ally.kg.repository import (
     InMemoryKnowledgeGraphRepository,
     KnowledgeGraphRepository,
 )
+from app.api.v1.ally.kg.graph_builder import build_graph
+from app.api.v1.ally.kg.sql_repository import SqlKnowledgeGraphRepository
 from app.api.v1.ally.kg.schemas import (
     GraphEdge,
     GraphMetadata,
@@ -34,6 +36,8 @@ __all__ = [
     "build_knowledge_graph_service",
     "KnowledgeGraphRepository",
     "InMemoryKnowledgeGraphRepository",
+    "SqlKnowledgeGraphRepository",
+    "build_graph",
     "traverse",
     "neighbors",
     "shortest_path",

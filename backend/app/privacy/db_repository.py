@@ -10,10 +10,12 @@ in-memory repository.
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 
 from sqlalchemy import text
 
+from app.privacy.deletion_repository import DeletionRepository, DueDeletion
 from app.privacy.errors import FounderNotFoundError
 from app.privacy.models import ExportBundle, PrivacyAction, PrivacyState
 from app.privacy.repository import PrivacyRepository
@@ -99,8 +101,67 @@ class SqlAlchemyPrivacyRepository(PrivacyRepository):
                      where founder_id = :fid"""),
             {"req": requested_at, "sch": scheduled_at, "fid": founder_id},
         )
+        # Committed before the (best-effort) tracking-row upsert below, so a schema
+        # mismatch on that table can never roll back the founders write that actually
+        # implements the right being exercised.
         self.db.commit()
+        self._upsert_deletion_request(founder_id, requested_at=requested_at,
+                                       grace_period_ends_at=scheduled_at, status="grace_period")
         return self.get_state(founder_id)
+
+    def cancel_deletion(self, founder_id: int, *, at: datetime) -> PrivacyState:
+        self.db.execute(
+            text("""update founders
+                       set deletion_requested_at = null, deletion_scheduled_at = null
+                     where founder_id = :fid"""),
+            {"fid": founder_id},
+        )
+        self.db.commit()
+        try:
+            self.db.execute(
+                text("""update data_deletion_requests
+                           set status = 'cancelled', cancellation_requested_at = :at
+                         where founder_id = :fid and status in ('pending_otp', 'grace_period')"""),
+                {"at": at, "fid": founder_id},
+            )
+            self.db.commit()
+        except Exception:
+            # The tracking table is a nice-to-have for the executor/admin view; the
+            # authoritative state is the founders columns cleared above, so a schema
+            # mismatch here must not resurface as a failed cancellation.
+            self.db.rollback()
+        return self.get_state(founder_id)
+
+    def _upsert_deletion_request(self, founder_id: int, *, requested_at: datetime,
+                                  grace_period_ends_at: datetime, status: str) -> None:
+        try:
+            existing = self.db.execute(
+                text("select deletion_id from data_deletion_requests where founder_id = :fid"),
+                {"fid": founder_id},
+            ).scalar()
+            if existing is None:
+                self.db.execute(
+                    text("""insert into data_deletion_requests
+                                (founder_id, requested_at, status, grace_period_ends_at,
+                                 otp_verified, confirmation_email_sent)
+                            values (:fid, :req, :status, :grace, true, false)"""),
+                    {"fid": founder_id, "req": requested_at, "status": status,
+                     "grace": grace_period_ends_at},
+                )
+            else:
+                self.db.execute(
+                    text("""update data_deletion_requests
+                               set requested_at = :req, status = :status,
+                                   grace_period_ends_at = :grace,
+                                   cancellation_requested_at = null,
+                                   deletion_completed_at = null
+                             where founder_id = :fid"""),
+                    {"fid": founder_id, "req": requested_at, "status": status,
+                     "grace": grace_period_ends_at},
+                )
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
 
     # --- audit trail ----------------------------------------------------
 
@@ -133,3 +194,167 @@ def _to_action(row) -> PrivacyAction:
         request_type=row["request_type"], status=row["status"],
         requested_at=row["requested_at"], due_by=row["due_by"],
     )
+
+
+# --- deletion executor's production store -----------------------------------
+
+# Tables purged outright: the founder's activity/content data, deleted rather than
+# anonymised because there is no legitimate reason to keep a trace of it once the
+# grace period has passed. Each entry is (label, DELETE sql) -- same explicit-list
+# discipline as `_EXPORT_SECTIONS` above, so adding a table here is a deliberate
+# decision, not something a future migration does by accident.
+_PURGE_TABLES: tuple[tuple[str, str], ...] = (
+    ("conversations", "delete from conversations where founder_id = :fid"),
+    ("sessions", "delete from sessions where founder_id = :fid"),
+    ("answers", "delete from answers where founder_id = :fid"),
+    ("detected_root_causes", "delete from detected_root_causes where founder_id = :fid"),
+    ("founder_reports", "delete from founder_reports where founder_id = :fid"),
+    ("internal_intelligence_reports",
+     "delete from internal_intelligence_reports where founder_id = :fid"),
+    ("stage_assessments", "delete from stage_assessments where founder_id = :fid"),
+    ("rag_retrieval_log", "delete from rag_retrieval_log where founder_id = :fid"),
+    ("founder_feedback", "delete from founder_feedback where founder_id = :fid"),
+    ("discovery_calls", "delete from discovery_calls where founder_id = :fid"),
+    ("daily_actions", "delete from daily_actions where founder_id = :fid"),
+    ("planning_tasks", """delete from planning_tasks where plan_id in
+                            (select plan_id from planning_plans where founder_id = :fid)"""),
+    ("planning_goals", """delete from planning_goals where plan_id in
+                            (select plan_id from planning_plans where founder_id = :fid)"""),
+    ("planning_plans", "delete from planning_plans where founder_id = :fid"),
+    ("notifications", "delete from notifications where founder_id = :fid"),
+    ("cookie_preferences", "delete from cookie_preferences where founder_id = :fid"),
+    ("founder_context", "delete from founder_context where founder_id = :fid"),
+    ("founder_visual_choices", "delete from founder_visual_choices where founder_id = :fid"),
+    ("user_token_usage", "delete from user_token_usage where founder_id = :fid"),
+    ("file_uploads", "delete from file_uploads where founder_id = :fid"),
+    ("report_shares", "delete from report_shares where founder_id = :fid"),
+)
+
+# Tables deliberately RETAINED rather than purged, and why -- not silently skipped,
+# so a reviewer can see this was a decision:
+#   payments, subscriptions      billing/tax records; Art 17(3)(b) legal obligation
+#   privacy_requests             the DSAR audit trail itself (Art 5(2) accountability)
+#   data_deletion_requests       this erasure's own record -- see the module docstring
+#   consents, consent_history    evidence of what was agreed and when, for defending
+#                                 against a future claim that consent was never given
+#   admin_notes                  admin-authored, not founder-authored content
+#   webhook_logs                 founder_id is ON DELETE SET NULL; decouples on its own
+
+
+class SqlAlchemyDeletionRepository(DeletionRepository):
+    """Production store for the deletion executor. See `app/privacy/executor.py`
+    for why this anonymises the founders row rather than deleting it."""
+
+    def __init__(self, db):
+        self.db = db
+
+    def list_due(self, *, now: datetime, limit: int) -> list[DueDeletion]:
+        rows = self.db.execute(
+            text("""select deletion_id, founder_id, requested_at, grace_period_ends_at
+                      from data_deletion_requests
+                     where status = 'grace_period' and grace_period_ends_at <= :now
+                     order by grace_period_ends_at asc
+                     limit :lim"""),
+            {"now": now, "lim": limit},
+        ).mappings().all()
+        return [DueDeletion(deletion_id=r["deletion_id"], founder_id=r["founder_id"],
+                            requested_at=r["requested_at"],
+                            grace_period_ends_at=r["grace_period_ends_at"]) for r in rows]
+
+    def ensure_immediate(self, founder_id: int, *, at: datetime) -> int:
+        existing = self.db.execute(
+            text("""select deletion_id from data_deletion_requests
+                     where founder_id = :fid and status in ('pending_otp', 'grace_period')"""),
+            {"fid": founder_id},
+        ).scalar()
+        if existing is not None:
+            self.db.execute(
+                text("""update data_deletion_requests
+                           set grace_period_ends_at = :at where deletion_id = :id"""),
+                {"id": existing, "at": at},
+            )
+            self.db.commit()
+            return int(existing)
+
+        row = self.db.execute(
+            text("""insert into data_deletion_requests
+                        (founder_id, requested_at, status, grace_period_ends_at,
+                         otp_verified, confirmation_email_sent)
+                    values (:fid, :at, 'grace_period', :at, true, false)
+                    returning deletion_id"""),
+            {"fid": founder_id, "at": at},
+        ).scalar()
+        # Also stamp the founders columns so PrivacyService.get_state reflects the
+        # same standing an executed-later request would have shown along the way.
+        self.db.execute(
+            text("""update founders set deletion_requested_at = :at, deletion_scheduled_at = :at
+                     where founder_id = :fid"""),
+            {"fid": founder_id, "at": at},
+        )
+        self.db.commit()
+        return int(row)
+
+    def mark_processing(self, deletion_id: int) -> None:
+        self.db.execute(
+            text("update data_deletion_requests set status = 'processing' where deletion_id = :id"),
+            {"id": deletion_id},
+        )
+        self.db.commit()
+
+    def purge_founder(self, founder_id: int, *, at: datetime) -> dict:
+        summary: dict[str, object] = {}
+        for label, sql in _PURGE_TABLES:
+            try:
+                result = self.db.execute(text(sql), {"fid": founder_id})
+                summary[label] = result.rowcount or 0
+                self.db.commit()
+            except Exception as exc:                                # noqa: BLE001 - recorded, not hidden
+                # One absent/renamed table must not abort the whole erasure -- the
+                # gap is recorded in the summary (and therefore in
+                # data_types_deleted) instead of silently skipped.
+                self.db.rollback()
+                summary[label] = f"error: {exc.__class__.__name__}"
+
+        summary["founder_profile"] = self._anonymise_founder(founder_id, at=at)
+        return summary
+
+    def _anonymise_founder(self, founder_id: int, *, at: datetime) -> str:
+        try:
+            self.db.execute(
+                text("""update founders set
+                            full_name = 'Deleted Founder',
+                            email = :anon_email,
+                            website = null, linkedin_url = null,
+                            social_profiles = '{}'::jsonb,
+                            problem_statement = null, goal_90_day = null, vision_1_year = null,
+                            founder_motivation = null, building_summary = null,
+                            adaptive_reflection = null,
+                            customer_segment = '[]'::jsonb, customer_segment_other = null,
+                            current_challenges = '[]'::jsonb, emotional_state = '[]'::jsonb,
+                            support_preferences = '[]'::jsonb,
+                            updated_at = :at
+                        where founder_id = :fid"""),
+                {"fid": founder_id, "anon_email": f"deleted-{founder_id}@erased.goxl.in", "at": at},
+            )
+            self.db.commit()
+            return "anonymised"
+        except Exception as exc:                                    # noqa: BLE001
+            self.db.rollback()
+            return f"error: {exc.__class__.__name__}"
+
+    def mark_completed(self, deletion_id: int, *, at: datetime, data_types_deleted: dict) -> None:
+        self.db.execute(
+            text("""update data_deletion_requests
+                       set status = 'completed', deletion_completed_at = :at,
+                           data_types_deleted = cast(:types as jsonb)
+                     where deletion_id = :id"""),
+            {"id": deletion_id, "at": at, "types": json.dumps(data_types_deleted, default=str)},
+        )
+        self.db.commit()
+
+    def mark_failed(self, deletion_id: int, *, reason: str) -> None:
+        self.db.execute(
+            text("update data_deletion_requests set status = 'grace_period' where deletion_id = :id"),
+            {"id": deletion_id},
+        )
+        self.db.commit()

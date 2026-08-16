@@ -45,8 +45,16 @@ separate so the API never depends on the identity provider:
 Login flow:
 
 1. Frontend runs Google/LinkedIn login via Supabase, gets a Supabase token.
-2. `POST /auth/session` with that token → backend returns `{access_token, refresh_token}`.
-3. Requests send the access token; `POST /auth/refresh` rotates it; `POST /auth/logout` revokes it.
+2. `POST /auth/session` with that token → backend returns `{access_token, …}` and
+   sets the refresh token as an **httpOnly cookie** (`ally_refresh`, scoped to
+   `/api/v1/auth`). The browser only ever holds the access token.
+3. Requests send the access token; `POST /auth/refresh` rotates it (empty body —
+   the cookie carries the refresh token); `POST /auth/logout` revokes it and
+   clears the cookie.
+
+Non-browser callers (scripts, tests) have no cookie jar, so `/auth/refresh`,
+`/auth/resume` and `/auth/logout` still accept `{"refresh_token": "…"}` in the
+body, and it takes precedence over the cookie when both are present.
 
 Moving to AWS Cognito changes only step 1 — one new `AuthProvider` in
 `app/core/auth/base.py` + `AUTH_PROVIDER=cognito`. Session tokens, routes, and

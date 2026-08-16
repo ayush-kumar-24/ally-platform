@@ -24,6 +24,7 @@ from app.api.v1.reports.routes import router as reports_router
 from app.api.v1.settings.routes import router as settings_router
 from app.api.v1.settings.router import router as settings_preferences_router
 from app.api.v1.voice.router import router as voice_router
+from app.api.v1.webhooks.router import router as webhooks_router
 from app.db.session import engine
 
 api_router = APIRouter(prefix="/api/v1")
@@ -53,6 +54,7 @@ api_router.include_router(plans_router)
 # /admin/credits, /admin/audit vs /admin/founders, /admin/announcements).
 api_router.include_router(admin_panel_router)
 api_router.include_router(admin_panel_router_v2)
+api_router.include_router(webhooks_router)
 
 
 @api_router.get("/health")

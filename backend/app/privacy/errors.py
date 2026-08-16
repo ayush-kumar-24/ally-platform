@@ -22,3 +22,12 @@ class DeletionAlreadyRequestedError(PrivacyError):
 class FounderNotFoundError(PrivacyError):
     def __init__(self, founder_id: int):
         super().__init__(f"No founder {founder_id} exists.", status_code=404)
+
+
+class NoDeletionPendingError(PrivacyError):
+    """Cancelling requires a deletion actually in flight -- otherwise "cancel" is
+    meaningless and the caller likely mis-read the founder's state."""
+
+    def __init__(self, founder_id: int):
+        super().__init__(f"Founder {founder_id} has no pending deletion to cancel.",
+                         status_code=409)
