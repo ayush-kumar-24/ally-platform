@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 # Phase 3's get_founder_record resolves the AuthUser token to the Founders row.
 from app.api.deps import get_founder_record as get_current_founder
 from app.api.v1.diagnosis.schemas import (
+    AnsweredQA,
     CurrentQuestionResponse,
     StartSessionResponse,
     SubmitAnswerRequest,
@@ -53,8 +54,15 @@ def get_current_question(
     db: Session = Depends(get_db),
     founder: Founder = Depends(get_current_founder),
 ) -> CurrentQuestionResponse:
-    session, question = DiagnosisService(db).get_current_question(founder)
-    return CurrentQuestionResponse(session=session, question=question)
+    session, question, history = DiagnosisService(db).get_current_question(founder)
+    return CurrentQuestionResponse(
+        session=session,
+        question=question,
+        history=[
+            AnsweredQA(question_text=qt, category=cat, answer_text=at, answered_at=ts)
+            for qt, cat, at, ts in history
+        ],
+    )
 
 
 @router.post(

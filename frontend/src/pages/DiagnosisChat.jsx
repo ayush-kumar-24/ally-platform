@@ -15,7 +15,7 @@ import { FEEDBACK } from '../services/feedback';
    A founder cannot choose their own diagnosis path, so offering a chooser was
    a lie twice over. What's shown now is the category actually being asked. */
 
-const clock = () => new Date().toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+const clock = (d) => (d ? new Date(d) : new Date()).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 
 export default function DiagnosisChat() {
   const navigate = useNavigate();
@@ -68,7 +68,16 @@ export default function DiagnosisChat() {
             ? []
             : [{ role: 'ally', time: clock(),
                 text: "Hi, I'm Ally. Let's get started — I'll ask about 30 questions, adapting as we go, so answer honestly and we'll get to your report as fast as your answers let us." }];
-          setMessages([...opening, { role: 'ally', text: session.question.text, time: clock() }]);
+          // Live-reproduced: resuming showed only the single current question
+          // -- every prior answer was safely saved server-side but never sent
+          // back to render, so the transcript looked wiped on every reload.
+          // Rebuilds the full history as alternating ally/founder bubbles,
+          // oldest first, using each turn's real answered_at rather than "now".
+          const past = session.history.flatMap((h) => [
+            { role: 'ally', time: clock(h.answeredAt), text: h.questionText },
+            { role: 'me', time: clock(h.answeredAt), text: h.answerText },
+          ]);
+          setMessages([...opening, ...past, { role: 'ally', text: session.question.text, time: clock() }]);
         }
       })
       .catch((error) => {

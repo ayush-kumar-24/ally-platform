@@ -177,3 +177,23 @@ class DiagnosisRepository:
         )
         rows = self.db.execute(stmt).all()
         return [(qt, at) for qt, at in reversed(rows)]
+
+    def full_qa_history(self, session_id: int) -> list[tuple[str, str, str, datetime]]:
+        """Every (question_text, category, answer_text, answered_at) this session
+        has answered so far, oldest-first, unlike `recent_qa` above which is
+        capped for LLM prompt context.
+
+        Live-reproduced gap: reloading the diagnosis page (or resuming after
+        closing the tab) showed only the single current question -- the founder's
+        already-answered turns are safely in `answers`, they were just never sent
+        back to render. This backs GET /diagnosis/current's `history` field so a
+        resumed session can rebuild its own transcript instead of looking like
+        the prior answers vanished.
+        """
+        stmt = (
+            select(Question.question_text, Question.category, Answer.answer_text, Answer.answered_at)
+            .join(Answer, Answer.question_id == Question.question_id)
+            .where(Answer.session_id == session_id)
+            .order_by(Answer.answered_at.asc())
+        )
+        return list(self.db.execute(stmt).all())
