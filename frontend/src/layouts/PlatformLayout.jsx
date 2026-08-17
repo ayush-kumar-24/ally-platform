@@ -380,7 +380,19 @@ export default function PlatformLayout() {
         </div>
 
         <div className="view-wrap">
-          <div className="view active" style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+          {/* overflowY:'hidden' overrides .view.active's own overflow-y:auto
+              (from platform.css) specifically here -- #main-content just
+              below is the real, more specific scroll owner for every /app/*
+              page, and without this override the two competed for the same
+              wheel/trackpad scroll exactly like .view-wrap did one layer out
+              (already fixed). Scrollbar-drag still worked either way (it
+              targets whichever element the mouse is directly over), which is
+              why this surfaced as "the scrollbar works, the wheel doesn't"
+              rather than a more obviously broken screen. Inline, not a CSS
+              class change, because .view.active is also used on pages with
+              no nested #main-content (guided onboarding) that still need to
+              own their own scroll. */}
+          <div className="view active" style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflowY: 'hidden' }}>
             <main id="main-content" tabIndex={-1} style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
               <Outlet />
             </main>

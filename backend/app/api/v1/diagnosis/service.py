@@ -199,8 +199,11 @@ class DiagnosisService:
         )
         return session, first_question, False
 
-    def get_current_question(self, founder: Founder) -> tuple[DiagnosisSession, Question | None]:
-        """Current question for the founder's active session.
+    def get_current_question(
+        self, founder: Founder
+    ) -> tuple[DiagnosisSession, Question | None, list[tuple[str, str, str, datetime]]]:
+        """Current question for the founder's active session, plus everything
+        already answered so far.
 
         404s when there is no active session -- the caller must POST /start
         first. This is a read; it does not create one implicitly.
@@ -209,7 +212,8 @@ class DiagnosisService:
         if session is None:
             raise SessionNotFoundError()
 
-        return session, self._current_question_for(session, founder)
+        history = self.repository.full_qa_history(session.session_id)
+        return session, self._current_question_for(session, founder), history
 
     async def submit_answer(
         self,

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { labelFor, midSentence, readable } from '../../utils/profileDisplay';
+import { midSentence, readable } from '../../utils/profileDisplay';
 import { useFounderRead } from '../../hooks/useFounderRead';
 
 /* Keyed to the eight stages the database actually stores. The previous map
@@ -17,18 +17,33 @@ const STAGE_LABELS = {
   Exit: 'legacy-minded',
 };
 
+/** The 4th bullet used to read the founder's self-reported "feeling" --
+ * emotional_state, a question the 2026-08-17 redesign retired entirely.
+ * Grounded in the Founder Reality signals instead (still collected by every
+ * path): how many of the 5 instinct checks came back Yes. */
+function realityPaceLabel(founderReality) {
+  if (!founderReality) return 'steady, finding your footing';
+  const yes = Object.values(founderReality).filter(Boolean).length;
+  if (yes >= 4) return 'clear-eyed and moving fast';
+  if (yes >= 2) return 'steady, with real gaps to close';
+  return 'still finding your footing';
+}
+
 /** Fallback used until the generated read arrives (or if it never does). */
 function buildFirstImpression(profile) {
   const stage = profile.stage || 'Ideation';
-  const challenge = readable('challenges', profile.challenges) || profile.problem || 'focus';
+  // Was keyed to 'challenges', which stopped existing when the redesign
+  // renamed it to 'biggestChallenge' -- fell through to profile.problem (or
+  // the literal word "focus") for every founder until this was caught live.
+  const challenge = readable('biggestChallenge', profile.biggestChallenge) || profile.problem || 'focus';
   const industry = profile.industry || 'your market';
-  const feeling = labelFor('feeling', profile.feeling) || 'Steady';
+  const pace = realityPaceLabel(profile.founderReality);
 
   return [
     `Noticed a ${midSentence(stage)} founder energy with fast, intuitive calls`,
     `Flagged pressure building around ${midSentence(challenge)}`,
     `Mapped your context through the lens of ${midSentence(industry)}`,
-    `Reading your pace as ${midSentence(feeling)} — ready to go deeper with you`,
+    `Reading your pace as ${pace} — ready to go deeper with you`,
   ];
 }
 

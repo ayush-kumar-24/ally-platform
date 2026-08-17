@@ -4,30 +4,31 @@ import { useApp } from '../../context/AppContext';
 import { primary } from '../../utils/profileDisplay';
 import { useFounderRead } from '../../hooks/useFounderRead';
 
-/* Keyed to the challenge values onboarding actually stores. The previous
-   version matched 'retention' / 'acquisition' / 'focus' -- none of which exist
-   in the question set any more -- so every founder fell through to the same
-   default line. `challenges` is also a list now, hence primary() rather than
-   calling .toLowerCase() on an array. */
+/* Keyed to the challenge values onboarding actually stores. Was keyed to
+   'challenges', a key that stopped existing when the 2026-08-17 redesign
+   renamed it to 'biggestChallenge' -- every founder silently fell through to
+   the same default line again, the exact bug this file's own history already
+   describes once. Also updated for the redesign's option list: 'Team' and
+   'Leadership' merged into one 'Team leadership' option, and 'Decision
+   making' became 'Decision-making' (see onboardingQuestions.js). */
 const INSTINCT_BY_CHALLENGE = {
   'Getting customers': 'Your instinct when growth stalls is to push harder on what already works.',
   Sales: 'Your instinct when the pipeline thins is to sell your way out of it personally.',
   Marketing: 'Your instinct when nobody is listening is to say it louder rather than differently.',
   Hiring: 'Your instinct when the team is stretched is to absorb the work yourself first.',
-  Team: 'Your instinct when the team wobbles is to carry more of it yourself.',
-  Leadership: 'Your instinct under pressure is to take the weight rather than share it.',
+  'Team leadership': 'Your instinct when the team wobbles is to carry more of it yourself.',
   'Cash flow': 'Your instinct when money is tight is to cut before you ask for help.',
   Fundraising: 'Your instinct when runway shortens is to keep building rather than start raising.',
   Scaling: 'Your instinct when something works is to pour more into it before it is ready.',
   Operations: 'Your instinct when things get messy is to hold the process together manually.',
   'Building the product': 'Your instinct when unsure is to build a little more before you ask.',
   'Finding the right idea': 'Your instinct when the path is unclear is to keep exploring rather than commit early.',
-  'Decision making': 'Your instinct when the call is close is to sit with it longer than you need to.',
+  'Decision-making': 'Your instinct when the call is close is to sit with it longer than you need to.',
   Productivity: 'Your instinct when the day gets away from you is to work later rather than narrower.',
 };
 
 function buildQuote(profile) {
-  const top = primary('challenges', profile.challenges);
+  const top = primary('biggestChallenge', profile.biggestChallenge);
   return INSTINCT_BY_CHALLENGE[top]
     || 'Your instinct when growth stalls is to push harder on what already works.';
 }

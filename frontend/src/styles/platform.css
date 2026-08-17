@@ -99,10 +99,22 @@
 .btn-dark-ghost{background:rgba(255,255,255,.08);color:#eaf3ee;border:1px solid rgba(255,255,255,.13)}
 .btn-dark-ghost:hover{background:rgba(255,255,255,.14)}
 
-/* view-wrap */
-.view-wrap{flex:1;min-height:0;display:flex;flex-direction:column;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch}
+/* view-wrap
+   Live-reproduced app-wide: .view-wrap and .view.active both independently
+   declared overflow-y:auto -- the same "two nested elements competing for the
+   same scroll axis" bug already fixed elsewhere this session (AllyChat/
+   DiagnosisChat vs #main-content), just here in the generic page wrapper
+   every single page renders inside, so it affected the whole app rather than
+   one screen. Native scrollbar-drag still worked (it targets whichever
+   element the mouse is directly on), but a mouse-wheel/trackpad scroll over
+   the content got eaten by the outer wrapper -- which technically CAN scroll
+   but has nothing of its own to scroll, since its child already fills and
+   scrolls itself -- instead of reaching the inner element that actually holds
+   the overflow. .view-wrap now only clips; .view.active is the sole scroll
+   owner, matching the fix pattern already established for #main-content. */
+.view-wrap{flex:1;min-height:0;display:flex;flex-direction:column;overflow-y:hidden;overflow-x:hidden}
 .view{display:none}
-.view.active{display:block;flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;scroll-behavior:smooth;overscroll-behavior:contain}
+.view.active{display:block;flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;scroll-behavior:smooth;overscroll-behavior:contain}
 .pad{padding:26px 32px 60px;max-width:1120px;margin:0 auto}
 /* stagger animations */
 .view.active .stagger{opacity:0;transform:translateY(16px);animation:rise .7s cubic-bezier(.22,1,.3,1) forwards}

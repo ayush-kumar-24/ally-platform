@@ -66,11 +66,30 @@ class StartSessionResponse(BaseModel):
     )
 
 
+class AnsweredQA(BaseModel):
+    """One already-answered turn, for rebuilding the transcript on resume.
+
+    Deliberately just the founder-facing text -- no score_label/score, same
+    "never leak what the engine is scoring on" rule QuestionRead follows.
+    """
+
+    question_text: str
+    category: str
+    answer_text: str
+    answered_at: datetime
+
+
 class CurrentQuestionResponse(BaseModel):
     """Returned by GET /diagnosis/current."""
 
     session: SessionRead
     question: QuestionRead | None = None
+    history: list[AnsweredQA] = Field(
+        default_factory=list,
+        description="Every turn already answered this session, oldest-first -- "
+        "lets a resumed session rebuild its own transcript instead of only "
+        "showing the current question with no visible prior context.",
+    )
 
 
 class SubmitAnswerRequest(BaseModel):

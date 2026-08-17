@@ -71,6 +71,14 @@ export function normalise(payload, resumed) {
       category: q.category ?? null,
       code: q.question_code ?? null,
     },
+    // Only /current sends this (POST /answer has no reason to resend
+    // everything already known) -- absent there, not just empty.
+    history: (payload?.history ?? []).map(h => ({
+      questionText: h.question_text,
+      category: h.category,
+      answerText: h.answer_text,
+      answeredAt: h.answered_at,
+    })),
     resumed,
   };
 }

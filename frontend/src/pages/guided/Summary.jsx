@@ -4,55 +4,90 @@ import { useApp } from '../../context/AppContext';
 import { labelFor, listed, midSentence, primary, readable } from '../../utils/profileDisplay';
 import { saveProfileEdits } from '../../services/profile';
 import { useFounderRead } from '../../hooks/useFounderRead';
+import { PATH_1, PATH_2, QUESTIONS, STAGE_BY_NAME } from '../../data/onboardingQuestions';
 
-/* Order and labels mirror data/onboardingQuestions.js. Two keys here were stale
-   after onboarding was rebuilt -- 'customer' is now 'audience' and 'working' is
-   now 'support' -- so both rows rendered permanently blank.
+/* Rewritten 2026-08-17 for the 4-section, path-branching onboarding redesign.
+   The previous FIELD_ORDER/SAVE_AS were never updated when that rewrite
+   happened -- 'goal90', 'challenges', 'vision' etc. were the OLD guided-answer
+   keys, none of which toGuidedAnswers() emits any more (the current keys are
+   'biggestChallenge', 'ninetyDayGoal'/'oneYearSuccess', ...), so those rows
+   silently rendered "Not answered" forever despite the real data sitting in
+   the database. Also dropped here: why/support/feeling/reflection, which the
+   redesign retired from onboarding entirely -- this screen has no business
+   still asking a founder to review answers to questions nobody asks anymore.
 
    `edit: true` marks the answers a founder typed, which they can retype here.
-   The rest were chosen from a fixed set (a stage, a capped multi-select, an
-   enum the database constrains); free-texting those would either be discarded
-   on save or rejected as invalid, so they are shown, not offered for edit. */
-const FIELD_ORDER = [
-  ['stage', 'Entrepreneurial Stage'],
-  ['building', "What You're Building", { edit: true }],
-  ['problem', 'Problem Statement', { edit: true }],
-  ['audience', 'Who You Serve'],
-  ['industry', 'Industry'],
-  ['challenges', 'Biggest Challenges'],
-  ['goal90', '90-Day Breakthrough', { edit: true }],
-  ['vision', 'One-Year Vision', { edit: true }],
-  ['why', 'Founder Story', { edit: true }],
-  ['support', 'How Ally Helps'],
-  ['experience', 'Experience Level'],
-  ['feeling', 'Today’s Mindset'],
-  ['reflection', 'Stage Reflection', { edit: true }],
-];
+   `yesno: true` marks the two reality-check blocks (a fixed object, not free
+   text or a simple pick-list) and gets its own formatter. Everything else was
+   chosen from a fixed set; free-texting those would either be discarded on
+   save or rejected as invalid, so they are shown, not offered for edit. */
+function fieldOrder(path) {
+  const rows = [
+    ['stage', 'Entrepreneurial Stage'],
+    ['socialHandle', 'Social Handle', { edit: true }],
+  ];
+  if (path === PATH_2) {
+    rows.push(
+      ['building', "What You're Building", { edit: true }],
+      ['productDescription', 'What It Is', { edit: true }],
+    );
+  } else if (path === PATH_1) {
+    rows.push(['ideaName', 'Idea Name', { edit: true }]);
+  }
+  rows.push(
+    ['problem', 'Problem Statement', { edit: true }],
+    ['audience', 'Who You Serve'],
+    ['industry', 'Industry'],
+  );
+  if (path === PATH_2) rows.push(['revenue', 'Monthly Revenue']);
+  rows.push(['founderReality', 'Founder Reality', { yesno: true }]);
+  if (path === PATH_2) rows.push(['businessReality', 'Business Reality', { yesno: true }]);
+  rows.push(
+    ['invisibleGaps', 'Invisible Gaps'],
+    ['biggestChallenge', 'Biggest Challenge'],
+  );
+  if (path === PATH_2) rows.push(['oneYearSuccess', 'One-Year Vision', { edit: true }]);
+  else if (path === PATH_1) rows.push(['ninetyDayGoal', '90-Day Goal', { edit: true }]);
+  rows.push(['experience', 'Experience Level']);
+  return rows;
+}
 
-/** Guided key -> the /profile/* field it saves back to. */
+/** Guided key -> the /profile/* field it saves back to. Only needs entries
+ * for `edit: true` rows above -- static rows are never retyped. */
 const SAVE_AS = {
+  socialHandle: 'linkedin_url',
   building: 'building_summary',
+  ideaName: 'building_summary', // same column, mutually exclusive by path
+  productDescription: 'product_description',
   problem: 'problem_statement',
-  goal90: 'goal_90_day',
-  vision: 'vision_1_year',
-  why: 'founder_motivation',
-  reflection: 'adaptive_reflection',
+  oneYearSuccess: 'vision_1_year',
+  ninetyDayGoal: 'goal_90_day',
 };
+
+/** The 5-item reality-check blocks are a fixed object ({itemKey: bool}), not
+ * free text or a simple pick-list -- listed()/labelFor() would stringify it
+ * to "[object Object]". Same per-item Yes/No summary the live onboarding
+ * flow and its resume path already build. */
+function yesNoSummary(key, value) {
+  const q = QUESTIONS.find((x) => x.key === key);
+  if (!q || !value) return '';
+  return q.items.map((it) => `${it.text}: ${value[it.key] ? 'Yes' : 'No'}`).join(' · ');
+}
 
 /** Fallback used until the generated read arrives (or if it never does). */
 function buildRead(profile) {
   const stage = profile.stage || 'this stage';
-  const challenge = readable('challenges', profile.challenges) || 'focus';
-  const why = profile.why || 'you care deeply about the problem itself';
-  return `You lead with conviction and move fast — the instinct that got you to ${midSentence(stage)}. You have strong momentum, but I can already see attention pulling toward ${midSentence(challenge)}. The reason underneath it all feels personal: ${midSentence(why)}`;
+  const challenge = readable('biggestChallenge', profile.biggestChallenge) || 'focus';
+  const problem = profile.problem || 'the problem you set out to solve';
+  return `You lead with conviction and move fast — the instinct that got you to ${midSentence(stage)}. You have strong momentum, but I can already see attention pulling toward ${midSentence(challenge)}. What you're solving feels real and specific: ${midSentence(problem)}`;
 }
 
 function buildTags(profile) {
   return [
     labelFor('stage', profile.stage),
-    primary('support', profile.support),
     labelFor('experience', profile.experience),
-    primary('challenges', profile.challenges),
+    primary('biggestChallenge', profile.biggestChallenge),
+    primary('invisibleGaps', profile.invisibleGaps),
   ].filter(Boolean).slice(0, 4);
 }
 
@@ -60,6 +95,8 @@ export default function Summary() {
   const navigate = useNavigate();
   const { user, setUser, showToast } = useApp();
   const { answers: profile, impression, loaded } = useFounderRead();
+  const path = profile.stage ? (STAGE_BY_NAME[profile.stage]?.path || null) : null;
+  const FIELD_ORDER = useMemo(() => fieldOrder(path), [path]);
   // Only the typed answers are editable, so only those live in form state.
   const [form, setForm] = useState({});
   const [saving, setSaving] = useState(false);
@@ -73,7 +110,7 @@ export default function Summary() {
       FIELD_ORDER.filter(([, , o]) => o?.edit)
         .map(([key]) => [key, prev[key] ?? (profile[key] || '')]),
     ));
-  }, [loaded, profile]);
+  }, [loaded, profile, FIELD_ORDER]);
 
   const merged = useMemo(() => ({ ...profile, ...form }), [profile, form]);
   const allyRead = impression?.read || buildRead(merged);
@@ -110,7 +147,7 @@ export default function Summary() {
       ...prev,
       stage: merged.stage || prev.stage,
       problem: merged.problem || prev.problem,
-      company: merged.building || prev.company,
+      company: merged.building || merged.ideaName || prev.company,
       founderProfile: { ...(prev?.founderProfile || {}), ...form },
     }));
     setSaving(false);
@@ -143,11 +180,11 @@ export default function Summary() {
                     onChange={(e) => handleChange(key, e.target.value)}
                   />
                 ) : (
-                  /* Chosen from a fixed set, so shown as chosen. Rendering an
-                     array or an enum into a text box gave "Hiring,Cash flow"
-                     and "one_company" and quietly broke on save. */
+                  /* Chosen from a fixed set (or, for the two reality checks, a
+                     fixed object), so shown as chosen, not offered for edit. */
                   <p className="sc-f-static" id={`sc-${key}`}>
-                    {listed(key, profile[key]) || <span className="sc-f-empty">Not answered</span>}
+                    {(opts?.yesno ? yesNoSummary(key, profile[key]) : listed(key, profile[key]))
+                      || <span className="sc-f-empty">Not answered</span>}
                   </p>
                 )}
               </div>
@@ -181,4 +218,3 @@ export default function Summary() {
     </section>
   );
 }
-

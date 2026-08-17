@@ -5,10 +5,13 @@ import { updateBusinessSection } from '../../services/profile';
 import { primary } from '../../utils/profileDisplay';
 
 function buildExamples(profile) {
-  // profile.challenges is a jsonb array (current_challenges) -- primary() reads
-  // it back as one plain string instead of handing the raw array to setProblem,
-  // which made `problem` a non-string and crashed handleContinue's `.trim()`.
-  const suggestions = [primary('challenges', profile.challenges), 'Growth flatlined', 'Users don\'t activate', 'Cash feels tight'].filter(Boolean);
+  // profile.biggestChallenge is a jsonb array (current_challenges) -- primary()
+  // reads it back as one plain string instead of handing the raw array to
+  // setProblem, which made `problem` a non-string and crashed handleContinue's
+  // `.trim()`. Was keyed to 'challenges', which stopped existing when the
+  // 2026-08-17 redesign renamed it -- same class of silent-fallback bug this
+  // file's own comment already once described.
+  const suggestions = [primary('biggestChallenge', profile.biggestChallenge), 'Growth flatlined', 'Users don\'t activate', 'Cash feels tight'].filter(Boolean);
   return Array.from(new Set(suggestions)).slice(0, 3);
 }
 
