@@ -4,7 +4,7 @@ from fastapi import Depends, status
 from sqlalchemy.orm import Session
 
 from app.core.auth import AuthUser, get_current_founder
-from app.db.session import get_db
+from app.db.session import get_db, set_founder_rls_context
 from app.middleware.error_handler import AppError
 from app.models import Founder
 from app.repositories import founder_repository
@@ -47,6 +47,8 @@ def get_founder_record(
         user_uuid = UUID(str(auth_user.id))
     except (ValueError, AttributeError, TypeError) as exc:
         raise InvalidFounderIdentityError() from exc
+
+    set_founder_rls_context(db, str(user_uuid))
 
     founder = founder_repository.get_by_user_id(db, user_uuid)
     if founder is None:
