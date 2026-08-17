@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import Annotated, Any, Literal
+from urllib.parse import urlparse
 from uuid import UUID
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field
@@ -30,6 +31,38 @@ def _clean_str_list(v: list[str] | None) -> list[str] | None:
     return out
 
 
+def _validate_social_url(v: str | None) -> str | None:
+    """The onboarding "social handle" field (Instagram or LinkedIn, whichever
+    the founder wants to share) -- stored in the existing linkedin_url column,
+    which already held a bare unvalidated string. A bare domain like
+    "instagram.com/name" (no scheme) is the single most likely thing someone
+    actually types here, so it is accepted and normalised to https:// rather
+    than rejected -- validating strictly against what people type, not just
+    what a browser's address bar would accept.
+    """
+    if v is None:
+        return None
+    s = v.strip()
+    if not s:
+        return None
+    if "://" not in s:
+        s = f"https://{s}"
+    parsed = urlparse(s)
+    # urlparse is deliberately lenient -- "https://not a url at all" parses
+    # with a non-empty netloc ("not a url at all"), so netloc alone is not
+    # enough to reject garbage. A real domain has no whitespace and at least
+    # one dot (even a bare "localhost"-style host is not a realistic social
+    # handle here).
+    if (
+        parsed.scheme not in ("http", "https")
+        or not parsed.netloc
+        or " " in parsed.netloc
+        or "." not in parsed.netloc
+    ):
+        raise ValueError("Enter a real URL, e.g. instagram.com/yourname or linkedin.com/in/yourname.")
+    return s
+
+
 def _dedupe(v: list | None) -> list | None:
     """De-duplicate while preserving order (for already-validated enum lists)."""
     if v is None:
@@ -47,9 +80,49 @@ def _dedupe(v: list | None) -> list | None:
 CleanStrList = Annotated[list[str], AfterValidator(_clean_str_list), Field(max_length=30)]
 Feelings = Annotated[list[Feeling], AfterValidator(_dedupe), Field(max_length=8)]
 
-# "What's your biggest challenge right now?" is capped at three by the onboarding
-# spec. Enforced here as well as in the UI so the cap survives a direct API call.
-Challenges = Annotated[list[str], AfterValidator(_clean_str_list), Field(max_length=3)]
+# "What's your biggest challenge right now?" -- uncapped as of the 2026-08-17
+# onboarding redesign (the old onboarding spec capped it at 3; the new one
+# does not), so this now just aliases CleanStrList. current_challenges uses
+# CleanStrList directly rather than this name going forward.
+
+SocialUrl = Annotated[str, AfterValidator(_validate_social_url), Field(max_length=500)]
+
+
+class RealityCheck(BaseModel):
+    """One yes/no reality-check block -- 5 fixed questions answered together as
+    a single onboarding step, not 5 separately-submitted answers. All 5 are
+    required once the block is submitted at all; partial submission is
+    rejected rather than silently storing an incomplete read. `founders.
+    founder_reality_signals`/`business_reality_signals` themselves stay NULL
+    until this whole object is written once -- that NULL is what distinguishes
+    "hasn't reached this step yet" (or "not applicable", for Business Reality
+    on a Stage 0 founder) from "answered". Defined here (not in sections.py)
+    so both that module and FounderUpdate below can use it without a circular
+    import -- sections.py already imports CleanStrList from this module."""
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class FounderRealityCheck(RealityCheck):
+    """Shown to both paths. Field names capture the checkbox's own claim, not
+    its italic sub-label (that pairing is UI copy, not data)."""
+
+    clear_next_priorities: bool   # "I clearly know my next 3 priorities"
+    decisive: bool                # "I take decisions with confidence"
+    effort_aligned_to_growth: bool  # "My effort is aligned to growth"
+    executes_consistently: bool   # "I execute consistently"
+    mentally_clear: bool          # "I feel mentally clear & in control"
+
+
+class BusinessRealityCheck(RealityCheck):
+    """Path 2 only -- there is no business yet to assess structure on for a
+    Stage 0 founder, so this block is skipped entirely rather than answered."""
+
+    revenue_predictable: bool     # "Revenue is predictable"
+    systems_defined: bool         # "Systems/processes are defined"
+    plans_become_execution: bool  # "Plans turn into execution"
+    team_independent: bool        # "Team operates without dependency"
+    financials_clear: bool        # "Financials are clear -- cost, margin, runway"
 
 
 class FounderRead(BaseModel):
@@ -87,6 +160,7 @@ class FounderRead(BaseModel):
 
     # Business DNA
     building_summary: str | None = None
+    product_description: str | None = None
     problem_statement: str | None = None
     customer_segment: Any | None = None      # multi-select chips
     customer_segment_other: str | None = None
@@ -94,6 +168,10 @@ class FounderRead(BaseModel):
     stage_id: int | None = None
     stage_name: str | None = None      # resolved from stage_id, see Founder.stage_name
     current_challenges: Any | None = None
+    current_challenges_other: str | None = None
+    founder_reality_signals: FounderRealityCheck | None = None
+    business_reality_signals: BusinessRealityCheck | None = None
+    invisible_gaps: Any | None = None
     goal_90_day: str | None = None
     vision_1_year: str | None = None
     team_size: str | None = None
@@ -146,7 +224,12 @@ class FounderUpdate(BaseModel):
     # industry is String(30) in the database. Bounding it at 100 here let a
     # 31-100 character value pass validation and then fail at the insert.
     industry: str | None = Field(default=None, max_length=30)
-    current_challenges: Challenges | None = None            # capped at 3
+    current_challenges: CleanStrList | None = None          # uncapped, see above
+    current_challenges_other: str | None = Field(default=None, max_length=200)
+    product_description: str | None = Field(default=None, max_length=5000)
+    founder_reality_signals: FounderRealityCheck | None = None
+    business_reality_signals: BusinessRealityCheck | None = None
+    invisible_gaps: CleanStrList | None = None
     goal_90_day: str | None = Field(default=None, max_length=5000)
     vision_1_year: str | None = Field(default=None, max_length=5000)
     team_size: str | None = Field(default=None, max_length=50)
@@ -154,6 +237,8 @@ class FounderUpdate(BaseModel):
     business_model: str | None = Field(default=None, max_length=100)
 
     website: str | None = Field(default=None, max_length=500)
-    linkedin_url: str | None = Field(default=None, max_length=500)
+    # Onboarding's "social handle" (Instagram or LinkedIn) -- validated as a
+    # real URL rather than accepted as bare unchecked text.
+    linkedin_url: SocialUrl | None = None
     preferred_language: str | None = Field(default=None, max_length=10)
     notification_preferences: dict[str, Any] | None = None

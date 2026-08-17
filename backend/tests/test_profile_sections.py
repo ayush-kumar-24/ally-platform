@@ -45,25 +45,35 @@ def founder_client():
 
 
 def test_founder_section_update_and_read(founder_client):
+    """Post 2026-08-17 onboarding redesign, /profile/founder only carries name
+    + experience -- founder_motivation/support_preferences/emotional_state/
+    decision_making_style/adaptive_reflection were retired from onboarding and
+    are no longer accepted here (they still exist as founders columns, still
+    readable via GET /profile, just no longer written by this section)."""
+    client, _ = founder_client
+    r = client.patch(f"{BASE}/founder", json={"experience_level": "serial"})
+    assert r.status_code == 200, r.text
+    assert r.json()["experience_level"] == "serial"
+    # read back
+    assert client.get(f"{BASE}/founder").json()["experience_level"] == "serial"
+
+
+def test_founder_section_rejects_retired_fields(founder_client):
+    """The 5 fields this section dropped in the redesign must 422 as unknown,
+    not be silently accepted and dropped -- a client relying on the old
+    contract should find out immediately, not lose data quietly."""
     client, _ = founder_client
     r = client.patch(f"{BASE}/founder", json={
         "founder_motivation": "to fix churn",
         "support_preferences": ["sales", "hiring"],
-        "experience_level": "serial",
         "emotional_state": ["determined", "hopeful"],
+        "decision_making_style": "fast",
+        "adaptive_reflection": "reflecting",
     })
-    assert r.status_code == 200, r.text
-    body = r.json()
-    assert body["support_preferences"] == ["sales", "hiring"]
-    assert body["emotional_state"] == ["determined", "hopeful"]
-    # read back
-    assert client.get(f"{BASE}/founder").json()["founder_motivation"] == "to fix churn"
-
-
-def test_founder_section_rejects_invalid_feeling(founder_client):
-    client, _ = founder_client
-    r = client.patch(f"{BASE}/founder", json={"emotional_state": ["angry"]})
-    assert r.status_code == 422  # not one of the 8 allowed feelings
+    assert r.status_code == 422
+    for field in ("founder_motivation", "support_preferences", "emotional_state",
+                  "decision_making_style", "adaptive_reflection"):
+        assert field in r.text
 
 
 def test_founder_section_rejects_foreign_field(founder_client):
@@ -116,20 +126,126 @@ def test_customer_segment_dedupes_and_trims(founder_client):
     assert r.json()["customer_segment"] == ["Businesses", "Students"]
 
 
-def test_challenges_capped_at_three(founder_client):
-    """The spec says "choose up to 3". The UI enforces it; so must the API, or
-    the cap is only a suggestion to anything that isn't our own frontend."""
+def test_challenges_uncapped(founder_client):
+    """The old onboarding capped this at 3; the 2026-08-17 redesign's biggest-
+    challenge question does not, so more than 3 must now go through cleanly."""
     client, _ = founder_client
     r = client.patch(f"{BASE}/business", json={
         "current_challenges": ["Sales", "Hiring", "Cash flow", "Scaling"],
     })
+    assert r.status_code == 200, r.text
+    assert r.json()["current_challenges"] == ["Sales", "Hiring", "Cash flow", "Scaling"]
+
+
+def test_challenges_other_captures_free_text(founder_client):
+    """Live-reproduced bug this redesign fixes: picking "Other" on the
+    biggest-challenge question had nowhere for the typed text to land, so it
+    was silently discarded. current_challenges_other is that missing field."""
+    client, _ = founder_client
+    r = client.patch(f"{BASE}/business", json={
+        "current_challenges": ["Sales", "Other"],
+        "current_challenges_other": "Investor relations",
+    })
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["current_challenges"] == ["Sales", "Other"]
+    assert body["current_challenges_other"] == "Investor relations"
+
+
+def test_product_description_distinct_from_building_summary(founder_client):
+    """Path 2's "What are you building?" (building_summary, the name) and
+    "What is it?" (product_description, the one-liner) must be two real,
+    independently-readable fields, not the same value doing double duty."""
+    client, _ = founder_client
+    r = client.patch(f"{BASE}/business", json={
+        "building_summary": "Ally",
+        "product_description": "A founder diagnosis engine that finds root causes.",
+    })
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["building_summary"] == "Ally"
+    assert body["product_description"] == "A founder diagnosis engine that finds root causes."
+
+
+def test_founder_reality_signals_round_trip(founder_client):
+    """Shown to both paths -- all 5 fixed keys, submitted as one object."""
+    client, _ = founder_client
+    signals = {
+        "clear_next_priorities": True, "decisive": False,
+        "effort_aligned_to_growth": True, "executes_consistently": False,
+        "mentally_clear": True,
+    }
+    r = client.patch(f"{BASE}/business", json={"founder_reality_signals": signals})
+    assert r.status_code == 200, r.text
+    assert r.json()["founder_reality_signals"] == signals
+
+
+def test_founder_reality_signals_rejects_partial_submission(founder_client):
+    """All 5 are answered together as one screen -- a partial object (missing
+    a key) is rejected rather than silently stored as an incomplete read."""
+    client, _ = founder_client
+    r = client.patch(f"{BASE}/business", json={
+        "founder_reality_signals": {"clear_next_priorities": True},
+    })
     assert r.status_code == 422
 
-    ok = client.patch(f"{BASE}/business", json={
-        "current_challenges": ["Sales", "Hiring", "Cash flow"],
+
+def test_business_reality_signals_stays_null_until_written(founder_client):
+    """The whole point of no server_default on this column: a Stage 0 founder
+    who never sees this question (not applicable) and a Path 2 founder who
+    hasn't reached it yet (not answered yet) must both read back as null --
+    there is no third state to fake a distinction with, so this just confirms
+    the column truly starts and stays null until explicitly written."""
+    client, _ = founder_client
+    assert client.get(f"{BASE}/business").json()["business_reality_signals"] is None
+
+    signals = {
+        "revenue_predictable": True, "systems_defined": True,
+        "plans_become_execution": False, "team_independent": False,
+        "financials_clear": True,
+    }
+    r = client.patch(f"{BASE}/business", json={"business_reality_signals": signals})
+    assert r.status_code == 200, r.text
+    assert r.json()["business_reality_signals"] == signals
+
+
+def test_monthly_revenue_keeps_existing_bands(founder_client):
+    """Revenue is new to onboarding, but writes into an already-live column --
+    kept on the existing coded bands (pre_revenue..above_1Cr) rather than the
+    redesign brief's proposed new ones, per an explicit product call."""
+    client, _ = founder_client
+    r = client.patch(f"{BASE}/business", json={"current_revenue": "5L_25L"})
+    assert r.status_code == 200, r.text
+    assert r.json()["current_revenue"] == "5L_25L"
+
+    bad = client.patch(f"{BASE}/business", json={"current_revenue": "5L_20L"})
+    assert bad.status_code == 422  # not a real band -- the redesign brief's proposal, not ours
+
+
+# --- social handle (Instagram or LinkedIn) via generic PATCH /profile -------
+
+def test_social_handle_normalises_bare_domain_to_https(founder_client):
+    """The most likely thing someone actually types here has no scheme --
+    accepted and normalised rather than rejected."""
+    client, _ = founder_client
+    r = client.patch(BASE, json={"linkedin_url": "instagram.com/somefounder"})
+    assert r.status_code == 200, r.text
+    assert r.json()["linkedin_url"] == "https://instagram.com/somefounder"
+
+
+def test_social_handle_rejects_garbage(founder_client):
+    client, _ = founder_client
+    r = client.patch(BASE, json={"linkedin_url": "not a url at all"})
+    assert r.status_code == 422
+
+
+def test_invisible_gaps_multi_select(founder_client):
+    client, _ = founder_client
+    r = client.patch(f"{BASE}/business", json={
+        "invisible_gaps": ["Business depends heavily on me", "No clear roadmap"],
     })
-    assert ok.status_code == 200, ok.text
-    assert ok.json()["current_challenges"] == ["Sales", "Hiring", "Cash flow"]
+    assert r.status_code == 200, r.text
+    assert r.json()["invisible_gaps"] == ["Business depends heavily on me", "No clear roadmap"]
 
 
 def test_goals_section(founder_client):
@@ -141,10 +257,10 @@ def test_goals_section(founder_client):
 
 def test_partial_update_leaves_other_fields(founder_client):
     client, _ = founder_client
-    client.patch(f"{BASE}/founder", json={"founder_motivation": "keep me"})
+    client.patch(f"{BASE}/founder", json={"experience_level": "mentor"})
     client.patch(f"{BASE}/goals", json={"goal_90_day": "unrelated"})
     # the founder-section field survived a goals update
-    assert client.get(f"{BASE}/founder").json()["founder_motivation"] == "keep me"
+    assert client.get(f"{BASE}/founder").json()["experience_level"] == "mentor"
 
 
 # --- provisioning -----------------------------------------------------------

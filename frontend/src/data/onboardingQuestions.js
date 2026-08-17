@@ -1,26 +1,30 @@
 /**
- * data/onboardingQuestions.js — the GoXL AI Founder DNA onboarding question set.
+ * data/onboardingQuestions.js — the Ally onboarding question set.
  *
- * Transcribed from the "GoXL AI Founder DNA Onboarding" spec. Questions, prompts
- * and option lists are reproduced verbatim; only the storage plumbing (`key`,
- * `field`, option `value`s) is ours.
- *
+ * Rewritten 2026-08-17 for the 4-section, path-branching onboarding redesign.
  * Onboarding runs entirely in the browser — no LLM, no API key, no agent. The
  * backend's only job is to persist the answers. Everything a founder is asked
  * lives in this file, so changing the flow never means touching a component.
+ *
+ * Two paths, decided by the Section 1 stage question and nothing else:
+ *   PATH_1  Stage 0 (Ideation) only
+ *   PATH_2  Stage 0→1 or Stage 1→10+ -- everyone beyond Stage 0
+ *
+ * This is ONE flow with conditional questions (each question declares which
+ * path(s) it belongs to via `paths`), not two separate onboarding flows —
+ * see effectiveQuestions() below, the single place that decision is made.
  */
 
+export const PATH_1 = 'path1'; // Stage 0 / Ideation
+export const PATH_2 = 'path2'; // Stage 0->1 or Stage 1->10+
+const BOTH = [PATH_1, PATH_2];
+
 /* ---------------------------------------------------------------------------
- * Q1 — Where are you in your entrepreneurial journey?
- *
- * Asked as two steps rather than one flat list. The founder first picks the
- * broad group, then (where it's ambiguous) the exact stage inside it. Stage 0
- * contains only Ideation, so that second step is skipped entirely.
- *
- * `group` mirrors questions.primary_stage_group in the database and decides
- * which slice of the diagnosis question bank the founder later sees; `stage`
- * resolves to founder_stages.stage_id via the name. Both are kept: the group is
- * what the diagnosis engine gates on, the stage is the precise self-assessment.
+ * Stage picker (Section 1, Q3). Unchanged from the prior onboarding build --
+ * founder_stages already contains exactly this 3-group / 8-stage structure
+ * (confirmed against the live table before writing this), so nothing here
+ * invents a parallel enum. `group` mirrors founder_stages.onboarding_label /
+ * questions.primary_stage_group; `stage` resolves to stage_id via the name.
  * ------------------------------------------------------------------------- */
 export const STAGE_GROUPS = [
   {
@@ -28,6 +32,7 @@ export const STAGE_GROUPS = [
     group: 'Stage 0',
     label: 'Just exploring ideas',
     hint: 'Still shaping what to build',
+    path: PATH_1,
     stages: [
       { name: 'Ideation', order: 1, blurb: 'Exploring ideas, nothing built yet' },
     ],
@@ -37,6 +42,7 @@ export const STAGE_GROUPS = [
     group: 'Stage 0→1',
     label: 'Building from 0 → 1',
     hint: 'Turning the idea into something real people use',
+    path: PATH_2,
     stages: [
       { name: 'Validation', order: 2, blurb: 'Testing whether people actually want this' },
       { name: 'Prototype / MVP', order: 3, blurb: 'Building the first working version' },
@@ -48,6 +54,7 @@ export const STAGE_GROUPS = [
     group: 'Stage 1→10+',
     label: 'Growing an established business',
     hint: 'Scaling something that already works',
+    path: PATH_2,
     stages: [
       { name: 'Growth / Scaling', order: 5, blurb: 'Pushing hard on what already works' },
       { name: 'Expansion', order: 6, blurb: 'New markets, products or geographies' },
@@ -57,172 +64,83 @@ export const STAGE_GROUPS = [
   },
 ];
 
-/** Flat lookup: stage name -> its group + order. */
+/** Flat lookup: stage name -> its group + order + path. */
 export const STAGE_BY_NAME = Object.fromEntries(
   STAGE_GROUPS.flatMap((g) =>
-    g.stages.map((s) => [s.name, { ...s, group: g.group, groupKey: g.key }]),
+    g.stages.map((s) => [s.name, { ...s, group: g.group, groupKey: g.key, path: g.path }]),
   ),
 );
 
-/* ---------------------------------------------------------------------------
- * The adaptive stage question.
- *
- * The spec defines five of these against its five stages; we ask against the
- * eight the database actually stores, so several stages share a question. The
- * wording is the spec's, unchanged.
- * ------------------------------------------------------------------------- */
-export const ADAPTIVE_BY_STAGE = {
-  Ideation: "What's stopping you from getting started?",
-  Validation: "What's the biggest blocker to launching?",
-  'Prototype / MVP': "What's the biggest blocker to launching?",
-  'Early Traction': "What's the biggest obstacle to your next phase of growth?",
-  'Growth / Scaling': 'Which part of your business needs the most attention right now?',
-  Expansion: 'What legacy or long-term impact do you want to create over the next decade?',
-  Maturity: 'What legacy or long-term impact do you want to create over the next decade?',
-  Exit: 'What legacy or long-term impact do you want to create over the next decade?',
-};
-
-export const ADAPTIVE_FALLBACK = 'What matters most to you right now?';
-
-/** The spec's three sections, used for the live Founder DNA panel. */
+/** The 4 onboarding sections, used for the live side panel and step labels. */
 export const SECTIONS = [
-  { key: 'journey', label: 'Your Journey' },
-  { key: 'business', label: 'Your Business' },
-  { key: 'style', label: 'Your Working Style' },
+  { key: 'personal', label: 'Personal Details' },
+  { key: 'where_you_are', label: 'Understanding Where You Are' },
+  { key: 'what_you_know', label: 'What Do You Know?' },
+  { key: 'final', label: 'Final Questions' },
 ];
 
 /* ---------------------------------------------------------------------------
- * The questions.
+ * Question types:
+ *   'stage'      two-step group -> stage picker (Section 1 Q3 only)
+ *   'short'      one-line free text
+ *   'long'       multi-line free text
+ *   'url'        a single URL, validated + normalised server-side
+ *   'chips'      multi-select chips, plus free text when the "other" option
+ *                is picked (see otherValue/otherPlaceholder)
+ *   'dropdown'   searchable single-select
+ *   'multi'      multi-select checkboxes, uncapped unless `max` is set, plus
+ *                free text when the "other" option is picked (same as chips)
+ *   'single'     single-select cards
+ *   'yesno'      a fixed set of Yes/No checks answered together as one screen
+ *                (`items`), submitted as a single object, not one answer per
+ *                item -- see the reality-check schema on the backend.
  *
- * type:
- *   'stage'    two-step group -> stage picker (Q1 only)
- *   'short'    one-line free text
- *   'long'     multi-line free text
- *   'chips'    multi-select chips, plus free text when "Other" is picked
- *   'dropdown' searchable single-select
- *   'multi'    multi-select, optionally capped by `max`
- *   'single'   single-select
+ * `paths`: which path(s) this question is shown on. Filtered by
+ * effectiveQuestions() once the founder's path is known from the stage
+ * answer -- everything below this point is the single source of truth for
+ * both paths; nothing here is a separate flow.
  * ------------------------------------------------------------------------- */
 export const QUESTIONS = [
-  /* --- Section 1: Your Journey --------------------------------------------- */
+  /* === Section 1 — Personal Details (identical for both paths, except the
+     conditional revenue question at the end) ============================ */
+  {
+    key: 'name',
+    section: 'personal',
+    field: 'full_name',
+    label: 'Name',
+    type: 'short',
+    paths: BOTH,
+    q: 'What would you like Ally to call you?',
+    placeholder: 'Your name…',
+  },
+  {
+    key: 'socialHandle',
+    section: 'personal',
+    field: 'linkedin_url',
+    label: 'Social Handle',
+    type: 'url',
+    paths: BOTH,
+    optional: true,
+    q: "Where is your Instagram page or LinkedIn profile — whichever you'd like to share with Ally?",
+    prompt: 'Optional — skip if you’d rather not share.',
+    placeholder: 'instagram.com/you or linkedin.com/in/you',
+  },
   {
     key: 'stage',
-    section: 'journey',
+    section: 'personal',
+    field: 'stage',
     label: 'Entrepreneurial Stage',
     type: 'stage',
+    paths: BOTH,
     q: 'Where are you in your entrepreneurial journey?',
   },
   {
-    key: 'building',
-    section: 'journey',
-    label: "What You're Building",
-    type: 'short',
-    q: 'What are you building?',
-    prompt: 'Tell us about your startup, company, or idea in one or two sentences.',
-    placeholder: 'Your startup, company or idea…',
-  },
-  {
-    key: 'problem',
-    section: 'journey',
-    label: 'Problem Statement',
-    type: 'long',
-    q: 'What problem are you trying to solve?',
-    prompt: "Describe the problem as if you're explaining it to a friend.",
-    placeholder: 'The problem you keep coming back to…',
-  },
-  {
-    key: 'why',
-    section: 'journey',
-    label: 'Founder Story',
-    type: 'long',
-    q: 'Why is solving this problem important to you?',
-    prompt: 'What made you dedicate your time and energy to solving this problem?',
-    placeholder: 'The real reason…',
-  },
-  {
-    key: 'audience',
-    section: 'journey',
-    label: 'Who You Serve',
-    type: 'chips',
-    q: 'Who are you building this for?',
-    prompt: 'Pick everyone that fits — you can add your own.',
-    options: [
-      'Consumers', 'Businesses', 'Students', 'Doctors', 'Creators',
-      'Developers', 'Manufacturers', 'Retailers', 'Enterprises', 'Other',
-    ],
-    otherPlaceholder: 'Who else are you building for?',
-  },
-
-  /* --- Section 2: Your Business -------------------------------------------- */
-  {
-    key: 'industry',
-    section: 'business',
-    label: 'Industry',
-    type: 'dropdown',
-    q: 'Which industry best describes your business?',
-    prompt: 'Start typing to search.',
-    options: [
-      'AI', 'SaaS', 'FinTech', 'Manufacturing', 'Healthcare', 'Education',
-      'D2C', 'Services', 'Logistics', 'Real Estate', 'Agriculture', 'Other',
-    ],
-    placeholder: 'Search industries…',
-  },
-  {
-    key: 'challenges',
-    section: 'business',
-    label: 'Biggest Challenges',
-    type: 'multi',
-    max: 3,
-    q: "What's your biggest challenge right now?",
-    prompt: 'Choose up to 3.',
-    options: [
-      'Finding the right idea', 'Building the product', 'Getting customers',
-      'Sales', 'Marketing', 'Hiring', 'Fundraising', 'Cash flow', 'Team',
-      'Leadership', 'Scaling', 'Operations', 'Decision making', 'Productivity',
-      'Other',
-    ],
-  },
-  {
-    key: 'goal90',
-    section: 'business',
-    label: '90-Day Breakthrough',
-    type: 'long',
-    q: 'If GoXL AI could help you achieve one breakthrough in the next 90 days, what would it be?',
-    examples: [
-      'Launch MVP', 'Reach ₹10L MRR', 'Hire leadership',
-      'Raise funding', 'Improve profitability', 'Acquire first 100 customers',
-    ],
-    placeholder: 'Your one breakthrough…',
-  },
-  {
-    key: 'vision',
-    section: 'business',
-    label: 'One-Year Vision',
-    type: 'long',
-    q: 'What does success look like one year from today?',
-    prompt: 'Describe your ideal future.',
-    placeholder: 'A year from today…',
-  },
-
-  /* --- Section 3: Your Working Style --------------------------------------- */
-  {
-    key: 'support',
-    section: 'style',
-    label: 'How Ally Helps',
-    type: 'multi',
-    q: 'How would you like GoXL AI to support you?',
-    prompt: 'Pick as many as you like.',
-    options: [
-      'Strategic thinking', 'Daily planning', 'Accountability', 'Brainstorming',
-      'Decision support', 'Research', 'Sales', 'Marketing', 'Finance',
-      'Hiring', 'Product', 'Leadership', 'Investor readiness',
-    ],
-  },
-  {
     key: 'experience',
-    section: 'style',
+    section: 'personal',
+    field: 'experience_level',
     label: 'Experience Level',
     type: 'single',
+    paths: BOTH,
     q: 'How experienced are you as an entrepreneur?',
     // values match the founders_experience_level_check constraint
     options: [
@@ -235,32 +153,214 @@ export const QUESTIONS = [
     ],
   },
   {
-    key: 'feeling',
-    section: 'style',
-    label: 'Today’s Mindset',
+    key: 'revenue',
+    section: 'personal',
+    field: 'current_revenue',
+    label: 'Monthly Revenue',
     type: 'single',
-    q: 'How are you feeling today?',
-    // values match the founders_emotional_state_check constraint
+    paths: [PATH_2], // Stage 0 founders are pre-revenue by definition -- skipped entirely
+    q: 'What is your monthly revenue?',
+    // values match the founders_current_revenue_check constraint, kept as the
+    // existing coded bands rather than introducing a new set for this
+    // question alone -- see backend/app/schemas/sections.py's MonthlyRevenue.
     options: [
-      { label: 'Excited', value: 'excited' },
-      { label: 'Inspired', value: 'inspired' },
-      { label: 'Confident', value: 'confident' },
-      { label: 'Curious', value: 'curious' },
-      { label: 'Overwhelmed', value: 'overwhelmed' },
-      { label: 'Stuck', value: 'stuck' },
-      { label: 'Determined', value: 'determined' },
-      { label: 'Hopeful', value: 'hopeful' },
+      { label: 'Pre-revenue (₹0)', value: 'pre_revenue' },
+      { label: 'Under ₹1 lakh/month', value: 'under_1L' },
+      { label: '₹1 lakh – ₹5 lakh/month', value: '1L_5L' },
+      { label: '₹5 lakh – ₹25 lakh/month', value: '5L_25L' },
+      { label: '₹25 lakh – ₹1 crore/month', value: '25L_1Cr' },
+      { label: '₹1 crore+/month', value: 'above_1Cr' },
+    ],
+  },
+
+  /* === Section 2 — Understanding Where You Are (genuinely different
+     questions per path, not just relabelled) ============================= */
+  {
+    key: 'building',
+    section: 'where_you_are',
+    field: 'building_summary',
+    label: "What You're Building",
+    type: 'short',
+    paths: [PATH_2],
+    q: 'What are you building?',
+    prompt: 'The product or company name.',
+    placeholder: 'Your product or company…',
+  },
+  {
+    key: 'productDescription',
+    section: 'where_you_are',
+    field: 'product_description',
+    label: 'What It Is',
+    type: 'short',
+    paths: [PATH_2],
+    q: 'What is it?',
+    prompt: 'One line — what it actually does.',
+    placeholder: 'A one-line description…',
+  },
+  {
+    key: 'problem',
+    section: 'where_you_are',
+    field: 'problem_statement',
+    label: 'Problem Statement',
+    type: 'long',
+    paths: BOTH,
+    q: 'What problem are you trying to solve?',
+    placeholder: 'The problem you keep coming back to…',
+  },
+  {
+    key: 'ideaName',
+    section: 'where_you_are',
+    field: 'building_summary', // same column as `building` above -- mutually
+    // exclusive by path, both are a short name/label for "the thing"
+    label: 'Idea Name',
+    type: 'short',
+    paths: [PATH_1],
+    q: 'What would you call this idea?',
+    prompt: "There's no product yet — just give it a name.",
+    placeholder: 'Name your idea…',
+  },
+
+  /* === Section 3 — What Do You Know? ==================================== */
+  {
+    key: 'audience',
+    section: 'what_you_know',
+    field: 'customer_segment',
+    otherField: 'customer_segment_other',
+    label: 'Who You Serve',
+    type: 'chips',
+    paths: BOTH,
+    q: 'Who is it for? Who are you building this for?',
+    options: [
+      'Consumers', 'Business', 'Student', 'Doctors', 'Creator', 'Developer',
+      'Manufacturers', 'Retailers', 'Enterprises', 'Others',
+    ],
+    otherValue: 'Others',
+    otherPlaceholder: 'Who else are you building for?',
+  },
+  {
+    key: 'industry',
+    section: 'what_you_know',
+    field: 'industry',
+    label: 'Industry',
+    type: 'dropdown',
+    paths: BOTH,
+    q: 'Which industry best describes your business?',
+    prompt: 'Start typing to search.',
+    options: [
+      'AI', 'SaaS', 'Fintech', 'Manufacturing', 'Healthcare', 'Education',
+      'D2C Services', 'Logistics', 'Real Estate', 'Agriculture', 'Other',
+    ],
+    otherValue: 'Other',
+    placeholder: 'Search industries…',
+  },
+  {
+    key: 'founderReality',
+    section: 'what_you_know',
+    field: 'founder_reality_signals',
+    label: 'Founder Reality',
+    type: 'yesno',
+    paths: BOTH,
+    q: 'Founder Reality (Intuitive Check)',
+    prompt: 'Tick what feels true — go with instinct.',
+    items: [
+      { key: 'clear_next_priorities', text: 'I clearly know my next 3 priorities', sub: 'Clarity vs random daily work' },
+      { key: 'decisive', text: 'I take decisions with confidence', sub: 'Decisive vs overthinking' },
+      { key: 'effort_aligned_to_growth', text: 'My effort is aligned to growth', sub: 'Impact work vs busy work' },
+      { key: 'executes_consistently', text: 'I execute consistently', sub: 'Systems vs mood-driven action' },
+      { key: 'mentally_clear', text: 'I feel mentally clear & in control', sub: 'Focus vs overwhelm' },
     ],
   },
   {
-    key: 'reflection',
-    section: 'style',
-    label: 'Stage Reflection',
+    key: 'businessReality',
+    section: 'what_you_know',
+    field: 'business_reality_signals',
+    label: 'Business Reality',
+    type: 'yesno',
+    paths: [PATH_2], // no business yet to assess structure on for Path 1
+    q: 'Business Reality (Structure Check)',
+    prompt: 'Tick what feels true — go with instinct.',
+    items: [
+      { key: 'revenue_predictable', text: 'Revenue is predictable', sub: 'Consistency vs uncertainty' },
+      { key: 'systems_defined', text: 'Systems/processes are defined', sub: 'Structure vs chaos' },
+      { key: 'plans_become_execution', text: 'Plans turn into execution', sub: 'Action vs discussion' },
+      { key: 'team_independent', text: 'Team operates without dependency', sub: 'Delegation vs founder bottleneck' },
+      { key: 'financials_clear', text: 'Financials are clear — cost, margin, runway', sub: 'Visibility vs guesswork' },
+    ],
+  },
+  {
+    key: 'invisibleGaps',
+    section: 'what_you_know',
+    field: 'invisible_gaps',
+    label: 'Invisible Gaps',
+    type: 'multi',
+    paths: BOTH,
+    q: 'What resonates?',
+    options: [
+      "Working hard but results don't match",
+      "Doing many things but unsure what's right",
+      'Business depends heavily on me',
+      'Feeling stuck despite effort',
+      'No clear roadmap',
+      'Strategy ≠ execution reality',
+      'Mental clutter / overwhelm',
+    ],
+  },
+
+  /* === Section 4 — Final Questions ====================================== */
+  {
+    key: 'biggestChallenge',
+    section: 'final',
+    field: 'current_challenges',
+    otherField: 'current_challenges_other',
+    label: 'Biggest Challenge',
+    type: 'multi',
+    paths: BOTH,
+    q: "What's the biggest challenge you are facing today?",
+    options: [
+      'Finding the right idea', 'Building the product', 'Getting customers',
+      'Sales', 'Marketing', 'Hiring', 'Fundraising', 'Cash flow',
+      'Team leadership', 'Scaling', 'Operations', 'Decision-making',
+      'Productivity', 'Other',
+    ],
+    otherValue: 'Other',
+    otherPlaceholder: 'What else is the biggest challenge?',
+  },
+  {
+    key: 'oneYearSuccess',
+    section: 'final',
+    field: 'vision_1_year',
+    label: 'One-Year Vision',
     type: 'long',
-    adaptive: true,
-    q: '',
-    placeholder: 'Say what’s really on your mind…',
+    paths: [PATH_2],
+    q: 'What does success look like one year from today?',
+    placeholder: 'A year from today…',
+  },
+  {
+    key: 'ninetyDayGoal',
+    section: 'final',
+    field: 'goal_90_day',
+    label: '90-Day Goal',
+    type: 'long',
+    paths: [PATH_1],
+    q: 'What one thing would you like to achieve in the next 90 days?',
+    placeholder: 'One thing, 90 days…',
   },
 ];
+
+/**
+ * The question list a founder with `path` (PATH_1 | PATH_2) actually sees, in
+ * order. This is the ONE place path-branching happens -- every question above
+ * declares its own `paths`, so adding/removing a question never means editing
+ * branching logic elsewhere.
+ *
+ * `path` may be null before the stage question is answered -- in that case
+ * every question is included (nothing downstream of "not yet known" can be
+ * excluded), matching resolve_stage_groups' own "fail open" convention on the
+ * backend.
+ */
+export function effectiveQuestions(path) {
+  if (!path) return QUESTIONS;
+  return QUESTIONS.filter((q) => q.paths.includes(path));
+}
 
 export const QUESTION_COUNT = QUESTIONS.length;

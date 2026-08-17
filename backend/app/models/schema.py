@@ -392,6 +392,19 @@ class Founders(Base):
     industry: Mapped[Optional[str]] = mapped_column(String(30))
     industry_mapped_id: Mapped[Optional[int]] = mapped_column(Integer)
     current_challenges: Mapped[Optional[dict]] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
+    # Free text behind an "Other" pick on current_challenges -- same convention
+    # as customer_segment_other above.
+    current_challenges_other: Mapped[Optional[str]] = mapped_column(String(200))
+    # Path 2's ("beyond Stage 0") "What is it?" -- distinct from
+    # building_summary, which holds the product/idea's NAME for both paths.
+    product_description: Mapped[Optional[str]] = mapped_column(Text)
+    # The 5 always-asked Founder Reality yes/no checks, one JSONB object.
+    founder_reality_signals: Mapped[Optional[dict]] = mapped_column(JSONB)
+    # The matching Business Reality checks -- Path 2 only. No server_default
+    # on purpose: stays genuinely NULL for a Stage 0 founder (not applicable
+    # at all, not merely unanswered) -- see the migration's own docstring.
+    business_reality_signals: Mapped[Optional[dict]] = mapped_column(JSONB)
+    invisible_gaps: Mapped[Optional[dict]] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
     goal_90_day: Mapped[Optional[str]] = mapped_column(Text)
     vision_1_year: Mapped[Optional[str]] = mapped_column(Text)
     team_size: Mapped[Optional[str]] = mapped_column(String(20))

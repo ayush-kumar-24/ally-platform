@@ -44,6 +44,15 @@ const RESEND_COOLDOWN_SECONDS = 60;
  *  so changing that setting in the dashboard can never lock anyone out. */
 const OTP_MIN_LENGTH = 6;
 const OTP_MAX_LENGTH = 10;
+/** Display only -- this project's actual configured length (see the note
+ *  above), used for the confirmation copy and the input's placeholder. Kept
+ *  separate from OTP_MIN_LENGTH/MAX_LENGTH on purpose: those stay a wide,
+ *  permissive validation range so a dashboard change never locks anyone out,
+ *  while this is just what a founder is told to expect right now. Live-
+ *  reproduced: the copy still said "6-digit" and showed a 6-zero placeholder
+ *  ("000000") despite the project actually issuing 8-digit codes -- correct
+ *  codes looked one digit short of matching what was shown on screen. */
+const OTP_DISPLAY_LENGTH = 8;
 
 export default function Login() {
   const navigate = useNavigate();
@@ -180,7 +189,7 @@ export default function Login() {
     try {
       await sendEmailOtp(email);
       setCooldown(RESEND_COOLDOWN_SECONDS);
-      setNotice(`We sent a 6-digit code to ${email.trim()}. It expires in a few minutes.`);
+      setNotice(`We sent a ${OTP_DISPLAY_LENGTH}-digit code to ${email.trim()}. It expires in a few minutes.`);
       if (!isResend) setStep('code');
       return true;
     } catch (err) {
@@ -437,7 +446,7 @@ export default function Login() {
               <span className="auth-label">Code from your email</span>
               <input className="auth-input auth-code" type="text" name="otp"
                      autoComplete="one-time-code" inputMode="numeric" maxLength={OTP_MAX_LENGTH}
-                     placeholder="000000" value={code} autoFocus disabled={submitting}
+                     placeholder={'0'.repeat(OTP_DISPLAY_LENGTH)} value={code} autoFocus disabled={submitting}
                      onChange={(e) => {
                        setCode(e.target.value.replace(/\D/g, '').slice(0, OTP_MAX_LENGTH));
                        setValidationError('');

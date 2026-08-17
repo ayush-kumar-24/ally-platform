@@ -46,43 +46,61 @@ def founder_client():
 
 
 # --- profile progress + validation -----------------------------------------
+#
+# Rewritten 2026-08-17 for the 4-section, path-branching onboarding redesign
+# (see app/services/profile_progress.py's own docstring): required fields are
+# now computed per founder from their stage, so a stage answer has to land
+# before "required" is even well-defined -- before that, path-specific fields
+# (vision_1_year, goal_90_day, ...) correctly count toward neither path.
 
-def test_progress_starts_low_then_rises(founder_client):
+def test_progress_before_stage_only_counts_path_agnostic_fields(founder_client):
     r = founder_client.get("/api/v1/profile/progress")
     assert r.status_code == 200
     body = r.json()
-    assert body["total"] == 13
+    # ALWAYS_REQUIRED (9) + OPTIONAL_FIELDS (1) -- no path-specific fields
+    # until stage is known.
+    assert body["total"] == 10
     start = body["filled"]
 
-    founder_client.patch("/api/v1/profile/goals", json={"goal_90_day": "ship v1", "vision_1_year": "1k users"})
+    founder_client.patch("/api/v1/profile/business", json={"problem_statement": "fix churn"})
     body2 = founder_client.get("/api/v1/profile/progress").json()
-    assert body2["filled"] == start + 2
+    assert body2["filled"] == start + 1
     assert body2["percent"] >= body["percent"]
 
 
-def test_validate_lists_missing_required(founder_client):
+def test_validate_lists_missing_required_once_path_is_known(founder_client):
+    # Validation -> Stage 0->1 -> Path 2, which requires vision_1_year, not
+    # goal_90_day.
+    founder_client.patch("/api/v1/profile/business", json={"stage": "Validation"})
     r = founder_client.get("/api/v1/profile/validate")
     assert r.status_code == 200
     body = r.json()
     assert body["valid"] is False
     missing = {m["field"] for m in body["missing"]}
-    assert "goal_90_day" in missing  # not filled yet
+    assert "vision_1_year" in missing       # Path 2 -- required, not filled yet
+    assert "goal_90_day" not in missing     # Path 1 only -- never required here
 
 
 def test_validate_becomes_valid_when_filled(founder_client):
-    # fill every required field
+    # fill every required field for Path 2 (Validation -> Stage 0->1)
     founder_client.patch("/api/v1/profile/business", json={
-        "stage": "Validation", "building_summary": "x", "problem_statement": "x",
-        "customer_segment": ["Businesses"], "industry": "saas",
-        "current_challenges": ["retention"],
+        "stage": "Validation", "building_summary": "x", "product_description": "x",
+        "problem_statement": "x", "customer_segment": ["Businesses"], "industry": "saas",
+        "current_challenges": ["Cash flow"], "current_revenue": "pre_revenue",
+        "founder_reality_signals": {
+            "clear_next_priorities": True, "decisive": True, "effort_aligned_to_growth": True,
+            "executes_consistently": True, "mentally_clear": True,
+        },
+        "business_reality_signals": {
+            "revenue_predictable": False, "systems_defined": False, "plans_become_execution": False,
+            "team_independent": False, "financials_clear": False,
+        },
+        "invisible_gaps": ["No clear roadmap"],
     })
-    founder_client.patch("/api/v1/profile/goals", json={"goal_90_day": "x", "vision_1_year": "x"})
-    founder_client.patch("/api/v1/profile/founder", json={
-        "founder_motivation": "x", "support_preferences": ["sales"],
-        "experience_level": "serial", "emotional_state": ["excited"],
-    })
+    founder_client.patch("/api/v1/profile/goals", json={"vision_1_year": "x"})
+    founder_client.patch("/api/v1/profile/founder", json={"experience_level": "serial"})
     body = founder_client.get("/api/v1/profile/validate").json()
-    assert body["valid"] is True
+    assert body["valid"] is True, body["missing"]
     assert body["missing"] == []
 
 
