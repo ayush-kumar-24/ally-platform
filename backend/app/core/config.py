@@ -148,16 +148,27 @@ class Settings(BaseSettings):
     # diagnosis above (see founders.founder_dna_completed_at). Unlike
     # MAX_DIAGNOSIS_QUESTIONS this is not a target to reach -- the engine
     # stops earlier, per-dimension, the moment the resolution advisor judges
-    # a dimension resolved. This cap only guards against every dimension
-    # failing to resolve (advisor errors, or answers too thin to judge),
-    # combined with MAX_DIAGNOSIS_QUESTIONS keeps a full session inside the
-    # ~40-50 question range agreed for the combined Founder DNA + Business
-    # DNA journey.
-    MAX_FOUNDER_DNA_QUESTIONS: int = 18
-    # Minimum questions a dimension must have before the resolution advisor
-    # is even asked -- one answer is never enough signal to call a dimension
-    # resolved, so this saves an LLM call that would just say "no" anyway.
-    FOUNDER_DNA_MIN_QUESTIONS_PER_DIMENSION: int = 2
+    # a dimension resolved.
+    #
+    # 9 = the 6 dimensions (the hard floor -- 6 dimensions cannot be covered
+    # in fewer than 6 questions) plus 50% headroom for clarifying follow-ups
+    # on vague answers. Sized against the WHOLE journey's time budget, not
+    # this phase in isolation: Founder DNA + the adaptive business diagnosis
+    # together must stay inside ~40 minutes of a founder's time, and the
+    # business diagnosis needs the larger share of that. Was 18, which let a
+    # first live run spend 12 questions here before the diagnosis had even
+    # started -- too much of the budget on identity, too little left for the
+    # actual problem.
+    MAX_FOUNDER_DNA_QUESTIONS: int = 9
+    # Minimum answers a dimension needs before the resolution advisor is
+    # asked to judge it. 1, not 2: a single specific, story-based answer CAN
+    # fully resolve a dimension (verified live -- the advisor correctly held
+    # dimensions open on thin answers and closed them on concrete ones), and
+    # requiring a second answer everywhere doubled this phase's length for
+    # signal the advisor did not need. The advisor is still the one deciding
+    # -- a vague first answer keeps the dimension open and earns a follow-up,
+    # which is what the headroom in the ceiling above is for.
+    FOUNDER_DNA_MIN_QUESTIONS_PER_DIMENSION: int = 1
 
     # --- Provisioning ---
     # ON: first real (Supabase) login creates the founder row via
