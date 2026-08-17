@@ -34,6 +34,17 @@ from app.models import (
 )
 
 
+class FounderDnaNotCompleteError(AppError):
+    def __init__(
+        self,
+        message: str = (
+            "Complete the Founder DNA phase (POST /founder-dna/start) before "
+            "starting a diagnosis."
+        ),
+    ):
+        super().__init__(message, status_code=status.HTTP_409_CONFLICT)
+
+
 class SessionNotFoundError(AppError):
     def __init__(self, message: str = "No active diagnosis session was found."):
         super().__init__(message, status_code=status.HTTP_404_NOT_FOUND)
@@ -130,6 +141,13 @@ class DiagnosisService:
             )
             question = self._current_question_for(existing, founder)
             return existing, question, True
+
+        # Agreed phase order: Founder DNA fully first, then Business DNA. Only
+        # gates a NEW diagnosis -- same reasoning as the allowance check right
+        # below: an in-progress assessment (the resume path above) must always
+        # be continuable even if this were somehow unset later.
+        if founder.founder_dna_completed_at is None:
+            raise FounderDnaNotCompleteError()
 
         # Only a NEW diagnosis is bounded. The resume path above has already
         # returned, so an in-progress assessment can always be continued -- the
@@ -274,12 +292,38 @@ class DiagnosisService:
                 self.db.commit()
             except IntegrityError as exc:
                 self.db.rollback()
-                logger.error(
-                    "Integrity error saving answer",
-                    extra={"founder_id": founder.founder_id},
-                    exc_info=exc,
-                )
-                raise DiagnosisPersistenceError("Could not save the answer.")
+                # Could be a genuine integrity problem, or two near-simultaneous
+                # requests for the same (session_id, question_id) racing each
+                # other -- a double-click, or a client retry that overlapped
+                # the original request instead of following it. The unique
+                # constraint on answers(session_id, question_id) (see
+                # uq_answers_session_question) is what makes the loser's
+                # insert fail here rather than silently creating a duplicate
+                # row + re-billing the LLM advisor call. Re-fetch to tell the
+                # two cases apart: if the row exists now, this WAS the race,
+                # not a failure -- resume from the winner's row exactly like
+                # the pooler-drop recovery path above, instead of surfacing an
+                # error to a founder who only submitted once.
+                existing = self.repository.get_answer(session.session_id, question_id)
+                if existing is not None:
+                    logger.info(
+                        "Concurrent duplicate answer submission detected; "
+                        "resuming from the row the other request already "
+                        "committed instead of failing this one.",
+                        extra={
+                            "founder_id": founder.founder_id,
+                            "session_id": session.session_id,
+                            "question_id": question_id,
+                        },
+                    )
+                    answer = existing
+                else:
+                    logger.error(
+                        "Integrity error saving answer",
+                        extra={"founder_id": founder.founder_id},
+                        exc_info=exc,
+                    )
+                    raise DiagnosisPersistenceError("Could not save the answer.")
             except SQLAlchemyError as exc:
                 self.db.rollback()
                 logger.error(

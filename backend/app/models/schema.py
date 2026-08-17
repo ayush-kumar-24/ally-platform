@@ -371,6 +371,16 @@ class Founders(Base):
     # a "first impression" that changes on every visit is not an impression.
     first_impression: Mapped[Optional[dict]] = mapped_column(JSONB)
     first_impression_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
+    # Gates entry to /diagnosis/start -- the agreed phase order is Founder DNA
+    # fully first, then Business DNA. NULL means the founder hasn't finished
+    # (or started) the Founder DNA phase yet.
+    founder_dna_completed_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
+    # Progress marker (dimension codes already judged resolved by the
+    # adaptive advisor), NOT a scoring table -- see
+    # alembic/versions/2026_08_17_1400-f4a2c8e91b36's docstring for why this
+    # is a plain JSONB array here rather than a founder_dimension_profile-
+    # style rubric table (that pattern was deliberately dropped 2026-07-27).
+    founder_dna_resolved_dimensions: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
 
     @property
     def stage_name(self) -> Optional[str]:
@@ -543,6 +553,60 @@ class VisualQuestionBank(Base):
     primary_stage_group: Mapped[Optional[str]] = mapped_column(String(20))
 
     founder_visual_choices: Mapped[list['FounderVisualChoices']] = relationship('FounderVisualChoices', back_populates='visual_question')
+
+
+class FounderDnaQuestions(Base):
+    """Phase-2 Founder DNA question bank (text-only v1) -- see
+    app/api/v1/founder_dna/. Purpose-built, not `questions`: these carry no
+    root_cause_id/problem_id, so they don't belong in the business
+    root-cause diagnosis bank. `dimension_code` is a Python StrEnum
+    (FounderDnaDimension), not an FK -- no dimension catalogue table exists
+    (see this migration's docstring)."""
+
+    __tablename__ = 'founder_dna_questions'
+    __table_args__ = (
+        CheckConstraint("dimension_code = ANY (ARRAY['purpose_mission'::character varying, 'core_values'::character varying, 'mindset_excellence'::character varying, 'energy_patterns'::character varying, 'decision_style'::character varying, 'focus_attention'::character varying]::text[])", name='founder_dna_questions_dimension_code_check'),
+        CheckConstraint("stage_group = ANY (ARRAY['Stage 0'::character varying, 'Stage 0→1'::character varying, 'Stage 1→10+'::character varying]::text[])", name='founder_dna_questions_stage_group_check'),
+        CheckConstraint("format = ANY (ARRAY['narrative'::character varying, 'scenario'::character varying]::text[])", name='founder_dna_questions_format_check'),
+        PrimaryKeyConstraint('founder_dna_question_id', name='founder_dna_questions_pkey'),
+        Index('idx_founder_dna_questions_dimension_stage', 'dimension_code', 'stage_group'),
+    )
+
+    founder_dna_question_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    dimension_code: Mapped[str] = mapped_column(String(30), nullable=False)
+    stage_group: Mapped[str] = mapped_column(String(20), nullable=False)
+    format: Mapped[str] = mapped_column(String(20), nullable=False, server_default=text("'narrative'::character varying"))
+    question_text: Mapped[str] = mapped_column(Text, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text('true'))
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
+    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
+
+    founder_dna_answers: Mapped[list['FounderDnaAnswers']] = relationship('FounderDnaAnswers', back_populates='founder_dna_question')
+
+
+class FounderDnaAnswers(Base):
+    """Mirrors `FounderVisualChoices`'s shape, not `answers` -- no
+    scoring/confirmation-status columns, since these questions aren't scored
+    against a root cause."""
+
+    __tablename__ = 'founder_dna_answers'
+    __table_args__ = (
+        ForeignKeyConstraint(['founder_id'], ['founders.founder_id'], ondelete='CASCADE', name='founder_dna_answers_founder_id_fkey'),
+        ForeignKeyConstraint(['founder_dna_question_id'], ['founder_dna_questions.founder_dna_question_id'], name='founder_dna_answers_founder_dna_question_id_fkey'),
+        PrimaryKeyConstraint('founder_dna_answer_id', name='founder_dna_answers_pkey'),
+        Index('idx_founder_dna_answers_founder', 'founder_id'),
+        Index('uq_founder_dna_answers_founder_question', 'founder_id', 'founder_dna_question_id', unique=True),
+    )
+
+    founder_dna_answer_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    founder_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    founder_dna_question_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    answer_text: Mapped[str] = mapped_column(Text, nullable=False)
+    answered_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
+
+    founder: Mapped['Founders'] = relationship('Founders')
+    founder_dna_question: Mapped['FounderDnaQuestions'] = relationship('FounderDnaQuestions', back_populates='founder_dna_answers')
 
 
 class ConsentHistory(Base):
@@ -1301,6 +1365,15 @@ class Answers(Base):
         Index('idx_answers_question', 'question_id'),
         Index('idx_answers_root_cause', 'root_cause_hypothesis_id'),
         Index('idx_answers_session', 'session_id'),
+        # Backstop for the race DiagnosisService.submit_answer's docstring
+        # describes: two near-simultaneous requests for the same still-current
+        # question (double-click, or a client retry overlapping the original
+        # call) could otherwise both pass the application-level "no answer
+        # yet" check and both insert, creating a duplicate answer row + a
+        # duplicate LLM advisor call. This constraint makes the second insert
+        # fail at the DB instead, and submit_answer already treats that
+        # IntegrityError as "resume from the winner's row", not an error.
+        Index('uq_answers_session_question', 'session_id', 'question_id', unique=True),
     )
 
     answer_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

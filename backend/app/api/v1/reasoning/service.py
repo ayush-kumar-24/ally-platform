@@ -35,6 +35,11 @@ from app.api.v1.ally.memory.schemas import MemoryType
 from app.api.v1.reasoning.config import ReasoningConfig
 from app.api.v1.reasoning.engines.archetype import ArchetypeEngine
 from app.api.v1.reasoning.engines.business_health import BusinessHealthScorer
+from app.api.v1.reasoning.engines.founder_dna_extras import (
+    origin_and_vision,
+    resolve_behavioural_dimensions,
+    resolve_phase2_dimensions,
+)
 from app.api.v1.reasoning.engines.psychological_state import (
     PsychologicalStateEngine,
     PsychologicalStateSignalScorer,
@@ -504,6 +509,37 @@ class ReasoningService:
             session.last_activity_at = _utcnow()
 
             self.repository.deactivate_existing_reports(session.session_id)
+
+            # Founder DNA jsonb -- archetype (always, when assigned) plus
+            # whichever of the newer dimensions actually resolved to real data.
+            # The 6 phase-2 dimensions (Purpose & Mission, Core Values, Mindset
+            # & Excellence, Energy Patterns, Decision Style, Focus/Attention)
+            # come from the founder_dna_answers a founder gives BEFORE this
+            # diagnosis even starts (see app/api/v1/founder_dna/) -- they are
+            # simply absent here if that phase hasn't produced anything for a
+            # given dimension yet, never guessed.
+            founder_dna_dict: dict = {}
+            if archetype is not None:
+                founder_dna_dict["archetype"] = archetype.as_founder_dna()
+            founder_dna_dict.update(origin_and_vision(founder))
+            try:
+                codes = self._root_cause_codes(scored)
+                founder_dna_dict.update(resolve_behavioural_dimensions(self.repository, codes))
+            except Exception:  # noqa: BLE001 -- optional enrichment, never blocks the report
+                logger.warning(
+                    "founder DNA behavioural-dimension lookup failed; leaving those keys absent",
+                    extra={"session_id": session.session_id},
+                )
+            try:
+                founder_dna_dict.update(
+                    resolve_phase2_dimensions(self.db, founder.founder_id)
+                )
+            except Exception:  # noqa: BLE001 -- optional enrichment, never blocks the report
+                logger.warning(
+                    "founder DNA phase-2 dimension lookup failed; leaving those keys absent",
+                    extra={"session_id": session.session_id},
+                )
+
             report = FounderReport(
                 founder_id=founder.founder_id,
                 session_id=session.session_id,
@@ -517,8 +553,8 @@ class ReasoningService:
                 session_state_at_generation=session.session_state,
                 # Founder report -> insights (its founder-facing slot).
                 insights=renderer.render_founder(founder_report),
-                # Founder pattern/archetype -> founder_dna (its founder-DNA slot).
-                founder_dna=({"archetype": archetype.as_founder_dna()} if archetype is not None else None),
+                # Founder pattern/archetype + newer dimensions -> founder_dna.
+                founder_dna=(founder_dna_dict or None),
                 # Business health (readiness pillars) -> business_dna (structured,
                 # queryable for the Business-DNA report + dashboard display).
                 business_dna=self._business_dna(business_health),
@@ -600,6 +636,16 @@ class ReasoningService:
             is_top_finding=scored.is_top_finding,
         )
 
+    def _root_cause_codes(self, scored: Sequence[ScoredRootCause]) -> list[str]:
+        """Root-cause CODEs (not ids) for a scored set -- the shared key used to
+        resolve interventions, blind_spots, and behaviour_patterns alike."""
+        if not scored:
+            return []
+        root_causes = self.repository.get_root_causes_by_ids(
+            s.root_cause_id for s in scored
+        )
+        return [rc.root_cause_code for rc in root_causes.values() if rc.root_cause_code]
+
     def _build_internal_report_row(
         self, session, founder: Founder, report_id: int, internal_report,
         distress_assessment=None, scored: Sequence[ScoredRootCause] = (),
@@ -621,26 +667,18 @@ class ReasoningService:
         """
         blind_spot_ids: list[int] = []
         behaviour_pattern_ids: list[int] = []
-        if scored:
-            try:
-                root_causes = self.repository.get_root_causes_by_ids(
-                    s.root_cause_id for s in scored
+        try:
+            codes = self._root_cause_codes(scored)
+            if codes:
+                blind_spot_ids = self.repository.get_blind_spot_ids_by_root_cause_codes(codes)
+                behaviour_pattern_ids = (
+                    self.repository.get_behaviour_pattern_ids_by_root_cause_codes(codes)
                 )
-                codes = [
-                    rc.root_cause_code
-                    for rc in root_causes.values()
-                    if rc.root_cause_code
-                ]
-                if codes:
-                    blind_spot_ids = self.repository.get_blind_spot_ids_by_root_cause_codes(codes)
-                    behaviour_pattern_ids = (
-                        self.repository.get_behaviour_pattern_ids_by_root_cause_codes(codes)
-                    )
-            except Exception:  # noqa: BLE001 -- optional enrichment, never blocks the report
-                logger.warning(
-                    "blind spot / behaviour pattern lookup failed; leaving empty",
-                    extra={"session_id": session.session_id},
-                )
+        except Exception:  # noqa: BLE001 -- optional enrichment, never blocks the report
+            logger.warning(
+                "blind spot / behaviour pattern lookup failed; leaving empty",
+                extra={"session_id": session.session_id},
+            )
         distress_signals = [
             {
                 "category": s.category,

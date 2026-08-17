@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Response, status
 from sqlalchemy import text
 
 from app.api.v1.chat.router import router as chat_api_router
@@ -12,6 +12,7 @@ from app.api.v1.admin.panel_router import router as admin_panel_router
 from app.api.v1.admin.panel_router_v2 import router as admin_panel_router_v2
 from app.api.v1.dashboard.routes import router as dashboard_router
 from app.api.v1.diagnosis.router import router as diagnosis_router
+from app.api.v1.founder_dna.router import router as founder_dna_router
 from app.api.v1.discovery.routes import router as discovery_router
 from app.api.v1.intelligence.routes import router as intelligence_router
 from app.api.v1.knowledge.routes import router as knowledge_router
@@ -37,6 +38,7 @@ api_router.include_router(impression_router)
 api_router.include_router(feedback_router)
 api_router.include_router(frontend_errors_router)
 api_router.include_router(discovery_router)
+api_router.include_router(founder_dna_router)
 api_router.include_router(diagnosis_router)
 api_router.include_router(settings_router)
 api_router.include_router(settings_preferences_router)
@@ -62,13 +64,24 @@ api_router.include_router(internal_jobs_router)
 
 
 @api_router.get("/health")
-async def health():
+async def health(response: Response):
     db_status = "connected"
     try:
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
     except Exception:
         db_status = "unreachable"
+
+    # This is the endpoint infrastructure (App Runner) should be polling for
+    # instance health/traffic routing -- see DEPLOY_AWS.md. A non-2xx status
+    # code is what actually gets App Runner to stop routing traffic to (and
+    # eventually recycle) an instance; a 200 with "degraded" in the body would
+    # be invisible to a health check that only looks at the status code, which
+    # is the common case. The bare `/` root endpoint intentionally does NOT do
+    # this check -- it exists only as an unauthenticated liveness ping, not a
+    # readiness check.
+    if db_status != "connected":
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
 
     return {
         "status": "healthy" if db_status == "connected" else "degraded",

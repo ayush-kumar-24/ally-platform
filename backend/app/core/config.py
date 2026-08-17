@@ -108,7 +108,15 @@ class Settings(BaseSettings):
     # credit columns all exist as of migration b8e2d4f60a19, so it can be live.
     # An explicit PLAN_ENFORCEMENT_ENABLED in the process environment still wins
     # over this, so a deploy can disable it without a code change.
-    PLAN_ENFORCEMENT_ENABLED: bool = False
+    #
+    # Defaults to True (changed pre-beta, 2026-08-16): with it off, chat LLM
+    # usage is completely unbounded per founder -- a real cost-abuse exposure
+    # flagged in the pre-beta audit. "Secure by default" here means a deploy
+    # that forgets to set this env var explicitly still gets the gate, rather
+    # than silently shipping unmetered LLM access. Set
+    # PLAN_ENFORCEMENT_ENABLED=false explicitly (env var, not this default) if
+    # a specific environment genuinely needs it off.
+    PLAN_ENFORCEMENT_ENABLED: bool = True
 
     # Founder-archetype assignment via LLM. Off => the deterministic lexical
     # match, which its own docstring calls a heuristic. The LLM chooses from the
@@ -134,6 +142,22 @@ class Settings(BaseSettings):
     # could never cross the 80 needed to generate a report. Coverage means "how
     # much of THIS diagnosis is done", and a diagnosis is this many questions.
     MAX_DIAGNOSIS_QUESTIONS: int = 30
+
+    # --- Founder DNA (phase 2, adaptive) ---
+    # Safety ceiling for the Founder DNA phase, which runs BEFORE the
+    # diagnosis above (see founders.founder_dna_completed_at). Unlike
+    # MAX_DIAGNOSIS_QUESTIONS this is not a target to reach -- the engine
+    # stops earlier, per-dimension, the moment the resolution advisor judges
+    # a dimension resolved. This cap only guards against every dimension
+    # failing to resolve (advisor errors, or answers too thin to judge),
+    # combined with MAX_DIAGNOSIS_QUESTIONS keeps a full session inside the
+    # ~40-50 question range agreed for the combined Founder DNA + Business
+    # DNA journey.
+    MAX_FOUNDER_DNA_QUESTIONS: int = 18
+    # Minimum questions a dimension must have before the resolution advisor
+    # is even asked -- one answer is never enough signal to call a dimension
+    # resolved, so this saves an LLM call that would just say "no" anyway.
+    FOUNDER_DNA_MIN_QUESTIONS_PER_DIMENSION: int = 2
 
     # --- Provisioning ---
     # ON: first real (Supabase) login creates the founder row via

@@ -127,13 +127,48 @@ def _sec_head(num: int, heading: str) -> str:
             f'<h3>{_esc(heading)}</h3></div>')
 
 
-def _archetype_card(facts: dict) -> str:
-    a = (facts or {}).get("archetype") or {}
-    if not a.get("name"):
-        return ""
-    name = _esc(a["name"]) + (" &middot; working hypothesis" if a.get("tentative") else "")
-    motiv = f'<div class="pillar-desc">Driven by {_esc(a["core_motivation"])}</div>' if a.get("core_motivation") else ""
-    return f'<div class="card"><div class="pillar-name">{name}</div>{motiv}</div>'
+# Founder DNA dimension key -> printable label, for whichever of the newer
+# dimensions actually resolved (see app/api/v1/reasoning/engines/
+# founder_dna_extras.py). A dimension with no key present in `facts` simply
+# has no card -- never a placeholder "not yet available" card.
+_DNA_LABELS = {
+    "origin": "Deepest Why",
+    "vision": "Vision",
+    "strengths_blind_spots": "Strengths &amp; Blind Spots",
+    "stress_response": "Stress Response Pattern",
+    "communication_preference": "Communication Preference",
+    # Phase-2 dimensions (app/api/v1/founder_dna/) -- same dict, same
+    # generic render-what's-there loop below, no separate code path needed.
+    "purpose_mission": "Purpose &amp; Mission",
+    "core_values": "Core Values &amp; Non-Negotiables",
+    "mindset_excellence": "Mindset &amp; Excellence Standard",
+    "energy_patterns": "Energy Patterns",
+    "decision_style": "Decision Style",
+    "focus_attention": "Focus &amp; Attention",
+}
+
+
+def _founder_dna_cards(facts: dict) -> str:
+    """Grid of Founder DNA cards -- archetype plus however many of the newer
+    dimensions are present. Mirrors `_pillars()`'s "render what's there"
+    approach rather than assuming a fixed set of dimensions."""
+    facts = facts or {}
+    cells = []
+    a = facts.get("archetype") or {}
+    if a.get("name"):
+        name = _esc(a["name"]) + (" &middot; working hypothesis" if a.get("tentative") else "")
+        motiv = f'<p class="pillar-desc">Driven by {_esc(a["core_motivation"])}</p>' if a.get("core_motivation") else ""
+        cells.append(f'<div class="card"><div class="pillar-name">{name}</div>{motiv}</div>')
+    for key, label in _DNA_LABELS.items():
+        value = facts.get(key)
+        if not value:
+            continue
+        desc = "<br>".join(_esc(v) for v in value) if isinstance(value, list) else _esc(value)
+        cells.append(
+            f'<div class="card"><div class="pillar-name">{label}</div>'
+            f'<p class="pillar-desc">{desc}</p></div>'
+        )
+    return f'<div class="grid">{"".join(cells)}</div>' if cells else ""
 
 
 def _pillars(facts: dict) -> str:
@@ -192,7 +227,7 @@ def build_report_html(narrative) -> str:
         elif s.key == "founder_dna":
             num += 1
             parts.append(_sec_head(num, "Founder DNA") + _p(s.prose, "prose intro")
-                         + _archetype_card(s.facts))
+                         + _founder_dna_cards(s.facts))
         elif s.key == "psychological_note":
             num += 1
             parts.append(_sec_head(num, s.heading) + _p(s.prose, "prose intro"))
