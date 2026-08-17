@@ -144,7 +144,15 @@ _DNA_LABELS = {
     "mindset_excellence": "Mindset &amp; Excellence Standard",
     "energy_patterns": "Energy Patterns",
     "decision_style": "Decision Style",
-    "focus_attention": "Focus &amp; Attention",
+    "focus_attention": "Focus, Attention &amp; Response Patterns",
+    # Now asked directly rather than derived from the blind_spots /
+    # behaviour_patterns catalogues, which held nothing for the
+    # psychology-range root causes most founders score.
+    "core_motivation": "Core Motivation Driver",
+    "strengths_blind_spots": "Strengths &amp; Blind Spots",
+    "stress_response": "Stress Response Pattern",
+    "communication_preference": "Communication Preference",
+    "emotional_intelligence": "Emotional Intelligence",
 }
 
 

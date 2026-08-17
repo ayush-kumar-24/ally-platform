@@ -5,11 +5,22 @@ start/current/answer contract, so the frontend flow can reuse the same
 patterns it already has for diagnosis.
 """
 
+from datetime import datetime
+
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class FounderDnaQuestionRead(BaseModel):
-    """A single Founder DNA question as presented to the founder."""
+    """A single Founder DNA question as presented to the founder.
+
+    `format` drives which control the client renders -- `narrative` and
+    `scenario` are free text, `forced_choice` is pick-one from `options`.
+    Both fields are carried explicitly because the existing diagnosis client
+    (frontend/src/services/diagnosis.js) silently drops `question_type` at its
+    normalisation boundary and renders every question as a textarea; a
+    forced-choice question sent to that path would look like a text question
+    with the choices buried in its wording.
+    """
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -17,6 +28,8 @@ class FounderDnaQuestionRead(BaseModel):
     dimension_code: str
     format: str
     question_text: str
+    options: list[str] | None = None
+    is_closing: bool = False
 
 
 class FounderDnaProgress(BaseModel):
@@ -39,9 +52,23 @@ class StartFounderDnaResponse(BaseModel):
     )
 
 
+class FounderDnaTurn(BaseModel):
+    """One completed question/answer pair, for rebuilding the transcript."""
+
+    question_text: str
+    dimension_code: str
+    answer_text: str
+    answered_at: datetime
+
+
 class CurrentFounderDnaQuestionResponse(BaseModel):
     progress: FounderDnaProgress
     question: FounderDnaQuestionRead | None = None
+    #: Everything already answered, oldest first. Only this endpoint sends it
+    #: -- POST /answer has no reason to resend what the client just watched
+    #: happen. Without it a reload renders one lone question in an empty
+    #: transcript, which reads as the conversation having been lost.
+    history: list[FounderDnaTurn] = Field(default_factory=list)
 
 
 class SubmitFounderDnaAnswerRequest(BaseModel):

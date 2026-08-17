@@ -150,16 +150,26 @@ class Settings(BaseSettings):
     # stops earlier, per-dimension, the moment the resolution advisor judges
     # a dimension resolved.
     #
-    # 9 = the 6 dimensions (the hard floor -- 6 dimensions cannot be covered
-    # in fewer than 6 questions) plus 50% headroom for clarifying follow-ups
-    # on vague answers. Sized against the WHOLE journey's time budget, not
-    # this phase in isolation: Founder DNA + the adaptive business diagnosis
-    # together must stay inside ~40 minutes of a founder's time, and the
-    # business diagnosis needs the larger share of that. Was 18, which let a
-    # first live run spend 12 questions here before the diagnosis had even
-    # started -- too much of the budget on identity, too little left for the
-    # actual problem.
-    MAX_FOUNDER_DNA_QUESTIONS: int = 9
+    # 16 = the agreed 14-question base journey (one per dimension: the doc's
+    # thirteen plus EQ, with the last doubling as the "wow close") plus up to
+    # 2 adaptive follow-ups for dimensions a founder answered vaguely.
+    #
+    # The follow-up headroom is deliberate and small. A fixed 14-and-done was
+    # considered and is what the product decision specifies for the BASE, but
+    # leaving zero recovery room was live-observed to ship thin dimensions
+    # straight to the dashboard: in an end-to-end run the advisor left
+    # decision_style and energy_patterns unresolved after one answer each,
+    # and a founder's card read "Yeah, that's something I think about
+    # sometimes." Two spare slots cost ~2 minutes worst case and only fire
+    # when the advisor judges a dimension genuinely unresolved.
+    #
+    # Sized against the WHOLE journey: 16 x ~75s is ~20 min, leaving ~20 min
+    # for the 30-question business diagnosis inside the ~40-minute ceiling.
+    #
+    # History: 18 -> 9 -> 12 -> 16 as the base journey grew from 6 asked
+    # dimensions to 14. At 9 the ceiling sat below base+close and the
+    # follow-up pool could never fire at all -- verified live.
+    MAX_FOUNDER_DNA_QUESTIONS: int = 16
     # Minimum answers a dimension needs before the resolution advisor is
     # asked to judge it. 1, not 2: a single specific, story-based answer CAN
     # fully resolve a dimension (verified live -- the advisor correctly held

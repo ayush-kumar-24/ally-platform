@@ -86,6 +86,33 @@ class FounderDnaRepository:
         )
         return Counter(self.db.execute(stmt).scalars().all())
 
+    def answered_history(self, founder_id: int) -> list[tuple[str, str, str, object]]:
+        """Every (question_text, dimension_code, answer_text, answered_at) this
+        founder has given, oldest first.
+
+        Feeds the transcript on resume. Without it the page shows only the
+        current question after a reload -- the answers are safe on the server
+        but invisible, which reads as the conversation having been wiped. The
+        diagnosis flow already solved this the same way; this is the Founder
+        DNA equivalent.
+        """
+        stmt = (
+            select(
+                FounderDnaQuestions.question_text,
+                FounderDnaQuestions.dimension_code,
+                FounderDnaAnswers.answer_text,
+                FounderDnaAnswers.answered_at,
+            )
+            .join(
+                FounderDnaAnswers,
+                FounderDnaAnswers.founder_dna_question_id
+                == FounderDnaQuestions.founder_dna_question_id,
+            )
+            .where(FounderDnaAnswers.founder_id == founder_id)
+            .order_by(FounderDnaAnswers.answered_at.asc())
+        )
+        return list(self.db.execute(stmt).all())
+
     def recent_qa_for_dimension(
         self, founder_id: int, dimension_code: str, stage_group: str, limit: int = 6
     ) -> list[tuple[str, str]]:

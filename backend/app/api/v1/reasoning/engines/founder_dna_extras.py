@@ -105,16 +105,32 @@ def resolve_behavioural_dimensions(
     return out
 
 
+#: Asked dimensions whose answers must NOT be written to `founder_dna` under
+#: their own code, because that key already has an owner with a different
+#: shape. Keeping them out here is what stops the phase from silently
+#: clobbering the archetype dict or turning origin/vision into lists that
+#: ReportPayload's string handling would then fail on.
+_RESERVED_KEYS = frozenset({
+    "archetype",   # archetype.py owns this key (a dict). The archetype
+                   # questions feed that engine's inference, not a card.
+    "origin",      # single string on the payload; also onboarding text
+    "vision",      # single string on the payload; also onboarding text
+})
+
+
 def resolve_phase2_dimensions(db: Session, founder_id: int) -> dict:
-    """The 6 phase-2 Founder DNA dimensions, keyed by their dimension_code
-    (purpose_mission, core_values, mindset_excellence, energy_patterns,
-    decision_style, focus_attention) -- only keys the founder has actually
-    answered questions for. Each value is a list of that dimension's answer
-    texts, oldest first, capped at `_MAX_ITEMS` -- same shape as
+    """Founder DNA phase answers, keyed by dimension_code -- only dimensions
+    the founder actually answered, and only those safe to key directly (see
+    `_RESERVED_KEYS`). Each value is a list of that dimension's answer texts,
+    oldest first, capped at `_MAX_ITEMS` -- same shape as
     `resolve_behavioural_dimensions`'s lists, for the same reason: one
     narrative answer rarely stands alone as "the" answer for a dimension, so
     the report/narrator layer gets the same small set a human reading the
     transcript would.
+
+    `origin` and `vision` come back under `_origin_text` / `_vision_text` as
+    single strings instead, so the caller can prefer a considered asked
+    answer over the onboarding field without changing either one's shape.
     """
     stmt = (
         select(FounderDnaQuestions.dimension_code, FounderDnaAnswers.answer_text)
@@ -131,7 +147,16 @@ def resolve_phase2_dimensions(db: Session, founder_id: int) -> dict:
         if answer_text and answer_text.strip():
             by_dimension[dimension_code].append(answer_text.strip())
 
-    return {
-        dimension_code: answers[:_MAX_ITEMS]
-        for dimension_code, answers in by_dimension.items()
+    out: dict = {
+        code: answers[:_MAX_ITEMS]
+        for code, answers in by_dimension.items()
+        if code not in _RESERVED_KEYS
     }
+    # Longest answer, not the first: these two are asked once per stage, but
+    # a founder resuming or re-running leaves more than one, and the fuller
+    # answer is the more useful one to show.
+    for code, key in (("origin", "_origin_text"), ("vision", "_vision_text")):
+        answers = by_dimension.get(code)
+        if answers:
+            out[key] = max(answers, key=len)
+    return out

@@ -36,6 +36,7 @@ from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy import inspect
 from sqlalchemy.dialects import postgresql
 
 revision: str = 'f4a2c8e91b36'
@@ -52,6 +53,48 @@ _FORMATS = ('narrative', 'scenario')
 
 
 def upgrade() -> None:
+    # Guarded per-object, because the migration chain above this one was
+    # blocked for a day (the ally_app role issue) while the Founder DNA
+    # feature needed testing. The DDL was therefore applied out-of-band from
+    # scripts/founder_dna_phase2.sql -- an IF NOT EXISTS copy of exactly what
+    # is below -- so on the production database these objects already exist
+    # and a bare create_table here would abort the whole upgrade on
+    # DuplicateTable. Same idempotency principle as 6d05993bb818 and
+    # 905bddfc6aff on this same chain: an already-adopted object needs this
+    # migration to no-op, not to re-create.
+    bind = op.get_bind()
+    insp = inspect(bind)
+    existing_tables = set(insp.get_table_names())
+
+    if 'founder_dna_questions' in existing_tables:
+        print(f"NOTE [{revision}]: founder_dna_questions already exists "
+              "(applied out-of-band) -- skipping its creation.")
+    else:
+        _create_questions_table()
+
+    if 'founder_dna_answers' in existing_tables:
+        print(f"NOTE [{revision}]: founder_dna_answers already exists "
+              "(applied out-of-band) -- skipping its creation.")
+    else:
+        _create_answers_table()
+
+    founders_columns = {c['name'] for c in insp.get_columns('founders')}
+    if 'founder_dna_completed_at' not in founders_columns:
+        op.add_column(
+            'founders',
+            sa.Column('founder_dna_completed_at', sa.DateTime(timezone=True), nullable=True),
+        )
+    if 'founder_dna_resolved_dimensions' not in founders_columns:
+        op.add_column(
+            'founders',
+            sa.Column(
+                'founder_dna_resolved_dimensions', postgresql.JSONB(astext_type=sa.Text()),
+                nullable=False, server_default='[]',
+            ),
+        )
+
+
+def _create_questions_table() -> None:
     op.create_table(
         'founder_dna_questions',
         sa.Column('founder_dna_question_id', sa.Integer(), primary_key=True, autoincrement=True),
@@ -80,6 +123,8 @@ def upgrade() -> None:
         'founder_dna_questions', ['dimension_code', 'stage_group'],
     )
 
+
+def _create_answers_table() -> None:
     op.create_table(
         'founder_dna_answers',
         sa.Column('founder_dna_answer_id', sa.Integer(), primary_key=True, autoincrement=True),
@@ -100,26 +145,14 @@ def upgrade() -> None:
         unique=True,
     )
 
-    op.add_column(
-        'founders',
-        sa.Column('founder_dna_completed_at', sa.DateTime(timezone=True), nullable=True),
-    )
-    # Progress marker, not a scoring table -- deliberately NOT a
-    # `founder_dimension_profile`-style rubric table (that pattern was
-    # dropped 2026-07-27; see this migration's docstring). The LLM
-    # resolution-advisor's judgment is still fully prompt-driven and
-    # recomputed fresh each call; this JSONB array just needs to persist
-    # *which* dimensions it already resolved so the engine doesn't have to
-    # re-ask about a settled dimension on every subsequent request -- the
-    # same role `sessions.routing_state` plays for the existing diagnosis
-    # flow's confidence decision.
-    op.add_column(
-        'founders',
-        sa.Column(
-            'founder_dna_resolved_dimensions', postgresql.JSONB(astext_type=sa.Text()),
-            nullable=False, server_default='[]',
-        ),
-    )
+# NOTE on founders.founder_dna_resolved_dimensions (added in upgrade() above):
+# a progress marker, NOT a scoring table -- deliberately not a
+# `founder_dimension_profile`-style rubric table (that pattern was dropped
+# 2026-07-27; see this migration's docstring). The LLM resolution-advisor's
+# judgment stays fully prompt-driven and recomputed fresh each call; this
+# JSONB array only persists WHICH dimensions it already resolved, so the
+# engine need not re-ask about a settled one on every request -- the same role
+# `sessions.routing_state` plays for the existing diagnosis flow.
 
 
 def downgrade() -> None:

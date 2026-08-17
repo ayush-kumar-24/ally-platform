@@ -249,7 +249,7 @@ export default function Dashboard() {
             </div>
           </button>
 
-          <button className="dash-action-card alt" type="button" onClick={() => navigate('/app/diagnosis')}>
+          <button className="dash-action-card alt" type="button" onClick={() => navigate('/app/founder-dna-journey')}>
             <div className="dash-action-top">
               <div className="dash-action-ic ic-diag">
                 <IconLightbulb />
@@ -308,7 +308,7 @@ export default function Dashboard() {
                   </button>
                 </>
               ) : (
-                <button className="btn btn-em" type="button" onClick={() => navigate('/app/diagnosis')}>
+                <button className="btn btn-em" type="button" onClick={() => navigate('/app/founder-dna-journey')}>
                   <IconArrowRight />
                   Start your diagnosis
                 </button>
@@ -382,7 +382,7 @@ export default function Dashboard() {
               </p>
               <div className="dash-note-actions">
                 <button className="btn btn-primary" type="button"
-                        onClick={() => navigate(hasDiagnosis ? '/app/plan' : '/app/diagnosis')}>
+                        onClick={() => navigate(hasDiagnosis ? '/app/plan' : '/app/founder-dna-journey')}>
                   {nextAction ? 'Open your plan'
                     : hasDiagnosis ? 'Plan your day'
                     : 'Start your diagnosis'}

@@ -1,13 +1,28 @@
 """Founder DNA question-selection engine.
 
-This is the actual fix for the bug that started this work: the existing
-diagnosis engine (app/api/v1/diagnosis/engine.py) walks one category to
-exhaustion before starting the next (CATEGORY_SEQUENCE), which is why a
-30-question budget never reached Business DNA. This engine round-robins
-across dimensions instead -- the least-answered still-open dimension goes
-next, every time -- so a founder always gets breadth across all 6 dimensions
-before depth in any one, and a session cut short by the safety ceiling still
-has partial signal on every dimension rather than zero signal on five of them.
+Ordering is the doc's narrative arc, not round-robin. An earlier cut of this
+engine round-robined by least-answered dimension -- correct as a reaction to
+the bug that started this work (the diagnosis engine exhausting one category
+before starting the next, so a 30-question budget never reached Business DNA),
+but wrong for this phase: `GoXL_Founder_DNA_Decoding_Journey.docx` Section 3
+specifies a deliberate arc, "opens wide and emotional (identity, origin)
+before narrowing into structured territory (decision style, values)", and
+round-robin scrambles it.
+
+Breadth is preserved a different way, so the original bug cannot come back:
+the BASE journey (arc_position < 90) is mandatory and already spans all six
+dimensions, so a founder covers every dimension by construction rather than
+by the selection order happening to interleave. Adaptive skipping now applies
+only to FOLLOW-UPS (arc_position >= 90), which is what the doc actually asks
+for -- "if an answer already resolves a dimension with high confidence, the
+next scripted question for that dimension is skipped".
+
+Shape per stage: 9 base + up to 2 follow-ups + 1 closing = 10-12 asked.
+
+The closing question (`is_closing`, the doc's "wow close") is held back and
+always asked last, even when the ceiling cuts the journey short -- a journey
+that ends mid-probe has no ending, which is the one thing the doc is
+explicit about not wanting.
 
 Stage-group resolution reuses app.api.v1.diagnosis.engine's mapping (same
 founder, same three groups) rather than duplicating it.
@@ -20,10 +35,22 @@ from app.api.v1.founder_dna.repository import FounderDnaRepository
 from app.core.config import settings
 from app.models.schema import FounderDnaQuestions, Founders
 
+#: Every dimension the phase asks about, in the doc's Section 2 order. Kept
+#: as a literal tuple rather than derived from FounderDnaDimension so the
+#: ORDER is explicit here -- it is the fallback ordering when two questions
+#: share an arc_position, and reordering an enum by accident should not
+#: silently reorder a founder's journey.
 ALL_DIMENSIONS: tuple[str, ...] = (
-    "purpose_mission", "core_values", "mindset_excellence",
-    "energy_patterns", "decision_style", "focus_attention",
+    "archetype", "core_motivation", "origin", "purpose_mission", "vision",
+    "core_values", "mindset_excellence", "strengths_blind_spots",
+    "energy_patterns", "stress_response", "decision_style",
+    "communication_preference", "focus_attention", "emotional_intelligence",
 )
+
+#: arc_position at/above which a question is an adaptive FOLLOW-UP rather than
+#: part of the mandatory base journey. Keeps the two in one ordered column
+#: instead of a second boolean that could disagree with it.
+FOLLOW_UP_FLOOR = 90
 
 
 def resolve_founder_dna_stage_group(founder: Founders) -> str:
@@ -49,32 +76,44 @@ class FounderDnaSelectionEngine:
     def select_next_question(
         self, founder: Founders, stage_group: str
     ) -> FounderDnaQuestions | None:
-        """Round-robin across dimensions NOT yet resolved: the dimension with
-        the fewest answers so far (ties broken by dimension order, then
-        question id) goes next. A resolved dimension is skipped even if its
-        pool has unanswered questions left -- that's the whole point of
-        "adaptive": more signal on a settled dimension doesn't help.
+        """Next question along the doc's arc, or the closing question when the
+        journey is otherwise done. None only when even that is answered.
+
+        Order of precedence:
+          1. BASE questions (arc_position < FOLLOW_UP_FLOOR), by arc_position.
+             Mandatory -- never skipped for a resolved dimension, because they
+             ARE the designed journey and skipping them is what would break
+             the arc.
+          2. FOLLOW-UPS, by arc_position, only for dimensions the advisor has
+             NOT resolved, and only while the budget leaves room for the
+             closing question.
+          3. The closing question, always last.
         """
-        resolved = self.repository.get_resolved_dimensions(founder)
-        candidates = [
-            q for q in self.candidate_questions(founder, stage_group)
-            if q.dimension_code not in resolved
-        ]
+        candidates = self.candidate_questions(founder, stage_group)
         if not candidates:
             return None
 
-        answered_counts = self.repository.answers_per_dimension(
-            founder.founder_id, stage_group
-        )
-        return min(
-            candidates,
-            key=lambda q: (
-                answered_counts.get(q.dimension_code, 0),
-                ALL_DIMENSIONS.index(q.dimension_code)
-                if q.dimension_code in ALL_DIMENSIONS else len(ALL_DIMENSIONS),
-                q.founder_dna_question_id,
-            ),
-        )
+        closing = next((q for q in candidates if q.is_closing), None)
+        pending = [q for q in candidates if not q.is_closing]
+
+        base = [q for q in pending if q.arc_position < FOLLOW_UP_FLOOR]
+        if base:
+            return min(base, key=lambda q: (q.arc_position, q.founder_dna_question_id))
+
+        # Base journey done -- follow-ups only where a dimension is still open,
+        # and only if answering one still leaves the closing slot affordable.
+        resolved = self.repository.get_resolved_dimensions(founder)
+        answered = self.repository.count_answered(founder.founder_id)
+        closing_reserve = 1 if closing is not None else 0
+        if answered + closing_reserve < settings.MAX_FOUNDER_DNA_QUESTIONS:
+            follow_ups = [q for q in pending if q.dimension_code not in resolved]
+            if follow_ups:
+                return min(
+                    follow_ups,
+                    key=lambda q: (q.arc_position, q.founder_dna_question_id),
+                )
+
+        return closing
 
     def dimension_pool_exhausted(
         self, founder: Founders, dimension_code: str, stage_group: str
@@ -87,9 +126,14 @@ class FounderDnaSelectionEngine:
         return answered.get(dimension_code, 0) >= pool.get(dimension_code, 0)
 
     def is_phase_complete(self, founder: Founders, stage_group: str) -> bool:
-        resolved = self.repository.get_resolved_dimensions(founder)
-        if set(ALL_DIMENSIONS) <= resolved:
-            return True
-        if self.repository.count_answered(founder.founder_id) >= settings.MAX_FOUNDER_DNA_QUESTIONS:
-            return True
+        """Complete only when there is genuinely nothing left to ask.
+
+        Deliberately NOT "all dimensions resolved" or "budget spent" as
+        standalone conditions any more, which is what an earlier cut used:
+        both could fire while the closing question was still unanswered, and
+        ending the journey without its close is precisely what the doc's "wow
+        close" principle rules out. select_next_question() already reserves a
+        slot for the close and returns it last, so deferring to it keeps one
+        definition of "done" instead of two that can disagree.
+        """
         return self.select_next_question(founder, stage_group) is None

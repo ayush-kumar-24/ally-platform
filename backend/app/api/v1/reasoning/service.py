@@ -531,9 +531,19 @@ class ReasoningService:
                     extra={"session_id": session.session_id},
                 )
             try:
-                founder_dna_dict.update(
-                    resolve_phase2_dimensions(self.db, founder.founder_id)
-                )
+                phase2 = resolve_phase2_dimensions(self.db, founder.founder_id)
+                # Asked answers beat the onboarding fields for origin/vision:
+                # a considered reply to a situational question is better
+                # material than a signup-form box. Popped rather than merged
+                # so they land as strings under their real keys -- the report
+                # payload reads those two as text, not lists.
+                asked_origin = phase2.pop("_origin_text", None)
+                asked_vision = phase2.pop("_vision_text", None)
+                if asked_origin:
+                    founder_dna_dict["origin"] = asked_origin
+                if asked_vision:
+                    founder_dna_dict["vision"] = asked_vision
+                founder_dna_dict.update(phase2)
             except Exception:  # noqa: BLE001 -- optional enrichment, never blocks the report
                 logger.warning(
                     "founder DNA phase-2 dimension lookup failed; leaving those keys absent",

@@ -16,6 +16,7 @@ from app.api.v1.founder_dna.repository import FounderDnaRepository
 from app.api.v1.founder_dna.schemas import (
     CurrentFounderDnaQuestionResponse,
     FounderDnaProgress,
+    FounderDnaTurn,
     StartFounderDnaResponse,
     SubmitFounderDnaAnswerRequest,
     SubmitFounderDnaAnswerResponse,
@@ -83,6 +84,13 @@ def current(
     return CurrentFounderDnaQuestionResponse(
         progress=_progress(repository, founder, is_complete),
         question=question,
+        history=[
+            FounderDnaTurn(
+                question_text=qt, dimension_code=dc,
+                answer_text=at, answered_at=ts,
+            )
+            for qt, dc, at, ts in repository.answered_history(founder.founder_id)
+        ],
     )
 
 

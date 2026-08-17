@@ -61,7 +61,7 @@ export function DnaNoReport({ kind = 'Founder DNA' }) {
       message={`It comes out of a diagnosis — Ally reads the person and the
         business behind your answers. Run the diagnosis and this page
         fills in with your own profile.`}
-      action={<Link to="/app/diagnosis" style={primaryLink}>Start Founder Diagnosis</Link>}
+      action={<Link to="/app/founder-dna-journey" style={primaryLink}>Start Founder Diagnosis</Link>}
     />
   );
 }

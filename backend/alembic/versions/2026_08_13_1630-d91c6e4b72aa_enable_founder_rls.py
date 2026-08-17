@@ -2,9 +2,23 @@
 
 Revision ID: d91c6e4b72aa
 Revises: 7c4f0f1a9d2e
+
+Every policy here is scoped `TO ally_app`, so this whole migration is
+meaningless without that role -- and `CREATE POLICY ... TO ally_app` errors
+outright when it is missing. See f2f3d7d7ce11's docstring for why it is
+missing on Supabase by design (Supabase enforces the same isolation through
+its own native RLS: 95 RLS-enabled tables and 86 policies already live there,
+keyed to anon/authenticated rather than to ally_app).
+
+Guarded as a whole, not statement-by-statement: enabling RLS on a table while
+skipping its policy would deny all access to that table for any non-BYPASSRLS
+role, which is strictly worse than leaving the table as it was. So when
+ally_app is absent this migration is a no-op with a loud warning, and the RDS
+target -- where the role exists -- gets the full policy set unchanged.
 """
 
 from alembic import op
+from sqlalchemy import text
 
 
 revision = "d91c6e4b72aa"
@@ -67,6 +81,19 @@ FOUNDER_TABLES = [
 
 POLICY_NAME = "ally_founder_isolation"
 
+ALLY_APP_ROLE = "ally_app"
+
+
+def _ally_app_exists() -> bool:
+    """Whether the RDS-only `ally_app` runtime role exists on this target.
+    Duplicated per-migration on purpose -- see the note in 7c4f0f1a9d2e."""
+    return bool(
+        op.get_bind()
+        .execute(text("SELECT 1 FROM pg_roles WHERE rolname = :role"),
+                 {"role": ALLY_APP_ROLE})
+        .scalar()
+    )
+
 
 def _admin_expression() -> str:
     return (
@@ -102,13 +129,26 @@ def _enable_policy(table: str, column: str) -> None:
         f'ON public."{table}" '
         "AS PERMISSIVE "
         "FOR ALL "
-        "TO ally_app "
+        f"TO {ALLY_APP_ROLE} "
         f"USING ({predicate}) "
         f"WITH CHECK ({predicate})"
     )
 
 
 def upgrade() -> None:
+    if not _ally_app_exists():
+        print(
+            f"WARNING [{revision}]: role {ALLY_APP_ROLE!r} does not exist on "
+            "this database -- SKIPPING the entire founder-isolation RLS policy "
+            f"set ({len(FOUNDER_TABLES) + 1} tables). Every policy here is "
+            f"scoped TO {ALLY_APP_ROLE}, so it cannot be created without it. "
+            "EXPECTED on Supabase, which enforces the same isolation via its "
+            "own native RLS. NOT expected on RDS -- if this is RDS, provision "
+            "the role as infrastructure and re-run, or founder isolation is "
+            "NOT being enforced at the database layer."
+        )
+        return
+
     for table in FOUNDER_TABLES:
         _enable_policy(table, "founder_id")
 
@@ -118,6 +158,22 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Mirror upgrade()'s guard, and for a sharper reason than symmetry: the
+    # DISABLE ROW LEVEL SECURITY below does not distinguish RLS that THIS
+    # migration turned on from RLS that was already there. On Supabase --
+    # where upgrade() is a no-op and 95 tables carry pre-existing native RLS
+    # with 86 policies -- running this ungated would tear down founder
+    # isolation this migration never created. A downgrade must not be able to
+    # leave a database less protected than it found it.
+    if not _ally_app_exists():
+        print(
+            f"WARNING [{revision}]: role {ALLY_APP_ROLE!r} absent -- skipping "
+            "downgrade. upgrade() was a no-op here, so there is nothing of "
+            "ours to undo, and disabling RLS would strip protection this "
+            "migration did not add."
+        )
+        return
+
     tables = FOUNDER_TABLES + ["credit_transactions"]
 
     for table in reversed(tables):

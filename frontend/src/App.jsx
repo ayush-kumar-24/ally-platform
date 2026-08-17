@@ -38,6 +38,7 @@ const Problem = lazy(() => import('./pages/guided/Problem'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const AllyChat = lazy(() => import('./pages/AllyChat'));
 const DiagnosisChat = lazy(() => import('./pages/DiagnosisChat'));
+const FounderDnaChat = lazy(() => import('./pages/FounderDnaChat'));
 const Thinking = lazy(() => import('./pages/Thinking'));
 const FounderProfile = lazy(() => import('./pages/FounderProfile'));
 const FounderDNA = lazy(() => import('./pages/FounderDNA'));
@@ -185,6 +186,11 @@ export default function App() {
           }>
             <Route index element={<Dashboard />} />
             <Route path="ally-chat" element={<AllyChat />} />
+            {/* The identity phase, asked BEFORE the business diagnosis --
+                /diagnosis/start 409s until it completes. Distinct from
+                "founder-dna" below, which is the read-only result card:
+                this one is where the founder answers. */}
+            <Route path="founder-dna-journey" element={<FounderDnaChat />} />
             <Route path="diagnosis" element={<DiagnosisChat />} />
             <Route path="thinking" element={<Thinking />} />
             <Route path="founder-dna" element={<FounderDNA />} />

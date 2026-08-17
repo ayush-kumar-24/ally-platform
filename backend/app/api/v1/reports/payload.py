@@ -17,9 +17,21 @@ from sqlalchemy.orm import Session
 
 from app.repositories import intelligence_repository
 
+# Dimension codes the Founder DNA phase writes as LISTS of answer text.
+#
+# Three of the fourteen asked dimensions are deliberately NOT here, because
+# the `founder_dna` jsonb already has an owner for those keys:
+#   * archetype -- archetype.py writes a DICT there (name/code/motivation).
+#     The archetype questions exist to give that engine the founder's own
+#     language to infer from, not to render a card of their own.
+#   * origin, vision -- also onboarding free text, and read as single
+#     strings by founder_origin / founder_vision below.
+# resolve_phase2_dimensions() enforces the same split at the write end.
 _PHASE2_DIMENSION_CODES = frozenset({
     "purpose_mission", "core_values", "mindset_excellence",
     "energy_patterns", "decision_style", "focus_attention",
+    "core_motivation", "strengths_blind_spots", "stress_response",
+    "communication_preference", "emotional_intelligence",
 })
 
 # Stage onboarding_label -> report tone (prompt_library code + persona name).

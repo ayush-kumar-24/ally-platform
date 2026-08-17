@@ -578,11 +578,13 @@ class FounderDnaQuestions(Base):
 
     __tablename__ = 'founder_dna_questions'
     __table_args__ = (
-        CheckConstraint("dimension_code = ANY (ARRAY['purpose_mission'::character varying, 'core_values'::character varying, 'mindset_excellence'::character varying, 'energy_patterns'::character varying, 'decision_style'::character varying, 'focus_attention'::character varying]::text[])", name='founder_dna_questions_dimension_code_check'),
+        CheckConstraint("dimension_code = ANY (ARRAY['purpose_mission'::character varying, 'core_values'::character varying, 'mindset_excellence'::character varying, 'energy_patterns'::character varying, 'decision_style'::character varying, 'focus_attention'::character varying, 'archetype'::character varying, 'core_motivation'::character varying, 'origin'::character varying, 'vision'::character varying, 'strengths_blind_spots'::character varying, 'stress_response'::character varying, 'communication_preference'::character varying, 'emotional_intelligence'::character varying]::text[])", name='founder_dna_questions_dimension_code_check'),
         CheckConstraint("stage_group = ANY (ARRAY['Stage 0'::character varying, 'Stage 0→1'::character varying, 'Stage 1→10+'::character varying]::text[])", name='founder_dna_questions_stage_group_check'),
-        CheckConstraint("format = ANY (ARRAY['narrative'::character varying, 'scenario'::character varying]::text[])", name='founder_dna_questions_format_check'),
+        CheckConstraint("format = ANY (ARRAY['narrative'::character varying, 'scenario'::character varying, 'forced_choice'::character varying]::text[])", name='founder_dna_questions_format_check'),
         PrimaryKeyConstraint('founder_dna_question_id', name='founder_dna_questions_pkey'),
         Index('idx_founder_dna_questions_dimension_stage', 'dimension_code', 'stage_group'),
+        Index('uq_founder_dna_one_closing_per_stage', 'stage_group', unique=True,
+              postgresql_where=text('is_closing')),
     )
 
     founder_dna_question_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -591,6 +593,13 @@ class FounderDnaQuestions(Base):
     format: Mapped[str] = mapped_column(String(20), nullable=False, server_default=text("'narrative'::character varying"))
     question_text: Mapped[str] = mapped_column(Text, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text('true'))
+    #: Slot in the doc's per-stage journey table -- drives the narrative arc
+    #: ordering (emotional/identity first, structured last). Lower goes first.
+    arc_position: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text('0'))
+    #: The doc's "wow close" -- always asked last, never skipped. One per stage.
+    is_closing: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text('false'))
+    #: Choice labels for format='forced_choice'; NULL for text formats.
+    options: Mapped[Optional[dict]] = mapped_column(JSONB)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
     updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
 
