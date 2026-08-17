@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 from app.core.auth.base import AuthUser
 from app.core.config import settings
 from app.core.logger import logger
+from app.db.session import set_founder_rls_context
 from app.models import Founder
 from app.plans.catalog import PLANS, PlanTier
 from app.repositories import founder_repository
@@ -46,6 +47,8 @@ def ensure_founder(identity: AuthUser, db: Session, ip_address: str = "0.0.0.0")
         user_uuid = UUID(str(identity.id))
     except (ValueError, TypeError):
         return None  # non-uuid subject (dev tokens) -- nothing to provision
+
+    set_founder_rls_context(db, str(user_uuid))
 
     existing = founder_repository.get_by_user_id(db, user_uuid)
     if existing is not None:
