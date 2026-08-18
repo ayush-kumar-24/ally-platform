@@ -147,6 +147,34 @@ class TemplateNarrator:
                 lines.append(f"{nm} surfaced but eased when probed -- a secondary consideration, not a settled finding.")
             else:  # not_tested
                 lines.append(f"{nm} is a possibility we did not directly test this session -- an area to explore, not a conclusion.")
+
+        # Open by quoting the founder's own framing back to them, the way
+        # every Page 3 in the Stage-Adaptive doc does. This template can only
+        # set the two beside each other and let the founder feel the gap; it
+        # deliberately does NOT assert a contradiction ("the real block isn't
+        # X") the way the doc's examples do, because naming what the stated
+        # symptom HIDES takes reading their actual probe answers. That is the
+        # LLM narrator's job -- see the prompt guidance in the section spec.
+        # Getting it wrong here would mean confidently telling a founder their
+        # problem is not what they said it was, on template logic alone.
+        stated = (s.get("stated_symptom") or "").strip()
+        if stated:
+            quoted = " ".join(stated.split())
+            if len(quoted) > 300:  # keep the quote a quote, not a paragraph
+                quoted = quoted[:297].rstrip() + "..."
+            # Founders end the sentence themselves more often than not, and
+            # closing the wrapper with its own full stop then renders as
+            # `...know enough yet.".` -- so the outer stop is added only when
+            # their own words did not already supply one.
+            tail = "" if quoted.endswith((".", "!", "?")) else "."
+            opener = f'You described the problem as "{quoted}"{tail}'
+            if not lines:
+                # No root cause to weigh it against -- record what they said
+                # rather than returning nothing, so Page 3 still opens on
+                # their words.
+                return opener
+            return f"{opener} {intro}{' '.join(lines)}"
+
         if not lines:
             return ""
         return intro + " ".join(lines)
@@ -248,6 +276,38 @@ class LLMSectionNarrator:
                 "IMPORTANT: this section must be BRIEF -- exactly ONE short sentence "
                 "naming only the overall band, plus one line saying more detail can "
                 "wait. Do NOT list individual pillars, bands, or descriptions."
+            )
+        if section_key == "problem_path" and slots.get("stated_symptom"):
+            # The one section with a prescribed shape. Every Page 3 in the
+            # Stage-Adaptive doc makes the same three moves, and the third --
+            # naming what the stated symptom HIDES -- is the entire reason a
+            # founder feels decoded rather than surveyed. The template
+            # narrator cannot do it (it would be asserting a contradiction it
+            # never read the evidence for), so it is specified here.
+            #
+            # The guard rails matter more than the shape: this is the only
+            # place the report tells a founder they are wrong about their own
+            # business, so the contradiction is allowed ONLY where their own
+            # probe answers carry it. With no such evidence the model is told
+            # to stop after two moves rather than reach for a plausible third.
+            directives.append(
+                "This section follows a FIXED three-move shape:\n"
+                "1. Quote the founder's own framing back to them, using "
+                "stated_symptom close to verbatim (trim for length, never "
+                "reword their meaning).\n"
+                "2. Set their own evidence beside it, drawn ONLY from "
+                "symptom_probes -- reference what they actually said.\n"
+                "3. Name the gap between the two, in the shape 'the real "
+                "block isn't <what they said> -- it's <the root cause in "
+                "root_causes>'.\n"
+                "Move 3 is permitted ONLY when a specific answer in "
+                "symptom_probes genuinely conflicts with stated_symptom. If "
+                "nothing in symptom_probes supports the contradiction, or "
+                "root_causes is empty, write moves 1 and 2 and STOP -- never "
+                "manufacture a contradiction to complete the pattern. A root "
+                "cause whose confirmation_status is not 'confirmed' must be "
+                "worded as a possibility, not a verdict. Up to 4 sentences "
+                "for this section."
             )
         prompt = (
             "\n".join(directives)

@@ -30,8 +30,16 @@ def founder_id():
         "(:i,'00000000-0000-0000-0000-000000000000','authenticated','authenticated',:e)"
     ), {"i": str(uid), "e": email})
     db.commit()
+    # Both phase gates pre-satisfied: this test is about the session-creation
+    # race, and start_session refuses to create a session at all until Founder
+    # DNA and Current Problem are done. Without these the race never runs --
+    # both threads just raise the phase error and the assertion reads as a
+    # locking failure when nothing was ever locked.
     fid = db.execute(text(
-        "insert into founders (user_id,full_name,email,plan_type) values (:u,:n,:e,'free') "
+        "insert into founders "
+        "(user_id,full_name,email,plan_type,founder_dna_completed_at,"
+        " current_problem_completed_at) "
+        "values (:u,:n,:e,'free',now(),now()) "
         "returning founder_id"
     ), {"u": str(uid), "n": "Diag Race Test", "e": email}).scalar()
     db.commit()

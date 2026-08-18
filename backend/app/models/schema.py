@@ -371,10 +371,14 @@ class Founders(Base):
     # a "first impression" that changes on every visit is not an impression.
     first_impression: Mapped[Optional[dict]] = mapped_column(JSONB)
     first_impression_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
-    # Gates entry to /diagnosis/start -- the agreed phase order is Founder DNA
-    # fully first, then Business DNA. NULL means the founder hasn't finished
-    # (or started) the Founder DNA phase yet.
+    # Phase order is Founder DNA fully first, then the Current Problem
+    # symptom capture, then Business DNA. NULL means the founder hasn't
+    # finished (or started) the Founder DNA phase yet.
     founder_dna_completed_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
+    # Gates entry to /diagnosis/start. The Stage-Adaptive doc has Ally move
+    # "from stated symptom to actual root cause", so the symptom has to be on
+    # record before the interrogation that is meant to explain it.
+    current_problem_completed_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
     # Progress marker (dimension codes already judged resolved by the
     # adaptive advisor), NOT a scoring table -- see
     # alembic/versions/2026_08_17_1400-f4a2c8e91b36's docstring for why this
@@ -629,6 +633,62 @@ class FounderDnaAnswers(Base):
 
     founder: Mapped['Founders'] = relationship('Founders')
     founder_dna_question: Mapped['FounderDnaQuestions'] = relationship('FounderDnaQuestions', back_populates='founder_dna_answers')
+
+
+class CurrentProblemQuestions(Base):
+    """The Current Problem phase's question bank -- see app/api/v1/
+    current_problem/.
+
+    Four rows per stage group: arc_position 0 is the founder's own-words
+    symptom statement (is_symptom), 1..3 are the Stage-Adaptive doc's s4.x.c
+    situational probes. Fixed order, no adaptive selection -- unlike
+    FounderDnaQuestions there is nothing to resolve here, the phase is four
+    questions and done.
+    """
+
+    __tablename__ = 'current_problem_questions'
+    __table_args__ = (
+        CheckConstraint("stage_group = ANY (ARRAY['Stage 0'::character varying, 'Stage 0→1'::character varying, 'Stage 1→10+'::character varying]::text[])", name='current_problem_questions_stage_group_check'),
+        PrimaryKeyConstraint('current_problem_question_id', name='current_problem_questions_pkey'),
+        Index('idx_current_problem_questions_stage', 'stage_group', 'arc_position'),
+        Index('uq_current_problem_one_symptom_per_stage', 'stage_group', unique=True,
+              postgresql_where=text('is_symptom')),
+    )
+
+    current_problem_question_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    stage_group: Mapped[str] = mapped_column(String(20), nullable=False)
+    arc_position: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text('0'))
+    question_text: Mapped[str] = mapped_column(Text, nullable=False)
+    #: The verbatim symptom the report quotes back before contradicting it.
+    is_symptom: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text('false'))
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text('true'))
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
+
+    current_problem_answers: Mapped[list['CurrentProblemAnswers']] = relationship('CurrentProblemAnswers', back_populates='current_problem_question')
+
+
+class CurrentProblemAnswers(Base):
+    """One founder's answer to one Current Problem question. Same shape as
+    FounderDnaAnswers -- never scored, so no confirmation_status column."""
+
+    __tablename__ = 'current_problem_answers'
+    __table_args__ = (
+        ForeignKeyConstraint(['founder_id'], ['founders.founder_id'], ondelete='CASCADE', name='current_problem_answers_founder_id_fkey'),
+        ForeignKeyConstraint(['current_problem_question_id'], ['current_problem_questions.current_problem_question_id'], name='current_problem_answers_question_id_fkey'),
+        PrimaryKeyConstraint('current_problem_answer_id', name='current_problem_answers_pkey'),
+        Index('idx_current_problem_answers_founder', 'founder_id'),
+        Index('uq_current_problem_answers_founder_question', 'founder_id', 'current_problem_question_id', unique=True),
+    )
+
+    current_problem_answer_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    founder_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    current_problem_question_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    answer_text: Mapped[str] = mapped_column(Text, nullable=False)
+    answered_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
+
+    founder: Mapped['Founders'] = relationship('Founders')
+    current_problem_question: Mapped['CurrentProblemQuestions'] = relationship('CurrentProblemQuestions', back_populates='current_problem_answers')
 
 
 class ConsentHistory(Base):
