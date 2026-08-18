@@ -46,13 +46,21 @@ Net: Strategic Clarity at Stage 0 goes from 8 unanswerable questions across 2
 categories to 20 answerable ones across 2 categories. Stage 0->1 nets 71,
 still four categories.
 
-INVERSE PRECISION. The two halves need different keys:
-  * 139/141/142 have questions in Stage 0->1 ONLY, so the IN half can key on
-    problem_id and its inverse is exact.
-  * 27/32/45 have questions spread across ALL THREE groups, so the OUT half
-    CANNOT key on problem_id -- doing so would drag their unrelated Stage 0->1
-    and Stage 1->10+ questions along, and the downgrade would over-restore.
-    It keys on the eight explicit question_ids instead.
+INVERSE PRECISION. The two halves need different GRAIN:
+  * BPL-001/BPL-003/RSK-001 have questions in Stage 0->1 ONLY, so the IN half
+    can move a whole problem and its inverse is exact.
+  * The fundraising/compliance problems have questions spread across ALL THREE
+    groups, so the OUT half must NOT move a whole problem -- that would drag
+    their unrelated Stage 0->1 and Stage 1->10+ questions along and the
+    downgrade would over-restore. It keys on eight individual questions.
+
+KEYING. Both halves match on business codes (`problems.problem_code`,
+`questions.question_code`), never on serial ids. The ids were read off a
+development copy of the catalogue; this migration also runs against production
+RDS, which sits in a private VPC and cannot be inspected from a developer
+machine beforehand. A mismatched id would silently re-tag the WRONG questions
+and nothing would look broken. Both code columns are verified unique, so this
+migration is either exactly right or matches nothing.
 """
 
 from alembic import op
@@ -67,26 +75,39 @@ _S0 = "Stage 0"
 _S01 = "Stage 0→1"
 
 #: Whole problems that belong at Stage 0 -- planning/assumption/risk THINKING,
-#: answerable with nothing built. Safe to key on problem_id (see docstring).
-_PROMOTE_PROBLEM_IDS = (
-    139,  # No Structured Planning Process for the Business
-    141,  # No Contingency or Scenario Planning
-    142,  # No Systematic Way to Identify Business Risks
+#: answerable with nothing built. Keyed by problem_code, not problem_id (see
+#: the KEYING note in the docstring).
+_PROMOTE_PROBLEM_CODES = (
+    "BPL-001",  # No Structured Planning Process for the Business
+    "BPL-003",  # No Contingency or Scenario Planning
+    "RSK-001",  # No Systematic Way to Identify Business Risks
 )
 
 #: Individual questions wrongly reachable at Stage 0 -- fundraising mechanics
-#: and compliance/governance. Keyed by question_id, NOT problem_id: their
-#: problems (27, 32, 45) also hold Stage 0->1 and Stage 1->10+ questions that
-#: must not move.
-_DEMOTE_QUESTION_IDS = (
-    147,  # fundraising pitch built around evidence or personal conviction
-    148,  # how did you arrive at your valuation
-    154,  # who do you want as investors
-    156,  # letters of intent or term sheets already
-    161,  # warm investor relationships before pitching
-    167,  # data privacy comfort vs what is actually needed
-    173,  # backups and disaster recovery vs own risk tolerance
-    179,  # personally reviewing contracts is sufficient
+#: and compliance/governance. Keyed at QUESTION grain, not problem grain: their
+#: problems also hold Stage 0->1 and Stage 1->10+ questions that must not move.
+_DEMOTE_QUESTION_CODES = (
+    "FND-006",  # fundraising pitch built around evidence or personal conviction
+    "FND-007",  # how did you arrive at your valuation
+    "FND-013",  # who do you want as investors
+    "FND-015",  # letters of intent or term sheets already
+    "FND-020",  # warm investor relationships before pitching
+    "OPS-006",  # data privacy comfort vs what is actually needed
+    "OPS-012",  # backups and disaster recovery vs own risk tolerance
+    "OPS-018",  # personally reviewing contracts is sufficient
+)
+
+_PROMOTE_SQL = (
+    "update questions q set primary_stage_group = :to, updated_at = now() "
+    "from problems p "
+    "where p.problem_id = q.problem_id "
+    "  and p.problem_code = any(:codes) "
+    "  and q.primary_stage_group = :frm"
+)
+
+_DEMOTE_SQL = (
+    "update questions set primary_stage_group = :to, updated_at = now() "
+    "where question_code = any(:codes) and primary_stage_group = :frm"
 )
 
 
@@ -94,19 +115,13 @@ def upgrade() -> None:
     bind = op.get_bind()
 
     promoted = bind.execute(
-        sa.text(
-            "update questions set primary_stage_group = :s0, updated_at = now() "
-            "where problem_id = any(:ids) and primary_stage_group = :s01"
-        ),
-        {"s0": _S0, "s01": _S01, "ids": list(_PROMOTE_PROBLEM_IDS)},
+        sa.text(_PROMOTE_SQL),
+        {"to": _S0, "frm": _S01, "codes": list(_PROMOTE_PROBLEM_CODES)},
     ).rowcount
 
     demoted = bind.execute(
-        sa.text(
-            "update questions set primary_stage_group = :s01, updated_at = now() "
-            "where question_id = any(:ids) and primary_stage_group = :s0"
-        ),
-        {"s0": _S0, "s01": _S01, "ids": list(_DEMOTE_QUESTION_IDS)},
+        sa.text(_DEMOTE_SQL),
+        {"to": _S01, "frm": _S0, "codes": list(_DEMOTE_QUESTION_CODES)},
     ).rowcount
 
     # Idempotent both ways: a re-run matches nothing, since each half filters
@@ -119,19 +134,13 @@ def downgrade() -> None:
     bind = op.get_bind()
 
     restored_up = bind.execute(
-        sa.text(
-            "update questions set primary_stage_group = :s0, updated_at = now() "
-            "where question_id = any(:ids) and primary_stage_group = :s01"
-        ),
-        {"s0": _S0, "s01": _S01, "ids": list(_DEMOTE_QUESTION_IDS)},
+        sa.text(_DEMOTE_SQL),
+        {"to": _S0, "frm": _S01, "codes": list(_DEMOTE_QUESTION_CODES)},
     ).rowcount
 
     restored_down = bind.execute(
-        sa.text(
-            "update questions set primary_stage_group = :s01, updated_at = now() "
-            "where problem_id = any(:ids) and primary_stage_group = :s0"
-        ),
-        {"s0": _S0, "s01": _S01, "ids": list(_PROMOTE_PROBLEM_IDS)},
+        sa.text(_PROMOTE_SQL),
+        {"to": _S01, "frm": _S0, "codes": list(_PROMOTE_PROBLEM_CODES)},
     ).rowcount
 
     print(f"INFO  Strategic Clarity restored: {restored_up} to {_S0}, "

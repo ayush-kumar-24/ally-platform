@@ -49,8 +49,13 @@ PRECONDITION for the exact inverse: none of these 18 problems currently has
 any question tagged Stage 1->10+ (verified against production before
 authoring), so downgrade() restoring them all to Stage 0->1 is lossless.
 If that ever stops holding, downgrade() would over-restore -- it reverts by
-(problem_id, current group) and cannot distinguish a row this migration moved
+(problem_code, current group) and cannot distinguish a row this migration moved
 from one that was already there. Re-check before relying on the downgrade.
+
+Keyed by problem_code rather than problem_id so it is safe to run against a
+database whose serial ids differ from the one it was authored on. Verified
+against production RDS is NOT possible from a laptop -- RDS sits in a private
+VPC -- which is exactly why the id-based version was unacceptable.
 """
 
 from alembic import op
@@ -65,61 +70,68 @@ _FROM = "Stage 0→1"
 _TO = "Stage 1→10+"
 
 #: Problems whose questions presuppose an operating business at scale.
-#: Grouped by category purely for readability -- the migration keys on ids.
-_SCALING_PROBLEM_IDS = (
+#:
+#: Keyed by `problems.problem_code`, NOT by problem_id. The ids were read off a
+#: development copy of the catalogue, and this migration also has to run
+#: against production RDS, where a serial primary key carries no guarantee of
+#: matching. Re-tagging by a mismatched id would silently move the WRONG
+#: questions -- worse than failing, because nothing would look broken.
+#: problem_code is the stable business key (verified unique), so this is
+#: correct on any database or it matches nothing at all.
+_SCALING_PROBLEM_CODES = (
     # Go-To-Market -- channel and positioning work never stops at scale
-    10,   # Wrong or Untested Channels
-    11,   # Poor Positioning and Messaging
+    "GTM-003",  # Wrong or Untested Channels
+    "GTM-004",  # Poor Positioning and Messaging
     # Competitive Awareness -- an ongoing posture, not a one-off launch task
-    133,  # No Response Plan for Competitor Moves
-    147,  # No Clear Differentiation from Competitors
-    148,  # Competitor Strengths Never Studied for Learning
+    "CMA-015",  # No Response Plan for Competitor Moves
+    "CMA-020",  # No Clear Differentiation from Competitors
+    "CMA-025",  # Competitor Strengths Never Studied for Learning
     # Target Customer & ICP -- segmentation needs a customer base to segment.
-    # NOTE only 145 moves. Problem 146 ("Customer Understanding Not Updated as
-    # Product Evolves") is deliberately LEFT at Stage 0->1: it and 145 were the
-    # only two ICP problems in that group, and moving both emptied Target
-    # Customer & ICP for Stage 0->1 entirely -- a founder with early customers,
-    # actively working out who they sell to, would have got no ICP question at
-    # all. 146 also genuinely applies early, where the product changes fastest
-    # and customer understanding goes stale quickest. This leaves ICP
-    # represented on both sides (6 questions each).
-    145,  # No Segmentation Beyond a Single Customer Type
+    # NOTE only TCI-011 moves. "Customer Understanding Not Updated as Product
+    # Evolves" is deliberately LEFT at Stage 0->1: it and TCI-011 were the only
+    # two ICP problems in that group, and moving both emptied Target Customer &
+    # ICP for Stage 0->1 entirely -- a founder with early customers, actively
+    # working out who they sell to, would have got no ICP question at all. It
+    # also genuinely applies early, where the product changes fastest and
+    # customer understanding goes stale quickest. This leaves ICP represented
+    # on both sides (6 questions each).
+    "TCI-011",  # No Segmentation Beyond a Single Customer Type
     # Marketing Execution -- campaign portfolio / team / measurement maturity
-    164,  # No Reusable System for Generating Marketing Content
-    166,  # No Structured Post-Campaign Analysis Process
-    211,  # No Defined Brand Voice or Style Guide for Content Creation
-    212,  # No Visual or Media Asset System to Support Content Creation
-    213,  # No Editing or Quality Review Step Before Content Gets Published
-    215,  # No Coordination With Sales or Fulfillment Before a Campaign
-    216,  # No Small-Scale Test Before Committing Full Campaign Budget
-    218,  # No Calculation of Campaign ROI or Cost-Efficiency
-    219,  # No Channel-Level Attribution Within a Multi-Channel Campaign
-    220,  # No Audience Segment-Level Analysis of Campaign Performance
-    221,  # No Post-Campaign Analysis of Which Message or Creative Worked
-    222,  # No Sharing of Campaign Results or Learnings With the Team
+    "MEX-006",  # No Reusable System for Generating Marketing Content
+    "MEX-016",  # No Structured Post-Campaign Analysis Process
+    "MEX-046",  # No Defined Brand Voice or Style Guide for Content Creation
+    "MEX-051",  # No Visual or Media Asset System to Support Content Creation
+    "MEX-056",  # No Editing or Quality Review Step Before Content Gets Published
+    "MEX-066",  # No Coordination With Sales or Fulfillment Before a Campaign
+    "MEX-071",  # No Small-Scale Test Before Committing Full Campaign Budget
+    "MEX-081",  # No Calculation of Campaign ROI or Cost-Efficiency
+    "MEX-086",  # No Channel-Level Attribution Within a Multi-Channel Campaign
+    "MEX-091",  # No Audience Segment-Level Analysis of Campaign Performance
+    "MEX-096",  # No Post-Campaign Analysis of Which Message or Creative Worked
+    "MEX-101",  # No Sharing of Campaign Results or Learnings With the Team
+)
+
+_MOVE_SQL = (
+    "update questions q set primary_stage_group = :to, updated_at = now() "
+    "from problems p "
+    "where p.problem_id = q.problem_id "
+    "  and p.problem_code = any(:codes) "
+    "  and q.primary_stage_group = :frm"
 )
 
 
 def upgrade() -> None:
-    bind = op.get_bind()
-    result = bind.execute(
-        sa.text(
-            "update questions set primary_stage_group = :to, updated_at = now() "
-            "where problem_id = any(:ids) and primary_stage_group = :frm"
-        ),
-        {"to": _TO, "frm": _FROM, "ids": list(_SCALING_PROBLEM_IDS)},
+    result = op.get_bind().execute(
+        sa.text(_MOVE_SQL),
+        {"to": _TO, "frm": _FROM, "codes": list(_SCALING_PROBLEM_CODES)},
     )
     # Idempotent: a re-run matches nothing because the rows are already _TO.
     print(f"INFO  retagged {result.rowcount} Market Clarity questions to {_TO}")
 
 
 def downgrade() -> None:
-    bind = op.get_bind()
-    result = bind.execute(
-        sa.text(
-            "update questions set primary_stage_group = :frm, updated_at = now() "
-            "where problem_id = any(:ids) and primary_stage_group = :to"
-        ),
-        {"to": _TO, "frm": _FROM, "ids": list(_SCALING_PROBLEM_IDS)},
+    result = op.get_bind().execute(
+        sa.text(_MOVE_SQL),
+        {"to": _FROM, "frm": _TO, "codes": list(_SCALING_PROBLEM_CODES)},
     )
     print(f"INFO  restored {result.rowcount} Market Clarity questions to {_FROM}")
