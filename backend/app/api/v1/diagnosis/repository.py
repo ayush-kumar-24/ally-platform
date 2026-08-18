@@ -17,6 +17,8 @@ from app.models import Answer, DiagnosisSession, Question, SessionStatus
 class DiagnosisRepository:
     def __init__(self, db: Session):
         self.db = db
+        #: Request-lifetime cache for problem_to_pillar() -- see its docstring.
+        self._problem_to_pillar: dict[int, int] | None = None
 
     # --- Sessions ---
 
@@ -134,10 +136,17 @@ class DiagnosisRepository:
         """Every question still unanswered in this session and valid for the
         founder's stage.
 
-        `stage_groups` should include NULL-equivalent breadth: questions with a
-        NULL `primary_stage_group` are stage-agnostic and always eligible. They
-        are the majority of the bank, so excluding them would strip out most of
-        the CORE questions.
+        Questions with a NULL `primary_stage_group` are stage-agnostic and
+        always eligible, which is why the predicate ORs rather than filters.
+
+        Note the bank currently contains NO such rows -- every one of the 2127
+        questions is pinned to exactly one group. An earlier version of this
+        docstring claimed stage-agnostic questions were "the majority of the
+        bank"; that has not been true for some time, and believing it hides
+        how narrow a single stage group can be. Market Clarity had just four
+        questions reachable by a scaling founder until
+        `f6d2a81c53e7_retag_market_clarity_scaling_questions` moved 134
+        mis-tagged ones. Check the real distribution before assuming breadth.
 
         Ordering is left to the engine -- this returns an unordered candidate
         set on purpose.
@@ -150,6 +159,68 @@ class DiagnosisRepository:
             | (Question.primary_stage_group.in_(stage_groups)),
         )
         return list(self.db.execute(stmt).scalars().all())
+
+    # --- Pillar membership ---
+    #
+    # An answer belongs to a readiness pillar via
+    # question.problem_id -> problems.pillar_id. The Business Health engine
+    # already relies on that chain to score; these two methods let the
+    # SELECTION side see the same fact, so the engine can spread the question
+    # budget across pillars instead of draining whichever category happens to
+    # sort first.
+
+    def problem_to_pillar(self) -> dict[int, int]:
+        """{problem_id: pillar_id} for the whole catalogue.
+
+        Small (a few hundred rows) and read-only, so it is fetched whole
+        rather than joined per candidate -- the candidate set is re-read on
+        every question and a join there would repeat this work each time.
+
+        Memoised for the life of this repository, which is one request: the
+        problem catalogue is reference data that cannot change mid-request,
+        and both select_next_question and order_candidates ask for it. Without
+        this each call was a fresh round-trip to fetch identical rows.
+        """
+        if self._problem_to_pillar is None:
+            rows = self.db.execute(
+                _text(
+                    "select problem_id, pillar_id from problems "
+                    "where pillar_id is not null"
+                )
+            ).all()
+            self._problem_to_pillar = {
+                problem_id: pillar_id for problem_id, pillar_id in rows
+            }
+        return self._problem_to_pillar
+
+    def answered_count_per_pillar_category(
+        self, session_id: int
+    ) -> dict[tuple[int, str], int]:
+        """{(pillar_id, category): answered_count} for this session.
+
+        Returned at (pillar, category) grain rather than per-pillar because
+        the engine round-robins at both levels: across pillars so all six get
+        covered, and across categories WITHIN a pillar so a pillar's score is
+        not read off a single narrow slice of it. Per-pillar totals are summed
+        from this, so one query serves both.
+
+        The round-robin depends on this counting ANSWERED questions, not asked
+        ones: an unanswered question must not consume a pillar's turn, or
+        abandoning one question would silently skip that pillar for the rest
+        of the session.
+        """
+        rows = self.db.execute(
+            _text(
+                "select p.pillar_id, q.category, count(*) "
+                "from answers a "
+                "join questions q on q.question_id = a.question_id "
+                "join problems p on p.problem_id = q.problem_id "
+                "where a.session_id = :sid and p.pillar_id is not null "
+                "group by p.pillar_id, q.category"
+            ),
+            {"sid": session_id},
+        ).all()
+        return {(pillar_id, category): count for pillar_id, category, count in rows}
 
     # --- Answers ---
 

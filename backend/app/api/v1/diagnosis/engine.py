@@ -105,7 +105,7 @@ def stage_groups_for(stage) -> list[str]:
 
 
 def _sort_key(question: Question) -> tuple[int, int, int, int]:
-    """Deterministic ranking key.
+    """Deterministic ranking key WITHIN one round-robin round.
 
     Category sequence, then CORE before SUPPLEMENTARY, then easiest first so
     the founder warms up before the harder probes, then question_id purely as a
@@ -114,6 +114,10 @@ def _sort_key(question: Question) -> tuple[int, int, int, int]:
     A category outside CATEGORY_SEQUENCE sorts last rather than raising -- a
     newly seeded category should degrade to "asked late", not break the
     assessment.
+
+    NOTE: this key alone is not the ask-order any more. On its own it sorts
+    strictly by category, which meant the first category was drained before
+    the second was ever reached -- see `_round_robin_key_for`.
     """
     try:
         category_rank = CATEGORY_SEQUENCE.index(question.category)
@@ -144,11 +148,85 @@ class QuestionSelectionEngine:
             return None
         return min(candidates, key=self._sort_key_for(session))
 
+    def _round_robin_key_for(self, session: DiagnosisSession):
+        """The GATHER-phase key: one question per pillar before any pillar
+        gets a second.
+
+        Why this exists. The six readiness pillars are what the report and the
+        dashboard are built on, and a pillar with no answers scores None --
+        it renders blank, not low. Selection used to order by CATEGORY_SEQUENCE
+        alone, which is a strict sort, so the first category was exhausted
+        before the second was reached. "Founder Psychology" leads that sequence
+        and carries 287 questions, all of them pillar 1 (Founder Readiness),
+        against a MAX_DIAGNOSIS_QUESTIONS budget of 30 -- so every session
+        spent its entire budget inside pillar 1 and the other five pillars were
+        never asked about at all. Same failure that put the Founder DNA phase
+        on a mandatory arc rather than a per-dimension sweep.
+
+        The fix is to make the pillar's turn the PRIMARY sort term:
+        `answered_in_that_pillar` is the round number, so every pillar sits at
+        round 0 until it has been asked once, then drops behind the pillars
+        still at 0.
+
+        The SECOND term round-robins categories within the pillar, and it
+        matters as much as the first. Pillar-only round-robin covered all six
+        but read each one off a single category -- Revenue Maturity was scored
+        from five Go-To-Market questions in a row while Financial Management,
+        Sales Execution and Business Model Design (its other 336 questions)
+        went unasked. A pillar score built from one narrow slice is not much
+        more honest than no score at all, and "pillar under most strain" is a
+        headline claim in the report.
+
+        `_sort_key` still decides WHICH question represents a pillar-category
+        within a round, so the category sequence, CORE-first and easiest-first
+        intents all survive -- they just no longer starve anything.
+
+        Counting ANSWERED (not asked) questions is deliberate: a question shown
+        and abandoned must not consume its pillar's turn.
+
+        Degrades to `_sort_key` if the pillar map is unavailable for any
+        reason -- a coverage optimisation must never be able to stop the
+        assessment from finding a next question.
+        """
+        try:
+            problem_to_pillar = self.repository.problem_to_pillar()
+            per_cat = self.repository.answered_count_per_pillar_category(
+                session.session_id
+            )
+        except Exception:                                  # noqa: BLE001
+            logger.warning(
+                "Pillar round-robin unavailable; using the category order",
+                extra={"session_id": session.session_id},
+            )
+            return _sort_key
+
+        if not problem_to_pillar:
+            return _sort_key
+
+        per_pillar: dict[int, int] = {}
+        for (pillar_id, _category), count in per_cat.items():
+            per_pillar[pillar_id] = per_pillar.get(pillar_id, 0) + count
+
+        def key(question: Question):
+            pillar_id = problem_to_pillar.get(question.problem_id)
+            # A question with no pillar cannot advance pillar coverage, so it
+            # sorts behind every pillar-bearing question rather than competing
+            # for a round it does not belong to.
+            if pillar_id is None:
+                return (len(per_pillar) + 1_000, 0, *_sort_key(question))
+            return (
+                per_pillar.get(pillar_id, 0),
+                per_cat.get((pillar_id, question.category), 0),
+                *_sort_key(question),
+            )
+
+        return key
+
     def _sort_key_for(self, session: DiagnosisSession):
         """The ranking key, biased by what the session is currently trying to do.
 
-        Below the validate threshold the job is to GATHER: sweep the categories in
-        sequence and build a picture. That is `_sort_key`, unchanged.
+        Below the validate threshold the job is to GATHER: cover all six
+        pillars before deepening any of them. That is `_round_robin_key_for`.
 
         Between the validate and report thresholds the job changes to CONFIRMING.
         The diagnosis already has candidate root causes; asking more broad
@@ -162,13 +240,19 @@ class QuestionSelectionEngine:
         so a session in validate mode that runs out of targeted questions simply
         continues with the normal order rather than ending early.
         """
+        base = self._round_robin_key_for(session)
+
         targeted = self._detected_root_cause_ids(session)
         if not targeted:
-            return _sort_key
+            return base
 
+        # Confirmation outranks coverage once there is something to confirm --
+        # but only among targeted questions. Everything below still round-robins,
+        # so falling out of validate mode resumes even pillar coverage rather
+        # than reverting to a single-category drain.
         def key(question: Question):
             confirms = question.root_cause_id in targeted
-            return (0 if confirms else 1, *_sort_key(question))
+            return (0 if confirms else 1, *base(question))
 
         return key
 
