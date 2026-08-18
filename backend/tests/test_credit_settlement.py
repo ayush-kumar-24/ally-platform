@@ -108,9 +108,18 @@ def test_reading_balance_settles_renewal():
 
 
 def test_read_when_nothing_due_writes_no_rows():
+    # InMemoryCreditRepository.get_balance() has no clock-injection point --
+    # it settles against real datetime.now(timezone.utc) directly (unlike
+    # every other test in this file, which goes through build_credit_service
+    # with an injected clock=lambda: T0). A fixed "T0 + 10 days" was a time
+    # bomb: correct only while real wall-clock time stayed behind that date,
+    # which it eventually didn't (confirmed live -- this failed once real
+    # `now` passed 2026-08-12). Anchor to real now instead, so "nothing is
+    # due" stays true no matter when the suite runs.
+    future = datetime.now(timezone.utc) + timedelta(days=10)
     r = repo(CreditState(monthly=50, bonus=10,
-                         expires_at=T0 + timedelta(days=10),
-                         renewal_date=T0 + timedelta(days=10)))
+                         expires_at=future,
+                         renewal_date=future))
     r.get_balance(UID)
     assert r.list_transactions(UID)[1] == 0
 

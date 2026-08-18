@@ -30,6 +30,41 @@ class DiagnosisDataError(ReasoningError):
         super().__init__(message, status_code=422)
 
 
+class NoClassifiableAnswersError(ReasoningError):
+    """The session has answers, but not one of them could be classified -- so the
+    pipeline has zero evidence to reason from.
+
+    This is its own error because of what used to happen instead. Individual
+    unscored answers are skipped rather than failing the batch (see
+    StandardDiagnosticEngine.classify_answers), which is right for one bad row and
+    catastrophic for all of them: when EVERY answer is unscored the pipeline runs
+    happily to completion on an empty classification set, detects no root causes,
+    scores no confidence, and persists a founder_report containing nothing. No
+    exception, no error log, a 200 response, and a founder who answered thirty
+    questions reading a report with no findings in it.
+
+    That state is reachable purely from configuration -- ADAPTIVE_QUESTIONS=false
+    (so the submit-time advisor never writes answers.score_label) plus
+    ANSWER_CLASSIFIER=stored (so the pipeline only reads it), which is exactly the
+    pair backend/.env.example ships and DEPLOY_AWS.md's env table does not
+    mention. Two independent flags silently decided whether the product's core
+    output contained anything.
+
+    Failing here is deliberately the harsher option, and it follows the rule the
+    frontend already states in services/reports.js: a fabricated profile that
+    reads as real is worse than an empty state, because the founder acts on it.
+    A rolled-back pipeline leaves the session recoverable -- the reconciliation
+    sweep retries it, and reasoning is idempotent -- whereas a persisted empty
+    report is indistinguishable from a real one and satisfies the
+    already-has-a-report guard forever.
+    """
+
+    def __init__(self, message: str = "No answer in this session could be classified."):
+        # Literal 422, matching DiagnosisDataError above -- the named constant is
+        # deprecated in this Starlette version and warns on every construction.
+        super().__init__(message, status_code=422)
+
+
 class FeatureDisabledError(ReasoningError):
     """A required business rule is not yet implemented, so the feature that
     depends on it is disabled rather than falling back to placeholder logic."""

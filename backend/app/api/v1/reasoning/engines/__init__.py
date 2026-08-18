@@ -6,6 +6,7 @@ from app.api.v1.reasoning.engines.diagnosis import DeterministicDiagnosisEngine
 from app.api.v1.reasoning.engines.diagnostic import (
     LLMAnswerClassifier,
     StandardDiagnosticEngine,
+    StoredFirstAnswerClassifier,
     StoredScoreAnswerClassifier,
 )
 from app.api.v1.reasoning.engines.recommendation import StandardRecommendationEngine
@@ -19,6 +20,7 @@ from app.api.v1.reasoning.engines.symptom_detection import SymptomDetector
 __all__ = [
     "DeterministicDiagnosisEngine",
     "LLMAnswerClassifier",
+    "StoredFirstAnswerClassifier",
     "StoredScoreAnswerClassifier",
     "StandardDiagnosticEngine",
     "StageDetector",

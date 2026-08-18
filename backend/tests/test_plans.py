@@ -392,11 +392,12 @@ def test_free_call_claim_is_atomic_under_forced_interleaving():
 # ── rollout flag ────────────────────────────────────────────────────────────
 
 
-def test_enforcement_defaults_off_in_code_but_env_and_settings_can_enable_it():
-    """The gate no longer ships dormant -- its storage exists and this deployment
-    turns it on in .env -- so asserting the *ambient* value would just assert what
-    the local .env happens to say. Pin the resolution order instead, which is the
-    part that can actually break.
+def test_enforcement_defaults_on_in_code_and_env_can_still_override_either_way():
+    """The gate no longer ships dormant -- its storage exists, and (pre-beta,
+    2026-08-16) the code default itself flipped to True so a deploy that
+    forgets to set the env var explicitly still gets metered LLM usage rather
+    than silently unbounded access. Pin the resolution order, which is the
+    part that can actually break, not just the ambient value.
 
     That order matters: it read only os.environ before, which meant
     PLAN_ENFORCEMENT_ENABLED=true in .env was ignored (pydantic-settings parses
@@ -411,7 +412,7 @@ def test_enforcement_defaults_off_in_code_but_env_and_settings_can_enable_it():
     original_env = os.environ.pop("PLAN_ENFORCEMENT_ENABLED", None)
     original_setting = settings.PLAN_ENFORCEMENT_ENABLED
     try:
-        assert type(settings).model_fields["PLAN_ENFORCEMENT_ENABLED"].default is False
+        assert type(settings).model_fields["PLAN_ENFORCEMENT_ENABLED"].default is True
 
         settings.PLAN_ENFORCEMENT_ENABLED = False
         assert enforcement_enabled() is False          # falls back to settings
@@ -420,6 +421,8 @@ def test_enforcement_defaults_off_in_code_but_env_and_settings_can_enable_it():
 
         os.environ["PLAN_ENFORCEMENT_ENABLED"] = "false"
         assert enforcement_enabled() is False          # the environment still wins
+        os.environ["PLAN_ENFORCEMENT_ENABLED"] = "true"
+        assert enforcement_enabled() is True            # and can re-enable it too
     finally:
         settings.PLAN_ENFORCEMENT_ENABLED = original_setting
         os.environ.pop("PLAN_ENFORCEMENT_ENABLED", None)

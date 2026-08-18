@@ -328,13 +328,20 @@ class Container:
         """Request-scoped panel service. The audit repository is DB-backed so the
         trail survives restarts."""
         from app.admin.conversations import SqlAlchemyConversationReadRepository
+        from app.api.v1.reasoning.trigger import regenerate_report_for_founder
         from app.privacy.db_repository import SqlAlchemyPrivacyRepository
         return AdminPanelService(
             SqlAlchemyAdminUserRepository(db),
             credits=self.credit_service(db),
             audit=AuditRecorder(SqlAlchemyPanelAuditRepository(db)),
             conversations=SqlAlchemyConversationReadRepository(db),
-            report_regenerator=None,   # wire once the generator exposes a re-run entry point
+            # Finds the founder's most recent completed session and re-runs
+            # the reasoning pipeline with force=True. This is the recovery
+            # path for a founder whose session completed but the best-effort
+            # inline reasoning run that should have produced a report never
+            # did (LLM hiccup, transient error) -- previously there was no
+            # way, self-service or admin, to get them a report at all.
+            report_regenerator=lambda founder_id: regenerate_report_for_founder(db, founder_id),
             privacy=SqlAlchemyPrivacyRepository(db),
         )
 

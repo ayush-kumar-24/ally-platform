@@ -68,3 +68,42 @@ def process_deletions(
             results.append({"founder_id": founder_id, "status": "failed", "error": str(exc)})
 
     return {"due_count": len(due), "results": results}
+
+
+@router.post(
+    "/reconcile-reports",
+    summary="Regenerate reports for completed diagnoses that never produced one",
+)
+def reconcile_reports(
+    older_than_minutes: int = 15,
+    limit: int = 25,
+    x_internal_secret: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> dict:
+    """The durability guarantee behind moving reasoning off the request path.
+
+    Reasoning now runs as a background task after the founder's final answer is
+    acknowledged, which fixes a 203-second pipeline being cut off by a load
+    balancer mid-run -- but a background task still dies with its container. This
+    sweep is what makes the outcome recoverable rather than merely faster: it
+    finds COMPLETED sessions with no active report and re-runs them.
+
+    It also covers the failures that predate that change and used to strand a
+    founder permanently -- a provider outage, a transient DB error during
+    persist. Before this existed the only way back was an admin manually calling
+    regenerate_report_for_founder, and nothing told anyone it was needed.
+
+    Same shape and same auth as process-deletions above, deliberately: a shared
+    secret rather than a founder or admin token, idempotent, and callable by
+    whatever already runs that sweep (EventBridge, pg_cron, a plain cron) with no
+    new infrastructure. Every 5-10 minutes is a sensible cadence -- often enough
+    that a founder waiting on the Thinking screen is likely still there when the
+    report lands, rare enough not to trip the older_than_minutes guard.
+    """
+    _verify_secret(x_internal_secret)
+
+    from app.api.v1.reasoning.trigger import reconcile_missing_reports
+
+    return reconcile_missing_reports(
+        db, older_than_minutes=older_than_minutes, limit=limit
+    )

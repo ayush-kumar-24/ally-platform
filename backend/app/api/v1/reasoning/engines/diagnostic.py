@@ -109,6 +109,67 @@ class StoredScoreAnswerClassifier(AnswerClassifier):
         }[label]
 
 
+class StoredFirstAnswerClassifier(AnswerClassifier):
+    """Reuse the label an answer already carries; only call the LLM for answers
+    that have none.
+
+    This exists because the diagnosis path classifies every answer TWICE.
+    `ADAPTIVE_QUESTIONS=true` makes the submit-time advisor score each answer and
+    persist the band to `answers.score_label` (DiagnosisService._apply_insight).
+    With `ANSWER_CLASSIFIER=llm`, the reasoning pipeline then handed all thirty of
+    those already-labelled answers to LLMAnswerClassifier, which re-derived the
+    same labels from scratch: thirty provider calls per diagnosis producing values
+    already sitting in the database. Profiled on a real session, that made the
+    `diagnosis` stage 161s of a 203s pipeline -- 79% of the founder's wait after
+    their final answer, spent re-deriving what was already known.
+
+    `.env.example` documents the intended pairing ("Keep ANSWER_CLASSIFIER=stored
+    when this is on -- the submit-time scores are reused by the reasoning
+    pipeline"), but nothing enforced it, so getting it wrong cost real money and
+    real latency silently. Composing here makes reuse structural rather than a
+    configuration the operator has to get right: whichever way the flags are set,
+    a stored label is never re-derived.
+
+    Not simply "always use stored": an answer with no label still has to be
+    classified, or it is dropped from the evidence set entirely (see
+    StandardDiagnosticEngine.classify_answers). So this delegates rather than
+    short-circuits, which also means the mixed case -- some answers labelled at
+    submit time, some not, e.g. a session that spanned a config change -- comes
+    out fully classified instead of half-empty.
+
+    Deterministic side effect worth knowing: the submit-time label wins over what
+    the pipeline would have decided. The advisor sees one answer plus five turns
+    of history; the pipeline classifier sees the whole set and could in principle
+    judge better. But the submit-time label is ALREADY what drives the confidence
+    loop, and therefore when the diagnosis ends -- so the two disagreeing was
+    never a feature, it was two sources of truth for one number.
+    """
+
+    def __init__(self, stored: AnswerClassifier, fallback: AnswerClassifier):
+        self.stored = stored
+        self.fallback = fallback
+
+    async def classify(
+        self,
+        answer: Answer,
+        question: Question,
+        context: ReasoningContext,
+        *,
+        previous_conversation: Sequence[ConversationTurn] | None = None,
+    ) -> AnswerClassification:
+        try:
+            return await self.stored.classify(
+                answer, question, context,
+                previous_conversation=previous_conversation,
+            )
+        except DiagnosisDataError:
+            # No stored band -- this answer genuinely needs classifying.
+            return await self.fallback.classify(
+                answer, question, context,
+                previous_conversation=previous_conversation,
+            )
+
+
 class _ClassificationParseError(Exception):
     """Internal, retryable: the model response was not a usable classification."""
 

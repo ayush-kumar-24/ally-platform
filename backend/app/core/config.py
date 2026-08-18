@@ -364,5 +364,25 @@ class Settings(BaseSettings):
     def is_production(self) -> bool:
         return self.ENVIRONMENT == "production"
 
+    @property
+    def diagnosis_scoring_configured(self) -> bool:
+        """Will any answer in a diagnosis actually get a Green/Amber/Red band?
+
+        Two independent flags decide this, and with both at their defaults the
+        answer is no -- which silently emptied every report. ADAPTIVE_QUESTIONS
+        is the only thing that writes answers.score_label (the submit-time
+        advisor, DiagnosisService._apply_insight); ANSWER_CLASSIFIER="llm" is the
+        only thing that derives a band at report time. Neither on means every
+        answer arrives at the reasoning pipeline unscored, every one is skipped
+        as unclassifiable, and the diagnosis yields a report with no evidence
+        behind it.
+
+        A named predicate rather than the expression inlined at its one call
+        site: this coupling is not deducible from either flag's own
+        documentation, it is the direct cause of a P0, and it deserves to be
+        stated once, in the same place the flags are defined.
+        """
+        return self.ADAPTIVE_QUESTIONS or self.ANSWER_CLASSIFIER == "llm"
+
 
 settings = Settings()

@@ -26,9 +26,9 @@ from dotenv import load_dotenv
 # produced exactly the symptom reported: a routing decision that correctly
 # named "openai"/"gpt-4o-mini", wrapping content that was still
 # MockLLMProvider's canned template. Confirmed empirically: os.environ's
-# OPENAI_API_KEY (sk-proj-7HXn4B...) did not match backend/.env's
-# (sk-proj-k04mJmnb...), and calling OpenAIProvider.generate() directly
-# raised LLMAuthError: "openai authentication failed (401)". override=True
+# OPENAI_API_KEY did not match backend/.env's key, and calling
+# OpenAIProvider.generate() directly raised LLMAuthError: "openai
+# authentication failed (401)". override=True
 # makes .env -- this project's actual source of truth -- win over whatever
 # is already sitting in the shell/machine environment.
 load_dotenv(override=True)
@@ -41,9 +41,10 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core.config import settings
-from app.core.logger import configure_logging
+from app.core.logger import configure_logging, logger
 from app.core.cors import setup_cors
 from app.middleware.request_logging import RequestLoggingMiddleware
+from app.middleware.security_headers import SecurityHeadersMiddleware
 from app.middleware.error_handler import (
     AppError,
     app_error_handler,
@@ -56,7 +57,12 @@ from app.api.v1.router import api_router
 configure_logging()
 
 # Sentry is optional -- with no DSN set (the default in development) this is a
-# no-op and nothing is sent anywhere.
+# no-op and nothing is sent anywhere. That's fine in development, but it was
+# previously silent in every environment: a production deploy that forgot to
+# set SENTRY_DSN got no error tracking and no signal that error tracking was
+# off. Both branches below now log loudly at startup specifically so "is
+# Sentry actually on in prod" is answerable from the boot log alone, not by
+# assuming the env var made it into the App Runner console.
 if settings.SENTRY_DSN:
     import sentry_sdk
 
@@ -70,14 +76,64 @@ if settings.SENTRY_DSN:
         # These carry founder data. Turn on deliberately, not by default.
         send_default_pii=False,
     )
+    logger.info("sentry_initialized", extra={"environment": settings.ENVIRONMENT})
+elif settings.is_production:
+    # Not raising: a missing SENTRY_DSN shouldn't take the whole app down when
+    # the alternative is "founders can't sign up." But this must never be a
+    # silent gap in production -- log at ERROR so it surfaces in CloudWatch
+    # and (once Sentry itself is fixed) would page on its own irony.
+    logger.error(
+        "sentry_not_configured_in_production",
+        extra={"environment": settings.ENVIRONMENT},
+    )
+else:
+    logger.info("sentry_disabled", extra={"environment": settings.ENVIRONMENT})
+
+# Nothing writes answers.score_label unless ADAPTIVE_QUESTIONS is on (the
+# submit-time advisor is the only writer -- DiagnosisService._apply_insight), and
+# nothing derives it at report time unless ANSWER_CLASSIFIER is "llm". With both
+# off, every answer reaches the reasoning pipeline unscored, every one is skipped
+# as unclassifiable, and the diagnosis produces a report with no evidence behind
+# it. That combination is what backend/.env.example ships and what
+# DEPLOY_AWS.md's "values that must differ" table does not mention, so a deploy
+# that follows the documentation lands on it.
+#
+# NoClassifiableAnswersError now stops such a run from persisting an empty
+# report, but that fires 30 questions too late -- after a founder has spent an
+# assessment they may only get one of. Logged at ERROR here so the misconfigured
+# state is answerable from the boot log, before anyone takes the diagnosis. Same
+# rule as the Sentry branch above: refuse to be a silent gap, but do not refuse
+# to boot -- a founder who cannot sign up at all is a worse outcome, and the
+# other phases of the product are unaffected.
+if not settings.diagnosis_scoring_configured:
+    logger.error(
+        "diagnosis_scoring_disabled",
+        extra={
+            "adaptive_questions": settings.ADAPTIVE_QUESTIONS,
+            "answer_classifier": settings.ANSWER_CLASSIFIER,
+            "impact": (
+                "no answer will be scored, so every diagnosis will fail to "
+                "produce a report -- set ADAPTIVE_QUESTIONS=true (preferred) "
+                "or ANSWER_CLASSIFIER=llm"
+            ),
+        },
+    )
 
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.VERSION,
+    # Interactive docs expose the full API surface (routes, schemas, and in
+    # AUTH_PROVIDER=dev they're even directly callable with no token). Fine
+    # in development; a production API has no business publishing its own
+    # schema to anyone who finds the URL.
+    docs_url=None if settings.is_production else "/docs",
+    redoc_url=None if settings.is_production else "/redoc",
+    openapi_url=None if settings.is_production else "/openapi.json",
 )
 
 # --- Middleware ---
 app.add_middleware(RequestLoggingMiddleware)
+app.add_middleware(SecurityHeadersMiddleware)
 setup_cors(app)
 
 # --- Error handlers ---
