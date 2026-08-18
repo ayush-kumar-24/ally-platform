@@ -30,6 +30,7 @@ const TITLES = {
 
   '/app': 'Dashboard',
   '/app/ally-chat': 'Chat with Ally',
+  '/app/founder-dna-journey': 'Mapping your Founder DNA',
   '/app/diagnosis': 'Your diagnosis',
   '/app/thinking': 'Ally is thinking',
   '/app/founder-dna': 'Founder DNA',

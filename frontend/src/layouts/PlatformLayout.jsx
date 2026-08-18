@@ -33,6 +33,7 @@ function IconPulse(props) {
 const ROUTE_EYE = {
   '/app': 'Overview',
   '/app/ally-chat': 'Conversation',
+  '/app/founder-dna-journey': 'Founder first',
   '/app/diagnosis': 'Diagnosis',
   '/app/founder-dna': 'Founder first',
   '/app/business-dna': 'Business',
@@ -56,7 +57,7 @@ const NAV_GROUPS = [
   {
     label: 'FOUNDER DIAGNOSIS',
     items: [
-      { path: '/app/diagnosis', tip: 'Adaptive diagnosis', icon: IconPulse, label: 'Adaptive diagnosis', badge: null },
+      { path: '/app/founder-dna-journey', tip: 'Adaptive diagnosis', icon: IconPulse, label: 'Adaptive diagnosis', badge: null },
       /* These four are written *from* a finished diagnosis, so before one
          exists they can only render an empty state -- which reads as a broken
          page rather than "not yet". The journey is onboarding -> diagnosis ->
@@ -218,7 +219,7 @@ export default function PlatformLayout() {
                     onClick={() => {
                       // Send them to the thing that unlocks it rather than to an
                       // empty page they have to work out for themselves.
-                      if (locked) { handleNav('/app/diagnosis'); return; }
+                      if (locked) { handleNav('/app/founder-dna-journey'); return; }
                       handleNav(path);
                     }}
                   >
@@ -372,7 +373,7 @@ export default function PlatformLayout() {
                 </div>
               </div>
             </div>
-            <button className="btn btn-primary tb-cta" onClick={() => handleNav('/app/diagnosis')} type="button">
+            <button className="btn btn-primary tb-cta" onClick={() => handleNav('/app/founder-dna-journey')} type="button">
               <IconPlus />
               New diagnosis
             </button>

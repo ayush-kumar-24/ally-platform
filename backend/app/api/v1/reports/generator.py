@@ -221,19 +221,48 @@ class ReportNarrativeGenerator:
             return {"founder_name": p.founder_name}, {}
 
         if key == "founder_dna":
-            if not p.archetype:
+            # Open set of dimensions -- archetype plus whichever of the newer
+            # ones (origin, vision, strengths/blind spots, stress response,
+            # communication preference, and now the 6 phase-2 dimensions) the
+            # payload actually resolved. A dimension with no source data
+            # simply isn't a key here; the frontend's card grid renders
+            # however many keys exist (see FounderDNA.jsx's generic
+            # factList() rendering), so nothing here needs to special-case a
+            # still-unanswered phase-2 dimension -- it appears automatically
+            # once the founder answers questions for it.
+            if not any((
+                p.archetype, p.founder_origin, p.founder_vision,
+                p.strengths_blind_spots, p.stress_response, p.communication_preference,
+                p.phase2_dimensions,
+            )):
                 return {}, {}
-            a = p.archetype
-            slots = {"archetype": {
-                "name": a.name, "core_motivation": a.core_motivation,
-                "is_confident": a.is_confident,
-            }}
-            # facts: NO fit_score (a grade) in the founder-facing report.
-            facts = {"archetype": {
-                "name": a.name, "code": a.code,
-                "core_motivation": a.core_motivation, "is_confident": a.is_confident,
-                "tentative": not a.is_confident,
-            }}
+
+            slots: dict = {}
+            facts: dict = {}
+            if p.archetype:
+                a = p.archetype
+                slots["archetype"] = {
+                    "name": a.name, "core_motivation": a.core_motivation,
+                    "is_confident": a.is_confident,
+                }
+                # facts: NO fit_score (a grade) in the founder-facing report.
+                facts["archetype"] = {
+                    "name": a.name, "code": a.code,
+                    "core_motivation": a.core_motivation, "is_confident": a.is_confident,
+                    "tentative": not a.is_confident,
+                }
+            if p.founder_origin:
+                slots["origin"] = facts["origin"] = p.founder_origin
+            if p.founder_vision:
+                slots["vision"] = facts["vision"] = p.founder_vision
+            if p.strengths_blind_spots:
+                slots["strengths_blind_spots"] = facts["strengths_blind_spots"] = list(p.strengths_blind_spots)
+            if p.stress_response:
+                slots["stress_response"] = facts["stress_response"] = list(p.stress_response)
+            if p.communication_preference:
+                slots["communication_preference"] = facts["communication_preference"] = list(p.communication_preference)
+            for dimension_code, answers in p.phase2_dimensions.items():
+                slots[dimension_code] = facts[dimension_code] = list(answers)
             return slots, facts
 
         if key == "psychological_note":

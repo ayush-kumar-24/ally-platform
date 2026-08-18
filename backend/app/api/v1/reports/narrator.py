@@ -51,21 +51,42 @@ class TemplateNarrator:
         return f"{name}, {lead}"
 
     def _founder_dna(self, s, tone):
+        # Archetype drives the lead sentence when present; the newer dimensions
+        # (origin, vision, strengths/blind spots, stress response, communication
+        # preference) each add at most one short, fact-only line so the template
+        # fallback stays readable rather than a wall of quoted text -- the full
+        # set is still visible as cards via `facts` regardless of what prose says.
+        parts = []
         arch = s.get("archetype")
-        if not arch or not arch.get("name"):
-            return ""
-        # Archetype names already begin with "The" -- do not prepend an article.
-        name, motiv = arch["name"], arch.get("core_motivation")
-        motiv_txt = f", driven by {motiv.lower()}" if motiv else ""
-        if arch.get("is_confident"):
-            opener = {"Validator": "Your answers point clearly to",
-                      "Auditor": "The pattern the data supports is"}.get(
-                          tone.persona, "Your founder pattern reads clearly as")
-            return f"{opener} {name}{motiv_txt}."
-        return (
-            f"Your answers lean toward {name}{motiv_txt}, but the signal is "
-            "mixed -- treat this as a starting hypothesis to test, not a fixed label."
-        )
+        if arch and arch.get("name"):
+            # Archetype names already begin with "The" -- do not prepend an article.
+            name, motiv = arch["name"], arch.get("core_motivation")
+            motiv_txt = f", driven by {motiv.lower()}" if motiv else ""
+            if arch.get("is_confident"):
+                opener = {"Validator": "Your answers point clearly to",
+                          "Auditor": "The pattern the data supports is"}.get(
+                              tone.persona, "Your founder pattern reads clearly as")
+                parts.append(f"{opener} {name}{motiv_txt}.")
+            else:
+                parts.append(
+                    f"Your answers lean toward {name}{motiv_txt}, but the signal is "
+                    "mixed -- treat this as a starting hypothesis to test, not a fixed label."
+                )
+        vision = s.get("vision")
+        if vision:
+            parts.append(f'In your own words, this is what success looks like: "{vision}"')
+        blind_spots = s.get("strengths_blind_spots")
+        if blind_spots:
+            parts.append("A pattern worth naming: " + blind_spots[0])
+        # purpose_mission gets the same one-line treatment as vision (both are
+        # "why this matters" statements); the other 5 phase-2 dimensions stay
+        # card-only here, same as origin/stress_response/communication_
+        # preference above -- narrating all 9+ possible dimensions in prose
+        # would be exactly the wall-of-text this fallback is written to avoid.
+        purpose_mission = s.get("purpose_mission")
+        if purpose_mission:
+            parts.append(f'On why this matters to you: "{purpose_mission[0]}"')
+        return " ".join(parts)
 
     def _psychological_note(self, s, tone):
         # Founder-facing sources ONLY: the Section H band description or the pillar

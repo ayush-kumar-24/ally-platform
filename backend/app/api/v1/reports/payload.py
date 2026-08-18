@@ -17,6 +17,23 @@ from sqlalchemy.orm import Session
 
 from app.repositories import intelligence_repository
 
+# Dimension codes the Founder DNA phase writes as LISTS of answer text.
+#
+# Three of the fourteen asked dimensions are deliberately NOT here, because
+# the `founder_dna` jsonb already has an owner for those keys:
+#   * archetype -- archetype.py writes a DICT there (name/code/motivation).
+#     The archetype questions exist to give that engine the founder's own
+#     language to infer from, not to render a card of their own.
+#   * origin, vision -- also onboarding free text, and read as single
+#     strings by founder_origin / founder_vision below.
+# resolve_phase2_dimensions() enforces the same split at the write end.
+_PHASE2_DIMENSION_CODES = frozenset({
+    "purpose_mission", "core_values", "mindset_excellence",
+    "energy_patterns", "decision_style", "focus_attention",
+    "core_motivation", "strengths_blind_spots", "stress_response",
+    "communication_preference", "emotional_intelligence",
+})
+
 # Stage onboarding_label -> report tone (prompt_library code + persona name).
 _STAGE_TONE = {
     "Stage 0": ("PROMPT-STAGE0-TONE", "Validator"),
@@ -97,6 +114,27 @@ class ReportPayload:
     chronic_state: str | None = None
     chronic_adjustment: str | None = None
     separate_identity: bool = False
+
+    # Founder DNA dimensions beyond archetype -- each absent (None/empty) rather
+    # than guessed when `founder_reports.founder_dna` has no key for it. Origin
+    # and vision are the founder's own onboarding text passed through close to
+    # verbatim; the other three are catalogue findings (blind_spots /
+    # behaviour_patterns) resolved by detected root cause. Defaulted (unlike
+    # `archetype` above) since every existing caller/test predates these and
+    # most sessions today have none of them yet.
+    founder_origin: str | None = None
+    founder_vision: str | None = None
+    strengths_blind_spots: tuple[str, ...] = ()
+    stress_response: tuple[str, ...] = ()
+    communication_preference: tuple[str, ...] = ()
+    # The 6 phase-2 Founder DNA dimensions (purpose_mission, core_values,
+    # mindset_excellence, energy_patterns, decision_style, focus_attention),
+    # keyed by dimension_code -- a dict rather than 6 more named fields like
+    # the ones above, since these came from a single generic engine
+    # (app/api/v1/founder_dna/) rather than 6 separately-built ones; adding a
+    # 7th dimension later needs no change here, matching the same
+    # no-rigid-schema choice already made for that engine.
+    phase2_dimensions: dict[str, tuple[str, ...]] = field(default_factory=dict)
 
     @property
     def psychology_flagged(self) -> bool:
@@ -210,15 +248,26 @@ def build_report_payload(db: Session, report) -> ReportPayload:
         ).scalar()
         separate_identity = chronic_state.startswith("Identity Fusion")
 
-    # --- archetype (from founder_dna) ---
+    # --- archetype + the newer Founder DNA dimensions (all from founder_dna) ---
+    fd = report.founder_dna or {}
     archetype = None
-    a = (report.founder_dna or {}).get("archetype")
+    a = fd.get("archetype")
     if a:
         archetype = ArchetypeFinding(
             name=a.get("archetype_name"), code=a.get("archetype_code"),
             core_motivation=a.get("core_motivation"),
             is_confident=bool(a.get("is_confident")), fit_score=a.get("fit_score"),
         )
+    founder_origin = (fd.get("origin") or "").strip() or None
+    founder_vision = (fd.get("vision") or "").strip() or None
+    strengths_blind_spots = tuple(fd.get("strengths_blind_spots") or ())
+    stress_response = tuple(fd.get("stress_response") or ())
+    communication_preference = tuple(fd.get("communication_preference") or ())
+    phase2_dimensions = {
+        code: tuple(values)
+        for code, values in fd.items()
+        if code in _PHASE2_DIMENSION_CODES and values
+    }
 
     # --- top root causes (detected_root_causes + labels) ---
     rows = db.execute(
@@ -252,7 +301,12 @@ def build_report_payload(db: Session, report) -> ReportPayload:
         business_health_overall=bd.get("overall_score"),
         business_health_band=bd.get("band"),
         pillars=pillars, red_flag_pillars=red_flag_pillars,
-        archetype=archetype, top_root_causes=top_root_causes,
+        archetype=archetype,
+        founder_origin=founder_origin, founder_vision=founder_vision,
+        strengths_blind_spots=strengths_blind_spots, stress_response=stress_response,
+        communication_preference=communication_preference,
+        phase2_dimensions=phase2_dimensions,
+        top_root_causes=top_root_causes,
         confirm_actions=_actions(report.confirm_actions),
         solve_actions=_actions(report.solve_actions),
         category_risk_scores=dict(sess.get("category_risk_scores") or {}),

@@ -82,6 +82,60 @@ class ScoreLabel(StrEnum):
     RED = "red"
 
 
+class FounderDnaDimension(StrEnum):
+    """founder_dna_questions_dimension_code_check
+
+    All fourteen dimensions the Founder DNA phase asks about: the thirteen in
+    `GoXL_Founder_DNA_Decoding_Journey.docx` Section 2, plus EMOTIONAL_
+    INTELLIGENCE, which GoXL added on top of the doc.
+
+    Every dashboard card is now sourced by ASKING. Three of these
+    (STRENGTHS_BLIND_SPOTS, STRESS_RESPONSE, COMMUNICATION_PREFERENCE) used
+    to be derived instead, by matching detected root causes against the
+    blind_spots / behaviour_patterns catalogues -- which hold nothing for the
+    psychology-range codes most founders actually score, so those cards came
+    out empty on real reports. ORIGIN and VISION also exist as onboarding
+    free text; the asked answer wins when both are present.
+
+    ARCHETYPE is asked through the doc's "Identity" questions rather than a
+    self-label pick -- app/api/v1/reasoning/engines/archetype.py infers the
+    archetype from the founder's own language, so it needs language, not a
+    label (and self-rating is what the doc's Section 1 warns against).
+    """
+
+    # -- doc Section 2, in its own order --
+    ARCHETYPE = "archetype"
+    CORE_MOTIVATION = "core_motivation"
+    ORIGIN = "origin"
+    PURPOSE_MISSION = "purpose_mission"
+    VISION = "vision"
+    CORE_VALUES = "core_values"
+    MINDSET_EXCELLENCE = "mindset_excellence"
+    STRENGTHS_BLIND_SPOTS = "strengths_blind_spots"
+    ENERGY_PATTERNS = "energy_patterns"
+    STRESS_RESPONSE = "stress_response"
+    DECISION_STYLE = "decision_style"
+    COMMUNICATION_PREFERENCE = "communication_preference"
+    FOCUS_ATTENTION = "focus_attention"
+    # -- GoXL addition, not in the doc's thirteen --
+    EMOTIONAL_INTELLIGENCE = "emotional_intelligence"
+
+
+class FounderDnaFormat(StrEnum):
+    """founder_dna_questions_format_check
+
+    FORCED_CHOICE carries its choices in `founder_dna_questions.options` and
+    is rendered as pick-one, not a text box -- the doc's "Mixed formats"
+    principle (every dimension should have at least one non-text format).
+    The doc's six two-image Visual questions are deliberately not here: v1 is
+    text-only, so VISUAL would be a format nothing can render.
+    """
+
+    NARRATIVE = "narrative"
+    SCENARIO = "scenario"
+    FORCED_CHOICE = "forced_choice"
+
+
 class ConfirmationStatus(StrEnum):
     """answers_confirmation_status_check / detected_root_causes.confirmation_status.
 

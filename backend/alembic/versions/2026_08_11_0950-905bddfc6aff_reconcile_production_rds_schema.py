@@ -18,6 +18,24 @@ This revision currently handles:
 
 Functions, triggers and RLS are added in subsequent reviewed sections before
 this migration is deployed to production.
+
+Guarded 2026-08-17: this migration's upgrade() assumes the 5 tables/indexes/
+constraints/reference rows it creates are genuinely absent. On the real
+production database they were not -- verified live (row-for-row: 5/20/4
+matching the exact reference-data counts below; all 5 indexes present; both
+FKs present, just under Postgres's default auto-generated names
+--founder_memory_founder_id_fkey / founder_memory_events_founder_id_fkey--
+rather than this file's explicit fk_founder_memory_founder_id /
+fk_founder_memory_events_founder_id, functionally identical). The merge
+revision (6f1d2c9a4b70) that reunifies this branch with main says as much:
+"Production RDS already contains the verified schema effects from both
+migration branches." But because production's `alembic_version` had never
+actually advanced onto this branch (it sat on the sibling onboarding-redesign
+branch, f3c8a92e5d61), a plain `alembic upgrade head` tries to genuinely
+EXECUTE this migration for the first time and collides on the very first
+`CREATE TABLE`. Same anchor-table-check pattern as 6d05993bb818, whose
+docstring documents the same class of problem: an already-adopted database
+needs this migration to no-op, not re-run.
 """
 
 from __future__ import annotations
@@ -26,6 +44,7 @@ import re
 from typing import Sequence, Union
 
 from alembic import op
+from sqlalchemy import inspect
 
 
 revision: str = "905bddfc6aff"
@@ -241,6 +260,14 @@ def _run_reference_data() -> None:
 
 
 def upgrade() -> None:
+    bind = op.get_bind()
+    if inspect(bind).has_table('chronic_state_inference'):
+        # Anchor-table check: every object below came from the same
+        # already-verified reconciliation as chronic_state_inference, so if
+        # that one already exists, all of them do -- see the module
+        # docstring for the live verification behind this guard.
+        return
+
     # 1. Sequences
     op.execute("""
         CREATE SEQUENCE IF NOT EXISTS

@@ -2,15 +2,40 @@
 
 Revision ID: 7c4f0f1a9d2e
 Revises: f2f3d7d7ce11
+
+The `ally_app` grant below is guarded on the role existing -- see f2f3d7d7ce11's
+docstring for the full reasoning (RDS-only infrastructure role; absent by design
+on the Supabase database the app currently runs on, which uses its own native
+RLS). Ungated, it aborts `alembic upgrade head` and blocks every deploy.
+
+The REVOKE-from-PUBLIC is deliberately NOT guarded: closing default public
+access to founder provisioning matters on every target, role or no role.
 """
 
 from alembic import op
+from sqlalchemy import text
 
 
 revision = "7c4f0f1a9d2e"
 down_revision = "f2f3d7d7ce11"
 branch_labels = None
 depends_on = None
+
+
+ALLY_APP_ROLE = "ally_app"
+
+
+def _ally_app_exists() -> bool:
+    """Whether the RDS-only `ally_app` runtime role exists on this target.
+    Duplicated rather than imported from f2f3d7d7ce11: migrations must stay
+    independently runnable, and a cross-revision import would break if that
+    file is ever squashed or renamed."""
+    return bool(
+        op.get_bind()
+        .execute(text("SELECT 1 FROM pg_roles WHERE rolname = :role"),
+                 {"role": ALLY_APP_ROLE})
+        .scalar()
+    )
 
 
 SIGNATURE = (
@@ -216,16 +241,24 @@ def upgrade() -> None:
     )
 
     # Only the application runtime may invoke founder provisioning.
-    op.execute(
-        f"GRANT EXECUTE ON FUNCTION {SIGNATURE} TO ally_app"
-    )
+    if _ally_app_exists():
+        op.execute(
+            f"GRANT EXECUTE ON FUNCTION {SIGNATURE} TO {ALLY_APP_ROLE}"
+        )
+    else:
+        print(
+            f"WARNING [{revision}]: role {ALLY_APP_ROLE!r} absent -- skipping "
+            "its EXECUTE grant on founder provisioning. Expected on Supabase, "
+            "NOT on RDS."
+        )
 
 
 def downgrade() -> None:
 
-    op.execute(
-        f"REVOKE EXECUTE ON FUNCTION {SIGNATURE} FROM ally_app"
-    )
+    if _ally_app_exists():
+        op.execute(
+            f"REVOKE EXECUTE ON FUNCTION {SIGNATURE} FROM {ALLY_APP_ROLE}"
+        )
 
     op.execute(
         f"GRANT EXECUTE ON FUNCTION {SIGNATURE} TO PUBLIC"

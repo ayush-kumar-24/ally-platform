@@ -324,6 +324,47 @@ class ReasoningRepository:
         stmt = select(BehaviourPatterns.pattern_id).where(or_(*conditions))
         return [row[0] for row in self.db.execute(stmt).all()]
 
+    def get_blind_spots_by_root_cause_codes(
+        self, root_cause_codes: Sequence[str]
+    ) -> list[BlindSpots]:
+        """Same match as `get_blind_spot_ids_by_root_cause_codes`, but returns the
+        full rows (not just ids) so callers can read the founder-safe finding text
+        (`what_it_actually_is`) -- e.g. for the founder-facing report's Founder DNA
+        "Strengths & Blind Spots" dimension. `what_founder_says`/`what_founder_thinks`
+        are the founder's own self-view, not the finding, and are deliberately not
+        surfaced here."""
+        codes = [c for c in set(root_cause_codes) if c]
+        if not codes:
+            return []
+        conditions = [
+            BlindSpots.linked_root_cause_ids.op("@>")(func.jsonb_build_array(code))
+            for code in codes
+        ]
+        stmt = select(BlindSpots).where(or_(*conditions))
+        return list(self.db.execute(stmt).scalars().all())
+
+    def get_behaviour_patterns_by_root_cause_codes(
+        self, root_cause_codes: Sequence[str], *, pattern_type: str | None = None
+    ) -> list[BehaviourPatterns]:
+        """Same match as `get_behaviour_pattern_ids_by_root_cause_codes`, but
+        returns full rows so callers can read `what_they_mean`/`empathy_response`
+        -- the founder-safe interpretation, not `what_they_say` (their own words).
+        `pattern_type` optionally narrows to one of the CHECK-constrained values
+        (`communication_style` / `stress_response` / `burnout_stage` /
+        `language_signal`), used to source the Founder DNA "Stress Response
+        Pattern" and "Communication Preference" dimensions separately."""
+        codes = [c for c in set(root_cause_codes) if c]
+        if not codes:
+            return []
+        conditions = [
+            BehaviourPatterns.linked_root_cause_ids.op("@>")(func.jsonb_build_array(code))
+            for code in codes
+        ]
+        stmt = select(BehaviourPatterns).where(or_(*conditions))
+        if pattern_type is not None:
+            stmt = stmt.where(BehaviourPatterns.pattern_type == pattern_type)
+        return list(self.db.execute(stmt).scalars().all())
+
     # --- Output (writes; flush only) --------------------------------------
 
     def replace_detected_root_causes(

@@ -1,5 +1,5 @@
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy import create_engine, event, text
+from sqlalchemy.orm import Session, sessionmaker, declarative_base
 
 from app.core.config import settings
 
@@ -27,6 +27,41 @@ engine = create_engine(
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
+
+
+_FOUNDER_UUID_KEY = "current_founder_uuid"
+
+
+@event.listens_for(Session, "after_begin")
+def _apply_rls_context(session, transaction, connection):
+    founder_uuid = session.info.get(_FOUNDER_UUID_KEY)
+
+    if founder_uuid:
+        connection.execute(
+            text(
+                "SELECT set_config("
+                "'app.current_founder_uuid', "
+                ":founder_uuid, "
+                "true)"
+            ),
+            {"founder_uuid": str(founder_uuid)},
+        )
+
+
+def set_founder_rls_context(db: Session, founder_uuid: str) -> None:
+    founder_uuid = str(founder_uuid)
+    db.info[_FOUNDER_UUID_KEY] = founder_uuid
+
+    if db.in_transaction():
+        db.execute(
+            text(
+                "SELECT set_config("
+                "'app.current_founder_uuid', "
+                ":founder_uuid, "
+                "true)"
+            ),
+            {"founder_uuid": founder_uuid},
+        )
 
 
 def get_db():

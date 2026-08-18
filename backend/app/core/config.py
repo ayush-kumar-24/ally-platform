@@ -108,7 +108,15 @@ class Settings(BaseSettings):
     # credit columns all exist as of migration b8e2d4f60a19, so it can be live.
     # An explicit PLAN_ENFORCEMENT_ENABLED in the process environment still wins
     # over this, so a deploy can disable it without a code change.
-    PLAN_ENFORCEMENT_ENABLED: bool = False
+    #
+    # Defaults to True (changed pre-beta, 2026-08-16): with it off, chat LLM
+    # usage is completely unbounded per founder -- a real cost-abuse exposure
+    # flagged in the pre-beta audit. "Secure by default" here means a deploy
+    # that forgets to set this env var explicitly still gets the gate, rather
+    # than silently shipping unmetered LLM access. Set
+    # PLAN_ENFORCEMENT_ENABLED=false explicitly (env var, not this default) if
+    # a specific environment genuinely needs it off.
+    PLAN_ENFORCEMENT_ENABLED: bool = True
 
     # Founder-archetype assignment via LLM. Off => the deterministic lexical
     # match, which its own docstring calls a heuristic. The LLM chooses from the
@@ -134,6 +142,43 @@ class Settings(BaseSettings):
     # could never cross the 80 needed to generate a report. Coverage means "how
     # much of THIS diagnosis is done", and a diagnosis is this many questions.
     MAX_DIAGNOSIS_QUESTIONS: int = 30
+
+    # --- Founder DNA (phase 2, adaptive) ---
+    # Safety ceiling for the Founder DNA phase, which runs BEFORE the
+    # diagnosis above (see founders.founder_dna_completed_at). Unlike
+    # MAX_DIAGNOSIS_QUESTIONS this is not a target to reach -- the engine
+    # stops earlier, per-dimension, the moment the resolution advisor judges
+    # a dimension resolved.
+    #
+    # 16 = the agreed 14-question base journey (one per dimension: the doc's
+    # thirteen plus EQ, with the last doubling as the "wow close") plus up to
+    # 2 adaptive follow-ups for dimensions a founder answered vaguely.
+    #
+    # The follow-up headroom is deliberate and small. A fixed 14-and-done was
+    # considered and is what the product decision specifies for the BASE, but
+    # leaving zero recovery room was live-observed to ship thin dimensions
+    # straight to the dashboard: in an end-to-end run the advisor left
+    # decision_style and energy_patterns unresolved after one answer each,
+    # and a founder's card read "Yeah, that's something I think about
+    # sometimes." Two spare slots cost ~2 minutes worst case and only fire
+    # when the advisor judges a dimension genuinely unresolved.
+    #
+    # Sized against the WHOLE journey: 16 x ~75s is ~20 min, leaving ~20 min
+    # for the 30-question business diagnosis inside the ~40-minute ceiling.
+    #
+    # History: 18 -> 9 -> 12 -> 16 as the base journey grew from 6 asked
+    # dimensions to 14. At 9 the ceiling sat below base+close and the
+    # follow-up pool could never fire at all -- verified live.
+    MAX_FOUNDER_DNA_QUESTIONS: int = 16
+    # Minimum answers a dimension needs before the resolution advisor is
+    # asked to judge it. 1, not 2: a single specific, story-based answer CAN
+    # fully resolve a dimension (verified live -- the advisor correctly held
+    # dimensions open on thin answers and closed them on concrete ones), and
+    # requiring a second answer everywhere doubled this phase's length for
+    # signal the advisor did not need. The advisor is still the one deciding
+    # -- a vague first answer keeps the dimension open and earns a follow-up,
+    # which is what the headroom in the ceiling above is for.
+    FOUNDER_DNA_MIN_QUESTIONS_PER_DIMENSION: int = 1
 
     # --- Provisioning ---
     # ON: first real (Supabase) login creates the founder row via

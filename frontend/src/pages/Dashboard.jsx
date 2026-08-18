@@ -249,7 +249,7 @@ export default function Dashboard() {
             </div>
           </button>
 
-          <button className="dash-action-card alt" type="button" onClick={() => navigate('/app/diagnosis')}>
+          <button className="dash-action-card alt" type="button" onClick={() => navigate('/app/founder-dna-journey')}>
             <div className="dash-action-top">
               <div className="dash-action-ic ic-diag">
                 <IconLightbulb />
@@ -257,7 +257,7 @@ export default function Dashboard() {
             </div>
             <h3>Start Founder Diagnosis</h3>
             <p>
-              A 20-minute structured AI assessment that traces the real root cause holding your business back - end to end.
+              A structured AI assessment that traces the real root cause holding your business back - end to end.
             </p>
             <div className="dash-chips">
               <span className="dash-chip">Founder DNA</span>
@@ -267,7 +267,15 @@ export default function Dashboard() {
             </div>
             <div className="dash-action-foot">
               <span className="dash-action-link">Start Diagnosis <IconArrowRight /></span>
-              <span className="dash-badge quiet">~20 min</span>
+              {/* Covers BOTH phases the chips above promise: the Founder DNA
+                  phase (adaptive, ~6-9 questions) then the business
+                  diagnosis (up to 30). The old "~20 min" predated the
+                  Founder DNA phase and now under-promises the real journey.
+                  Kept as an upper bound, not an average -- a founder whose
+                  answers resolve dimensions quickly finishes well inside it,
+                  and under-running a stated time is the harmless direction
+                  to be wrong in. */}
+              <span className="dash-badge quiet">under 40 min</span>
             </div>
           </button>
         </section>
@@ -300,7 +308,7 @@ export default function Dashboard() {
                   </button>
                 </>
               ) : (
-                <button className="btn btn-em" type="button" onClick={() => navigate('/app/diagnosis')}>
+                <button className="btn btn-em" type="button" onClick={() => navigate('/app/founder-dna-journey')}>
                   <IconArrowRight />
                   Start your diagnosis
                 </button>
@@ -374,7 +382,7 @@ export default function Dashboard() {
               </p>
               <div className="dash-note-actions">
                 <button className="btn btn-primary" type="button"
-                        onClick={() => navigate(hasDiagnosis ? '/app/plan' : '/app/diagnosis')}>
+                        onClick={() => navigate(hasDiagnosis ? '/app/plan' : '/app/founder-dna-journey')}>
                   {nextAction ? 'Open your plan'
                     : hasDiagnosis ? 'Plan your day'
                     : 'Start your diagnosis'}
