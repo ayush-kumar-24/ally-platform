@@ -67,7 +67,21 @@ _STAGE_CLAUSE = (
     "AND (d.stage_relevance IS NULL OR d.stage_relevance = 'All' "
     "OR d.stage_relevance = ANY(:stages))"
 )
-_INDUSTRY_CLAUSE = "AND (d.industry_tag IS NULL OR d.industry_tag = :industry)"
+# 'All' is a wildcard tag, exactly as it is for stage_relevance above -- NOT the
+# name of an industry. Matching it literally meant the 25 of 30 approved
+# documents tagged industry_tag='All' were invisible to every founder whose
+# industry was not, character for character, "All".
+#
+# Measured live: the same query returned 20 chunks with no filters and 0 with
+# industry="Technology & SaaS", so chat and reasoning ran with retrieval_hits=0
+# and no citations for essentially every real founder -- silently, because an
+# empty retrieval is indistinguishable from "nothing relevant was found".
+# The stage clause had always handled its 'All' correctly; only this one had
+# been written without the wildcard arm.
+_INDUSTRY_CLAUSE = (
+    "AND (d.industry_tag IS NULL OR d.industry_tag = 'All' "
+    "OR d.industry_tag = :industry)"
+)
 
 
 class SqlVectorRetrievalRepository(RetrievalRepository):

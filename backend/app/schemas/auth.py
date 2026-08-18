@@ -30,7 +30,13 @@ class SessionResponse(TokenPair):
     founder: IdentityOut
     provisioned: bool = Field(
         default=False,
-        description="Whether a founder row was created/ensured. False while provisioning is disabled.",
+        description=(
+            "True only when THIS call created the founder row -- i.e. a genuine "
+            "first login. False for every returning login, for dev identities "
+            "(never provisioned), and while provisioning is disabled. The old "
+            "wording, 'created/ensured', is what let this report true for "
+            "founders that had existed for days."
+        ),
     )
 
 

@@ -34,6 +34,7 @@ from app.api.v1.reasoning.schemas import (
     FollowUpTrigger,
     LLMClassification,
 )
+from app.core.config import settings
 from app.core.logger import logger
 from app.models.diagnosis import Answer, Question
 from app.models.enums import ScoreLabel
@@ -323,19 +324,33 @@ class StandardDiagnosticEngine(DiagnosticEngine):
         questions: dict[int, Question],
         context: ReasoningContext,
     ) -> list[AnswerClassification]:
-        classifications: list[AnswerClassification] = []
-        for answer in answers:
+        # Bounded-concurrent, not sequential. Each answer is classified
+        # independently, but this awaited them one at a time: profiled on a real
+        # 30-answer session the `diagnosis` stage was 161s of a 203s pipeline --
+        # 79% of what the founder waits through after their final answer, spent
+        # entirely on serialisation the work never required.
+        #
+        # Order is preserved: results come back indexed, so a founder's
+        # classifications stay in answer order regardless of completion order.
+        # An unscored answer is still skipped rather than failing the batch,
+        # exactly as before -- see DIAGNOSIS_CLASSIFY_CONCURRENCY for the width.
+        width = max(1, int(settings.DIAGNOSIS_CLASSIFY_CONCURRENCY or 1))
+        limit = asyncio.Semaphore(width)
+
+        async def _classify(answer: Answer) -> AnswerClassification | None:
             question = questions.get(answer.question_id)
-            try:
-                classifications.append(
-                    await self.classifier.classify(answer, question, context)
-                )
-            except DiagnosisDataError:
-                logger.warning(
-                    "Skipping unscored answer during classification",
-                    extra={"answer_id": answer.answer_id},
-                )
-        return classifications
+            async with limit:
+                try:
+                    return await self.classifier.classify(answer, question, context)
+                except DiagnosisDataError:
+                    logger.warning(
+                        "Skipping unscored answer during classification",
+                        extra={"answer_id": answer.answer_id},
+                    )
+                    return None
+
+        results = await asyncio.gather(*(_classify(a) for a in answers))
+        return [c for c in results if c is not None]
 
     def compute_category_risks(
         self,

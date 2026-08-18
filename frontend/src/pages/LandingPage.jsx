@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { getAccessToken } from '../services/api';
 
 
 const DIMS = [
@@ -385,7 +386,15 @@ export default function LandingPage() {
    * There is exactly one real sign-in flow now, in Login.jsx. Both CTAs here
    * just take the founder to it.
    */
-  const goToLogin = () => navigate('/guided/login');
+  /* Already signed in? Then "Continue with email" is the wrong promise: it
+     used to send an authenticated founder to /guided/login, which recognised
+     the session and bounced them straight to the dashboard. The destination
+     was right; the label described a login they were not about to do. Reading
+     the token at render is enough -- if it has expired server-side the
+     dashboard's own 401 handling takes over, which is the same path a bookmark
+     to /app already goes through. */
+  const signedIn = Boolean(getAccessToken());
+  const goToLogin = () => navigate(signedIn ? '/app' : '/guided/login');
 
   return (
     <div id="landing-page" ref={containerRef} className="scrollbar-thin">
@@ -412,7 +421,7 @@ export default function LandingPage() {
               hands back a password. There is no provider to pick between, so
               the nav no longer offers a choice it can't honour. */}
           <button className="lp-auth-btn lp-nav-auth" onClick={goToLogin} type="button">
-            <span className="na-label">Sign in</span>
+            <span className="na-label">{signedIn ? 'My dashboard' : 'Sign in'}</span>
           </button>
         </div>
       </nav>
@@ -447,12 +456,16 @@ export default function LandingPage() {
           <div className="j-eye"><span className="lv"></span> GoXL &middot; Ally</div>
           <h1>Meet Ally, your <em>Companion</em></h1>
           <p className="lp-hero-sub">In about 20 minutes, Ally learns how you lead and finds what's really holding you and your business back. You'll leave with a clarity report and your next move.</p>
-          <div className="lp-auth" role="group" aria-label="Login options">
+          <div className="lp-auth" role="group" aria-label={signedIn ? 'Continue to your workspace' : 'Login options'}>
             <button className="lp-auth-btn" onClick={goToLogin} type="button">
-              Continue with email
+              {signedIn ? 'Go to my dashboard' : 'Continue with email'}
             </button>
           </div>
-          <p className="lp-auth-fine">No password to invent up front — we email you a code.<br />Private &amp; encrypted · we never share your business.</p>
+          <p className="lp-auth-fine">
+            {signedIn
+              ? <>You're already signed in.<br />Private &amp; encrypted · we never share your business.</>
+              : <>No password to invent up front — we email you a code.<br />Private &amp; encrypted · we never share your business.</>}
+          </p>
         </div>
 
         {/* scroll cue */}

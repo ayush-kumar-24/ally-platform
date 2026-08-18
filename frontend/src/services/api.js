@@ -236,7 +236,41 @@ api.interceptors.response.use(
 // ── Reusable methods ─────────────────────────────────────────────────────────
 // All return `response.data` directly and throw ApiError on failure.
 
-export const get   = (url, config)       => api.get(url, config).then(r => r.data);
+/* In-flight GET coalescing.
+ *
+ * One dashboard load issued /dashboard/overview twice and /profile three
+ * times, because the shell (PlatformLayout) and the page (Dashboard, Report,
+ * Billing...) each fetch what they need independently -- which is the right
+ * way to write them; they should not have to know about each other. React's
+ * StrictMode double-invokes effects in development on top of that, doubling
+ * the whole set again.
+ *
+ * So: if an identical GET is ALREADY in flight, hand back the same promise
+ * instead of opening a second request. Deliberately not a cache -- nothing is
+ * retained past settlement, so a later refetch (after a save, say) still hits
+ * the network and nobody can read a stale value. It only collapses requests
+ * that overlap in time, which is exactly the duplicate class above.
+ *
+ * Skipped when a per-call `config` is present: that can carry an AbortSignal,
+ * an Authorization override or one-off headers, and sharing a response across
+ * two callers with different configs would be wrong.
+ */
+const inFlightGets = new Map();
+
+export const get = (url, config) => {
+  if (config) return api.get(url, config).then(r => r.data);
+
+  const existing = inFlightGets.get(url);
+  if (existing) return existing;
+
+  const request = api
+    .get(url)
+    .then(r => r.data)
+    .finally(() => inFlightGets.delete(url));
+
+  inFlightGets.set(url, request);
+  return request;
+};
 export const post  = (url, body, config) => api.post(url, body, config).then(r => r.data);
 export const put   = (url, body, config) => api.put(url, body, config).then(r => r.data);
 export const patch = (url, body, config) => api.patch(url, body, config).then(r => r.data);

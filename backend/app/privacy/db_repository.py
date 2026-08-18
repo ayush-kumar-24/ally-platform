@@ -21,6 +21,18 @@ from app.privacy.repository import PrivacyRepository
 # Sections included in a self-service export, as (label, SQL). Each is scoped to the
 # founder by :fid. Kept as an explicit list rather than "every table with a
 # founder_id" so that adding a table is a deliberate disclosure decision.
+#
+# The diagnosis half of this list was missing, and the omission was not small:
+# the Privacy Center screen offers "a full export (JSON) of all data Ally holds
+# about you -- founder profile, SESSIONS, and DIAGNOSIS HISTORY", while the
+# export returned profile/consents/settings/planning only. Measured on one
+# account: 5 records returned against 51 actually held. Under DPDP and GDPR
+# right-of-access that gap is the defect, so the tables the sentence already
+# promises are now included.
+#
+# Answers are joined to their question text on purpose. A portability export has
+# to be intelligible to the person receiving it, and a bare `question_id` is not
+# -- it is a foreign key into a catalogue they cannot see.
 _EXPORT_SECTIONS: tuple[tuple[str, str], ...] = (
     ("founder_profile", "select * from founders where founder_id = :fid"),
     ("consents", "select * from founder_consents where founder_id = :fid"),
@@ -29,7 +41,54 @@ _EXPORT_SECTIONS: tuple[tuple[str, str], ...] = (
     ("plans", "select * from planning_plans where founder_id = :fid"),
     ("goals", "select * from planning_goals where founder_id = :fid"),
     ("tasks", "select * from planning_tasks where founder_id = :fid"),
+    # --- diagnosis history ------------------------------------------------
+    ("diagnosis_sessions", "select * from sessions where founder_id = :fid"),
+    (
+        "diagnosis_answers",
+        "select a.*, q.question_text, q.category, q.question_code "
+        "from answers a left join questions q on q.question_id = a.question_id "
+        "where a.founder_id = :fid order by a.answered_at",
+    ),
+    (
+        "founder_dna_answers",
+        "select a.*, q.question_text, q.dimension_code "
+        "from founder_dna_answers a "
+        "left join founder_dna_questions q "
+        "  on q.founder_dna_question_id = a.founder_dna_question_id "
+        "where a.founder_id = :fid order by a.answered_at",
+    ),
+    (
+        "current_problem_answers",
+        "select a.*, q.question_text "
+        "from current_problem_answers a "
+        "left join current_problem_questions q "
+        "  on q.current_problem_question_id = a.current_problem_question_id "
+        "where a.founder_id = :fid order by a.answered_at",
+    ),
+    ("stage_assessments", "select * from stage_assessments where founder_id = :fid"),
+    ("detected_root_causes", "select * from detected_root_causes where founder_id = :fid"),
+    ("reports", "select * from founder_reports where founder_id = :fid"),
+    ("feedback", "select * from founder_feedback where founder_id = :fid"),
+    # --- what Ally remembers about them -----------------------------------
+    ("founder_context", "select * from founder_context where founder_id = :fid"),
+    ("founder_memory", "select * from founder_memory where founder_id = :fid"),
+    ("founder_memory_events", "select * from founder_memory_events where founder_id = :fid"),
+    # --- chat --------------------------------------------------------------
+    ("conversations", "select * from conversations where founder_id = :fid"),
+    (
+        "messages",
+        "select * from messages where founder_id = :fid order by created_at",
+    ),
 )
+
+# Deliberately NOT exported: `internal_intelligence_reports`.
+#
+# It is derived from this founder's data and therefore arguably personal data
+# under a right-of-access request, but it is also Ally's internal commercial
+# assessment. Which way that resolves is a legal call, not an engineering one,
+# so the status quo (excluded) is preserved rather than quietly changed here.
+# If counsel says it must be disclosed, add it to the tuple above -- nothing
+# else needs to change.
 
 
 class SqlAlchemyPrivacyRepository(PrivacyRepository):

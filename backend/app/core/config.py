@@ -166,10 +166,33 @@ class Settings(BaseSettings):
     # Sized against the WHOLE journey: 16 x ~75s is ~20 min, leaving ~20 min
     # for the 30-question business diagnosis inside the ~40-minute ceiling.
     #
-    # History: 18 -> 9 -> 12 -> 16 as the base journey grew from 6 asked
+    # History: 18 -> 9 -> 12 -> 16 -> 17 as the base journey grew from 6 asked
     # dimensions to 14. At 9 the ceiling sat below base+close and the
     # follow-up pool could never fire at all -- verified live.
-    MAX_FOUNDER_DNA_QUESTIONS: int = 16
+    #
+    # 17, because the CLOSE IS CHARGED TO THIS BUDGET TOO. The "two spare slots"
+    # above were counted as 16 - 14 base, but one of the two is always spent on
+    # the closing question, so only ONE follow-up could ever fire -- half the
+    # stated intent. Measured live at 16: the authored follow-up for
+    # energy_patterns (arc 92) was unreachable no matter how unresolved the
+    # dimension was, and the phase closed at 12/14. At 17 the same run reaches
+    # 13/14. So: 14 base + 2 follow-ups + 1 close = 17.
+    #
+    # Raising this was only safe once select_next_question() made the close
+    # TERMINAL. Ordering previously fell out of budget exhaustion, which held
+    # only while the ceiling was exactly base + 1 + close; the first attempt at
+    # 17 (before that fix) put the close at Q16 and a follow-up at Q17, after
+    # it. Do not raise this further without re-checking that the close is still
+    # last.
+    #
+    # Still inside the ceiling: 17 x ~75s is ~21 min, leaving ~19 min for the
+    # 30-question business diagnosis inside the ~40-minute whole-journey budget.
+    #
+    # Note this cannot reach 14/14 on its own: 10 of the 14 dimensions have no
+    # follow-up question authored at all (core_values among them), so they are
+    # one-shot regardless of budget. If the advisor cannot resolve one of those
+    # from a single answer, no ceiling helps -- that needs content, not config.
+    MAX_FOUNDER_DNA_QUESTIONS: int = 17
     # Minimum answers a dimension needs before the resolution advisor is
     # asked to judge it. 1, not 2: a single specific, story-based answer CAN
     # fully resolve a dimension (verified live -- the advisor correctly held
@@ -273,6 +296,20 @@ class Settings(BaseSettings):
     # template. Each section degrades to the template on failure and records it
     # (narrator_provenance), so template-generated sections are never invisible.
     REPORT_NARRATIVE_LLM: bool = False
+
+    # How many diagnosis ANSWERS to classify concurrently.
+    #
+    # DiagnosticEngine.classify_answers awaited one LLM call per answer in a
+    # plain for-loop, so a 30-answer session spent 30 x ~5s in series. Profiled
+    # on a real session: the `diagnosis` stage was 161s of a 203s pipeline --
+    # 79% of the founder's wait on the final answer. Every answer is classified
+    # independently, so the serialisation bought nothing.
+    #
+    # 6, not "all 30": each one is a provider call, and firing thirty at once is
+    # how a burst rate limit gets hit -- and this runs while the founder is
+    # waiting, so a 429 storm is the worst possible trade. 6 turns 30 serial
+    # calls into 5 waves. Set to 1 to restore the strictly-sequential behaviour.
+    DIAGNOSIS_CLASSIFY_CONCURRENCY: int = 6
 
     # Answer-consistency detector (input (c) of confidence). Off => the signal stays
     # UNAVAILABLE and confidence renormalises over the other four inputs, as before.
