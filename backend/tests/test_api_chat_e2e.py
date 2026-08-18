@@ -381,7 +381,9 @@ def test_openapi_documents_every_chat_endpoint(world):
     # 12, not 11: /conversations/{id}/messages was added -- GET /conversations/{id}
     # only ever returned the header (title, counts, timestamps), never the
     # transcript, so reopening a past conversation always rendered empty.
-    assert len(paths) == 12
+    # 13, not 12: /attachments/{id}/link was added -- an upload happens before
+    # the message exists, so the two can only be associated afterwards.
+    assert len(paths) == 13
     # every operation documents a response model (no undocumented responses)
     for path, ops in schema["paths"].items():
         if path.startswith("/api/v1/chat/"):

@@ -134,6 +134,11 @@ class ChatResponse:
     trace: ConversationExecutionTrace
     metrics: ChatMetrics
     error: str | None = None
+    # The turn the founder actually sent. Needed so anything uploaded before
+    # the send (attachments) can be tied to THAT message rather than floating
+    # at conversation level forever -- see POST /chat/attachments/{id}/link.
+    # None on the idempotent-replay path, which does not re-append.
+    user_message_id: str | None = None
 
     @property
     def is_empty(self) -> bool:

@@ -122,7 +122,7 @@ class ChatExecutionService:
                 return self._replay(request_id, conversation, started, prior_assistant)
 
         # 3. Append the user message (raises InvalidMessageError on empty content).
-        self.conversation_service.append_message(
+        user_message = self.conversation_service.append_message(
             conversation.conversation_id, MessageRole.USER, request.message,
             metadata={"request_id": request_id, "actor": request.actor},
         )
@@ -144,7 +144,8 @@ class ChatExecutionService:
         except Exception as exc:  # noqa: BLE001
             return self._finalize(request_id, conversation, started, completed, window,
                                   ai=None, rendered=None, assistant_id=None,
-                                  failed_step=RENDER_PROMPT, error=f"prompt: {exc}")
+                                  failed_step=RENDER_PROMPT, error=f"prompt: {exc}",
+                                  user_message_id=user_message.message_id)
 
         # 6. Execute AI (M5 is itself fail-closed -> always returns). Turns that
         # actually need to reason over grounded data (diagnosis/RAG) route to
@@ -217,7 +218,8 @@ class ChatExecutionService:
         error = None if ai.ok else (ai.error or "ai_execution_failed")
         response = self._finalize(request_id, conversation, started, completed, window,
                                   ai=ai, rendered=rendered, assistant_id=assistant_id,
-                                  failed_step=failed_step, error=error)
+                                  failed_step=failed_step, error=error,
+                                  user_message_id=user_message.message_id)
 
         # 8. Generate suggestions for this conversation now, while THIS turn's
         # context_window/ai_response are actually in hand -- the only place
@@ -295,13 +297,19 @@ class ChatExecutionService:
             answer=assistant_message.content,
             response_type=meta.get("response_type") or "answer",
             confidence=None, citations=(),
-            assistant_message_id=assistant_message.message_id, trace=trace, metrics=metrics, error=None,
+            assistant_message_id=assistant_message.message_id,
+            # Replay does not re-append the user turn (that is the point), so
+            # there is no new message to hand attachments to. The original
+            # send already linked them.
+            user_message_id=None,
+            trace=trace, metrics=metrics, error=None,
         )
 
     # --- finalize --------------------------------------------------------
 
     def _finalize(self, request_id, conversation, started, completed, window,
-                  *, ai, rendered, assistant_id, failed_step, error) -> ChatResponse:
+                  *, ai, rendered, assistant_id, failed_step, error,
+                  user_message_id=None) -> ChatResponse:
         finished = self.clock.now()
         duration_ms = round((finished - started).total_seconds() * 1000, 3)
 
@@ -327,7 +335,8 @@ class ChatExecutionService:
             response_type=ai.response_type if ok else "none",
             confidence=ai.confidence if ok else None,
             citations=ai.citations if ok else (),
-            assistant_message_id=assistant_id, trace=trace, metrics=metrics, error=error,
+            assistant_message_id=assistant_id, user_message_id=user_message_id,
+            trace=trace, metrics=metrics, error=error,
         )
 
     @staticmethod

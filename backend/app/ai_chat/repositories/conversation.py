@@ -42,7 +42,14 @@ class ConversationRepository(abc.ABC):
 
     # --- messages --------------------------------------------------------
     @abc.abstractmethod
-    def add_message(self, message: ConversationMessage) -> None: ...
+    def add_message(self, message: ConversationMessage) -> str | None:
+        """Persist a message; return the id it is actually stored under.
+
+        A SQL-backed store assigns its own key, which is what every later
+        read will report -- returning it lets the service correct the id it
+        minted, so a message written and then read back has ONE identity.
+        None means 'the id you gave me is the one I kept'."""
+        ...
 
     @abc.abstractmethod
     def list_messages(self, conversation_id: str) -> tuple[ConversationMessage, ...]: ...
@@ -109,9 +116,10 @@ class InMemoryConversationRepository(ConversationRepository):
 
     # --- messages --------------------------------------------------------
 
-    def add_message(self, message: ConversationMessage) -> None:
+    def add_message(self, message: ConversationMessage) -> str | None:
         with self._lock:
             self._messages.setdefault(message.conversation_id, []).append(message)
+        return None  # in-memory keeps the minted id verbatim
 
     def list_messages(self, conversation_id: str) -> tuple[ConversationMessage, ...]:
         with self._lock:

@@ -108,7 +108,11 @@ class ConversationService:
             important=important,
             metadata=dict(metadata or {}),
         )
-        self.repository.add_message(message)
+        persisted_id = self.repository.add_message(message)
+        if persisted_id and persisted_id != message.message_id:
+            # The store keyed it differently; adopt its id so what callers
+            # get back is what reads will return.
+            message = replace(message, message_id=persisted_id)
 
         # Unread accrues only for the founder-facing side (Ally's replies).
         unread = conversation.unread_count + (1 if role == MessageRole.ASSISTANT else 0)

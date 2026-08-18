@@ -125,6 +125,26 @@ class AttachmentService:
     def restore_attachment(self, attachment_id: str) -> Attachment:
         return self._transition(attachment_id, _ACTIVE, archived_at=None, deleted_at=None)
 
+    def link_to_message(self, attachment_id: str, message_id: str) -> Attachment:
+        """Tie an already-uploaded file to the message it was sent with.
+
+        Uploads necessarily happen BEFORE the message exists (the founder
+        picks the file, then types), so message_id cannot be set at creation
+        the way it can for anything attached server-side. Without this the
+        file stays conversation-level forever, which is why the composer had
+        no way to tell an attachment that had been sent from one still
+        waiting to be -- it showed both identically, permanently.
+
+        Deliberately does NOT change status or visibility: the file stays
+        active and stays in the LLM's context for later turns, exactly as
+        before. This only records which turn it arrived on."""
+        attachment = self._require(attachment_id)
+        if attachment.message_id == message_id:
+            return attachment                                  # idempotent
+        updated = replace(attachment, message_id=message_id, updated_at=self.clock.now())
+        self.repository.replace(updated)
+        return updated
+
     def delete_attachment(self, attachment_id: str) -> Attachment:
         now = self.clock.now()
         return self._transition(attachment_id, _DELETED, deleted_at=now)

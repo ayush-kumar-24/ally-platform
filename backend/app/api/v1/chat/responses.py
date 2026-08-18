@@ -43,6 +43,7 @@ class ApiChatResponse(BaseModel):
     confidence: float | None
     citations: list[str]
     assistant_message_id: str | None
+    user_message_id: str | None
     provider: str | None
     model: str | None
     error: str | None
@@ -55,6 +56,7 @@ class ApiChatResponse(BaseModel):
             request_id=r.request_id, conversation_id=r.conversation_id, ok=r.ok, answer=r.answer,
             response_type=r.response_type, confidence=(float(r.confidence) if r.confidence is not None else None),
             citations=list(r.citations), assistant_message_id=r.assistant_message_id,
+            user_message_id=getattr(r, 'user_message_id', None),
             provider=r.trace.provider, model=r.trace.model, error=r.error,
             metrics=ApiChatMetrics(
                 history_messages=m.history_messages, included_messages=m.included_messages,

@@ -162,7 +162,7 @@ class SqlConversationRepository(ConversationRepository):
 
     # --- messages ------------------------------------------------------
 
-    def add_message(self, message: ConversationMessage) -> None:
+    def add_message(self, message: ConversationMessage) -> str | None:
         conv_row = self._get_row(message.conversation_id)
         if conv_row is None:
             raise LookupError(f"conversation {message.conversation_id!r} not found")
@@ -185,6 +185,13 @@ class SqlConversationRepository(ConversationRepository):
         )
         self.db.add(row)
         self._persist()
+        # The service mints a uuid, but this table's key is the integer
+        # message_id -- and that is what _message_to_domain reports on every
+        # later read. Without handing it back, a message had one id when
+        # written and a different one when read, so nothing could correlate
+        # across a reload (found via chat attachments, which need to record
+        # the message they were sent with).
+        return str(row.message_id)
 
     def list_messages(self, conversation_id: str) -> tuple[ConversationMessage, ...]:
         conv_row = self._get_row(conversation_id)

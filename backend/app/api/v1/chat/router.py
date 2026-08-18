@@ -36,6 +36,7 @@ from app.api.v1.chat.responses import (
     SuggestionResponse,
 )
 from app.api.v1.chat.schemas import (
+    AttachmentLinkRequest,
     CreateConversationRequest,
     FeedbackRequest,
     MessageRequest,
@@ -249,6 +250,21 @@ def archive_attachment(
 ) -> AttachmentResponse:
     owned_attachment(service, attachment_id, founder_id)
     return AttachmentResponse.from_domain(service.archive_attachment(attachment_id))
+
+
+@router.post("/attachments/{attachment_id}/link", response_model=AttachmentResponse,
+             summary="Link an attachment to the message it was sent with")
+def link_attachment_to_message(
+    attachment_id: str,
+    payload: AttachmentLinkRequest,
+    founder_id: int = Depends(get_current_founder_id),
+    service=Depends(get_attachment_service),
+) -> AttachmentResponse:
+    """Called right after a send succeeds. The upload happens before the
+    message exists, so the association can only be made afterwards."""
+    owned_attachment(service, attachment_id, founder_id)
+    return AttachmentResponse.from_domain(
+        service.link_to_message(attachment_id, payload.message_id))
 
 
 @router.post("/attachments/{attachment_id}/restore", response_model=AttachmentResponse,

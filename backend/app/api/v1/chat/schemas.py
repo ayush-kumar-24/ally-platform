@@ -29,3 +29,10 @@ class CreateConversationRequest(BaseModel):
 class FeedbackRequest(BaseModel):
     feedback: Literal["accepted", "dismissed", "ignored"]
     note: str | None = Field(default=None, max_length=1000)
+
+
+class AttachmentLinkRequest(BaseModel):
+    """Which message an already-uploaded attachment was sent with. The upload
+    precedes the message (file picked, then typed), so this association can
+    only be made after the send returns."""
+    message_id: str = Field(min_length=1, max_length=64)
