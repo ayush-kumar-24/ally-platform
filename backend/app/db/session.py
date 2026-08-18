@@ -30,6 +30,7 @@ Base = declarative_base()
 
 
 _FOUNDER_UUID_KEY = "current_founder_uuid"
+_ADMIN_KEY = "current_admin"
 
 
 @event.listens_for(Session, "after_begin")
@@ -47,6 +48,11 @@ def _apply_rls_context(session, transaction, connection):
             {"founder_uuid": str(founder_uuid)},
         )
 
+    if session.info.get(_ADMIN_KEY):
+        connection.execute(
+            text("SELECT set_config('app.current_admin', 'true', true)")
+        )
+
 
 def set_founder_rls_context(db: Session, founder_uuid: str) -> None:
     founder_uuid = str(founder_uuid)
@@ -62,6 +68,33 @@ def set_founder_rls_context(db: Session, founder_uuid: str) -> None:
             ),
             {"founder_uuid": founder_uuid},
         )
+
+
+def set_admin_rls_context(db: Session) -> None:
+    """Mark this session as a system/admin actor for RLS.
+
+    The founder-isolation policies (migration d91c6e4b72aa) read
+    `founder_id = public.get_founder_id() OR app.current_admin`, and
+    get_founder_id() resolves from `app.current_founder_uuid`. A session with
+    NEITHER set therefore sees zero rows on every founder-scoped table --
+    sessions, answers, founders, founder_reports, detected_root_causes, all of
+    them -- rather than failing loudly. That is the correct default for a stray
+    connection and exactly wrong for a trusted server-initiated job, which has no
+    founder identity to carry and legitimately works across founders.
+
+    Used by the report-reconciliation sweep, which must find completed sessions
+    belonging to ANY founder before it can know whose they are. Do not reach for
+    this on a request path: a request has a founder, and
+    set_founder_rls_context is the least-privilege way to say so.
+
+    Set inside the transaction with `is_local = true`, same as the founder
+    context, so it dies with the transaction and can never leak to whoever gets
+    this pooled connection next.
+    """
+    db.info[_ADMIN_KEY] = True
+
+    if db.in_transaction():
+        db.execute(text("SELECT set_config('app.current_admin', 'true', true)"))
 
 
 def get_db():
