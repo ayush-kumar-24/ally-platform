@@ -45,6 +45,17 @@ class FounderDnaNotCompleteError(AppError):
         super().__init__(message, status_code=status.HTTP_409_CONFLICT)
 
 
+class CurrentProblemNotCompleteError(AppError):
+    def __init__(
+        self,
+        message: str = (
+            "Describe the current problem (POST /current-problem/start) before "
+            "starting a diagnosis."
+        ),
+    ):
+        super().__init__(message, status_code=status.HTTP_409_CONFLICT)
+
+
 class SessionNotFoundError(AppError):
     def __init__(self, message: str = "No active diagnosis session was found."):
         super().__init__(message, status_code=status.HTTP_404_NOT_FOUND)
@@ -142,12 +153,20 @@ class DiagnosisService:
             question = self._current_question_for(existing, founder)
             return existing, question, True
 
-        # Agreed phase order: Founder DNA fully first, then Business DNA. Only
-        # gates a NEW diagnosis -- same reasoning as the allowance check right
-        # below: an in-progress assessment (the resume path above) must always
-        # be continuable even if this were somehow unset later.
+        # The doc's three sections in order: Founder DNA, then the Current
+        # Problem symptom capture, then this -- the Business DNA interrogation.
+        # The symptom gate matters diagnostically, not just for tidiness: the
+        # report's whole Page 3 move is quoting what the founder SAID the
+        # problem was and contradicting it with what the interrogation found.
+        # Interrogate first and there is nothing to contradict.
+        #
+        # Only gates a NEW diagnosis -- same reasoning as the allowance check
+        # right below: an in-progress assessment (the resume path above) must
+        # always be continuable even if this were somehow unset later.
         if founder.founder_dna_completed_at is None:
             raise FounderDnaNotCompleteError()
+        if founder.current_problem_completed_at is None:
+            raise CurrentProblemNotCompleteError()
 
         # Only a NEW diagnosis is bounded. The resume path above has already
         # returned, so an in-progress assessment can always be continued -- the

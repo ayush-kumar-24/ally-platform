@@ -34,6 +34,7 @@ const ROUTE_EYE = {
   '/app': 'Overview',
   '/app/ally-chat': 'Conversation',
   '/app/founder-dna-journey': 'Founder first',
+  '/app/current-problem': 'In your words',
   '/app/diagnosis': 'Diagnosis',
   '/app/founder-dna': 'Founder first',
   '/app/business-dna': 'Business',

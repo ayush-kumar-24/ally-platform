@@ -12,6 +12,7 @@ from app.api.v1.admin.panel_router import router as admin_panel_router
 from app.api.v1.admin.panel_router_v2 import router as admin_panel_router_v2
 from app.api.v1.dashboard.routes import router as dashboard_router
 from app.api.v1.diagnosis.router import router as diagnosis_router
+from app.api.v1.current_problem.router import router as current_problem_router
 from app.api.v1.founder_dna.router import router as founder_dna_router
 from app.api.v1.discovery.routes import router as discovery_router
 from app.api.v1.intelligence.routes import router as intelligence_router
@@ -39,6 +40,7 @@ api_router.include_router(feedback_router)
 api_router.include_router(frontend_errors_router)
 api_router.include_router(discovery_router)
 api_router.include_router(founder_dna_router)
+api_router.include_router(current_problem_router)
 api_router.include_router(diagnosis_router)
 api_router.include_router(settings_router)
 api_router.include_router(settings_preferences_router)
