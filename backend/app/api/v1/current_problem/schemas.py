@@ -8,7 +8,7 @@ fixed length, so unlike Founder DNA it CAN honestly show "2 of 4".
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
 
 
 class CurrentProblemQuestionRead(BaseModel):
@@ -69,5 +69,14 @@ class SubmitCurrentProblemAnswerRequest(BaseModel):
 class SubmitCurrentProblemAnswerResponse(BaseModel):
     progress: CurrentProblemProgress
     next_question: CurrentProblemQuestionRead | None = Field(
-        default=None, description="Null when the phase just completed."
+        default=None,
+        description="DEPRECATED alias of `question`, kept for existing clients. "
+        "Null when the phase just completed.",
     )
+
+    @computed_field
+    @property
+    def question(self) -> CurrentProblemQuestionRead | None:
+        """Canonical name -- /start and /current already use it. See
+        diagnosis/schemas.py SubmitAnswerResponse.question for why both ship."""
+        return self.next_question

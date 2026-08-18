@@ -39,6 +39,33 @@ class FounderDnaRepository:
         )
         return list(self.db.execute(stmt).scalars().all())
 
+    def closing_answered(self, founder_id: int, stage_group: str) -> bool:
+        """True once this founder has answered the stage group's closing question.
+
+        The engine cannot infer this from `list_candidate_questions`, which drops
+        answered questions: a close that has been ASKED and a close that was
+        never AUTHORED both show up there as simply absent. Without the
+        distinction the selector kept handing out follow-ups after the closing
+        question had already run, which is how a founder ended up getting the
+        "one sentence from your future self" close and then another analytical
+        question after it.
+        """
+        stmt = (
+            select(FounderDnaAnswers.founder_dna_answer_id)
+            .join(
+                FounderDnaQuestions,
+                FounderDnaQuestions.founder_dna_question_id
+                == FounderDnaAnswers.founder_dna_question_id,
+            )
+            .where(
+                FounderDnaAnswers.founder_id == founder_id,
+                FounderDnaQuestions.stage_group == stage_group,
+                FounderDnaQuestions.is_closing.is_(True),
+            )
+            .limit(1)
+        )
+        return self.db.execute(stmt).scalars().first() is not None
+
     # --- Answers ---
 
     def get_answer(self, founder_id: int, question_id: int) -> FounderDnaAnswers | None:

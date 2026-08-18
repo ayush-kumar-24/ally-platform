@@ -51,6 +51,7 @@ from app.core.auth import (
 )
 from app.core.config import settings
 from app.db.session import get_db
+from app.middleware.rate_limit import ip_rate_limit
 from app.schemas.auth import (
     AuthStatus,
     IdentityOut,
@@ -59,7 +60,7 @@ from app.schemas.auth import (
     SessionResponse,
     TokenPair,
 )
-from app.services.provisioning import ensure_founder
+from app.services.provisioning import ensure_founder_with_status
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -68,6 +69,16 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 # would mean the browser attaches it to every single API request for no
 # benefit, the opposite of least-privilege for a long-lived credential.
 _COOKIE_PATH = "/api/v1/auth"
+
+# Named module-level dependency objects, not inline Depends(ip_rate_limit(...))
+# calls -- FastAPI's dependency_overrides keys by the exact callable object
+# passed to Depends(), and a factory call produces a fresh closure every
+# time. Naming these lets a test override them (same pattern as chat_gate /
+# message_rate_limit) if a suite ever needs to exceed these limits within a
+# single run.
+session_rate_limit = ip_rate_limit(key="auth-session", limit=20, window_seconds=60)
+refresh_rate_limit = ip_rate_limit(key="auth-refresh", limit=30, window_seconds=60)
+resume_rate_limit = ip_rate_limit(key="auth-resume", limit=30, window_seconds=60)
 
 
 def _claim_expiry(claims: dict) -> datetime | None:
@@ -126,7 +137,11 @@ def _incoming_refresh_token(request: Request, payload) -> str:
     raise AuthError("No refresh token provided")
 
 
-@router.post("/session", response_model=SessionResponse)
+@router.post(
+    "/session",
+    response_model=SessionResponse,
+    dependencies=[Depends(session_rate_limit)],
+)
 async def start_session(
     request: Request,
     response: Response,
@@ -141,18 +156,34 @@ async def start_session(
     dev founder) -- dev identities are not provisioned.
     """
     ip = request.client.host if request.client else "0.0.0.0"
-    founder = ensure_founder(identity, db, ip_address=ip)
+    founder, created = ensure_founder_with_status(identity, db, ip_address=ip)
 
     pair, refresh_token = _token_pair(identity)
     _set_refresh_cookie(response, refresh_token)
     return SessionResponse(
         **pair.model_dump(),
-        founder=IdentityOut(id=identity.id, email=identity.email, provider=identity.provider),
-        provisioned=founder is not None,
+        # The founder ROW's email, not the upstream identity's. In dev mode the
+        # identity carries a synthesised "<uuid>@ally.local" address, so echoing
+        # it reported a fake email for a founder whose real one was sitting in
+        # the row this call had just loaded. The frontend happened to survive
+        # that by re-fetching /profile; anything trusting this response did not.
+        founder=IdentityOut(
+            id=identity.id,
+            email=(founder.email if founder is not None else None) or identity.email,
+            provider=identity.provider,
+        ),
+        # Whether this call CREATED the row -- not whether one exists. The old
+        # `founder is not None` reported true for every returning login, and for
+        # dev identities that provisioning explicitly never touches.
+        provisioned=created,
     )
 
 
-@router.post("/refresh", response_model=TokenPair)
+@router.post(
+    "/refresh",
+    response_model=TokenPair,
+    dependencies=[Depends(refresh_rate_limit)],
+)
 async def refresh_session(
     request: Request,
     response: Response,
@@ -177,7 +208,11 @@ async def refresh_session(
     return pair
 
 
-@router.post("/resume", response_model=SessionResponse)
+@router.post(
+    "/resume",
+    response_model=SessionResponse,
+    dependencies=[Depends(resume_rate_limit)],
+)
 async def resume_session(
     request: Request,
     response: Response,

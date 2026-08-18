@@ -399,6 +399,17 @@ class DiagnosisService:
             raise DiagnosisPersistenceError("Could not save your progress. Please try again.")
 
         self.db.refresh(session)
+
+        # _attach_question is the single authority on whether a next question
+        # exists -- it nulls current_question_id when it decides the session is
+        # done. `next_question` here is the candidate picked BEFORE that
+        # decision, so on the completing answer it holds a real question the
+        # session was never actually moved to. Returning it advertised
+        # `status: "completed"` and a populated `next_question` in the same
+        # response, and a client trusting the question over the status would
+        # ask it and get a 409.
+        if session.status != SessionStatus.IN_PROGRESS.value:
+            return session, None
         return session, next_question
 
     async def _choose_next_question(

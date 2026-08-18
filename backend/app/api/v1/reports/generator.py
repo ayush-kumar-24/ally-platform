@@ -126,6 +126,11 @@ class ReportNarrativeGenerator:
         variant = select_variant(payload)
         order = self._section_order(payload, variant)
 
+        # Sequential on purpose. Narrating these concurrently was tried and
+        # reverted: measured on a real 30-answer session, the whole
+        # report_generation stage is 0.4s of a 203s pipeline, so overlapping it
+        # bought nothing and cost a ThreadPoolExecutor. The 161s is in answer
+        # classification -- see DiagnosticEngine.classify_answers.
         sections: list[Section] = []
         sources: list[str] = []
         for key in order:

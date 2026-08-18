@@ -7,7 +7,7 @@ patterns it already has for diagnosis.
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
 
 
 class FounderDnaQuestionRead(BaseModel):
@@ -88,5 +88,13 @@ class SubmitFounderDnaAnswerResponse(BaseModel):
     progress: FounderDnaProgress
     next_question: FounderDnaQuestionRead | None = Field(
         default=None,
-        description="Null when the phase just completed.",
+        description="DEPRECATED alias of `question`, kept for existing clients. "
+        "Null when the phase just completed.",
     )
+
+    @computed_field
+    @property
+    def question(self) -> FounderDnaQuestionRead | None:
+        """Canonical name -- /start and /current already use it. See
+        diagnosis/schemas.py SubmitAnswerResponse.question for why both ship."""
+        return self.next_question

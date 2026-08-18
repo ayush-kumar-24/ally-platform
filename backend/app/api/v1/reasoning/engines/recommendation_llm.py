@@ -38,7 +38,8 @@ from app.api.v1.reasoning.schemas import (
 )
 from app.core.logger import logger
 from app.models.enums import ConfirmationStatus
-from app.services.llm.base import LLMError, LLMMessage, LLMRequest, LLMRole
+from app.services.llm.base import LLMMessage, LLMRequest, LLMRole
+from app.services.llm.text import run_sync
 
 _SYSTEM = (
     "You advise startup founders. You are given a root cause diagnosed in a "
@@ -84,10 +85,23 @@ class LLMRecommendationFallback:
         for code, scored, name in list(uncovered)[: self.max_gaps]:
             try:
                 payload = self._ask(name or code, stage_name, industry)
-            except (LLMError, asyncio.TimeoutError, json.JSONDecodeError, ValueError) as exc:
+            # Broad on purpose. The module contract above is "fails open: a
+            # diagnosis is never blocked on filling a library gap", and the
+            # narrow tuple this used to catch did not honour it -- a RuntimeError
+            # from the async seam sailed straight through and cost the founder
+            # their entire report. Nothing this helper can raise is worth more
+            # than the report it sits inside, so anything short of a cancellation
+            # or interpreter shutdown (BaseException) degrades to "cause stays
+            # uncovered", which is precisely the pre-fallback behaviour.
+            except Exception as exc:
                 logger.warning(
                     "Recommendation fallback failed; cause stays uncovered",
-                    extra={"root_cause_code": code, "error": str(exc)},
+                    extra={
+                        "root_cause_code": code,
+                        "error_type": type(exc).__name__,
+                        "error": str(exc),
+                    },
+                    exc_info=exc,
                 )
                 continue
 
@@ -144,7 +158,15 @@ class LLMRecommendationFallback:
             max_tokens=500,
             response_format={"type": "json_object"},
         )
-        response = asyncio.run(
+        # `run_sync`, not a bare `asyncio.run`: this is called from inside the
+        # reasoning pipeline, which is `async def` and therefore already has a
+        # running loop on this thread. `asyncio.run` raises "cannot be called
+        # from a running event loop" there, and because RuntimeError was outside
+        # this call's fail-open guard below, that escaped `fill` and rolled the
+        # WHOLE diagnosis back -- a completed 30-answer session produced zero
+        # founder_reports. Same sync-caller/async-provider seam, and the same
+        # fix, as ReasoningTrigger and the report narrator.
+        response = run_sync(
             asyncio.wait_for(self.provider.generate(request), self.timeout_seconds)
         )
         return json.loads(response.text)
