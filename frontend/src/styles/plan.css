@@ -214,12 +214,38 @@
   transform: translateY(-1px);
 }
 
+/* Was missing entirely -- the button just went inert with no visual change,
+   so clicking "Plan my day" looked broken while the request was in flight. */
+.pl-plan-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.pl-plan-btn:disabled:hover {
+  background: #10B981;
+  transform: none;
+}
+
 .pl-plan-btn svg {
   width: 14px;
   height: 14px;
   fill: none;
   stroke: currentColor;
   stroke-width: 2.2;
+}
+
+.pl-plan-btn .pl-spinner {
+  width: 13px;
+  height: 13px;
+  border: 2px solid rgba(6, 35, 26, 0.3);
+  border-top-color: #06231a;
+  border-radius: 50%;
+  animation: pl-spin 0.7s linear infinite;
+}
+
+@keyframes pl-spin {
+  to { transform: rotate(360deg); }
 }
 
 /* ---- Checklist goal rows ---- */
@@ -239,6 +265,103 @@
 .pl-goal-row:hover {
   border-color: var(--bd-2, #d8cfc2);
   transform: translateY(-1px);
+}
+
+/* ---- Per-task "..." menu (edit / delete) ---- */
+.pl-task-menu {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.pl-task-menu-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--muted-2, #6c7a70);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+.pl-task-menu-btn:hover,
+.pl-task-menu-btn[aria-expanded="true"] {
+  background: var(--bg-2, #f4efe6);
+  color: var(--ink, #16241c);
+}
+
+.pl-task-menu-btn svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
+.pl-task-menu-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 5;
+  background: #ffffff;
+  border: 1px solid var(--bd, #e7e0d6);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px -8px rgba(0, 0, 0, 0.2);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  min-width: 110px;
+}
+
+.pl-task-menu-list button {
+  text-align: left;
+  padding: 7px 10px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  font-family: var(--body);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink, #16241c);
+  cursor: pointer;
+}
+
+.pl-task-menu-list button:hover {
+  background: var(--bg-2, #f4efe6);
+}
+
+.pl-task-menu-list button.danger {
+  color: #b91c1c;
+}
+
+.pl-task-menu-list button.danger:hover {
+  background: rgba(239, 68, 68, 0.08);
+}
+
+/* ---- Inline task edit row ---- */
+.pl-edit-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  flex-wrap: wrap;
+}
+
+.pl-edit-cancel {
+  font-family: var(--display);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted, #556458);
+  background: transparent;
+  border: 1px solid var(--bd, #e7e0d6);
+  border-radius: 8px;
+  padding: 8px 14px;
+  height: 36px;
+  cursor: pointer;
+}
+
+.pl-edit-cancel:hover {
+  border-color: var(--bd-2, #d8cfc2);
 }
 
 .pl-checkbox {
@@ -324,6 +447,57 @@
   background: rgba(245, 158, 11, 0.08);
   color: #b45309;
   border: 1px solid rgba(245, 158, 11, 0.2);
+}
+
+/* Was missing outright -- every task defaulted to medium with no way to set
+   a different priority, so "low" never actually got a badge shown. */
+.pl-badge.low {
+  background: rgba(16, 185, 129, 0.08);
+  color: #0c7a54;
+  border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+/* ---- Priority picker (manual add) ---- */
+.pl-priority-picker {
+  display: flex;
+  gap: 6px;
+}
+
+.pl-priority-opt {
+  font-family: var(--display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: capitalize;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--bd, #e7e0d6);
+  background: #ffffff;
+  color: var(--muted, #556458);
+  cursor: pointer;
+  transition: background 0.15s var(--ease), border-color 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+.pl-priority-opt:hover {
+  border-color: var(--emerald, #10B981);
+}
+
+.pl-priority-opt.active.high {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.35);
+  color: #b91c1c;
+}
+
+.pl-priority-opt.active.medium {
+  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.35);
+  color: #b45309;
+}
+
+.pl-priority-opt.active.low {
+  background: rgba(16, 185, 129, 0.1);
+  border-color: rgba(16, 185, 129, 0.35);
+  color: #0c7a54;
 }
 
 .pl-meta-item {

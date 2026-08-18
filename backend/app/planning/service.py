@@ -190,6 +190,10 @@ class PlanningService:
         self.get_goal(founder_id, goal_id)
         return self.repository.list_tasks(goal_id)
 
+    def delete_task(self, founder_id: int, task_id: str) -> None:
+        self.get_task(founder_id, task_id)          # ownership + existence
+        self.repository.delete_task(task_id)
+
     def update_task(self, founder_id: int, task_id: str, *, title: str | None = None,
                     status: ProgressStatus | None = None, priority: Priority | None = None,
                     due_date: date | None = None, clear_due_date: bool = False) -> Task:

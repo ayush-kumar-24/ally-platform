@@ -141,6 +141,12 @@ class SqlAlchemyPlanningRepository(PlanningRepository):
                 .order_by(TaskRow.created_at, TaskRow.task_id).all())
         return tuple(_task(r) for r in rows)
 
+    def delete_task(self, task_id):
+        row = self.db.get(TaskRow, task_id)
+        if row is not None:
+            self.db.delete(row)
+            self.db.commit()
+
     # --- reminders -------------------------------------------------------
     def add_reminder(self, reminder):
         self.db.add(ReminderRow(

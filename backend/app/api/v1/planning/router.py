@@ -160,6 +160,15 @@ def update_task(task_id: str, payload: TaskUpdate, founder_id: int = Depends(get
     return TaskResponse.from_domain(service.update_task(founder_id, task_id, **fields))
 
 
+@router.delete("/tasks/{task_id}", status_code=204, summary="Delete a task")
+def delete_task(task_id: str, founder_id: int = Depends(get_current_founder_id),
+                service: PlanningService = Depends(get_planning_service)) -> None:
+    # Unlike plans (archived, recoverable) a task has no restore path -- this
+    # is a real row delete, so 204/no body rather than echoing back a
+    # response_model for something that no longer exists.
+    service.delete_task(founder_id, task_id)
+
+
 # --- reminders --------------------------------------------------------------
 
 

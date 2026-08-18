@@ -8,7 +8,7 @@
  * and everything else operates on tasks directly.
  */
 
-import { get, patch, post } from './api';
+import { del, get, patch, post } from './api';
 
 const DEFAULT_PLAN_TITLE = 'My Plan';
 const DEFAULT_GOAL_TITLE = 'Tasks';
@@ -49,6 +49,22 @@ export async function addTask(title, { priority = 'medium', dueDate = null } = {
 
 export function setTaskStatus(taskId, status) {
   return patch(`/planning/tasks/${taskId}`, { status });
+}
+
+/** Title and/or priority -- the two fields the per-task edit menu exposes.
+ * Both optional so a caller only sends what actually changed. */
+export function updateTask(taskId, { title, priority } = {}) {
+  const body = {};
+  if (title !== undefined) body.title = title;
+  if (priority !== undefined) body.priority = priority;
+  return patch(`/planning/tasks/${taskId}`, body);
+}
+
+/** No undo -- unlike a plan (archived, restorable), a task has no restore
+ * path once deleted. The caller is responsible for confirming with the
+ * founder before calling this. */
+export function deleteTask(taskId) {
+  return del(`/planning/tasks/${taskId}`);
 }
 
 /** Every not-done task with a due date on or before today -- what "Ally should
