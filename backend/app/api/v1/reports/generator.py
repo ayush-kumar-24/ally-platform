@@ -40,6 +40,11 @@ _HEADINGS = {
     "discovery_cta": "Your next move with Ally",
 }
 
+#: The free tier's "3+3 action plan" -- three lines to confirm/isolate, three
+#: to solve (Stage-Adaptive doc s6). A ceiling, not a quota: fewer is honest,
+#: more is the paid tier's "multiple problems ranked by priority".
+_ACTION_LINES_PER_SIDE = 3
+
 # Frontend sections with NO backend source -- surfaced empty, never fabricated.
 # "expected_impact" covers the two frontend boxes (Expected Business / Founder Impact);
 # it was previously missing here, so it went absent SILENTLY instead of being declared.
@@ -316,9 +321,24 @@ class ReportNarrativeGenerator:
             rcs = [{"name": rc.name, "category": rc.category,
                     "confirmation_status": rc.confirmation_status, "rank": rc.rank}
                    for rc in p.top_root_causes]
+            # The founder's own words, plus the probe answers the
+            # contradiction is drawn from. Both go into slots as well as
+            # facts: this is the one section where the narrator is SUPPOSED to
+            # quote the founder back to themselves, so withholding the text
+            # from the LLM would leave it asserting a root cause with nothing
+            # to weigh it against. Absent on pre-Current-Problem reports, in
+            # which case the narrator falls back to root-causes-only prose.
+            probes = [{"question": q, "answer": a} for q, a in p.symptom_probes]
+            extra = {}
+            if p.stated_symptom:
+                extra["stated_symptom"] = p.stated_symptom
+            if probes:
+                extra["symptom_probes"] = probes
+            if not rcs and not extra:
+                return {}, {}
             # Hard rule 5: Not-Tested must never read as certain as Confirmed --
             # confirmation_status is carried on every finding (categorical, no %).
-            return ({"root_causes": rcs}, {"root_causes": rcs}) if rcs else ({}, {})
+            return {"root_causes": rcs, **extra}, {"root_causes": rcs, **extra}
 
         if key == "areas_to_monitor":
             # Names ONLY -- never the raw category-risk score. The score is an
@@ -329,10 +349,28 @@ class ReportNarrativeGenerator:
             return {"categories": names}, {"categories": names}
 
         if key == "priority_actions":
-            confirm = [{"next_actions": list(a.next_actions), "priority": a.priority}
-                       for a in p.confirm_actions]
-            solve = [{"next_actions": list(a.next_actions), "priority": a.priority}
-                     for a in p.solve_actions]
+            # The doc's free tier is "a 3+3 action plan (3 lines to
+            # confirm/isolate the problem further, 3 lines to solve it)" --
+            # three LINES per side, not three interventions. next_actions is a
+            # list per intervention, so the cap has to be applied to the
+            # flattened lines; capping the interventions instead let a single
+            # intervention carrying five steps render a five-line "3 lines of
+            # action". Ordering is already priority-sorted upstream, so the
+            # first three are the three that matter most.
+            def _capped(items):
+                lines, out = 0, []
+                for a in items:
+                    if lines >= _ACTION_LINES_PER_SIDE:
+                        break
+                    take = list(a.next_actions)[: _ACTION_LINES_PER_SIDE - lines]
+                    if not take:
+                        continue
+                    lines += len(take)
+                    out.append({"next_actions": take, "priority": a.priority})
+                return out
+
+            confirm = _capped(p.confirm_actions)
+            solve = _capped(p.solve_actions)
             slots = {"confirm_actions": confirm, "solve_actions": solve}
             # intervention IDs stay in the OWNER facts; the shared view strips them.
             facts = {"confirm_actions": confirm, "solve_actions": solve,

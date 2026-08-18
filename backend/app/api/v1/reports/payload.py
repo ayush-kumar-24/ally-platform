@@ -136,6 +136,20 @@ class ReportPayload:
     # no-rigid-schema choice already made for that engine.
     phase2_dimensions: dict[str, tuple[str, ...]] = field(default_factory=dict)
 
+    # --- Current Problem (app/api/v1/current_problem/) ---
+    # The founder's own words for what they think is wrong, captured BEFORE
+    # the diagnosis interrogation ran. Page 3 of every example report in the
+    # Stage-Adaptive doc opens by quoting this and then contradicting it
+    # ("Rohan describes the problem as 'we need more marketing' -- but his own
+    # account shows..."), so without it the report can only assert a root
+    # cause, never show the founder the gap between it and what they believed.
+    # Deliberately NOT founders.problem_statement: that is onboarding text and
+    # can be months stale by the time a diagnosis runs.
+    stated_symptom: str | None = None
+    # (question_text, answer_text) for the three stage-specific probes, in ask
+    # order -- the evidence the contradiction is drawn from.
+    symptom_probes: tuple[tuple[str, str], ...] = ()
+
     @property
     def psychology_flagged(self) -> bool:
         """Founder Psychology takes narrative precedence when the psychology
@@ -288,6 +302,31 @@ def build_report_payload(db: Session, report) -> ReportPayload:
         for r in rows
     )
 
+    # Current Problem phase. Founder-scoped, not session-scoped, so this is
+    # keyed on founder_id like the Founder DNA dimensions above rather than
+    # joined through the session. Absent (None/empty) for every report
+    # generated before that phase shipped -- the narrator degrades to its
+    # pre-existing root-cause-only prose in that case rather than inventing a
+    # symptom to contradict.
+    symptom_rows = db.execute(
+        text(
+            "select q.question_text, a.answer_text, q.is_symptom "
+            "from current_problem_answers a "
+            "join current_problem_questions q "
+            "  on q.current_problem_question_id = a.current_problem_question_id "
+            "where a.founder_id = :fid "
+            "order by q.arc_position asc"
+        ),
+        {"fid": report.founder_id},
+    ).mappings().all()
+    stated_symptom = next(
+        (r["answer_text"] for r in symptom_rows if r["is_symptom"]), None
+    )
+    symptom_probes = tuple(
+        (r["question_text"], r["answer_text"])
+        for r in symptom_rows if not r["is_symptom"]
+    )
+
     return ReportPayload(
         report_id=report.report_id, founder_id=report.founder_id,
         session_id=report.session_id, founder_name=founder_name,
@@ -306,6 +345,7 @@ def build_report_payload(db: Session, report) -> ReportPayload:
         strengths_blind_spots=strengths_blind_spots, stress_response=stress_response,
         communication_preference=communication_preference,
         phase2_dimensions=phase2_dimensions,
+        stated_symptom=stated_symptom, symptom_probes=symptom_probes,
         top_root_causes=top_root_causes,
         confirm_actions=_actions(report.confirm_actions),
         solve_actions=_actions(report.solve_actions),

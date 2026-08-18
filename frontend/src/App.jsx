@@ -39,6 +39,7 @@ const Dashboard = lazy(() => import('./pages/Dashboard'));
 const AllyChat = lazy(() => import('./pages/AllyChat'));
 const DiagnosisChat = lazy(() => import('./pages/DiagnosisChat'));
 const FounderDnaChat = lazy(() => import('./pages/FounderDnaChat'));
+const CurrentProblemChat = lazy(() => import('./pages/CurrentProblemChat'));
 const Thinking = lazy(() => import('./pages/Thinking'));
 const FounderProfile = lazy(() => import('./pages/FounderProfile'));
 const FounderDNA = lazy(() => import('./pages/FounderDNA'));
@@ -191,6 +192,11 @@ export default function App() {
                 "founder-dna" below, which is the read-only result card:
                 this one is where the founder answers. */}
             <Route path="founder-dna-journey" element={<FounderDnaChat />} />
+            {/* Phase 2 of 3. Reached from the Founder DNA journey rather than
+                linked directly -- see PlatformLayout, where the one "Start
+                Diagnosis" entry point still points at founder-dna-journey and
+                each phase passes through once complete. */}
+            <Route path="current-problem" element={<CurrentProblemChat />} />
             <Route path="diagnosis" element={<DiagnosisChat />} />
             <Route path="thinking" element={<Thinking />} />
             <Route path="founder-dna" element={<FounderDNA />} />

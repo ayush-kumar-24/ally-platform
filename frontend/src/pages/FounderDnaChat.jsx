@@ -59,14 +59,14 @@ export default function FounderDnaChat() {
         if (cancelled) return;
         setResolved(state.resolved);
         if (state.complete) {
-          // Already finished on arrival -- pass straight through to the
-          // diagnosis rather than showing a completion screen for something
-          // they did days ago. `replace` so Back doesn't bounce them here
-          // again. This is what lets the dashboard's single "Start
-          // Diagnosis" button always point at this route: a founder who has
-          // done the phase never notices it exists, and one who hasn't gets
-          // it before the 409 can happen.
-          navigate('/app/diagnosis', { replace: true });
+          // Already finished on arrival -- pass straight through to the next
+          // phase rather than showing a completion screen for something they
+          // did days ago. `replace` so Back doesn't bounce them here again.
+          // This is what lets the dashboard's single "Start Diagnosis" button
+          // always point at this route: each phase forwards to the next once
+          // done, so a founder lands on the first thing they still owe and
+          // /diagnosis/start's 409 gates are never reached from the UI.
+          navigate('/app/current-problem', { replace: true });
           return;
         }
         setQuestion(state.question);
@@ -125,7 +125,7 @@ export default function FounderDnaChat() {
         setQuestion(null);
         setMessages(prev => [...prev, {
           role: 'ally', time: clock(),
-          text: "That's your Founder DNA mapped. Now let's look at the business itself.",
+          text: "That's your Founder DNA mapped. Now — what do you think is actually going wrong?",
         }]);
       }
     } catch {
@@ -141,7 +141,7 @@ export default function FounderDnaChat() {
           setQuestion(null);
           setMessages(prev => [...prev, {
             role: 'ally', time: clock(),
-            text: "That's your Founder DNA mapped. Now let's look at the business itself.",
+            text: "That's your Founder DNA mapped. Now — what do you think is actually going wrong?",
           }]);
           return;
         }
@@ -201,9 +201,9 @@ export default function FounderDnaChat() {
               Here's how this <em>works</em>
             </h1>
             <p className="fd-hero-desc">
-              Two conversations and a report. Ally asks one question at a time,
-              adapts to what you say, and stops as soon as it has what it needs
-              — so the length depends on your answers.
+              Three short stretches and a report. Ally asks one question at a
+              time, adapts to what you say, and stops as soon as it has what it
+              needs — so the length depends on your answers.
             </p>
           </div>
         </div>
@@ -218,6 +218,11 @@ export default function FounderDnaChat() {
               step: 'First · ~15 min',
               title: 'Ally gets to know you',
               desc: 'Around fifteen questions about how you decide, what drives you, where your energy goes, and how you handle pressure. Not a personality quiz — real situations from how you actually run this.',
+            },
+            {
+              step: 'Then · ~5 min',
+              title: 'You say what you think is wrong',
+              desc: "In your own words, plus a few follow-ups. Ally quotes this back in your report — and then shows you whether the answers actually agree with it.",
             },
             {
               step: 'Then · ~20 min',
@@ -290,12 +295,13 @@ export default function FounderDnaChat() {
         <div style={{ fontSize: '40px' }} aria-hidden="true">🧬</div>
         <h2 style={{ margin: 0 }}>Your Founder DNA is mapped</h2>
         <p style={{ color: 'var(--muted-2)', margin: 0 }}>
-          {resolved.length} of {TOTAL_DIMENSIONS} dimensions understood. Next, Ally
-          looks at the business itself and traces what's actually holding it back.
+          {resolved.length} of {TOTAL_DIMENSIONS} dimensions understood. Next, tell
+          Ally what you think the problem is — then it goes looking for what's
+          actually causing it.
         </p>
         <div style={{ display: 'flex', gap: '10px', marginTop: '8px', flexWrap: 'wrap', justifyContent: 'center' }}>
-          <button type="button" className="btn-primary" onClick={() => navigate('/app/diagnosis')}>
-            Continue to diagnosis
+          <button type="button" className="btn-primary" onClick={() => navigate('/app/current-problem')}>
+            Continue
           </button>
           <button type="button" className="sugg" onClick={() => navigate('/app/founder-dna')}>
             See my Founder DNA
