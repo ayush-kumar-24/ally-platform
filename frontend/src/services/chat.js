@@ -57,6 +57,32 @@ export function sendMessage({ message, conversationId, sessionId, language, requ
   }));
 }
 
+/* --- attachments ---------------------------------------------------------
+   Upload lives in the page (it needs FormData + the multipart Content-Type
+   dance); these two are the reads/removes the chip row needs so a founder
+   can see what is actually attached and take one back off. */
+
+/** Active attachments on a conversation. Archived ones are excluded, which
+ *  matches what the chat's context builder actually feeds the LLM. */
+export function listAttachments(conversationId) {
+  return get(`/chat/conversations/${conversationId}/attachments`);
+}
+
+/** Tie an uploaded file to the message it was sent with. Uploads happen
+ *  before the message exists, so this can only run after the send returns --
+ *  it is what lets a reload put the chip back in its own bubble instead of
+ *  back in the composer. */
+export function linkAttachmentToMessage(attachmentId, messageId) {
+  return post(`/chat/attachments/${attachmentId}/link`, { message_id: messageId });
+}
+
+/** Archive (not purge): the row and its bytes stay, but the attachment drops
+ *  out of the conversation and out of the LLM's context -- reversible, and
+ *  the audit trail survives. */
+export function removeAttachment(attachmentId) {
+  return del(`/chat/attachments/${attachmentId}`);
+}
+
 export function getSuggestions(conversationId) {
   return get(`/chat/conversations/${conversationId}/suggestions`);
 }

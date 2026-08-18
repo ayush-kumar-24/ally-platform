@@ -5,6 +5,7 @@ import { getCurrentSession, normalise, resumeOrStart, submitAnswer } from '../se
 import { explainLimit } from '../services/plans';
 import { useVoiceInput } from '../hooks/useVoiceInput';
 import VoiceBars from '../components/VoiceBars';
+import Markdown from '../components/Markdown';
 import FeedbackPrompt from '../components/FeedbackPrompt';
 import { FEEDBACK } from '../services/feedback';
 
@@ -260,7 +261,12 @@ export default function DiagnosisChat() {
                 {m.role === 'ally' ? '🤝' : initials}
               </div>
               <div>
-                <div className="bubble">{m.text}</div>
+                <div className="bubble">
+                  {/* Ally's side only: a founder's own answer is shown
+                      verbatim, since a stray asterisk in their words is
+                      punctuation, not formatting. */}
+                  {m.role === 'ally' ? <Markdown>{m.text}</Markdown> : m.text}
+                </div>
                 <div className="m-meta">{m.time}</div>
               </div>
             </div>

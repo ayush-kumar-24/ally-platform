@@ -2111,3 +2111,73 @@ body.lp-done #landing-page { display:none; }
   .voice-meter .vm-dot{animation:none}
   .voice-meter .vm-bars span{transition:none}
 }
+
+/* ---- Attached-file chips (above the chat input) ------------------------
+   Standing evidence of what is actually attached to this conversation. The
+   upload toast is transient, so it could not answer "is my file on there?"
+   a few seconds later, or after a reload. Sourced from the server on open,
+   so it reflects what the LLM will actually be given, not what this tab
+   happens to remember. */
+.ac-attachments{display:flex;flex-wrap:wrap;gap:6px;max-width:800px;margin:0 auto 8px}
+.ac-chip{display:inline-flex;align-items:center;gap:6px;max-width:260px;padding:5px 6px 5px 9px;border-radius:9px;background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.3);color:#a7f3d0;font-size:12px}
+.ac-chip>svg{width:13px;height:13px;flex-shrink:0;fill:none;stroke:currentColor;stroke-width:2}
+/* The filename is the whole point of the chip, so it truncates rather than
+   wrapping or pushing the remove button out of reach. */
+.ac-chip-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ac-chip-x{display:grid;place-items:center;width:18px;height:18px;flex-shrink:0;border:none;border-radius:5px;background:transparent;color:inherit;cursor:pointer;opacity:.7}
+.ac-chip-x:hover{opacity:1;background:rgba(239,68,68,.22);color:#fca5a5}
+.ac-chip-x svg{width:11px;height:11px;fill:none;stroke:currentColor;stroke-width:2.4}
+/* Delivered files, shown under their own message bubble. No remove control:
+   the message is already sent, so the chip is a record of what went with it. */
+.msg-attachments{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.msg.me .msg-attachments{justify-content:flex-end}
+.ac-chip.is-sent{background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.14);color:#a7c0b4}
+
+/* ---- Markdown in Ally's replies ---------------------------------------
+   The model has always written markdown; until now the bubble printed it
+   raw, so every answer arrived as one unbroken block with literal ** and ##
+   in it. Spacing is the substance of this: headings and paragraphs need room
+   to read as structure rather than as more text. */
+.md{font-size:14.5px;line-height:1.72;color:#dbe7e0}
+/* No leading/trailing margin -- the bubble already provides its padding. */
+.md>:first-child{margin-top:0}
+.md>:last-child{margin-bottom:0}
+.md p{margin:0 0 12px}
+.md h1,.md h2,.md h3,.md h4{
+  font-family:var(--display);color:#eaf3ee;font-weight:750;line-height:1.35;
+  margin:20px 0 8px;letter-spacing:-.01em}
+.md h1{font-size:19px}
+.md h2{font-size:17px}
+.md h3{font-size:15.5px}
+.md h4{font-size:14.5px}
+.md strong{color:#eaf3ee;font-weight:700}
+.md em{font-style:italic}
+.md ul,.md ol{margin:0 0 12px;padding-left:22px}
+.md li{margin:5px 0}
+.md li::marker{color:#34d399}
+.md ul ul,.md ol ol,.md ul ol,.md ol ul{margin:5px 0}
+.md a{color:#34d399;text-decoration:underline;text-underline-offset:2px}
+.md a:hover{color:#5eead4}
+.md blockquote{
+  margin:0 0 12px;padding:2px 0 2px 14px;
+  border-left:2px solid rgba(16,185,129,.45);color:#a7c0b4}
+.md hr{border:none;border-top:1px solid rgba(255,255,255,.12);margin:18px 0}
+/* Inline vs block decided by structure, not by a library prop -- see the
+   note in components/Markdown.jsx. */
+.md :not(pre)>code{
+  font-family:'Fira Code',ui-monospace,monospace;font-size:12.6px;
+  background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.1);
+  padding:1.5px 5px;border-radius:5px;color:#a7f3d0;white-space:normal}
+/* Wide snippets scroll inside the bubble instead of stretching it. */
+.md-pre{
+  margin:0 0 12px;padding:12px 14px;border-radius:10px;overflow-x:auto;
+  background:rgba(0,0,0,.32);border:1px solid rgba(255,255,255,.1)}
+.md pre>code{
+  font-family:'Fira Code',ui-monospace,monospace;font-size:12.6px;
+  line-height:1.6;color:#d7e6de;background:none;border:none;padding:0;
+  white-space:pre}
+.md-table-wrap{overflow-x:auto;margin:0 0 12px}
+.md table{border-collapse:collapse;font-size:13px;min-width:100%}
+.md th,.md td{
+  border:1px solid rgba(255,255,255,.12);padding:7px 10px;text-align:left}
+.md th{background:rgba(255,255,255,.06);color:#eaf3ee;font-weight:700}

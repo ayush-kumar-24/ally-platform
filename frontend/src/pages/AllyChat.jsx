@@ -3,7 +3,10 @@ import { useApp } from '../context/AppContext';
 import {
   createConversation,
   getConversationMessages,
+  linkAttachmentToMessage,
+  listAttachments,
   listConversations,
+  removeAttachment,
   sendMessage,
   toUiMessage,
 } from '../services/chat';
@@ -15,6 +18,7 @@ import { post, ApiError } from '../services/api';
 import { greetingNow } from '../utils/helpers';
 import { useVoiceInput } from '../hooks/useVoiceInput';
 import VoiceBars from '../components/VoiceBars';
+import Markdown from '../components/Markdown';
 import { usePlan as usePlanGateEntitlements } from '../components/PlanGate';
 import { explainLimit, getMyPlan, can, FEATURES } from '../services/plans';
 
@@ -44,6 +48,16 @@ export default function AllyChat() {
   const [threadError, setThreadError] = useState(false);
   const [plan, setPlan] = useState(null);
   const [uploading, setUploading] = useState(false);
+  /* What is attached to THIS conversation right now. A transient toast was
+     the only signal before, so once it faded a founder had no way to tell
+     whether their file was actually attached -- or, after a reload, that it
+     still was. Server-sourced on open so it survives a refresh. */
+  const [attachments, setAttachments] = useState([]);
+  /* Files already delivered, keyed by the message they went out with, so
+     they render inside that bubble instead of sitting in the composer
+     forever. Rebuilt from the server on open (AttachmentResponse carries
+     message_id), so it survives a reload. */
+  const [sentAttachments, setSentAttachments] = useState({});
   const scrollRef = useRef(null);
   const taRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -80,6 +94,21 @@ export default function AllyChat() {
     try {
       const conv = await getConversationMessages(id);
       setMessages((conv.messages ?? []).map(toUiMessage));
+      // Best-effort: a thread still opens fine if this read fails, it just
+      // shows no chips rather than blocking the transcript on them.
+      listAttachments(id)
+        .then((res) => {
+          const all = res.attachments ?? [];
+          // Unlinked = uploaded but never sent (the founder attached, then
+          // navigated away), so it belongs back in the composer. Linked =
+          // already delivered, and belongs to its message.
+          setAttachments(all.filter(a => !a.message_id));
+          setSentAttachments(all.reduce((acc, a) => {
+            if (a.message_id) (acc[a.message_id] ||= []).push(a);
+            return acc;
+          }, {}));
+        })
+        .catch(() => { setAttachments([]); setSentAttachments({}); });
     } catch {
       /* This used to just setMessages([]), which rendered the "New
          conversation" hero -- so a thread that failed to load was
@@ -114,6 +143,8 @@ export default function AllyChat() {
     // founder edited the text before resending) is a genuinely new message.
     const failed = lastFailedRef.current;
     const requestId = failed && failed.text === text ? failed.requestId : crypto.randomUUID();
+    // Snapshot before awaiting: these are the files this send is delivering.
+    const pending = attachments;
 
     try {
       // Create the conversation lazily, on the first message, so an abandoned
@@ -128,6 +159,33 @@ export default function AllyChat() {
 
       const res = await sendMessage({ message: text, conversationId: convId, requestId });
       lastFailedRef.current = null;
+
+      /* Hand the pending files to the message that just went out, so they
+         stop sitting in the composer looking un-sent. Linking is persisted
+         (message_id on the row) purely so a reload can put them back in the
+         right bubble -- it does not change what the LLM sees, which stays
+         conversation-wide as before. Best-effort: if the link call fails the
+         chip still moves locally, because the file genuinely was sent. */
+      const mid = res.user_message_id;
+      if (mid) {
+        // The optimistic bubble was pushed before the server had assigned an
+        // id; adopt the real one so anything keyed by message id lands on it.
+        setMessages(prev => {
+          const next = [...prev];
+          for (let i = next.length - 1; i >= 0; i--) {
+            if (next[i].role === 'me' && !next[i].id) { next[i] = { ...next[i], id: mid }; break; }
+          }
+          return next;
+        });
+      }
+      if (pending.length) {
+        setAttachments([]);
+        if (mid) {
+          setSentAttachments(prev => ({ ...prev, [mid]: pending }));
+          Promise.all(pending.map(a =>
+            linkAttachmentToMessage(a.attachment_id, mid).catch(() => {})));
+        }
+      }
 
       // The API answers with `ok: false` and an empty `answer` when it cannot
       // ground a reply -- most often because this founder has no diagnosis yet, so
@@ -208,12 +266,26 @@ export default function AllyChat() {
       const form = new FormData();
       form.append('conversation_id', conversationId);
       form.append('file', file);
-      await post('/chat/attachments', form, { headers: { 'Content-Type': undefined } });
+      const created = await post('/chat/attachments', form,
+                                 { headers: { 'Content-Type': undefined } });
+      setAttachments(prev => [...prev, created]);
       showToast(`Attached "${file.name}" — mention it in your message and I'll take it into account.`);
     } catch (err) {
       showToast(err instanceof ApiError ? err.detail : 'Could not attach that file — please try again.');
     } finally {
       setUploading(false);
+    }
+  };
+
+  const handleRemoveAttachment = async (att) => {
+    // Optimistic: the chip disappears on click, and comes back if the
+    // request fails, so removing never feels laggy but never lies either.
+    setAttachments(prev => prev.filter(a => a.attachment_id !== att.attachment_id));
+    try {
+      await removeAttachment(att.attachment_id);
+    } catch (err) {
+      setAttachments(prev => [...prev, att]);
+      showToast(err instanceof ApiError ? err.detail : 'Could not remove that file — please try again.');
     }
   };
 
@@ -259,6 +331,10 @@ export default function AllyChat() {
   const startNew = () => {
     setActiveConv(null);
     setMessages([]);
+    // Attachments belong to a conversation, so they must not carry over into
+    // a new one -- leaving them would show files that this thread cannot use.
+    setAttachments([]);
+    setSentAttachments({});
     setHistOpen(false);
   };
 
@@ -378,7 +454,23 @@ export default function AllyChat() {
                     {m.role === 'ally' ? '✦' : (user?.initials || firstName || '?').charAt(0).toUpperCase()}
                   </div>
                   <div>
-                    <div className="bubble">{m.text}</div>
+                    <div className="bubble">
+                      {m.role === 'ally' ? <Markdown>{m.text}</Markdown> : m.text}
+                    </div>
+                    {/* Files delivered with this turn -- read-only here (the
+                        message is already sent), so no remove control. */}
+                    {(sentAttachments[m.id] || []).length > 0 && (
+                      <div className="msg-attachments">
+                        {sentAttachments[m.id].map((a) => (
+                          <span className="ac-chip is-sent" key={a.attachment_id}>
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                              <path d="M21.4 11.05 12.25 20.2a5.5 5.5 0 01-7.78-7.78l9.19-9.19a3.5 3.5 0 114.95 4.95l-9.2 9.19a1.5 1.5 0 01-2.12-2.12l8.49-8.49" />
+                            </svg>
+                            <span className="ac-chip-name" title={a.filename}>{a.filename}</span>
+                          </span>
+                        ))}
+                      </div>
+                    )}
                     {m.confidence && (
                       <ConfBar pct={m.confidence} />
                     )}
@@ -418,6 +510,31 @@ export default function AllyChat() {
               {plan && <span className="arm-bar"><i style={{ width: `${usedPct}%` }} /></span>}
             </span>
           </div>
+          {/* Persistent proof of what is attached. The upload toast is
+              transient, so once it faded there was no way to tell a file had
+              attached at all -- or, after a reload, that it still was. */}
+          {attachments.length > 0 && (
+            <div className="ac-attachments" aria-label="Attached files">
+              {attachments.map((a) => (
+                <span className="ac-chip" key={a.attachment_id}>
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M21.4 11.05 12.25 20.2a5.5 5.5 0 01-7.78-7.78l9.19-9.19a3.5 3.5 0 114.95 4.95l-9.2 9.19a1.5 1.5 0 01-2.12-2.12l8.49-8.49" />
+                  </svg>
+                  <span className="ac-chip-name" title={a.filename}>{a.filename}</span>
+                  <button
+                    type="button"
+                    className="ac-chip-x"
+                    aria-label={`Remove ${a.filename}`}
+                    onClick={() => handleRemoveAttachment(a)}
+                  >
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M18 6 6 18M6 6l12 12" />
+                    </svg>
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
           <div className={`ci-row${voice.status !== 'idle' ? ' voice-live' : ''}`}>
             {voice.status !== 'idle' && (
               <VoiceBars
