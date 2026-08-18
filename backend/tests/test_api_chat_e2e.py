@@ -20,6 +20,11 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.api.v1.chat import dependencies as deps
+# `from app.api.v1.chat import router` would resolve to the re-exported
+# APIRouter instance (app/api/v1/chat/__init__.py does `from .router import
+# router`, colliding with the submodule's own name) rather than the module --
+# import the two names directly instead, off the actual module object.
+from app.api.v1.chat.router import message_rate_limit, stream_rate_limit
 from app.api.v1.plans.dependencies import ChatGate, chat_gate
 from app.ai_chat import build_conversation_service
 from app.ai_chat.attachments import build_attachment_service
@@ -140,6 +145,14 @@ def world():
         # the 100 calls got a real 429 mid-run instead of the mocked answer.
         chat_gate: lambda: ChatGate(founder_id=founder["id"], tier="free",
                                     service=None, enforced=False),
+        # Same reasoning as chat_gate above, for the per-founder request-rate
+        # limiter (app/middleware/rate_limit.py): this suite's load/concurrency
+        # tests legitimately send far more than 20 messages/minute for a
+        # single founder_id, which the limiter (correctly) has no way to tell
+        # apart from real abuse. It has its own dedicated tests
+        # (test_rate_limit.py).
+        message_rate_limit: lambda: None,
+        stream_rate_limit: lambda: None,
     }
     app.dependency_overrides.update(overrides)
     yield SimpleNamespace(client=TestClient(app), conv=conv, att=att, sug=sug, founder=founder)
@@ -236,6 +249,26 @@ def test_conversation_messages_endpoint_ownership_and_404(world):
         assert c.get(f"{BASE}/conversations/{cid}/messages").status_code == 404
     finally:
         world.founder["id"] = 1
+
+
+def test_upload_attachment_rejects_foreign_conversation(world):
+    """Regression test: POST /attachments previously had no ownership check on
+    the client-supplied conversation_id, so an authenticated founder could
+    upload an attachment into another founder's conversation. Every sibling
+    route in the router already checks ownership before acting; this closes
+    the gap the same way -- 404, not 403, matching owned_conversation's
+    never-disclose-a-foreign-resource convention."""
+    c = world.client
+    cid = _new_conversation(c)
+    world.founder["id"] = 2
+    try:
+        resp = _upload(c, cid)
+        assert resp.status_code == 404
+    finally:
+        world.founder["id"] = 1
+    # and the attachment must not have been written against founder 1's
+    # conversation despite the rejected request
+    assert c.get(f"{BASE}/conversations/{cid}/attachments").json()["total"] == 0
 
 
 def test_chat_in_archived_conversation_409(world):
