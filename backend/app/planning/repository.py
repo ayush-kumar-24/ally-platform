@@ -53,6 +53,9 @@ class PlanningRepository(abc.ABC):
     @abc.abstractmethod
     def list_tasks(self, goal_id: str) -> tuple[Task, ...]: ...
 
+    @abc.abstractmethod
+    def delete_task(self, task_id: str) -> None: ...
+
     # reminders
     @abc.abstractmethod
     def add_reminder(self, reminder: "Reminder") -> "Reminder": ...
@@ -141,6 +144,10 @@ class InMemoryPlanningRepository(PlanningRepository):
             items = [t for t in self._tasks.values() if t.goal_id == goal_id]
         items.sort(key=lambda t: (t.created_at, t.task_id))
         return tuple(items)
+
+    def delete_task(self, task_id):
+        with self._lock:
+            self._tasks.pop(task_id, None)
 
     # reminders
     def add_reminder(self, reminder):

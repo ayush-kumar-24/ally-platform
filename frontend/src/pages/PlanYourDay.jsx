@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import PlanGate from '../components/PlanGate';
 import { FEATURES } from '../services/plans';
-import { addTask, listTasks, setTaskStatus } from '../services/planning';
+import { addTask, deleteTask, listTasks, setTaskStatus, updateTask } from '../services/planning';
 import { ApiError } from '../services/api';
 import { greetingNow } from '../utils/helpers';
 
@@ -20,6 +20,31 @@ function completedAtLabel(task) {
   return new Date(task.completed_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 }
 
+/** "i need to review the website" -> "I need to review the website". Titles
+ * are stored exactly as typed (no forced casing at the API layer, so a
+ * founder's own capitalization choices are never silently overwritten) --
+ * this only affects how they're displayed, sitting next to the all-caps
+ * priority badge which otherwise makes an un-capitalized title look broken
+ * rather than just informal. */
+function displayTitle(title) {
+  if (!title) return title;
+  return title.charAt(0).toUpperCase() + title.slice(1);
+}
+
+/** UTC calendar day, matching the convention dueLabel() above already uses
+ * for due_date comparisons -- not the founder's local timezone, but
+ * consistent with the rest of this file rather than a one-off exception. */
+function isToday(isoTimestamp) {
+  if (!isoTimestamp) return false;
+  return isoTimestamp.slice(0, 10) === new Date().toISOString().slice(0, 10);
+}
+
+/** "3 Aug" -- a past day read the way a person reads it, for grouping the
+ * completed-history list. */
+function dayLabel(isoTimestamp) {
+  return new Date(isoTimestamp).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+}
+
 /** "Today" / "Overdue" / "12 Aug" — a due date read the way a person reads it. */
 function dueLabel(task) {
   if (!task?.due_date) return '';
@@ -31,6 +56,109 @@ function dueLabel(task) {
   });
 }
 
+/** The "⋯" menu on every task row -- previously there was no way to edit a
+ * typo or change priority after creation, and no way to remove a task at
+ * all short of directly editing the database. */
+function TaskMenu({ onEdit, onDelete }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  return (
+    <div className="pl-task-menu" ref={ref} onClick={(e) => e.stopPropagation()}>
+      <button
+        type="button"
+        className="pl-task-menu-btn"
+        aria-label="Task options"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="5" r="1.8" />
+          <circle cx="12" cy="12" r="1.8" />
+          <circle cx="12" cy="19" r="1.8" />
+        </svg>
+      </button>
+      {open && (
+        <div className="pl-task-menu-list" role="menu">
+          <button type="button" role="menuitem" onClick={() => { setOpen(false); onEdit(); }}>
+            Edit
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="danger"
+            onClick={() => { setOpen(false); onDelete(); }}
+          >
+            Delete
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Replaces a task row in place while editing -- title + priority, the same
+ * two fields the manual-add form takes, so editing isn't a different,
+ * smaller feature than creating. */
+function TaskEditForm({ task, onSave, onCancel, saving }) {
+  const [title, setTitle] = useState(task.title);
+  const [priority, setPriority] = useState(task.priority);
+  const canSave = title.trim().length > 0;
+
+  return (
+    <div className="pl-edit-row">
+      <label className="sr-only" htmlFor={`pl-edit-${task.task_id}`}>Task description</label>
+      <input
+        id={`pl-edit-${task.task_id}`}
+        type="text"
+        className="pl-textarea"
+        style={{ minHeight: 'auto', height: '36px', padding: '0 10px', flex: 1 }}
+        value={title}
+        disabled={saving}
+        onChange={(e) => setTitle(e.target.value)}
+        onKeyDown={(e) => e.key === 'Enter' && canSave && onSave({ title: title.trim(), priority })}
+        autoFocus
+      />
+      <div role="radiogroup" aria-label="Priority" className="pl-priority-picker">
+        {['low', 'medium', 'high'].map((p) => (
+          <button
+            key={p}
+            type="button"
+            role="radio"
+            aria-checked={priority === p}
+            className={`pl-priority-opt ${p}${priority === p ? ' active' : ''}`}
+            disabled={saving}
+            onClick={() => setPriority(p)}
+          >
+            {p}
+          </button>
+        ))}
+      </div>
+      <button
+        type="button"
+        className="pl-plan-btn"
+        style={{ height: '36px', padding: '0 14px' }}
+        disabled={saving || !canSave}
+        onClick={() => onSave({ title: title.trim(), priority })}
+      >
+        {saving && <span className="pl-spinner" aria-hidden="true" />}
+        {saving ? 'Saving…' : 'Save'}
+      </button>
+      <button type="button" className="pl-edit-cancel" onClick={onCancel} disabled={saving}>
+        Cancel
+      </button>
+    </div>
+  );
+}
+
 function PlanYourDayInner() {
   const { user, showToast } = useApp();
   const [activeTab, setActiveTab] = useState('ally');
@@ -39,6 +167,14 @@ function PlanYourDayInner() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [dateString, setDateString] = useState('');
+  // Only the manual-add tab exposes this -- "Plan with Ally" is a quick
+  // brain-dump (deterministic comma-splitting, not AI parsing, see the note
+  // on handlePlanMyDay below), so it always defaults to medium rather than
+  // asking the founder to configure something on a "just talk" path. Every
+  // task used to be created medium with no way to set anything else.
+  const [manualPriority, setManualPriority] = useState('medium');
+  const [editingTaskId, setEditingTaskId] = useState(null);
+  const [savingEdit, setSavingEdit] = useState(false);
 
   useEffect(() => {
     const options = { weekday: 'long', month: 'long', day: 'numeric' };
@@ -58,8 +194,62 @@ function PlanYourDayInner() {
 
   useEffect(() => { refresh(); }, [refresh]);
 
+  const handleSaveEdit = async (task, { title, priority }) => {
+    setSavingEdit(true);
+    try {
+      await updateTask(task.task_id, { title, priority });
+      setEditingTaskId(null);
+      await refresh();
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.detail : 'Could not save changes — please try again.');
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const handleDeleteTask = async (task) => {
+    // No undo once this goes through -- confirm first rather than making a
+    // stray click permanent.
+    if (!window.confirm(`Delete "${displayTitle(task.title)}"? This can't be undone.`)) return;
+    try {
+      await deleteTask(task.task_id);
+      await refresh();
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.detail : 'Could not delete that task — please try again.');
+    }
+  };
+
+  // Active tasks are never day-scoped -- an unfinished task carries forward
+  // every day until it's done, rather than vanishing just because the date
+  // changed (that's what a "founder needs to redo their whole list every
+  // morning" bug would look like).
   const activeGoals = sortByPriority(tasks.filter(t => t.status !== 'done'));
-  const completedGoals = tasks.filter(t => t.status === 'done');
+  const doneGoals = tasks.filter(t => t.status === 'done');
+  // "Completed today" used to show every done task the founder has ever had
+  // -- a task finished two weeks ago read as finished "today" forever, with
+  // no way to tell the two apart. Actually scoped to today now.
+  const completedGoals = doneGoals.filter(t => isToday(t.completed_at));
+  // Everything else done, grouped by the day it was actually completed --
+  // this is the only place a founder can see what they finished on a past
+  // day; there was previously no such view at all. Keyed by ISO date (not
+  // the display label) so groups sort chronologically regardless of the
+  // order tasks came back in.
+  const completedHistory = Object.entries(
+    doneGoals
+      // handleToggleActive optimistically flips status to 'done' before the
+      // server responds with a real completed_at -- during that brief
+      // window the task has status 'done' but completed_at is still null,
+      // which crashed the .slice() below (reported live: marking a task
+      // done threw "Something went wrong" every time). isToday(null) is
+      // already false, so the plain !isToday filter let these through,
+      // filter them out explicitly instead.
+      .filter(t => t.completed_at && !isToday(t.completed_at))
+      .reduce((groups, t) => {
+        const isoDay = t.completed_at.slice(0, 10);
+        (groups[isoDay] ||= []).push(t);
+        return groups;
+      }, {})
+  ).sort(([a], [b]) => b.localeCompare(a)); // most recent day first
 
   const handleToggleActive = async (task) => {
     // Optimistic: flip locally first so the checkbox feels instant, reconcile
@@ -96,8 +286,12 @@ function PlanYourDayInner() {
       const titles = activeTab === 'ally'
         ? text.split(',').map(s => s.trim()).filter(Boolean)
         : [text];
+      // Manual add carries whatever the picker is set to; "Plan with Ally"
+      // stays medium for every phrase -- it never asked which of several
+      // brain-dumped items was more urgent than the others.
+      const priority = activeTab === 'manual' ? manualPriority : 'medium';
       for (const title of titles) {
-        await addTask(title, { priority: 'medium' });
+        await addTask(title, { priority });
       }
       await refresh();
     } catch (err) {
@@ -108,7 +302,13 @@ function PlanYourDayInner() {
     }
   };
 
-  const totalGoals = tasks.length;
+  // Today's ring, not all-time: was tasks.length/completedGoals before
+  // completedGoals got scoped to today, which would have made the
+  // denominator include every task ever (active + all-time completions)
+  // while the numerator only counted today's -- badly undercounting the
+  // moment any history existed. Active tasks carry forward into "today" by
+  // design (see the isToday() note above), so they belong in the total.
+  const totalGoals = activeGoals.length + completedGoals.length;
   const completionPct = totalGoals > 0 ? Math.round((completedGoals.length / totalGoals) * 100) : 0;
   const strokeDashoffset = 308 - (completionPct / 100) * 308;
 
@@ -272,7 +472,8 @@ function PlanYourDayInner() {
                   Comma-separate a few things and I'll add them as separate tasks.
                 </div>
                 <button className="pl-plan-btn" onClick={handlePlanMyDay} disabled={submitting}>
-                  Plan my day
+                  {submitting && <span className="pl-spinner" aria-hidden="true" />}
+                  {submitting ? 'Planning…' : 'Plan my day'}
                 </button>
               </div>
             </div>
@@ -281,6 +482,27 @@ function PlanYourDayInner() {
               <div className="pl-input-header">
                 <span className="pl-input-title">Add task manually</span>
               </div>
+
+              {/* Was nowhere -- every manually-added task defaulted to medium
+                  with no way to mark anything more or less urgent, even
+                  though the badge and sort-by-priority logic both already
+                  support all three. */}
+              <div role="radiogroup" aria-label="Priority" className="pl-priority-picker">
+                {['low', 'medium', 'high'].map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    role="radio"
+                    aria-checked={manualPriority === p}
+                    className={`pl-priority-opt ${p}${manualPriority === p ? ' active' : ''}`}
+                    disabled={submitting}
+                    onClick={() => setManualPriority(p)}
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
+
               <div style={{ display: 'flex', gap: '10px' }}>
                 <label className="sr-only" htmlFor="pl-manual-task">Task description</label>
                 <input
@@ -300,7 +522,8 @@ function PlanYourDayInner() {
                   onClick={handlePlanMyDay}
                   disabled={submitting}
                 >
-                  Add task
+                  {submitting && <span className="pl-spinner" aria-hidden="true" />}
+                  {submitting ? 'Adding…' : 'Add task'}
                 </button>
               </div>
             </div>
@@ -345,35 +568,50 @@ function PlanYourDayInner() {
             ) : (
               activeGoals.map((task) => (
                 <div key={task.task_id} className="pl-goal-row">
-                  <button
-                    className="pl-checkbox"
-                    type="button"
-                    role="checkbox"
-                    aria-checked="false"
-                    aria-label={`Mark "${task.title}" as done`}
-                    onClick={() => handleToggleActive(task)}
-                  >
-                    <svg viewBox="0 0 12 12" aria-hidden="true">
-                      <polyline points="2 6 5 9 10 3" />
-                    </svg>
-                  </button>
-                  <div className="pl-goal-content">
-                    <h4 className="pl-goal-title">{task.title}</h4>
-                    <div className="pl-goal-badges">
-                      <span className={`pl-badge ${task.priority}`}>
-                        {task.priority}
-                      </span>
-                      {task.due_date && (
-                        <span className="pl-meta-item">
-                          <svg viewBox="0 0 24 24">
-                            <circle cx="12" cy="12" r="10" />
-                            <polyline points="12 6 12 12 16 14" />
-                          </svg>
-                          due {task.due_date}
-                        </span>
-                      )}
-                    </div>
-                  </div>
+                  {editingTaskId === task.task_id ? (
+                    <TaskEditForm
+                      task={task}
+                      saving={savingEdit}
+                      onSave={(fields) => handleSaveEdit(task, fields)}
+                      onCancel={() => setEditingTaskId(null)}
+                    />
+                  ) : (
+                    <>
+                      <button
+                        className="pl-checkbox"
+                        type="button"
+                        role="checkbox"
+                        aria-checked="false"
+                        aria-label={`Mark "${task.title}" as done`}
+                        onClick={() => handleToggleActive(task)}
+                      >
+                        <svg viewBox="0 0 12 12" aria-hidden="true">
+                          <polyline points="2 6 5 9 10 3" />
+                        </svg>
+                      </button>
+                      <div className="pl-goal-content">
+                        <h4 className="pl-goal-title">{displayTitle(task.title)}</h4>
+                        <div className="pl-goal-badges">
+                          <span className={`pl-badge ${task.priority}`}>
+                            {task.priority}
+                          </span>
+                          {task.due_date && (
+                            <span className="pl-meta-item">
+                              <svg viewBox="0 0 24 24">
+                                <circle cx="12" cy="12" r="10" />
+                                <polyline points="12 6 12 12 16 14" />
+                              </svg>
+                              due {task.due_date}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <TaskMenu
+                        onEdit={() => setEditingTaskId(task.task_id)}
+                        onDelete={() => handleDeleteTask(task)}
+                      />
+                    </>
+                  )}
                 </div>
               ))
             )}
@@ -392,44 +630,128 @@ function PlanYourDayInner() {
           <div className="pl-completed-list">
             {completedGoals.length === 0 ? (
               <div className="plan-empty" style={{ background: 'transparent', padding: '16px', border: '1.5px dashed var(--bd)', borderRadius: '12px', textAlign: 'center' }}>
-                <p style={{ fontSize: '12.5px', color: 'var(--muted)', margin: 0 }}>No tasks completed yet. Start checking off goals!</p>
+                <p style={{ fontSize: '12.5px', color: 'var(--muted)', margin: 0 }}>
+                  {/* Distinct from "never completed anything" -- a founder with
+                      real history but nothing done yet today shouldn't be told
+                      to "start checking off goals" as if this were their
+                      first one. */}
+                  {doneGoals.length === 0
+                    ? 'No tasks completed yet. Start checking off goals!'
+                    : "Nothing completed today yet — see Completed history below for earlier days."}
+                </p>
               </div>
             ) : (
               // Was a plain div with onClick: un-completing a task was
               // mouse-only, unreachable by keyboard and invisible to screen
               // readers.
-              completedGoals.map((task) => (
-                <div
-                  key={task.task_id}
-                  className="pl-completed-row"
-                  role="checkbox"
-                  aria-checked="true"
-                  aria-label={`Mark "${task.title}" as not done`}
-                  tabIndex={0}
-                  onClick={() => handleToggleCompleted(task)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      handleToggleCompleted(task);
-                    }
-                  }}
-                  style={{ cursor: 'pointer' }}
-                >
-                  <div className="pl-checkbox" aria-hidden="true">
-                    <svg viewBox="0 0 12 12">
-                      <polyline points="2 6 5 9 10 3" />
-                    </svg>
+              completedGoals.map((task) => {
+                const editing = editingTaskId === task.task_id;
+                return (
+                  <div
+                    key={task.task_id}
+                    className="pl-completed-row"
+                    // Toggle-to-reopen only applies when not editing -- an
+                    // edit form's own clicks (the input, the priority
+                    // picker) must not also flip completion via bubbling.
+                    {...(editing ? {} : {
+                      role: 'checkbox',
+                      'aria-checked': 'true',
+                      'aria-label': `Mark "${task.title}" as not done`,
+                      tabIndex: 0,
+                      onClick: () => handleToggleCompleted(task),
+                      onKeyDown: (e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          handleToggleCompleted(task);
+                        }
+                      },
+                      style: { cursor: 'pointer' },
+                    })}
+                  >
+                    {editing ? (
+                      <TaskEditForm
+                        task={task}
+                        saving={savingEdit}
+                        onSave={(fields) => handleSaveEdit(task, fields)}
+                        onCancel={() => setEditingTaskId(null)}
+                      />
+                    ) : (
+                      <>
+                        <div className="pl-checkbox" aria-hidden="true">
+                          <svg viewBox="0 0 12 12">
+                            <polyline points="2 6 5 9 10 3" />
+                          </svg>
+                        </div>
+                        <div className="pl-completed-content">
+                          <h4 className="pl-completed-title">{displayTitle(task.title)}</h4>
+                          <span className="pl-completed-time">
+                            Completed{completedAtLabel(task) ? ` at ${completedAtLabel(task)}` : ''}
+                          </span>
+                        </div>
+                        <TaskMenu
+                          onEdit={() => setEditingTaskId(task.task_id)}
+                          onDelete={() => handleDeleteTask(task)}
+                        />
+                      </>
+                    )}
                   </div>
-                  <div className="pl-completed-content">
-                    <h4 className="pl-completed-title">{task.title}</h4>
-                    <span className="pl-completed-time">
-                      Completed{completedAtLabel(task) ? ` at ${completedAtLabel(task)}` : ''}
-                    </span>
-                  </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
+
+          {/* Previously nowhere: every completion before today was shown
+              (mislabeled) under "Completed today" forever, with no way to
+              tell an old completion from a real one and no way to browse
+              past days at all. */}
+          {completedHistory.length > 0 && (
+            <>
+              <div className="sec-row" style={{ marginTop: 28 }}>
+                <div className="sec-title" style={{ fontSize: '15px', fontWeight: 750 }}>
+                  Completed history
+                </div>
+              </div>
+              {completedHistory.map(([isoDay, dayTasks]) => (
+                <div key={isoDay} style={{ marginBottom: 18 }}>
+                  <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--muted-2, #6c7a70)', margin: '0 0 8px' }}>
+                    {dayLabel(dayTasks[0].completed_at)} · {dayTasks.length} completed
+                  </div>
+                  <div className="pl-completed-list">
+                    {dayTasks.map((task) => (
+                      <div key={task.task_id} className="pl-completed-row" style={{ cursor: 'default' }}>
+                        {editingTaskId === task.task_id ? (
+                          <TaskEditForm
+                            task={task}
+                            saving={savingEdit}
+                            onSave={(fields) => handleSaveEdit(task, fields)}
+                            onCancel={() => setEditingTaskId(null)}
+                          />
+                        ) : (
+                          <>
+                            <div className="pl-checkbox" aria-hidden="true">
+                              <svg viewBox="0 0 12 12">
+                                <polyline points="2 6 5 9 10 3" />
+                              </svg>
+                            </div>
+                            <div className="pl-completed-content">
+                              <h4 className="pl-completed-title">{displayTitle(task.title)}</h4>
+                              <span className="pl-completed-time">
+                                Completed{completedAtLabel(task) ? ` at ${completedAtLabel(task)}` : ''}
+                              </span>
+                            </div>
+                            <TaskMenu
+                              onEdit={() => setEditingTaskId(task.task_id)}
+                              onDelete={() => handleDeleteTask(task)}
+                            />
+                          </>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
         </div>
 
         {/* Right side panel */}

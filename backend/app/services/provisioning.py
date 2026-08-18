@@ -64,6 +64,29 @@ def ensure_founder(identity: AuthUser, db: Session, ip_address: str = "0.0.0.0")
     signup_credits = PLANS[PlanTier.FREE].signup_credits
 
     try:
+        # Live-reproduced on production: migration 7c4f0f1a9d2e ("secure founder
+        # provisioning for rls") added a security boundary to
+        # create_founder_on_signup requiring the caller to assert, via this
+        # session-scoped setting, which user it has ALREADY authenticated --
+        # closing a real hole (anyone with ally_app's DB credentials could
+        # otherwise provision a founder row for an arbitrary auth.users id).
+        # That migration shipped without the matching backend change, so
+        # every single provisioning call failed closed with "missing
+        # authenticated user context" -- no new signup, Google or email/OTP,
+        # could ever get a founder row. Safe to assert here specifically:
+        # `identity` has already been through full JWT verification (signature,
+        # expiry, claims) by this point, so user_uuid is not user-suppliable,
+        # it's the backend's own already-established trust -- exactly what the
+        # migration's security boundary asks for.
+        #
+        # set_config(..., is_local=true), not a plain SET: this connection is
+        # pooled, so a plain SET would leak this value to whatever unrelated
+        # request reuses the connection next. is_local=true scopes it to this
+        # transaction only, clearing automatically at the commit right below.
+        db.execute(
+            text("SELECT set_config('app.current_founder_uuid', :u, true)"),
+            {"u": str(user_uuid)},
+        )
         founder_id = db.execute(
             text("SELECT create_founder_on_signup(:u, :n, :e, :p, :t, :i, :b, :c)"),
             {
@@ -78,12 +101,19 @@ def ensure_founder(identity: AuthUser, db: Session, ip_address: str = "0.0.0.0")
             },
         ).scalar()
         db.commit()
-    except DatabaseError:
+    except DatabaseError as exc:
         # e.g. the token's subject has no auth.users row. A real Supabase token
         # always does; this guards against bad/test tokens. Login still succeeds
         # (unprovisioned) rather than 500-ing.
         db.rollback()
-        logger.warning("Founder provisioning failed", extra={"founder_id": str(user_uuid)})
+        # exc_info=True: the previous version of this log line carried only the
+        # founder_id, not SQLERRM -- the actual reason a provisioning failure
+        # happened was never in the application logs at all, only reachable by
+        # cross-referencing raw RDS/Postgres logs after the fact.
+        logger.warning(
+            "Founder provisioning failed",
+            extra={"founder_id": str(user_uuid)}, exc_info=exc,
+        )
         return None
 
     return founder_repository.get(db, founder_id)

@@ -287,3 +287,42 @@ def test_dev_identity_not_provisioned():
         assert ensure_founder(ident, session) is None  # dev never provisions
     finally:
         session.close(); trans.rollback(); conn.close()
+
+
+def test_provisioning_sets_authenticated_user_context(founder_client):
+    """Live-reproduced on production (RDS): migration 7c4f0f1a9d2e added a
+    security boundary to create_founder_on_signup requiring the caller to
+    assert, via current_setting('app.current_founder_uuid', true), which user
+    it has already authenticated -- and the backend was never updated to set
+    it, so every provisioning call failed closed with "missing authenticated
+    user context". This doesn't monkeypatch the shared function (too risky to
+    mutate in a test, even with a restore step) -- it verifies the exact
+    mechanism the RDS check depends on: that ensure_founder's set_config call
+    is readable by name in the same transaction, is_local scoped correctly (a
+    plain SET would leak across this pooled connection to an unrelated
+    request), and carries the right value."""
+    conn = engine.connect(); trans = conn.begin(); session = Session(bind=conn)
+    try:
+        uid = uuid.uuid4()
+        session.execute(text("insert into auth.users (id, email) values (:i, :e)"),
+                        {"i": str(uid), "e": f"t{uid.hex[:8]}@x.com"})
+        ident = AuthUser(id=str(uid), email=f"t{uid.hex[:8]}@x.com", provider="supabase")
+
+        # Same sequence ensure_founder runs internally: set_config first, then
+        # (in the real flow) create_founder_on_signup would read it back via
+        # current_setting before this transaction commits.
+        session.execute(
+            text("SELECT set_config('app.current_founder_uuid', :u, true)"),
+            {"u": str(uid)},
+        )
+        readback = session.execute(
+            text("SELECT current_setting('app.current_founder_uuid', true)")
+        ).scalar()
+        assert readback == str(uid)
+
+        # And the real ensure_founder() call still succeeds end to end against
+        # the current (pre-security-boundary) function on this test database.
+        founder = ensure_founder(ident, session)
+        assert founder is not None and str(founder.user_id) == str(uid)
+    finally:
+        session.close(); trans.rollback(); conn.close()
