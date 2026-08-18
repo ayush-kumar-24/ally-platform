@@ -28,7 +28,13 @@ from app.services.voice.base import TranscriptionError, TranscriptionProvider
 
 router = APIRouter(prefix="/voice", tags=["voice"])
 
-_FEATURE_FOR_CONTEXT = {"chat": Feature.VOICE_CHAT, "diagnosis": Feature.VOICE_DIAGNOSIS}
+_FEATURE_FOR_CONTEXT = {
+    "chat": Feature.VOICE_CHAT,
+    "diagnosis": Feature.VOICE_DIAGNOSIS,
+    # The identity half of the same journey -- same entitlement. See the note
+    # on VoiceContext in schemas.py for why it isn't its own feature.
+    "founder_dna": Feature.VOICE_DIAGNOSIS,
+}
 
 
 @router.post("/transcribe", response_model=TranscriptionResponse, summary="Transcribe a voice recording")

@@ -73,5 +73,10 @@ export function useVoiceInput({ context, onTranscribed, onUpgradeRequired, onErr
     else if (status === 'idle') start();
   }, [status, start, stop]);
 
-  return { status, toggle, start, stop, cancel };
+  /* Read on demand (rAF, by the meter component) rather than pushed through
+     React state -- amplitude changes every frame, and putting that in state
+     would re-render the whole chat ~60x/sec while someone is talking. */
+  const getLevel = useCallback(() => sessionRef.current?.getLevel?.() ?? 0, []);
+
+  return { status, toggle, start, stop, cancel, getLevel };
 }

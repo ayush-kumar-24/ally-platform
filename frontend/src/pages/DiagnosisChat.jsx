@@ -4,6 +4,7 @@ import { useApp } from '../context/AppContext';
 import { getCurrentSession, normalise, resumeOrStart, submitAnswer } from '../services/diagnosis';
 import { explainLimit } from '../services/plans';
 import { useVoiceInput } from '../hooks/useVoiceInput';
+import VoiceBars from '../components/VoiceBars';
 import FeedbackPrompt from '../components/FeedbackPrompt';
 import { FEEDBACK } from '../services/feedback';
 
@@ -302,7 +303,13 @@ export default function DiagnosisChat() {
 
         {/* Input */}
         <div className="chat-input">
-          <div className="ci-row">
+          <div className={`ci-row${voice.status !== 'idle' ? ' voice-live' : ''}`}>
+            {voice.status !== 'idle' && (
+              <VoiceBars
+                getLevel={voice.getLevel}
+                label={voice.status === 'transcribing' ? 'Transcribing…' : 'Listening…'}
+              />
+            )}
             <label className="sr-only" htmlFor="dg-answer">Your answer to Ally</label>
             <textarea
               id="dg-answer"
@@ -316,7 +323,7 @@ export default function DiagnosisChat() {
               }}
             />
             <button
-              className={`ci-btn${voice.status === 'recording' ? ' recording' : ''}`}
+              className={`ci-btn mic${voice.status === 'recording' ? ' recording' : ''}`}
               type="button"
               title="Voice input"
               aria-label="Voice input"

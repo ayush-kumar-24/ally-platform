@@ -23,7 +23,15 @@ export class VoiceUpgradeRequiredError extends Error {
   }
 }
 
-/** Records from the mic until `stop()` is called; resolves the recorded Blob. */
+/** Records from the mic until `stop()` is called; resolves the recorded Blob.
+ *
+ * Also exposes `getLevel()` -- current mic amplitude, 0..1 -- so callers can
+ * render a live "we can hear you" meter. It reads the real stream through a
+ * Web Audio AnalyserNode rather than animating on a timer, so the bars reflect
+ * what the mic is actually picking up: silence reads flat, which is the whole
+ * point. A founder who is muted, or too far from the mic, sees it immediately
+ * instead of discovering it in a bad transcript afterwards.
+ */
 export function startRecording() {
   return navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
     const mimeType = MediaRecorder.isTypeSupported('audio/webm')
@@ -33,9 +41,36 @@ export function startRecording() {
     const chunks = [];
     recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
 
+    /* Metering is strictly best-effort: if AudioContext is unavailable or
+       blocked, the recording itself must still work, so every failure here
+       degrades to a flat level rather than breaking the mic. */
+    let audioCtx = null;
+    let analyser = null;
+    let timeData = null;
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (Ctx) {
+        audioCtx = new Ctx();
+        analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 1024;
+        analyser.smoothingTimeConstant = 0.75;
+        audioCtx.createMediaStreamSource(stream).connect(analyser);
+        timeData = new Uint8Array(analyser.fftSize);
+      }
+    } catch { /* metering unavailable -- recording continues without it */ }
+
+    const teardown = () => {
+      stream.getTracks().forEach((t) => t.stop());
+      analyser = null;
+      timeData = null;
+      // close() is async and rejects if already closed; nothing to do either way.
+      try { audioCtx?.close?.().catch?.(() => {}); } catch { /* already closed */ }
+      audioCtx = null;
+    };
+
     const stopped = new Promise((resolve) => {
       recorder.onstop = () => {
-        stream.getTracks().forEach((t) => t.stop());
+        teardown();
         resolve(new Blob(chunks, { type: recorder.mimeType || 'audio/webm' }));
       };
     });
@@ -46,7 +81,19 @@ export function startRecording() {
       cancel: () => {
         recorder.onstop = null;
         recorder.stop();
-        stream.getTracks().forEach((t) => t.stop());
+        teardown();
+      },
+      /* RMS of the time-domain signal, not peak -- peak jumps to full on any
+         transient and reads as a permanently solid bar. */
+      getLevel: () => {
+        if (!analyser || !timeData) return 0;
+        analyser.getByteTimeDomainData(timeData);
+        let sumSquares = 0;
+        for (let i = 0; i < timeData.length; i++) {
+          const v = (timeData[i] - 128) / 128; // centre at 0, normalise to -1..1
+          sumSquares += v * v;
+        }
+        return Math.sqrt(sumSquares / timeData.length);
       },
     };
   });

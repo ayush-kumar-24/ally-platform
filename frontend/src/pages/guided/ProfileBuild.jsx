@@ -4,6 +4,7 @@ import { useApp } from '../../context/AppContext';
 import { getProfile, saveOnboardingProfile, toGuidedAnswers } from '../../services/profile';
 import { readable } from '../../utils/profileDisplay';
 import { useVoiceInput } from '../../hooks/useVoiceInput';
+import VoiceBars from '../../components/VoiceBars';
 import {
   QUESTIONS as ALL_QUESTIONS,
   effectiveQuestions,
@@ -495,11 +496,16 @@ export default function ProfileBuild() {
       submitFreeText(taRef.current.value);
     }
   };
-  const onInput = (e) => {
-    setInput(e.target.value);
-    const ta = e.target;
+  const sizeTa = () => {
+    const ta = taRef.current;
+    if (!ta) return;
     ta.style.height = 'auto';
     ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
+  };
+
+  const onInput = (e) => {
+    setInput(e.target.value);
+    sizeTa();
   };
 
   // Profile-build is pre-chat onboarding, not the paid chat surface -- voice
@@ -509,15 +515,21 @@ export default function ProfileBuild() {
   const voice = useVoiceInput({
     context: 'diagnosis',
     onTranscribed: (text) => {
+      // Sizing and focus both wait for the effect below: at this point the
+      // field is still display:none (status is 'transcribing'), where
+      // scrollHeight reads 0 and focus() is a no-op.
       setInput((prev) => (prev ? `${prev} ${text}` : text));
-      if (taRef.current) {
-        taRef.current.focus();
-        taRef.current.style.height = 'auto';
-        taRef.current.style.height = Math.min(taRef.current.scrollHeight, 120) + 'px';
-      }
     },
     onError: () => showToast('Could not access the microphone — check your browser permissions.'),
   });
+
+  /* See AllyChat for the same fix: measure (and focus) only once React has
+     rendered the dictated text and the textarea is visible again. */
+  useEffect(() => {
+    if (voice.status !== 'idle') return;
+    sizeTa();
+    if (input) taRef.current?.focus();
+  }, [input, voice.status]);
 
   /* --- control handlers ---------------------------------------------------- */
 
@@ -807,7 +819,13 @@ export default function ProfileBuild() {
     /* short / long / url free text */
     return (
       <div className="chat-input">
-        <div className="ci-row">
+        <div className={`ci-row${voice.status !== 'idle' ? ' voice-live' : ''}`}>
+          {voice.status !== 'idle' && (
+            <VoiceBars
+              getLevel={voice.getLevel}
+              label={voice.status === 'transcribing' ? 'Transcribing…' : 'Listening…'}
+            />
+          )}
           <label className="sr-only" htmlFor="profText">Your answer to Ally</label>
           <textarea
             id="profText"
@@ -819,7 +837,7 @@ export default function ProfileBuild() {
             onKeyDown={onKeyDown}
           />
           <button
-            className={`ci-btn${voice.status === 'recording' ? ' recording' : ''}`}
+            className={`ci-btn mic${voice.status === 'recording' ? ' recording' : ''}`}
             type="button"
             aria-label="Voice input"
             aria-pressed={voice.status === 'recording'}

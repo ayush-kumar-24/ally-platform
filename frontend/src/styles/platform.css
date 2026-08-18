@@ -298,8 +298,18 @@
 .ci-btn svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:2}
 .ci-btn.send{background:#10B981;color:#06231a;border-color:#10B981}
 .ci-btn.send:hover{background:#34d399}
-.ci-btn.rec{background:rgba(183,137,95,.2);color:#e0a982;border-color:rgba(183,137,95,.4);animation:recpulse 1.4s infinite}
-@keyframes recpulse{50%{box-shadow:0 0 0 6px rgba(183,137,95,0)}0%{box-shadow:0 0 0 0 rgba(183,137,95,.35)}}
+/* Mic button: green when idle (ready to record), red while actively
+   recording. Was named .ci-btn.rec here but every caller (DiagnosisChat,
+   AllyChat, FounderDnaChat, ProfileBuild) applies .recording instead -- the
+   selector never matched anything, so the mic never visibly changed state
+   at all, live-reported as "the mic doesn't show it's recording, and then
+   the transcription is wrong" (a founder talking before/after the actual
+   recording window with no way to tell). Scoped to .mic specifically so
+   the plain .ci-btn attach/send buttons next to it are unaffected. */
+.ci-btn.mic{background:rgba(16,185,129,.14);color:#34d399;border-color:rgba(16,185,129,.35)}
+.ci-btn.mic:hover{background:rgba(16,185,129,.22);color:#5eead4}
+.ci-btn.mic.recording{background:rgba(239,68,68,.2);color:#f87171;border-color:rgba(239,68,68,.45);animation:recpulse 1.4s infinite}
+@keyframes recpulse{50%{box-shadow:0 0 0 6px rgba(239,68,68,0)}0%{box-shadow:0 0 0 0 rgba(239,68,68,.35)}}
 .ci-hint{font-size:11px;color:#7d9488;margin:8px 2px 0}
 /* knowledge graph side panel */
 .kg-panel{border-left:1px solid rgba(255,255,255,.08);background:rgba(6,20,13,.4);backdrop-filter:blur(10px);padding:18px 18px;overflow-y:auto}
@@ -2079,3 +2089,25 @@ body.lp-done #landing-page { display:none; }
 /* .pl-tab became a real <button> (it was a click-only <div>); reset the UA
    button styling so it keeps the card appearance it had as a div. */
 .pl-tab { font: inherit; text-align: left; color: inherit; width: 100%; }
+
+/* ---- Live mic meter (takes the text field's place while recording) -----
+   Real amplitude from the AnalyserNode in services/voice.js, not a canned
+   animation -- see components/VoiceBars.jsx. Bar heights are written as
+   inline styles on rAF, so nothing here animates them.
+
+   It sits INSIDE .ci-row, in the textarea's own slot, so recording reads as
+   "the field itself is listening" rather than a banner bolted above it. The
+   textarea is only hidden, never unmounted, so its value (and anything
+   already typed) survives -- the transcript appends to it on release. The
+   mic and send buttons keep their positions and stay clickable throughout. */
+.ci-row.voice-live > textarea{display:none}
+.voice-meter{display:flex;align-items:center;gap:9px;flex:1;min-width:0;align-self:center;padding:6px 0}
+.voice-meter .vm-dot{width:7px;height:7px;border-radius:50%;background:#f87171;flex-shrink:0;animation:vmblink 1.2s ease-in-out infinite}
+@keyframes vmblink{50%{opacity:.25}}
+.voice-meter .vm-label{font-size:12px;font-weight:650;color:#f87171;letter-spacing:.01em;flex-shrink:0}
+.voice-meter .vm-bars{display:flex;align-items:center;gap:2px;height:20px;flex:1;min-width:0}
+.voice-meter .vm-bars span{flex:1;min-width:2px;height:12%;border-radius:2px;background:linear-gradient(180deg,#f87171,#ef4444);transition:height .06s linear}
+@media (prefers-reduced-motion:reduce){
+  .voice-meter .vm-dot{animation:none}
+  .voice-meter .vm-bars span{transition:none}
+}

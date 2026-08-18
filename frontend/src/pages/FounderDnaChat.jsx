@@ -10,6 +10,7 @@ import {
   submitFounderDnaAnswer,
 } from '../services/founderDna';
 import { useVoiceInput } from '../hooks/useVoiceInput';
+import VoiceBars from '../components/VoiceBars';
 
 /* The identity half of the journey, asked before the business diagnosis.
    Deliberately mirrors DiagnosisChat's shape -- same transcript, same
@@ -374,7 +375,13 @@ export default function FounderDnaChat() {
         )}
 
         <div className="chat-input">
-          <div className="ci-row">
+          <div className={`ci-row${voice.status !== 'idle' ? ' voice-live' : ''}`}>
+            {voice.status !== 'idle' && (
+              <VoiceBars
+                getLevel={voice.getLevel}
+                label={voice.status === 'transcribing' ? 'Transcribing…' : 'Listening…'}
+              />
+            )}
             <label className="sr-only" htmlFor="fdna-answer">Your answer to Ally</label>
             <textarea
               id="fdna-answer"
@@ -392,7 +399,7 @@ export default function FounderDnaChat() {
               }}
             />
             <button
-              className={`ci-btn${voice.status === 'recording' ? ' recording' : ''}`}
+              className={`ci-btn mic${voice.status === 'recording' ? ' recording' : ''}`}
               type="button" title="Voice input" aria-label="Voice input"
               aria-pressed={voice.status === 'recording'}
               disabled={busy || failed || voice.status === 'transcribing'}

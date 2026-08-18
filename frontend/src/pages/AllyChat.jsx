@@ -14,6 +14,7 @@ import { post, ApiError } from '../services/api';
 // "Good evening" -- the exact bug greetingNow's docstring was written to end.
 import { greetingNow } from '../utils/helpers';
 import { useVoiceInput } from '../hooks/useVoiceInput';
+import VoiceBars from '../components/VoiceBars';
 import { usePlan as usePlanGateEntitlements } from '../components/PlanGate';
 import { explainLimit, getMyPlan, can, FEATURES } from '../services/plans';
 
@@ -225,13 +226,20 @@ export default function AllyChat() {
 
   const voice = useVoiceInput({
     context: 'chat',
-    onTranscribed: (text) => {
-      setInput(prev => (prev ? `${prev} ${text}` : text));
-      sizeTa();
-    },
+    onTranscribed: (text) => setInput(prev => (prev ? `${prev} ${text}` : text)),
     onUpgradeRequired: () => showToast(upgradeMessage),
     onError: () => showToast('Could not access the microphone — check your browser permissions.'),
   });
+
+  /* Re-measure once React has actually rendered the new value AND the field
+     is back on screen. sizeTa() reads scrollHeight, so calling it inline
+     right after setInput() measured the PREVIOUS content -- and while
+     voice.status !== 'idle' the textarea is display:none (the meter has its
+     slot), where scrollHeight reads 0, collapsing the box and clipping the
+     transcript that had just been dictated into it. */
+  useEffect(() => {
+    if (voice.status === 'idle') sizeTa();
+  }, [input, voice.status]);
 
   const handleMicClick = () => {
     if (!canUseVoice) {
@@ -410,7 +418,13 @@ export default function AllyChat() {
               {plan && <span className="arm-bar"><i style={{ width: `${usedPct}%` }} /></span>}
             </span>
           </div>
-          <div className="ci-row">
+          <div className={`ci-row${voice.status !== 'idle' ? ' voice-live' : ''}`}>
+            {voice.status !== 'idle' && (
+              <VoiceBars
+                getLevel={voice.getLevel}
+                label={voice.status === 'transcribing' ? 'Transcribing…' : 'Listening…'}
+              />
+            )}
             <input
               ref={fileInputRef}
               type="file"
@@ -441,7 +455,7 @@ export default function AllyChat() {
               onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(input); } }}
             />
             <button
-              className={`ci-btn${voice.status === 'recording' ? ' recording' : ''}`}
+              className={`ci-btn mic${voice.status === 'recording' ? ' recording' : ''}`}
               type="button"
               title={canUseVoice ? 'Voice input' : 'Voice input (paid plan)'}
               aria-label={canUseVoice ? 'Voice input' : 'Voice input (paid plan)'}
