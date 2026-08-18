@@ -65,3 +65,9 @@ reportlab==5.0.0
 pypdf==6.14.2
 python-docx==1.2.0
 lxml==6.1.1
+
+# Chat attachment blobs in S3. Optional at runtime: with no
+# ATTACHMENT_S3_BUCKET set, attachments store inline in Postgres and this is
+# never imported -- see app/ai_chat/attachments/storage.py. Credentials come
+# from the standard chain (ECS task role), never from config.
+boto3>=1.35,<2

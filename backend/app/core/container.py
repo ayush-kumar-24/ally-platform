@@ -242,10 +242,23 @@ class Container:
     # --- Phase 6 attachments + links accessors ----------------------------
 
     def attachment_service(self, db: Session) -> AttachmentService:
-        """Request-scoped, DB-backed attachment metadata store -- persists to
-        file_uploads. Fails loud on error, same reasoning as conversation_service:
-        this repository IS the attachment metadata storage."""
-        return AttachmentService(SqlAttachmentRepository(db))
+        """Request-scoped, DB-backed attachment store -- persists to file_uploads.
+        Fails loud on error, same reasoning as conversation_service: this
+        repository IS the attachment storage.
+
+        The object store is resolved once per process (see _object_storage):
+        building a boto3 client per request is pure latency, and it is
+        stateless and thread-safe. None means no bucket configured, in which
+        case file bytes stay inline in Postgres."""
+        return AttachmentService(SqlAttachmentRepository(db, self._object_storage()))
+
+    def _object_storage(self):
+        # Cached on the container so the client (and its connection pool) is
+        # shared, matching how the LLM/embedding providers are held.
+        if not hasattr(self, "_object_storage_cached"):
+            from app.ai_chat.attachments.storage import build_object_storage
+            self._object_storage_cached = build_object_storage()
+        return self._object_storage_cached
 
     def link_extractor(self) -> LinkExtractor:
         return self._link_extractor

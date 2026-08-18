@@ -306,6 +306,19 @@ class Settings(BaseSettings):
     PROVIDER_MAX_RETRIES: int = 3
     PROVIDER_BACKOFF_SECONDS: float = 0.5
 
+    # Chat attachment blobs. Empty bucket (the default) keeps file bytes
+    # inline in file_uploads.content, which is what local dev and CI run on --
+    # no AWS access needed for attachments to work or be tested. Set the
+    # bucket in production and new uploads go to S3 instead; rows written
+    # before that keep resolving from Postgres, so there is no backfill or
+    # flag day. Credentials are NOT read from here: boto3 resolves them from
+    # the standard chain (ECS task role in production), so no secret for this
+    # ever lives in config.
+    ATTACHMENT_S3_BUCKET: str = ""
+    ATTACHMENT_S3_REGION: str = ""
+    # Only for S3-compatible stores (MinIO/LocalStack); empty means real AWS.
+    ATTACHMENT_S3_ENDPOINT_URL: str = ""
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
