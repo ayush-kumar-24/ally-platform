@@ -1228,7 +1228,7 @@ class FileUploads(Base):
     file_name: Mapped[str] = mapped_column(String(300), nullable=False)
     # Holds the MIME type string (e.g. "application/pdf") -- attachment_type is
     # derived from this at read time (see metadata.categorize), not stored.
-    file_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    file_type: Mapped[str] = mapped_column(String(150), nullable=False)
     file_size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
     # Nullable: no object-storage backend exists yet -- see the persistence-columns
     # migration docstring. Never written to by the current upload path.
