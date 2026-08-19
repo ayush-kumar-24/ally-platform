@@ -139,3 +139,42 @@ def test_only_this_request_s_own_insert_is_discarded():
     destroy an answer this request never wrote."""
     assert should_discard_as_unresponsive(
         _insight(False), created_here=False, already_reprompted=False) is False
+
+
+# --- every exit from submit_answer must carry the reprompt slot -------------
+
+def test_every_submit_answer_return_is_a_three_tuple():
+    """Adding `reprompt` widened this method's return, and one exit was missed.
+
+    The missed one was the completing answer -- the branch that fires when
+    _attach_question has decided the session is done. It is reachable only on the
+    LAST answer of a diagnosis, so a two-answer probe of the new gate passed
+    cleanly while every founder's thirtieth answer would have 500'd with
+    "not enough values to unpack (expected 3, got 2)". A full journey run found
+    it; nothing smaller could have.
+
+    Checked structurally because reaching that branch in a unit test means
+    driving a whole session to completion, and a guard nobody can afford to run
+    is not a guard.
+    """
+    import ast
+    import inspect
+
+    from app.api.v1.diagnosis import service as service_module
+
+    tree = ast.parse(inspect.getsource(service_module))
+    fn = next(
+        node for node in ast.walk(tree)
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "submit_answer"
+    )
+    returns = [n for n in ast.walk(fn) if isinstance(n, ast.Return) and n.value is not None]
+    assert returns, "submit_answer has no return statements -- test is looking at the wrong thing"
+
+    for node in returns:
+        assert isinstance(node.value, ast.Tuple), (
+            f"line {node.lineno}: submit_answer must return a tuple"
+        )
+        assert len(node.value.elts) == 3, (
+            f"line {node.lineno}: returns {len(node.value.elts)} values, expected "
+            "(session, next_question, reprompt)"
+        )

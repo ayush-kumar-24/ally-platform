@@ -515,7 +515,7 @@ class DiagnosisService:
         # response, and a client trusting the question over the status would
         # ask it and get a 409.
         if session.status != SessionStatus.IN_PROGRESS.value:
-            return session, None
+            return session, None, None
         return session, next_question, None
 
     async def _choose_next_question(
