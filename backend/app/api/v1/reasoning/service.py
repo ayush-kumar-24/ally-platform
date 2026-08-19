@@ -419,6 +419,38 @@ class ReasoningService:
         )
         self._log_stage("report_generation", session_id, start)
 
+        # --- Distress: which input actually decided it ---------------------
+        # sessions.distress_mode_triggered is an OR of two independent
+        # mechanisms, and a live session came out True while BOTH looked False
+        # from the persisted data: no answer qualified as a distress signal
+        # (score_labels on disk), and the language detector logged
+        # high_distress=False with a score inside the "Open and Engaged" band.
+        # A founder was told "burnout, identity crisis, fear of failure or
+        # isolation appear to be active blockers" on the strength of that.
+        #
+        # There is no way to tell which side fired from what is stored, so log
+        # both inputs, the threshold they were judged against, and the answer
+        # ids the counting side actually used -- those can be read back off
+        # `answers` to see whether the engine classified them differently from
+        # what is on the row. INFO, not debug: this needs to be present in an
+        # ordinary run, which is the only place the disagreement has shown up.
+        distress_mode = diagnosis.distress_mode or distress.is_high_distress
+        logger.info(
+            "distress decision",
+            extra={
+                "session_id": session_id,
+                "resolved": distress_mode,
+                "by_counting": diagnosis.distress_mode,
+                "signal_count": diagnosis.distress_signal_count,
+                "signal_answer_ids": list(diagnosis.distress_signal_answer_ids),
+                "trigger": str(self.config.distress.distress_questions_trigger),
+                "by_language": distress.is_high_distress,
+                "language_score": str(distress.session_distress_score),
+                "language_status": getattr(distress, "detector_status", None),
+                "high_distress_threshold": str(self.config.distress.high_distress_score),
+            },
+        )
+
         # --- Persist (single committed transaction) ---
         return self._persist(
             session=session,
@@ -426,7 +458,7 @@ class ReasoningService:
             scored=scored,
             overall_confidence=overall_confidence,
             routing_state=routing_state,
-            distress_mode=diagnosis.distress_mode or distress.is_high_distress,
+            distress_mode=distress_mode,
             recommendations=recommendations,
             founder_report=founder_report,
             internal_report=internal_report,

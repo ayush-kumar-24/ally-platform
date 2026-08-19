@@ -178,3 +178,53 @@ def test_every_submit_answer_return_is_a_three_tuple():
             f"line {node.lineno}: returns {len(node.value.elts)} values, expected "
             "(session, next_question, reprompt)"
         )
+
+
+# --- a kept answer is always a scored answer --------------------------------
+
+def test_an_answer_is_scored_whenever_it_is_kept():
+    """The bound must not create a third state: kept but unscored.
+
+    _apply_insight used to sit behind `insight.responsive`, so an answer accepted
+    by the one-reprompt bound over a second unresponsive verdict was stored with
+    score_label NULL. That is not neutral. With ANSWER_CLASSIFIER=llm an unscored
+    answer is re-scored from scratch at reasoning time, and in one live session
+    seven of them came back Red -- two on distress-tagged questions, which tripped
+    DISTRESS_QUESTIONS_TRIGGER and handed a founder a distress report while the
+    language detector had him at "Open and Engaged".
+
+    Scoring now hangs off the keep decision, not the responsiveness verdict.
+    Checked structurally: reaching the call behaviourally needs a live session,
+    an advisor and a database, and the property is about WHERE the call sits.
+    """
+    import ast
+    import inspect
+
+    from app.api.v1.diagnosis import service as service_module
+
+    tree = ast.parse(inspect.getsource(service_module))
+
+    def _calls_apply_insight(node) -> bool:
+        return any(
+            isinstance(n, ast.Call)
+            and isinstance(n.func, ast.Attribute)
+            and n.func.attr == "_apply_insight"
+            for n in ast.walk(node)
+        )
+
+    chooser = next(
+        n for n in ast.walk(tree)
+        if isinstance(n, ast.AsyncFunctionDef) and n.name == "_choose_next_question"
+    )
+    submit = next(
+        n for n in ast.walk(tree)
+        if isinstance(n, ast.AsyncFunctionDef) and n.name == "submit_answer"
+    )
+
+    assert not _calls_apply_insight(chooser), (
+        "_choose_next_question must not score: it runs before the keep/discard "
+        "decision, so scoring there cannot depend on it"
+    )
+    assert _calls_apply_insight(submit), (
+        "submit_answer must score the answer it decided to keep"
+    )

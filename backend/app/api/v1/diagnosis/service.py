@@ -463,6 +463,20 @@ class DiagnosisService:
                 return session, question, None
             return session, question, _REPROMPT
 
+        # The answer is being kept, so it gets the score the advisor produced --
+        # including when the one-reprompt bound accepted it over a second
+        # unresponsive verdict. Responsiveness and quality are separate axes and
+        # the model reported both; dropping the score because of the other field
+        # leaves the row unscored, and an unscored answer is not neutral. With
+        # ANSWER_CLASSIFIER=llm it is re-scored from scratch at reasoning time,
+        # which is how seven answers in one live session came back Red, two of
+        # them on distress-tagged questions, and tripped
+        # DISTRESS_QUESTIONS_TRIGGER -- so a founder whose language detector
+        # reported "Open and Engaged" was handed a distress report telling him
+        # burnout and isolation appeared to be active blockers.
+        if insight is not None:
+            self._apply_insight(answer, insight)
+
         try:
             # Derived from the actual row count, not incremented -- a retry
             # through the recovery path above must not double-count an answer
@@ -554,12 +568,11 @@ class DiagnosisService:
                 exc_info=exc,
             )
 
-        # An unresponsive answer is not scored: score_label feeds the risk
-        # model, root causes and the distress trigger, and a Red earned by text
-        # about a different topic is a measurement of nothing. The caller
-        # discards the answer entirely (see submit_answer).
-        if insight is not None and insight.responsive:
-            self._apply_insight(answer, insight)
+        # Scoring is the CALLER's decision, not this method's: an answer is
+        # scored if and only if it is kept, and only submit_answer knows that.
+        # This used to score only `responsive` answers, which silently created a
+        # third state -- kept but unscored -- for every answer accepted by the
+        # one-reprompt bound. See submit_answer for what that cost.
         return resolve_next(ordered, shortlist, insight), insight
 
     def _apply_insight(self, answer: Answer, insight: AnswerInsight) -> None:
