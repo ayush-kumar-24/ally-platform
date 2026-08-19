@@ -46,6 +46,17 @@ watchfiles==1.2.0
 websockets==16.1
 win32_setctime==1.2.0
 sentry-sdk[fastapi]==2.14.0
+# Required BY sentry-sdk[fastapi], not by this app's own code, and not pulled in
+# as one of its dependencies. Its StarletteIntegration.setup_once() calls
+# patch_templates(), which imports starlette.templating.Jinja2Templates
+# unconditionally -- and starlette raises ImportError when jinja2 is absent.
+#
+# The failure is at sentry_sdk.init(), i.e. at import time in app/main.py, so
+# the whole process dies before uvicorn binds. It only fires when SENTRY_DSN is
+# actually set, which is why it stayed hidden: production ran without a DSN, and
+# the first deploy that set one crash-looped. Confirmed in production logs
+# 2026-08-19.
+jinja2==3.1.4
 psycopg==3.3.4
 psycopg-binary==3.3.4
 # Safety net for the psycopg3 migration: app/db/session.py passes
