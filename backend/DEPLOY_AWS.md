@@ -84,6 +84,7 @@ Values that must differ from `backend/.env.example`'s development defaults:
 | `PLAN_ENFORCEMENT_ENABLED` | `true` (now the code default too, as of 2026-08-16 — this row is a "don't override it to false" reminder, not an action item) | with it off, chat LLM usage is unbounded per user — see cost-controls note below |
 | `ADAPTIVE_QUESTIONS` | `true` | **This table previously omitted this row and the one below, and that omission was the bug.** These two flags are coupled: `ADAPTIVE_QUESTIONS=true` is the only thing that writes `answers.score_label`, and `ANSWER_CLASSIFIER=llm` is the only thing that derives a band at report time. Set to `false` alongside `ANSWER_CLASSIFIER=stored` — which is what `.env.example` used to ship — and *every answer reaches the reasoning pipeline unscored*, every one is skipped, and each diagnosis produces a report with no root causes in it. Silently: 200 response, no error, a founder reading an empty report after thirty questions. |
 | `ANSWER_CLASSIFIER` | `stored` | Keep it `stored` **with `ADAPTIVE_QUESTIONS=true`** — the advisor already scored each answer at submit time and the pipeline reuses the label. Setting this to `llm` as well is not broken, just wasteful: it re-derives all 30 labels from scratch, which measured as 161s of a 203s pipeline. |
+| `GOTENBERG_URL` | the private URL of the Gotenberg service (see §3a) | Report PDFs are rendered by a **separate** Gotenberg container. Leave this at its `http://localhost:3000` default and nothing is listening there, so every export silently falls back to a plain reportlab PDF — 200 OK, a real file, and none of the founder's report design. See §3a; this is the single most invisible misconfiguration in this table. |
 
 ### Verifying the scoring pair is right
 
@@ -132,6 +133,76 @@ because chat and diagnosis have different shapes:
   than a real founder ever would, racking up real LLM calls regardless of
   the count-based lifetime cap (which only checks once, at session start).
 
+## 3a. Gotenberg (report PDFs)
+
+`POST /reports/{id}/export` renders the founder's clarity report twice over:
+
+```
+print HTML (app/api/v1/reports/print_html.py) -> Gotenberg (headless Chromium) -> PDF
+        |
+        +-- GotenbergError -> reportlab (app/api/v1/reports/pdf.py)
+```
+
+The first path is the one that matches what the founder saw on screen: the
+forest palette, the band cards, the embedded Montserrat/Inter/Fraunces, five
+pages. The fallback is a plain two-page text document. Both return `200` with
+`Content-Type: application/pdf`, so **a misconfigured deploy does not look
+broken** -- it just quietly ships the wrong document to every founder who
+downloads their report.
+
+The response carries `X-PDF-Renderer: gotenberg | reportlab-fallback` precisely
+so this is checkable. Check it.
+
+### App Runner cannot run this as a sidecar
+
+App Runner is one image per service -- there is no second container to put
+Gotenberg in, and the `backend/Dockerfile` deliberately does not ship Chromium
+(it would roughly triple the image and put a browser in the API's blast radius).
+So Gotenberg has to be somewhere else, and `GOTENBERG_URL` has to point at it.
+
+Two options, in order of preference:
+
+1. **A second App Runner service** from the public `gotenberg/gotenberg:8`
+   image, port `3000`, reachable from the API. Simplest to stand up and it
+   redeploys like everything else here.
+2. **ECS Fargate / EC2** behind a private load balancer, if you would rather
+   keep it entirely off the public internet from day one.
+
+Either way it must **not** be publicly reachable without protection: Gotenberg
+converts arbitrary HTML that is POSTed to it, so an open instance is a free
+rendering service and an SSRF surface. Put it behind a VPC connector, or at
+minimum an ingress rule that only admits the API service.
+
+| Setting | Value |
+|---|---|
+| Image | `gotenberg/gotenberg:8` |
+| Port | `3000` |
+| CPU / Memory | 1 vCPU / **2 GB** |
+| Health check path | `/health` |
+
+The memory line is not padding. Gotenberg runs headless Chromium per request;
+under 1 GB it starts failing conversions under any concurrency, and every one of
+those failures lands as a silent fallback rather than an error.
+
+### Confirming it actually works
+
+Once both services are up, export a real report and read the header -- the
+status code tells you nothing:
+
+```bash
+curl -sD - -o /dev/null -X POST   https://<app-runner-domain>/api/v1/reports/<id>/export   -H "Authorization: Bearer <token>" | grep -i x-pdf-renderer
+```
+
+`x-pdf-renderer: gotenberg` is correct. `reportlab-fallback` means founders are
+getting the plain document.
+
+### Alert on it
+
+Add a CloudWatch metric filter for `reportlab-fallback` and alarm on it. Nothing
+else in the system reports this: the founder gets a file, the request succeeds,
+Sentry sees nothing. The only other symptom is a founder mentioning their report
+"looks like a text file", which is not a monitoring strategy.
+
 ## 4. Point Vercel at it
 
 Edit `frontend/vercel.json`, replace `REPLACE-ME.awsapprunner.com` with the
@@ -156,6 +227,10 @@ directly rather than through the frontend's proxy.
 - [ ] `GET https://<app-runner-domain>/` returns `{"status": "running", ...}`
 - [ ] `GET https://<app-runner-domain>/api/v1/health` returns `{"status": "healthy", "database": "connected"}` (503 + `"degraded"` if the DB is unreachable — confirm the App Runner health check is actually pointed here, not at `/`)
 - [ ] `SENTRY_DSN` is set and a manually-triggered test error shows up in Sentry
+- [ ] A report export returns `X-PDF-Renderer: gotenberg`, **not**
+      `reportlab-fallback` (see §3a — the fallback is a 200 with a real
+      PDF attached, so this cannot be confirmed by the download succeeding)
+- [ ] The Gotenberg service is not reachable from the public internet
 - [ ] `frontend/vercel.json`'s rewrite destination matches the real App Runner
       domain, committed and pushed
 - [ ] Full journey works end to end through `www.goxlally.ai`: sign in →
