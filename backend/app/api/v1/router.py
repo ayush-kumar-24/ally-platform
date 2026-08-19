@@ -29,6 +29,8 @@ from app.api.v1.settings.router import router as settings_preferences_router
 from app.api.v1.voice.router import router as voice_router
 from app.api.v1.webhooks.supabase import router as webhooks_supabase_router
 from app.api.v1.webhooks.internal_jobs import router as internal_jobs_router
+from app.api.v1.reports.gotenberg import is_available as gotenberg_available
+from app.core.config import settings
 from app.db.session import engine
 
 api_router = APIRouter(prefix="/api/v1")
@@ -85,7 +87,26 @@ async def health(response: Response):
     if db_status != "connected":
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
 
+    # Which renderer report exports will actually use. INFORMATIONAL ONLY -- it
+    # deliberately does not affect `status` or the status code.
+    #
+    # A broken PDF renderer must not take the API out of rotation: App Runner
+    # would stop routing to a healthy instance over a feature that degrades
+    # gracefully, and founders who cannot sign in is a far worse outcome than
+    # founders whose PDF looks plain. But it must be VISIBLE, because nothing
+    # else makes it so -- the export returns 200 with a real PDF either way.
+    #
+    # `gotenberg` means exports match the on-screen report. `reportlab-fallback`
+    # means every founder is getting the plain two-page document instead; see
+    # DEPLOY_AWS.md section 3a.
+    pdf_renderer = (
+        "gotenberg"
+        if gotenberg_available(base_url=settings.GOTENBERG_URL)
+        else "reportlab-fallback"
+    )
+
     return {
         "status": "healthy" if db_status == "connected" else "degraded",
         "database": db_status,
+        "pdf_renderer": pdf_renderer,
     }
