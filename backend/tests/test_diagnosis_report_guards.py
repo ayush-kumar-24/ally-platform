@@ -43,8 +43,16 @@ from app.models.enums import ScoreLabel
 # --- minimal doubles --------------------------------------------------------
 
 def _context():
-    """Just enough ReasoningContext for the stored classifier: the score bands."""
-    bands = SimpleNamespace(green=Decimal(2), amber=Decimal(1), red=Decimal(0))
+    """Just enough ReasoningContext for the stored classifier: the score bands.
+
+    green=0, amber=1, red=2 -- the RISK direction, straight from `scoring_rules`
+    (QUESTION_SCORE_GREEN/_AMBER/_RED). This fixture had them inverted, which is
+    the same inversion that shipped in diagnosis/advisor.py and gave a
+    pre-revenue founder "Strong" on all six pillars. With red=0 every
+    non-negative score resolves to RED, since _label_for_score tests
+    `score >= bands.red` first.
+    """
+    bands = SimpleNamespace(green=Decimal(0), amber=Decimal(1), red=Decimal(2))
     return SimpleNamespace(config=SimpleNamespace(question_scores=bands))
 
 
@@ -145,10 +153,16 @@ def test_numeric_score_alone_counts_as_stored():
         stored=StoredScoreAnswerClassifier(), fallback=llm
     )
 
-    result = asyncio.run(classifier.classify(_answer(score=0), None, _context()))
+    # score=2 is RED on the risk scale; the point of the test is that a bare
+    # number resolves a band without a provider call, not which band it is.
+    result = asyncio.run(classifier.classify(_answer(score=2), None, _context()))
 
     assert llm.calls == 0
     assert result.label is ScoreLabel.RED
+
+    # ...and the other end, so a future inversion cannot pass this file.
+    green = asyncio.run(classifier.classify(_answer(score=0), None, _context()))
+    assert green.label is ScoreLabel.GREEN
 
 
 # --- (2) an empty evidence set must not become a report ---------------------
@@ -187,6 +201,9 @@ def test_pipeline_raises_rather_than_persisting_an_empty_report(monkeypatch):
             return SimpleNamespace(
                 classifications=(), category_risks=(), symptoms=(),
                 distress_mode=False,
+                # Every answer was skipped, so all of them are unscored -- the
+                # real DiagnosisResult carries these and the stage log reads it.
+                unscored_answer_ids=(1, 2, 3),
                 stage_detection=SimpleNamespace(stage_id=None),
             )
 

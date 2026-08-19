@@ -255,6 +255,15 @@ class ReasoningService:
             stage_id=diagnosis.stage_detection.stage_id,
             symptoms=len(diagnosis.symptoms),
             distress=diagnosis.distress_mode,
+            # How many answers were DROPPED from the evidence set. The all-or-
+            # nothing case is caught loudly just below, but a partial drop --
+            # one answer in thirty whose advisor call failed at submit time --
+            # has been silent, and it is silent in exactly the configuration
+            # production runs: ANSWER_CLASSIFIER=stored skips an unscored answer
+            # rather than classifying it, so the founder's report is built from
+            # 29 answers with nothing saying so. Measured non-zero on 2 of 5 test
+            # sessions.
+            unscored_skipped=len(diagnosis.unscored_answer_ids),
         )
         # Zero classifications from a non-empty answer set means every answer was
         # skipped as unscored, and everything downstream -- root causes,
