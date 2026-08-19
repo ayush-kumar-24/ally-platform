@@ -31,6 +31,7 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.ai_chat.attachments.errors import AttachmentConversationNotFoundError
 from app.ai_chat.attachments.metadata import categorize, extension_of
 from app.ai_chat.attachments.repository import AttachmentRepository
 from app.ai_chat.attachments.schemas import (
@@ -69,7 +70,11 @@ class SqlAttachmentRepository(AttachmentRepository):
     def add(self, attachment: Attachment) -> None:
         conv_pk = self._conversation_pk(attachment.conversation_id)
         if conv_pk is None:
-            raise LookupError(f"conversation {attachment.conversation_id!r} not found")
+            # A stale/invalid conversation_id from the client (e.g. a session
+            # that went bad mid-flow) must 404 cleanly -- a bare LookupError
+            # here fell through to the unhandled-exception handler as a raw
+            # 500, which is what actually surfaced in production.
+            raise AttachmentConversationNotFoundError(attachment.conversation_id)
         row = FileUploadRow(
             founder_id=attachment.founder_id,
             conversation_id=conv_pk,

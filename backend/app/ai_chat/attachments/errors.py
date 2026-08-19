@@ -34,6 +34,17 @@ class AttachmentNotFoundError(AttachmentError):
                          status_code=status.HTTP_404_NOT_FOUND)
 
 
+class AttachmentConversationNotFoundError(AttachmentError):
+    """Raised when an attachment upload names a conversation_id that doesn't
+    resolve to a real row -- a stale/invalid id from the client, not a
+    server bug, so this must be a clean 404, never a raw 500. Distinct from
+    AttachmentNotFoundError, which is about the attachment itself."""
+
+    def __init__(self, conversation_id: str):
+        super().__init__(f"Conversation '{conversation_id}' was not found.",
+                         status_code=status.HTTP_404_NOT_FOUND)
+
+
 class DuplicateAttachmentError(AttachmentError):
     def __init__(self, checksum: str):
         super().__init__(f"An identical attachment (checksum {checksum[:12]}…) already exists.",
