@@ -1,4 +1,8 @@
-"""No API field may accept more text than its column can hold.
+"""No API field may accept a value its column will reject.
+
+Two ways the same failure happened, both a 500 with the founder's whole profile
+update lost, and both because validation stopped short of what Postgres
+enforces.
 
 PATCH /profile returned 500 for any founder whose answer landed in the gap
 between the two: FounderUpdate advertised max_length=100 for
@@ -7,23 +11,44 @@ so "gather everything, then decide late" -- 35 characters -- passed validation,
 reached Postgres, and raised StringDataRightTruncation. Unhandled, so a 500,
 and the founder's whole profile update was discarded.
 
-Seven fields were mismatched that way. This test compares the two declarations
-directly so the next one is caught before it reaches a founder.
+Seven fields were mismatched that way.
 
-Deliberately checked against the ORM model rather than a live database: the
-column widths are declared in app/models/schema.py, migrations keep the real
-table in step with it, and a test that needs a database connection is a test
-that gets skipped in CI.
+Then, with the widths fixed, the same save failed again on CheckViolation: five
+of those columns are not free text at all but controlled vocabularies with a
+CHECK constraint listing their values, while the schema still typed them as
+plain `str`. "D2C e-commerce" is a reasonable thing to type into business_model
+and is not on the list.
+
+This module compares both -- declared max_length against column width, and
+declared Literal members against the CHECK definition read out of Postgres -- so
+the next drift in either direction is caught before it reaches a founder.
+
+The width checks read the ORM model, not a live database: the widths are
+declared in app/models/schema.py, migrations keep the real table in step with
+it, and a test needing a connection is a test that gets skipped in CI. The
+vocabulary check has no such option -- a CHECK definition exists only in
+Postgres -- so that one connects, and skips rather than fails when it cannot.
 """
 
 from __future__ import annotations
 
+import re
+from typing import get_args
+
 import pydantic
 import pytest
+from sqlalchemy import text
 
 from app import schemas as _schemas  # noqa: F401  (ensures schema modules import)
 from app.models.schema import Founders
-from app.schemas.founder import FounderUpdate
+from app.schemas.founder import (
+    BusinessModel,
+    CurrentRevenue,
+    ExperienceLevel,
+    FounderUpdate,
+    TeamSize,
+    WorkingRelationship,
+)
 
 
 def _column_lengths() -> dict[str, int]:
@@ -85,3 +110,67 @@ def test_widened_columns_stay_widened(field, expected):
     about themselves rather than letting them.
     """
     assert _column_lengths()[field] == expected
+
+
+# --- controlled vocabularies -----------------------------------------------
+
+_ENUM_FIELDS = {
+    "business_model": BusinessModel,
+    "current_revenue": CurrentRevenue,
+    "experience_level": ExperienceLevel,
+    "team_size": TeamSize,
+    "working_relationship": WorkingRelationship,
+}
+
+
+def _check_constraint_values(engine, column: str) -> set[str]:
+    """The values `founders_<column>_check` actually permits, from Postgres."""
+    sql = text(
+        "select pg_get_constraintdef(oid) from pg_constraint "
+        "where conrelid = 'founders'::regclass and conname = :name"
+    )
+    with engine.connect() as conn:
+        definition = conn.execute(sql, {"name": f"founders_{column}_check"}).scalar()
+    assert definition, f"no CHECK constraint found for founders.{column}"
+    return set(re.findall(r"'([^']+)'::character varying", definition))
+
+
+@pytest.mark.parametrize("column, literal", sorted(_ENUM_FIELDS.items()))
+def test_literal_members_match_the_database_check(column, literal):
+    """The schema's accepted values and the column's CHECK must be the same set.
+
+    Needs a database, unlike the width tests above -- the CHECK definition is
+    the authority and it only exists in Postgres. Skipped rather than failed
+    when there is no connection, so this file still guards the widths in an
+    offline run.
+    """
+    try:
+        from app.db.session import engine
+        allowed = _check_constraint_values(engine, column)
+    except Exception as exc:  # no database configured for this run
+        pytest.skip(f"no database available: {exc}")
+
+    declared = set(get_args(literal))
+    assert declared == allowed, (
+        f"founders.{column}: schema accepts {sorted(declared)}, "
+        f"database allows {sorted(allowed)}"
+    )
+
+
+def test_enum_fields_reject_free_text_with_422_not_500():
+    """The actual reported failure: a plausible free-text value must be refused
+    by validation, not by Postgres."""
+    with pytest.raises(pydantic.ValidationError):
+        FounderUpdate(business_model="D2C e-commerce")
+    with pytest.raises(pydantic.ValidationError):
+        FounderUpdate(team_size="2")
+    with pytest.raises(pydantic.ValidationError):
+        FounderUpdate(experience_level="first-time founder")
+
+
+def test_enum_fields_still_accept_their_real_values():
+    ok = FounderUpdate(business_model="D2C", team_size="solo",
+                       experience_level="first_time", current_revenue="pre_revenue",
+                       working_relationship="cofounder")
+    assert ok.business_model == "D2C"
+    assert ok.team_size == "solo"
