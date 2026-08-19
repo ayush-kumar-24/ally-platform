@@ -107,6 +107,18 @@ export default function DiagnosisChat() {
     try {
       const res = await submitAnswer({ questionId: question?.id, answer: text });
       const state = normalise(res, true);
+      // The answer did not address the question -- nothing was kept and the same
+      // question stands. Handled before anything below, because the server sends
+      // that same question back as `question`, which would otherwise render as
+      // Ally asking it twice in a row with no explanation. Mirrors
+      // FounderDnaChat, which gates the identity phase the same way.
+      if (!state.accepted) {
+        setMessages(prev => [...prev, {
+          role: 'ally', time: clock(),
+          text: state.reprompt || "That didn't quite answer the question — try again.",
+        }]);
+        return;
+      }
       const next = state.question;
       // The server's count is authoritative; only fall back to counting
       // locally if it didn't send one.

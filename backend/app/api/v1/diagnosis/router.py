@@ -106,7 +106,7 @@ async def submit_answer(
     ),
     advisor: NextQuestionAdvisor | None = Depends(get_next_question_advisor),
 ) -> SubmitAnswerResponse:
-    session, next_question = await DiagnosisService(db, advisor=advisor).submit_answer(
+    session, next_question, reprompt = await DiagnosisService(db, advisor=advisor).submit_answer(
         founder=founder,
         question_id=payload.question_id,
         answer_text=payload.answer_text,
@@ -150,4 +150,6 @@ async def submit_answer(
         session=session,
         next_question=next_question,
         is_complete=session.status == SessionStatus.COMPLETED,
+        accepted=reprompt is None,
+        reprompt=reprompt,
     )
