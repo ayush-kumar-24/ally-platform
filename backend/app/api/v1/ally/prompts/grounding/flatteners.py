@@ -93,7 +93,14 @@ def diagnosis_block(ctx: AllyContext | None) -> str:
     return "\n".join(lines)
 
 
-_MAX_ATTACHMENT_TEXT = 1500
+# Was 1500 -- too tight for a real document. Live-diagnosed: a founder
+# uploaded a .docx whose first ~13,000 characters were a box-drawing ASCII
+# diagram; clamped (whitespace-collapsed) at 1500 chars, Ally received nothing
+# but jumbled diagram characters and never saw any of the document's actual
+# prose, so it answered as if no file had been read at all -- silently, no
+# error anywhere. 6000 gives real documents room for their content to start
+# appearing, at a still-bounded per-file token cost.
+_MAX_ATTACHMENT_TEXT = 6000
 
 
 def attachments_block(entries: tuple[tuple[str, str, int, str | None], ...]) -> str:
