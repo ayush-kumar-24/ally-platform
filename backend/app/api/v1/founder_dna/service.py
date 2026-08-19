@@ -23,6 +23,8 @@ from app.api.v1.founder_dna.engine import (
     resolve_founder_dna_stage_group,
 )
 from app.api.v1.founder_dna.repository import FounderDnaRepository
+from app.api.v1.founder_dna.responsiveness import Rejection
+from app.api.v1.founder_dna.responsiveness import check as check_responsiveness
 from app.core.config import settings
 from app.core.logger import logger
 from app.middleware.error_handler import AppError
@@ -78,13 +80,19 @@ class FounderDnaService:
 
     async def submit_answer(
         self, founder: Founders, question_id: int, answer_text: str
-    ) -> tuple[FounderDnaQuestions | None, bool]:
+    ) -> tuple[FounderDnaQuestions | None, bool, Rejection | None]:
         """Store an answer, judge resolution, and pick the next question.
 
-        Returns (next_question, is_complete). Two commits, not one -- same
-        reasoning as DiagnosisService.submit_answer: the answer is written
-        and committed BEFORE the (optional) LLM resolution call, so a slow or
-        failed advisor call never risks losing an already-given answer.
+        Returns (next_question, is_complete, rejection). Two commits, not one
+        -- same reasoning as DiagnosisService.submit_answer: the answer is
+        written and committed BEFORE the (optional) LLM resolution call, so a
+        slow or failed advisor call never risks losing an already-given answer.
+
+        When `rejection` is non-None nothing was written at all and
+        `next_question` is the SAME question re-asked: the input was not an
+        answer to it (see responsiveness.py). That is a conversational turn,
+        not an error -- a 4xx here would surface to the founder as "that
+        didn't save", which is both wrong and alarming.
         """
         if founder.founder_dna_completed_at is not None:
             raise FounderDnaQuestionMismatchError(
@@ -100,6 +108,27 @@ class FounderDnaService:
             raise FounderDnaQuestionMismatchError(
                 "That question is not part of your current stage."
             )
+
+        # Responsiveness is checked BEFORE the idempotent-retry lookup below,
+        # not after: a rejected input is never stored, so a re-send of the same
+        # rejected text must be re-judged rather than treated as a resume of an
+        # answer that was already saved.
+        rejection = check_responsiveness(
+            question_text=question.question_text,
+            question_format=question.format,
+            options=question.options,
+            answer_text=answer_text,
+        )
+        if rejection is not None:
+            logger.info(
+                "Founder DNA answer not responsive; re-asking",
+                extra={
+                    "founder_id": founder.founder_id,
+                    "question_id": question_id,
+                    "reason": rejection.reason,
+                },
+            )
+            return question, False, rejection
 
         existing = self.repository.get_answer(founder.founder_id, question_id)
         if existing is not None:
@@ -144,11 +173,11 @@ class FounderDnaService:
             if self.engine.is_phase_complete(founder, stage_group):
                 self._complete(founder)
                 self.db.commit()
-                return None, True
+                return None, True, None
 
             next_question = self.engine.select_next_question(founder, stage_group)
             self.db.commit()
-            return next_question, False
+            return next_question, False, None
         except SQLAlchemyError as exc:
             self.db.rollback()
             logger.error(
