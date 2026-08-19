@@ -1556,6 +1556,14 @@ class FounderReports(Base):
     # Full ReportNarrative.as_dict() output, cached on first build. Lazily
     # populated -- see _build_narrative in app/api/v1/reports/routes.py.
     narrative_snapshot: Mapped[Optional[dict]] = mapped_column(JSONB)
+    #: Where this report's rendered PDF lives in object storage, once one has
+    #: been made. Null means it has never been rendered -- see
+    #: app/api/v1/reports/pdf_delivery.py.
+    pdf_storage_key: Mapped[Optional[str]] = mapped_column(Text)
+    #: Set when a download could not be served because the renderer was down.
+    #: The backfill sweep reads this, so the only PDFs rendered off the request
+    #: path are ones a founder actually asked for.
+    pdf_requested_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
 
     founder: Mapped['Founders'] = relationship('Founders', back_populates='founder_reports')
     session: Mapped['Sessions'] = relationship('Sessions', back_populates='founder_reports')
