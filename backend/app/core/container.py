@@ -328,6 +328,7 @@ class Container:
         """Request-scoped panel service. The audit repository is DB-backed so the
         trail survives restarts."""
         from app.admin.conversations import SqlAlchemyConversationReadRepository
+        from app.admin.feedback import SqlAlchemyFeedbackReadRepository
         from app.api.v1.reasoning.trigger import regenerate_report_for_founder
         from app.privacy.db_repository import SqlAlchemyPrivacyRepository
         return AdminPanelService(
@@ -343,6 +344,7 @@ class Container:
             # way, self-service or admin, to get them a report at all.
             report_regenerator=lambda founder_id: regenerate_report_for_founder(db, founder_id),
             privacy=SqlAlchemyPrivacyRepository(db),
+            feedback=SqlAlchemyFeedbackReadRepository(db),
         )
 
     def insights_service(self, db: Session):

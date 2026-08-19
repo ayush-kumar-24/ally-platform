@@ -63,6 +63,7 @@ class AdminPanelService:
         conversations=None,
         report_regenerator: Callable[[int], dict] | None = None,
         privacy=None,
+        feedback=None,
     ):
         self.users = users
         self.credits = credits
@@ -72,6 +73,7 @@ class AdminPanelService:
         self.conversations = conversations
         self.report_regenerator = report_regenerator
         self.privacy = privacy  # PrivacyRepository -- backs cancel_pending_deletion
+        self.feedback = feedback  # FeedbackReadRepository -- backs list_feedback/feedback_stats
         self._now = clock or (lambda: datetime.now(timezone.utc))
 
     # --- reads ------------------------------------------------------------
@@ -375,6 +377,28 @@ class AdminPanelService:
         """
         require(admin.role, Capability.VIEW_CHATS)
         return self.conversations.get_with_messages(conversation_id)
+
+    # --- feedback (read-only) -----------------------------------------------
+
+    def list_feedback(self, admin, *, feedback_type: str | None = None,
+                      limit: int = 50, offset: int = 0):
+        """Star ratings and written notes, newest first -- every founder
+        submission previously landed in founder_feedback with no admin-visible
+        read path at all (the older GET /admin/feedback route existed but was
+        wired to an in-memory stub, live-verified to return nothing even with
+        real rows in the database). This is the real one."""
+        require(admin.role, Capability.VIEW_FEEDBACK)
+        if self.feedback is None:
+            raise InvalidSearchError("feedback review is not configured")
+        return self.feedback.list_feedback(feedback_type=feedback_type, limit=limit, offset=offset)
+
+    def feedback_stats(self, admin, *, feedback_type: str | None = None):
+        """Aggregate counts (total, how many carry a rating, average rating,
+        breakdown by type) over the same filter list_feedback uses."""
+        require(admin.role, Capability.VIEW_FEEDBACK)
+        if self.feedback is None:
+            raise InvalidSearchError("feedback review is not configured")
+        return self.feedback.stats(feedback_type=feedback_type)
 
     # --- report regeneration ------------------------------------------------
 

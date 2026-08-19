@@ -34,6 +34,7 @@ class Capability(str, Enum):
     VIEW_REPORTS = "view_reports"
     VIEW_CHATS = "view_chats"
     VIEW_AUDIT = "view_audit"
+    VIEW_FEEDBACK = "view_feedback"
     # --- admin-level mutations ------------------------------------------
     EDIT_USER_PROFILE = "edit_user_profile"
     RESET_DIAGNOSIS = "reset_diagnosis"
@@ -62,12 +63,14 @@ _SUPPORT: frozenset[Capability] = frozenset({
     Capability.VIEW_USERS,
     Capability.VIEW_REPORTS,
     Capability.VIEW_CHATS,
+    Capability.VIEW_FEEDBACK,
 })
 
 _ADMIN: frozenset[Capability] = frozenset({
     Capability.VIEW_USERS,
     Capability.VIEW_REPORTS,
     Capability.VIEW_AUDIT,
+    Capability.VIEW_FEEDBACK,
     Capability.EDIT_USER_PROFILE,
     Capability.RESET_DIAGNOSIS,
     Capability.RESET_CONVERSATIONS,

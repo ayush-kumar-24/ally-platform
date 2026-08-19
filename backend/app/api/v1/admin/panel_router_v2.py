@@ -9,6 +9,16 @@ under the same /admin prefix with distinct paths.
     GET    /admin/users/{id}/timeline       chronological history
     GET    /admin/users/{id}/conversations  list (Support may view)
     GET    /admin/conversations/{cid}       read-only transcript
+    GET    /admin/founder-feedback          star ratings + written notes (Support may view)
+    GET    /admin/founder-feedback/stats    counts + average rating
+
+Named /founder-feedback, not /feedback: the Phase 12 admin router (app/api/v1/
+admin/router.py) already owns GET /admin/feedback, registered earlier in
+router.py, so a second /admin/feedback here would be silently shadowed and
+never reached -- the exact same collision /admin/audit-log below was already
+renamed to avoid. That older route also targets a different, never-built
+"suggestion feedback" shape (FeedbackSummary has a suggestion_id, not
+rating/outcome_text), not the real founder_feedback table this reads.
     POST   /admin/users/{id}/regenerate-report
     GET    /admin/flags                     list feature flags
     PUT    /admin/flags/{key}               set a global flag (Super Admin)
@@ -159,6 +169,39 @@ def view_conversation(conversation_id: str,
             "messages": [{"message_id": m.message_id, "role": m.role,
                           "content": m.content, "created_at": m.created_at}
                          for m in view.messages]}
+
+
+# --- feedback (read-only) ----------------------------------------------------
+
+@router.get("/founder-feedback", response_model=dict,
+            summary="Star ratings and written notes from founders (read-only)")
+def list_feedback(feedback_type: str | None = Query(default=None, max_length=30),
+                  limit: int = Query(default=50, ge=1, le=200),
+                  offset: int = Query(default=0, ge=0),
+                  admin: PanelAdmin = Depends(get_panel_admin),
+                  service=Depends(get_panel_service)) -> dict:
+    if service.feedback is None:
+        raise NotConfiguredError("Feedback review")
+    items, total = service.list_feedback(
+        admin, feedback_type=feedback_type, limit=limit, offset=offset)
+    return {"total": total, "items": [
+        {"feedback_id": f.feedback_id, "founder_id": f.founder_id,
+         "founder_name": f.founder_name, "founder_email": f.founder_email,
+         "feedback_type": f.feedback_type, "rating": f.rating, "comment": f.comment,
+         "session_id": f.session_id, "report_id": f.report_id,
+         "collected_at": f.collected_at} for f in items]}
+
+
+@router.get("/founder-feedback/stats", response_model=dict,
+            summary="Feedback counts and average rating")
+def feedback_stats(feedback_type: str | None = Query(default=None, max_length=30),
+                   admin: PanelAdmin = Depends(get_panel_admin),
+                   service=Depends(get_panel_service)) -> dict:
+    if service.feedback is None:
+        raise NotConfiguredError("Feedback review")
+    stats = service.feedback_stats(admin, feedback_type=feedback_type)
+    return {"total": stats.total, "rated_count": stats.rated_count,
+            "average_rating": stats.average_rating, "by_type": stats.by_type}
 
 
 # --- report regeneration ----------------------------------------------------

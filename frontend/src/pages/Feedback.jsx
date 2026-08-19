@@ -1,28 +1,24 @@
 import { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import FeedbackPrompt from '../components/FeedbackPrompt';
-import { FEEDBACK } from '../services/feedback';
+import { FEEDBACK, submitFeedback } from '../services/feedback';
+import { ApiError } from '../services/api';
 
 /**
  * The feedback section, as its own page in the sidebar.
  *
- * Two different things live here, deliberately kept apart:
+ * Both things on this page now post to the same backend endpoint and land in
+ * the same founder_feedback table, visible to the team from the admin panel:
  *
- *  - The written note (this page's form) is FRONTEND-ONLY. There is no
- *    feedback-inbox endpoint to post to, so rather than swallow a founder's
- *    words into a form that goes nowhere, it builds a mailto: link and hands
- *    off to their own mail client. Every word lands in our inbox exactly as
- *    typed, with no server piece to build or keep running. The tradeoff is
- *    real and worth naming: it needs a mail client configured, and it needs
- *    them to press send once it opens.
+ *  - The written note (this page's form) used to be FRONTEND-ONLY -- it built
+ *    a mailto: link and handed off to the founder's own mail client. That
+ *    silently did nothing for anyone without one configured, or who didn't
+ *    personally press send once it opened. It now posts here instead
+ *    (feedback_type="general", no rating), same as the star rating below.
  *
- *  - The star rating (the modal below) DOES post to the backend, via the
- *    existing /feedback endpoint. That one is a number we can aggregate;
- *    this page's note is prose we want to actually read.
+ *  - The star rating (the modal below) already posted to the backend via the
+ *    existing /feedback endpoint -- unchanged.
  */
-
-// Where a founder's typed-in feedback goes.
-const FEEDBACK_EMAIL = 'info@goxl.in';
 
 const TOPICS = [
   { id: 'bug', label: 'Something is broken' },
@@ -35,37 +31,32 @@ const TOPICS = [
 const TOPIC_LABEL = Object.fromEntries(TOPICS.map((t) => [t.id, t.label]));
 
 export default function Feedback() {
-  const { user, showToast } = useApp();
+  const { showToast } = useApp();
   const [topic, setTopic] = useState('idea');
   const [message, setMessage] = useState('');
   const [ratingOpen, setRatingOpen] = useState(false);
+  const [sending, setSending] = useState(false);
 
-  const canSend = message.trim().length > 0;
+  const canSend = message.trim().length > 0 && !sending;
 
-  const send = () => {
+  const send = async () => {
     const trimmed = message.trim();
-    if (!trimmed) return;
+    if (!trimmed || sending) return;
 
-    const name = user?.name || '';
-    const email = user?.email || '';
+    // Topic has no column of its own on founder_feedback -- folded into the
+    // comment as a prefix so the admin panel shows it without a schema change.
+    const comment = `[${TOPIC_LABEL[topic]}] ${trimmed}`;
 
-    const subject = `Ally feedback · ${TOPIC_LABEL[topic]}${name ? ` · ${name}` : ''}`;
-    const body = [
-      trimmed,
-      '',
-      '---',
-      `Topic: ${TOPIC_LABEL[topic]}`,
-      email ? `From: ${name || 'A founder'} <${email}>` : `From: ${name || 'A founder'}`,
-      `Page: ${window.location.origin}`,
-    ].join('\n');
-
-    // A real navigation, not window.open -- mail-client handoff wants the same
-    // tab; window.open just leaves a blank one behind.
-    window.location.href =
-      `mailto:${FEEDBACK_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-
-    showToast('Opening your mail app with this ready to send.');
-    setMessage('');
+    setSending(true);
+    try {
+      await submitFeedback({ type: FEEDBACK.GENERAL, comment });
+      showToast('Feedback sent — thank you, we read every one of these.');
+      setMessage('');
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.detail : 'Could not send that just now — please try again.');
+    } finally {
+      setSending(false);
+    }
   };
 
   return (
@@ -119,14 +110,11 @@ export default function Feedback() {
           />
 
           <div className="fb-send-row">
-            {/* Said plainly rather than discovered after clicking -- a button
-                that hijacks you into Outlook without warning is a small
-                betrayal. */}
             <span className="fb-send-note">
-              Opens your mail app, addressed to {FEEDBACK_EMAIL}
+              Goes straight to our team — no mail app required
             </span>
             <button className="btn btn-em" type="button" onClick={send} disabled={!canSend}>
-              Send feedback
+              {sending ? 'Sending…' : 'Send feedback'}
             </button>
           </div>
         </div>

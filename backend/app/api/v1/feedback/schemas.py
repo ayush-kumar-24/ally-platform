@@ -15,7 +15,13 @@ class FeedbackCreate(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     feedback_type: FeedbackType
-    rating: int = Field(ge=1, le=5)          # mirrors founder_feedback_rating_check
+    # Optional now: a free-text "send us a note" (feedback_type="general") has
+    # no star rating at all -- it used to go out as a mailto: link that only
+    # worked if the founder's own mail client happened to be configured, which
+    # silently did nothing for anyone else. It now posts here instead, so
+    # rating must not be required for that case. Still mirrors
+    # founder_feedback_rating_check (1-5) whenever it IS provided.
+    rating: int | None = Field(default=None, ge=1, le=5)
     comment: str | None = Field(default=None, max_length=2000)
 
     # What the rating is about. Which one is expected depends on the type.
@@ -30,6 +36,10 @@ class FeedbackCreate(BaseModel):
             raise ValueError("report_rating requires report_id")
         if self.feedback_type == "diagnosis_rating" and self.session_id is None:
             raise ValueError("diagnosis_rating requires session_id")
+        if self.feedback_type in ("report_rating", "diagnosis_rating") and self.rating is None:
+            raise ValueError(f"{self.feedback_type} requires a rating")
+        if self.rating is None and not (self.comment or "").strip():
+            raise ValueError("provide a rating, a comment, or both")
         return self
 
 
