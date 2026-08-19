@@ -20,6 +20,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.api.v1.chat import dependencies as deps
+from app.api.v1.privacy.dependencies import require_ai_processing_allowed_for_id
 # `from app.api.v1.chat import router` would resolve to the re-exported
 # APIRouter instance (app/api/v1/chat/__init__.py does `from .router import
 # router`, colliding with the submodule's own name) rather than the module --
@@ -145,6 +146,11 @@ def world():
         # the 100 calls got a real 429 mid-run instead of the mocked answer.
         chat_gate: lambda: ChatGate(founder_id=founder["id"], tier="free",
                                     service=None, enforced=False),
+        # Same reasoning as the chat_gate override above, for a second, later
+        # gate: require_ai_processing_allowed_for_id resolves a real DB-backed
+        # PrivacyService (may_process checks founders.processing_restricted_at
+        # for founder_id=1), which this offline suite has no DB to back.
+        require_ai_processing_allowed_for_id: lambda: None,
         # Same reasoning as chat_gate above, for the per-founder request-rate
         # limiter (app/middleware/rate_limit.py): this suite's load/concurrency
         # tests legitimately send far more than 20 messages/minute for a

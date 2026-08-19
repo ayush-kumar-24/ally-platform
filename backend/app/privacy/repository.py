@@ -10,9 +10,10 @@ from __future__ import annotations
 
 import abc
 import threading
+from dataclasses import replace
 from datetime import datetime
 
-from app.privacy.errors import NoDeletionToCancelError
+from app.privacy.errors import NoDeletionToCancelError, PrivacyRequestNotFoundError
 from app.privacy.models import ExportBundle, PrivacyAction, PrivacyState
 
 
@@ -51,6 +52,23 @@ class PrivacyRepository(abc.ABC):
         """Clear a pending (not-yet-executed) deletion request. Refuses
         silently-doing-nothing-useful once deletion_executed_at is set --
         the sweep already ran, there is nothing left to cancel."""
+
+    @abc.abstractmethod
+    def list_all_requests(self, *, status: str | None = None,
+                          limit: int = 50, offset: int = 0) -> list[PrivacyAction]:
+        """Admin-wide view across every founder's requests -- unlike
+        list_requests, not scoped to one founder_id. Backs the admin panel's
+        review queue."""
+
+    @abc.abstractmethod
+    def resolve_request(self, request_id: int, *, status: str, processed_by: str,
+                        processing_notes: str | None, rejection_reason: str | None,
+                        at: datetime) -> PrivacyAction:
+        """Admin fulfilment: move a queued request (view_data, correct_data,
+        or any other logged action) to in_progress/completed/rejected. This is
+        the piece that was missing entirely before -- without it, every
+        "Request" button in the Privacy Center created a row that stayed
+        'pending' forever, with no code path anywhere that could resolve it."""
 
 
 class InMemoryPrivacyRepository(PrivacyRepository):
@@ -144,3 +162,24 @@ class InMemoryPrivacyRepository(PrivacyRepository):
             )
             self._states[founder_id] = state
             return state
+
+    def list_all_requests(self, *, status: str | None = None,
+                          limit: int = 50, offset: int = 0) -> list[PrivacyAction]:
+        with self._lock:
+            items = [r for r in reversed(self._requests) if status is None or r.status == status]
+        return items[offset:offset + limit]
+
+    def resolve_request(self, request_id: int, *, status: str, processed_by: str,
+                        processing_notes: str | None, rejection_reason: str | None,
+                        at: datetime) -> PrivacyAction:
+        with self._lock:
+            for i, r in enumerate(self._requests):
+                if r.request_id == request_id:
+                    updated = replace(
+                        r, status=status, processed_by=processed_by,
+                        processing_notes=processing_notes, rejection_reason=rejection_reason,
+                        completed_at=at if status in ("completed", "rejected") else r.completed_at,
+                    )
+                    self._requests[i] = updated
+                    return updated
+            raise PrivacyRequestNotFoundError(request_id)

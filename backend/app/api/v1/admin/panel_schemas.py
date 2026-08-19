@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -47,6 +48,19 @@ class SubscriptionUpdateRequest(BaseModel):
     expires_at: datetime | None = None
     monthly_credits: int | None = Field(default=None, ge=0, le=1_000_000)
     bonus_credits: int | None = Field(default=None, ge=0, le=1_000_000)
+
+
+class PrivacyRequestResolveRequest(BaseModel):
+    """Resolve one queued Privacy Center request. `status` is restricted to
+    the three outcomes an admin can move a request TO -- 'pending' is not
+    listed because that's only the state a request starts in, never a
+    resolution."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["in_progress", "completed", "rejected"]
+    processing_notes: str | None = Field(default=None, max_length=5000)
+    rejection_reason: str | None = Field(default=None, max_length=1000)
 
 
 class ConfirmRequest(BaseModel):

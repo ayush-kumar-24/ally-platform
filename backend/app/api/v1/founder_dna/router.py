@@ -22,6 +22,7 @@ from app.api.v1.founder_dna.schemas import (
     SubmitFounderDnaAnswerResponse,
 )
 from app.api.v1.founder_dna.service import FounderDnaService
+from app.api.v1.privacy.dependencies import require_ai_processing_allowed
 from app.db.session import get_db
 from app.middleware.rate_limit import founder_rate_limit
 from app.models import Founder
@@ -58,7 +59,7 @@ def _progress(
     "/start",
     response_model=StartFounderDnaResponse,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(start_rate_limit)],
+    dependencies=[Depends(start_rate_limit), Depends(require_ai_processing_allowed)],
 )
 def start(
     db: Session = Depends(get_db),
@@ -97,7 +98,7 @@ def current(
 @router.post(
     "/answer",
     response_model=SubmitFounderDnaAnswerResponse,
-    dependencies=[Depends(answer_rate_limit)],
+    dependencies=[Depends(answer_rate_limit), Depends(require_ai_processing_allowed)],
 )
 async def submit_answer(
     payload: SubmitFounderDnaAnswerRequest,

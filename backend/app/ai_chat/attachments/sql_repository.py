@@ -47,6 +47,15 @@ from app.models.schema import FileUploads as FileUploadRow
 # AttachmentType has 4 values; the legacy upload_category CHECK only allows
 # ('file','image') -- kept as a coarse convenience column, NOT the source of
 # truth (file_type/mime is, via categorize()).
+# file_uploads.message_id is an INTEGER column (the messages table's own PK),
+# but ai_chat's domain message ids are the uuid `messages.id` -- a 32-char hex
+# string that cannot go in an integer column. Rather than migrate the column's
+# type, the chat linkage is packed into the existing `extra` JSONB under an
+# internal underscore key and stripped back out on read. That is the same
+# convention sql_conversation.py already documents and uses for the fields the
+# messages table has no column for.
+_MESSAGE_ID_KEY = "_message_id"
+
 _IMAGE_CATEGORY = "image"
 _FILE_CATEGORY = "file"
 
@@ -71,7 +80,10 @@ class SqlAttachmentRepository(AttachmentRepository):
                 _IMAGE_CATEGORY if attachment.metadata.mime_type in _IMAGE_MIMES else _FILE_CATEGORY
             ),
             is_active=attachment.is_active,
-            message_id=(int(attachment.message_id) if attachment.message_id else None),
+            # Left NULL: see _MESSAGE_ID_KEY above. A domain (uuid) id would
+            # raise ValueError here, and did not previously because nothing set
+            # message_id at upload time.
+            message_id=None,
             external_id=attachment.attachment_id,
             status=attachment.status.value,
             checksum=attachment.metadata.checksum,
@@ -79,7 +91,8 @@ class SqlAttachmentRepository(AttachmentRepository):
             archived_at=attachment.archived_at,
             deleted_at=attachment.deleted_at,
             tags=list(attachment.tags),
-            extra=dict(attachment.extra),
+            extra=({**attachment.extra, _MESSAGE_ID_KEY: attachment.message_id}
+                   if attachment.message_id else dict(attachment.extra)),
             created_at=attachment.created_at,
         )
         self.db.add(row)
@@ -110,7 +123,12 @@ class SqlAttachmentRepository(AttachmentRepository):
         row.archived_at = attachment.archived_at
         row.deleted_at = attachment.deleted_at
         row.tags = list(attachment.tags)
-        row.extra = dict(attachment.extra)
+        extra = dict(attachment.extra)
+        if attachment.message_id:
+            extra[_MESSAGE_ID_KEY] = attachment.message_id
+        else:
+            extra.pop(_MESSAGE_ID_KEY, None)
+        row.extra = extra
         self.db.commit()
 
     def list_for_conversation(
@@ -225,11 +243,15 @@ class SqlAttachmentRepository(AttachmentRepository):
             ),
             created_at=row.created_at,
             updated_at=row.updated_at,
-            message_id=(str(row.message_id) if row.message_id is not None else None),
+            message_id=(
+                (row.extra or {}).get(_MESSAGE_ID_KEY)
+                or (str(row.message_id) if row.message_id is not None else None)
+            ),
             archived_at=row.archived_at,
             deleted_at=row.deleted_at,
             tags=tuple(row.tags or ()),
-            extra=dict(row.extra or {}),
+            # internal key stripped so callers never see it
+            extra={k: v for k, v in (row.extra or {}).items() if k != _MESSAGE_ID_KEY},
         )
 
 

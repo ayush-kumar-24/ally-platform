@@ -45,6 +45,10 @@ class Capability(str, Enum):
     # only path back for them, so it deliberately is NOT locked behind the
     # same tier as actions that destroy data.
     CANCEL_DELETION = "cancel_deletion"
+    # DSAR fulfilment ("View data summary", "Request data correction", etc. from
+    # the Privacy Center) -- same admin tier as CANCEL_DELETION: it resolves a
+    # founder-initiated data-rights request, not routine account admin.
+    MANAGE_PRIVACY_REQUESTS = "manage_privacy_requests"
     # --- super-admin-only mutations -------------------------------------
     TRANSFER_CREDITS = "transfer_credits"
     MODIFY_SUBSCRIPTION = "modify_subscription"
@@ -68,6 +72,7 @@ _ADMIN: frozenset[Capability] = frozenset({
     Capability.RESET_DIAGNOSIS,
     Capability.RESET_CONVERSATIONS,
     Capability.CANCEL_DELETION,
+    Capability.MANAGE_PRIVACY_REQUESTS,
 })
 
 # Super Admin holds every capability -- stated as "all of them" so a capability

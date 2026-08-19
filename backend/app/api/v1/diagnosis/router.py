@@ -25,6 +25,7 @@ from app.api.v1.diagnosis.notifications import (
     get_session_completion_notifier,
 )
 from app.api.v1.diagnosis.service import DiagnosisService
+from app.api.v1.privacy.dependencies import require_ai_processing_allowed
 from app.db.session import get_db
 from app.middleware.rate_limit import founder_rate_limit
 from app.models import Founder, SessionStatus
@@ -51,7 +52,7 @@ answer_rate_limit = founder_rate_limit(
     response_model=StartSessionResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Start (or resume) a diagnosis session",
-    dependencies=[Depends(start_rate_limit)],
+    dependencies=[Depends(start_rate_limit), Depends(require_ai_processing_allowed)],
 )
 def start_session(
     db: Session = Depends(get_db),
@@ -90,8 +91,10 @@ def get_current_question(
     # all (unlike chat's chat_gate) -- so a per-founder request-rate ceiling
     # is the only backstop against a single account driving unbounded LLM
     # spend here. A 30-question diagnosis under normal use stays well under
-    # this in any single minute.
-    dependencies=[Depends(answer_rate_limit)],
+    # this in any single minute. require_ai_processing_allowed is the other
+    # half: the rate limit bounds throughput, this one refuses entirely once
+    # the founder has restricted processing or withdrawn consent.
+    dependencies=[Depends(answer_rate_limit), Depends(require_ai_processing_allowed)],
 )
 async def submit_answer(
     payload: SubmitAnswerRequest,

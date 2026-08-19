@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { get, post } from '../services/api';
 import { getProfile, getProgress, updateProfile } from '../services/profile';
+import { getNotificationPreferences, updateNotificationPreferences } from '../services/settings';
 import { logout } from '../services/auth';
 import { getCatalog, getMyPlan } from '../services/plans';
 import {
@@ -361,6 +362,11 @@ export default function FounderProfile() {
       form2.append('file', file);
       const res = await post('/profile/avatar', form2, { headers: { 'Content-Type': undefined } });
       setAvatarUrl(res.avatar_url);
+      // Live-reported: the sidebar kept the OLD photo until a full reload.
+      // setAvatarUrl above only updates this page's own copy -- the sidebar
+      // (PlatformLayout) reads user.avatar from AppContext, which handleSave
+      // already updates for a name change but this upload never touched.
+      setUser(prev => ({ ...prev, avatar: res.avatar_url }));
       showToast('Profile photo updated ✓');
     } catch (err) {
       showToast(err?.message || 'Could not upload that photo. Please try again.');
@@ -369,16 +375,55 @@ export default function FounderProfile() {
     }
   };
 
-  // Preferences Switches
+  // Preferences Switches. Names on the UI side; the backend's
+  // notification_preferences keys are different (in_app_all, email_reminders,
+  // ...), so this map is the one place the two vocabularies meet.
+  const SWITCH_FIELD = {
+    notifications: 'in_app_all',
+    renewal: 'email_reminders',
+    reducedMotion: 'reduced_motion',
+    privateMode: 'private_mode',
+  };
   const [switches, setSwitches] = useState({
     renewal: true,
     notifications: true,
     reducedMotion: false,
     privateMode: true
   });
+  const [switchesLoaded, setSwitchesLoaded] = useState(false);
 
-  const toggleSwitch = (key) => {
-    setSwitches(prev => ({ ...prev, [key]: !prev[key] }));
+  // Live-reported: toggling any of these, then reloading, silently reset
+  // them all to default -- there was no backend call at all, not even
+  // localStorage. Loaded from the real preferences on mount now.
+  useEffect(() => {
+    let cancelled = false;
+    getNotificationPreferences()
+      .then((prefs) => {
+        if (cancelled || !prefs) return;
+        setSwitches({
+          notifications: prefs.in_app_all ?? true,
+          renewal: prefs.email_reminders ?? true,
+          reducedMotion: prefs.reduced_motion ?? false,
+          privateMode: prefs.private_mode ?? true,
+        });
+      })
+      .catch(() => { /* leave the defaults -- a stale-but-sane UI beats a broken one */ })
+      .finally(() => { if (!cancelled) setSwitchesLoaded(true); });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Optimistic, same shape as everywhere else in this session (Plan Your Day,
+  // attachments): flip locally so the switch feels instant, roll back and
+  // toast if the save actually fails.
+  const toggleSwitch = async (key) => {
+    const next = !switches[key];
+    setSwitches(prev => ({ ...prev, [key]: next }));
+    try {
+      await updateNotificationPreferences({ [SWITCH_FIELD[key]]: next });
+    } catch (err) {
+      setSwitches(prev => ({ ...prev, [key]: !next }));
+      showToast(err?.message || 'Could not save that preference — please try again.');
+    }
   };
 
   const [savingProfile, setSavingProfile] = useState(false);

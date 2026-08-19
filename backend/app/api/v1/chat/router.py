@@ -44,6 +44,7 @@ from app.api.v1.chat.schemas import (
 )
 
 from app.api.v1.plans.dependencies import ChatGate, chat_gate
+from app.api.v1.privacy.dependencies import require_ai_processing_allowed_for_id
 from app.middleware.rate_limit import founder_rate_limit
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -74,9 +75,11 @@ stream_rate_limit = founder_rate_limit(
     summary="Send a chat message",
     # chat_gate (below) enforces plan/credit limits, but only when
     # PLAN_ENFORCEMENT_ENABLED is on -- with it off (the documented default),
-    # chat_gate is a full pass-through and this is the only ceiling on how
-    # fast one account can drive LLM spend.
-    dependencies=[Depends(message_rate_limit)],
+    # message_rate_limit is the only ceiling on how fast one account can drive
+    # LLM spend, and require_ai_processing_allowed_for_id is what makes the
+    # Privacy Center's "Restrict processing" / "Withdraw consent" actually
+    # stop new AI processing rather than just recording that it was asked to.
+    dependencies=[Depends(message_rate_limit), Depends(require_ai_processing_allowed_for_id)],
 )
 def post_message(
     payload: MessageRequest,
@@ -105,7 +108,8 @@ def post_message(
 @router.post(
     "/stream",
     summary="Stream a chat response (Server-Sent Events)",
-    dependencies=[Depends(stream_rate_limit)],
+    # Same reasoning as /message above -- rate limit and the privacy gate both apply.
+    dependencies=[Depends(stream_rate_limit), Depends(require_ai_processing_allowed_for_id)],
 )
 def post_stream(
     payload: StreamRequest,

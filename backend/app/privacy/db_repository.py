@@ -14,14 +14,14 @@ from datetime import datetime
 
 from sqlalchemy import text
 
-from app.privacy.errors import FounderNotFoundError, NoDeletionToCancelError
+from app.privacy.errors import (
+    FounderNotFoundError,
+    NoDeletionToCancelError,
+    PrivacyRequestNotFoundError,
+)
 from app.privacy.models import ExportBundle, PrivacyAction, PrivacyState
 from app.privacy.repository import PrivacyRepository
 
-# Sections included in a self-service export, as (label, SQL). Each is scoped to the
-# founder by :fid. Kept as an explicit list rather than "every table with a
-# founder_id" so that adding a table is a deliberate disclosure decision.
-#
 # The diagnosis half of this list was missing, and the omission was not small:
 # the Privacy Center screen offers "a full export (JSON) of all data Ally holds
 # about you -- founder profile, SESSIONS, and DIAGNOSIS HISTORY", while the
@@ -79,6 +79,12 @@ _EXPORT_SECTIONS: tuple[tuple[str, str], ...] = (
         "messages",
         "select * from messages where founder_id = :fid order by created_at",
     ),
+    # --- everything else Ally holds under this founder_id -------------------
+    # (discovery_calls / notifications / token_usage: found missing in the same
+    # audit that found the diagnosis history gap above.)
+    ("discovery_calls", "select * from discovery_calls where founder_id = :fid"),
+    ("notifications", "select * from notifications where founder_id = :fid"),
+    ("token_usage", "select * from user_token_usage where founder_id = :fid"),
 )
 
 # Deliberately NOT exported: `internal_intelligence_reports`.
@@ -173,7 +179,9 @@ class SqlAlchemyPrivacyRepository(PrivacyRepository):
             text("""insert into privacy_requests
                         (founder_id, request_type, status, request_details, requested_at, due_by)
                     values (:fid, :rt, 'pending', :det, :at, :due)
-                    returning request_id, founder_id, request_type, status, requested_at, due_by"""),
+                    returning request_id, founder_id, request_type, status, requested_at, due_by,
+                              request_details, processed_by, processing_notes, rejection_reason,
+                              completed_at"""),
             {"fid": founder_id, "rt": request_type, "det": details, "at": at, "due": due_by},
         ).mappings().first()
         self.db.commit()
@@ -181,13 +189,57 @@ class SqlAlchemyPrivacyRepository(PrivacyRepository):
 
     def list_requests(self, founder_id: int) -> list[PrivacyAction]:
         rows = self.db.execute(
-            text("""select request_id, founder_id, request_type, status, requested_at, due_by
+            text("""select request_id, founder_id, request_type, status, requested_at, due_by,
+                           request_details, processed_by, processing_notes, rejection_reason,
+                           completed_at
                       from privacy_requests
                      where founder_id = :fid
                      order by requested_at desc, request_id desc"""),
             {"fid": founder_id},
         ).mappings().all()
         return [_to_action(r) for r in rows]
+
+    # --- admin fulfilment -------------------------------------------------
+
+    def list_all_requests(self, *, status: str | None = None,
+                          limit: int = 50, offset: int = 0) -> list[PrivacyAction]:
+        """Admin-wide view across every founder's requests -- backs the panel's
+        review queue. Unlike list_requests, not scoped to one founder."""
+        rows = self.db.execute(
+            text("""select request_id, founder_id, request_type, status, requested_at, due_by,
+                           request_details, processed_by, processing_notes, rejection_reason,
+                           completed_at
+                      from privacy_requests
+                     where CAST(:status AS VARCHAR) is null or status = CAST(:status AS VARCHAR)
+                     order by requested_at desc, request_id desc
+                     limit :lim offset :off"""),
+            {"status": status, "lim": limit, "off": offset},
+        ).mappings().all()
+        return [_to_action(r) for r in rows]
+
+    def resolve_request(self, request_id: int, *, status: str, processed_by: str,
+                        processing_notes: str | None, rejection_reason: str | None,
+                        at: datetime) -> PrivacyAction:
+        row = self.db.execute(
+            text("""update privacy_requests
+                       set status = :status,
+                           processed_by = :by,
+                           processing_notes = :notes,
+                           rejection_reason = :reason,
+                           completed_at = case when CAST(:status AS VARCHAR) in ('completed', 'rejected')
+                                               then :at else completed_at end
+                     where request_id = :rid
+                    returning request_id, founder_id, request_type, status, requested_at, due_by,
+                              request_details, processed_by, processing_notes, rejection_reason,
+                              completed_at"""),
+            {"status": status, "by": processed_by, "notes": processing_notes,
+             "reason": rejection_reason, "at": at, "rid": request_id},
+        ).mappings().first()
+        if row is None:
+            self.db.rollback()
+            raise PrivacyRequestNotFoundError(request_id)
+        self.db.commit()
+        return _to_action(row)
 
     # --- execution ---------------------------------------------------------
 
@@ -217,8 +269,13 @@ class SqlAlchemyPrivacyRepository(PrivacyRepository):
 
 
 def _to_action(row) -> PrivacyAction:
+    # .get() rather than [] -- defensive against a future call site that
+    # selects a narrower column set, rather than a hard KeyError.
     return PrivacyAction(
         request_id=row["request_id"], founder_id=row["founder_id"],
         request_type=row["request_type"], status=row["status"],
         requested_at=row["requested_at"], due_by=row["due_by"],
+        request_details=row.get("request_details"), processed_by=row.get("processed_by"),
+        processing_notes=row.get("processing_notes"), rejection_reason=row.get("rejection_reason"),
+        completed_at=row.get("completed_at"),
     )
