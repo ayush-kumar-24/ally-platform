@@ -171,6 +171,49 @@ class AdminPanelService:
         )
         return state
 
+    # --- privacy requests (DSAR fulfilment) --------------------------------
+
+    def list_privacy_requests(self, admin, *, status: str | None = None,
+                              limit: int = 50, offset: int = 0):
+        """The review queue behind the Privacy Center's "Request"-type actions
+        (view_data, correct_data, etc.). Read-only -- same tier as VIEW_USERS,
+        since this is what makes those requests visible to anyone at all."""
+        require(admin.role, Capability.VIEW_USERS)
+        if self.privacy is None:
+            raise InvalidSearchError("privacy request review is not configured")
+        return self.privacy.list_all_requests(status=status, limit=limit, offset=offset)
+
+    def resolve_privacy_request(self, admin, request_id: int, *, status: str,
+                                processing_notes: str | None = None,
+                                rejection_reason: str | None = None,
+                                ip: str | None = None):
+        """Move a queued request to in_progress/completed/rejected.
+
+        Before this existed, every "View data summary" / "Request data
+        correction" click created a privacy_requests row that could never be
+        marked done by anything in the codebase -- this is that missing path.
+        """
+        require(admin.role, Capability.MANAGE_PRIVACY_REQUESTS)
+        if self.privacy is None:
+            raise InvalidSearchError("privacy request review is not configured")
+        before = None
+        for r in self.privacy.list_all_requests(limit=1000):
+            if r.request_id == request_id:
+                before = r
+                break
+        updated = self.privacy.resolve_request(
+            request_id, status=status, processed_by=admin.email,
+            processing_notes=processing_notes, rejection_reason=rejection_reason,
+            at=self._now(),
+        )
+        self.audit.record(
+            admin=admin, action="privacy_request.resolve",
+            resource=f"privacy_request:{request_id}",
+            target_user_id=updated.founder_id, ip_address=ip,
+            old_value=before.status if before else None, new_value=status,
+        )
+        return updated
+
     def delete_user(self, admin, founder_id: int, *, reason: str | None = None,
                     ip: str | None = None) -> UserSummary:
         """Soft-delete by banning. A hard DELETE is deliberately not offered here:

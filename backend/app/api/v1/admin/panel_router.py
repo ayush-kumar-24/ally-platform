@@ -11,6 +11,8 @@
     GET    /admin/users/{id}/credits       ledger for one user
     POST   /admin/users/{id}/credits       adjust credits (Super Admin only)
     PATCH  /admin/users/{id}/subscription  plan / expiry / credit grants
+    GET    /admin/privacy-requests         DSAR review queue (view_data, correct_data, ...)
+    PATCH  /admin/privacy-requests/{id}    resolve a queued request
     GET    /admin/audit-log               immutable audit trail
 
 Named /audit-log, not /audit: the Phase 12 admin router already owns GET /admin/audit
@@ -46,6 +48,8 @@ from app.api.v1.admin.panel_responses import (
     CreditAdjustResponse,
     CreditLedgerResponse,
     CreditTransactionResponse,
+    PrivacyRequestListResponse,
+    PrivacyRequestResponse,
     UserDetailResponse,
     UserPageResponse,
     UserSummaryResponse,
@@ -54,6 +58,7 @@ from app.api.v1.admin.panel_responses import (
 from app.api.v1.admin.panel_schemas import (
     ConfirmRequest,
     CreditAdjustRequest,
+    PrivacyRequestResolveRequest,
     StatusChangeRequest,
     SubscriptionUpdateRequest,
     UserUpdateRequest,
@@ -228,6 +233,39 @@ def update_subscription(founder_id: int, payload: SubscriptionUpdateRequest,
     return service.update_subscription(
         admin, founder_id, plan=payload.plan, expires_at=payload.expires_at,
         monthly_credits=payload.monthly_credits, bonus_credits=payload.bonus_credits, ip=ip)
+
+
+# --- privacy requests (DSAR review queue) ------------------------------------
+
+@router.get("/privacy-requests", response_model=PrivacyRequestListResponse,
+            summary="DSAR review queue -- view_data, correct_data and every other logged request")
+def list_privacy_requests(
+    status: str | None = Query(default=None, max_length=20,
+                               description="Filter by pending / in_progress / completed / rejected"),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    admin: PanelAdmin = Depends(get_panel_admin),
+    service=Depends(get_panel_service),
+) -> PrivacyRequestListResponse:
+    items = service.list_privacy_requests(admin, status=status, limit=limit, offset=offset)
+    return PrivacyRequestListResponse.from_domain(items)
+
+
+@router.patch("/privacy-requests/{request_id}", response_model=PrivacyRequestResponse,
+              summary="Resolve a queued Privacy Center request")
+def resolve_privacy_request(
+    request_id: int, payload: PrivacyRequestResolveRequest,
+    ip: str | None = Depends(client_ip),
+    admin: PanelAdmin = Depends(get_panel_admin),
+    service=Depends(get_panel_service),
+) -> PrivacyRequestResponse:
+    if payload.status == "rejected" and not payload.rejection_reason:
+        raise ConfirmationRequiredError("rejection (rejection_reason required)")
+    updated = service.resolve_privacy_request(
+        admin, request_id, status=payload.status,
+        processing_notes=payload.processing_notes,
+        rejection_reason=payload.rejection_reason, ip=ip)
+    return PrivacyRequestResponse.from_domain(updated)
 
 
 # --- audit ------------------------------------------------------------------

@@ -25,6 +25,7 @@ from app.api.v1.diagnosis.notifications import (
     get_session_completion_notifier,
 )
 from app.api.v1.diagnosis.service import DiagnosisService
+from app.api.v1.privacy.dependencies import require_ai_processing_allowed
 from app.db.session import get_db
 from app.models import Founder, SessionStatus
 
@@ -36,6 +37,7 @@ router = APIRouter(prefix="/diagnosis", tags=["diagnosis"])
     response_model=StartSessionResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Start (or resume) a diagnosis session",
+    dependencies=[Depends(require_ai_processing_allowed)],
 )
 def start_session(
     db: Session = Depends(get_db),
@@ -69,6 +71,7 @@ def get_current_question(
     "/answer",
     response_model=SubmitAnswerResponse,
     summary="Submit an answer and receive the next question",
+    dependencies=[Depends(require_ai_processing_allowed)],
 )
 async def submit_answer(
     payload: SubmitAnswerRequest,

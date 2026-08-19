@@ -59,7 +59,13 @@ class PrivacyState:
 
 @dataclass(frozen=True)
 class PrivacyAction:
-    """Receipt for an exercised right -- logged to privacy_requests."""
+    """Receipt for an exercised right -- logged to privacy_requests.
+
+    The fields below `due_by` exist for the admin resolution path
+    (AdminPanelService.resolve_privacy_request): a "queued" request (view_data,
+    correct_data) sits pending until an admin acts on it, and these are what
+    they act with.
+    """
 
     request_id: int
     founder_id: int
@@ -67,3 +73,8 @@ class PrivacyAction:
     status: str
     requested_at: datetime
     due_by: datetime | None = None
+    request_details: str | None = None
+    processed_by: str | None = None
+    processing_notes: str | None = None
+    rejection_reason: str | None = None
+    completed_at: datetime | None = None

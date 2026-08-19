@@ -20,6 +20,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.api.v1.chat import dependencies as deps
+from app.api.v1.privacy.dependencies import require_ai_processing_allowed_for_id
 from app.api.v1.plans.dependencies import ChatGate, chat_gate
 from app.ai_chat import build_conversation_service
 from app.ai_chat.attachments import build_attachment_service
@@ -140,6 +141,11 @@ def world():
         # the 100 calls got a real 429 mid-run instead of the mocked answer.
         chat_gate: lambda: ChatGate(founder_id=founder["id"], tier="free",
                                     service=None, enforced=False),
+        # Same reasoning as the chat_gate override above, for a second, later
+        # gate: require_ai_processing_allowed_for_id resolves a real DB-backed
+        # PrivacyService (may_process checks founders.processing_restricted_at
+        # for founder_id=1), which this offline suite has no DB to back.
+        require_ai_processing_allowed_for_id: lambda: None,
     }
     app.dependency_overrides.update(overrides)
     yield SimpleNamespace(client=TestClient(app), conv=conv, att=att, sug=sug, founder=founder)

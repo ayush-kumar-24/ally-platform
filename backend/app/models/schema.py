@@ -427,6 +427,11 @@ class Founders(Base):
     website: Mapped[Optional[str]] = mapped_column(String(300))
     linkedin_url: Mapped[Optional[str]] = mapped_column(String(300))
     avatar_url: Mapped[Optional[str]] = mapped_column(String(500))
+    # Non-null = an S3 object under this key (see avatar_object_key() in
+    # profile/routes.py); NULL = local disk under /uploads/avatars, the only
+    # place an avatar has ever lived until this column existed. Same pattern
+    # as file_uploads.storage_path -- see migration f1a4e6c8b302.
+    avatar_storage_path: Mapped[Optional[str]] = mapped_column(String(500))
     social_profiles: Mapped[Optional[dict]] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
     preferred_language: Mapped[Optional[str]] = mapped_column(String(10), server_default=text("'en'::character varying"))
     notification_preferences: Mapped[Optional[dict]] = mapped_column(JSONB, server_default=text('\'{"in_app_all": true, "email_reminders": true, "email_report_ready": true}\'::jsonb'))

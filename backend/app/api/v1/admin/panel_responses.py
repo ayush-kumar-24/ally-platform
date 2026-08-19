@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from app.admin.panel_audit import PanelAuditEvent
 from app.admin.users_models import UserDetail, UserPage, UserSummary
 from app.credits.models import CreditTransaction
+from app.privacy.models import PrivacyAction
 
 
 class UserSummaryResponse(BaseModel):
@@ -130,6 +131,38 @@ class AuditPageResponse(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class PrivacyRequestResponse(BaseModel):
+    request_id: int
+    founder_id: int
+    request_type: str
+    status: str
+    requested_at: datetime
+    due_by: datetime | None = None
+    request_details: str | None = None
+    processed_by: str | None = None
+    processing_notes: str | None = None
+    rejection_reason: str | None = None
+    completed_at: datetime | None = None
+
+    @classmethod
+    def from_domain(cls, a: PrivacyAction) -> "PrivacyRequestResponse":
+        return cls(request_id=a.request_id, founder_id=a.founder_id,
+                   request_type=a.request_type, status=a.status,
+                   requested_at=a.requested_at, due_by=a.due_by,
+                   request_details=a.request_details, processed_by=a.processed_by,
+                   processing_notes=a.processing_notes, rejection_reason=a.rejection_reason,
+                   completed_at=a.completed_at)
+
+
+class PrivacyRequestListResponse(BaseModel):
+    items: list[PrivacyRequestResponse]
+    total: int
+
+    @classmethod
+    def from_domain(cls, items: list[PrivacyAction]) -> "PrivacyRequestListResponse":
+        return cls(items=[PrivacyRequestResponse.from_domain(a) for a in items], total=len(items))
 
 
 class WhoAmIResponse(BaseModel):

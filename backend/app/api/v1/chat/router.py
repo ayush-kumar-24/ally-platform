@@ -44,6 +44,7 @@ from app.api.v1.chat.schemas import (
 )
 
 from app.api.v1.plans.dependencies import ChatGate, chat_gate
+from app.api.v1.privacy.dependencies import require_ai_processing_allowed_for_id
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -51,7 +52,10 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 # --- messaging --------------------------------------------------------------
 
 
-@router.post("/message", response_model=ApiChatResponse, summary="Send a chat message")
+@router.post(
+    "/message", response_model=ApiChatResponse, summary="Send a chat message",
+    dependencies=[Depends(require_ai_processing_allowed_for_id)],
+)
 def post_message(
     payload: MessageRequest,
     gate: ChatGate = Depends(chat_gate),
@@ -76,7 +80,10 @@ def post_message(
     return ApiChatResponse.from_domain(result)
 
 
-@router.post("/stream", summary="Stream a chat response (Server-Sent Events)")
+@router.post(
+    "/stream", summary="Stream a chat response (Server-Sent Events)",
+    dependencies=[Depends(require_ai_processing_allowed_for_id)],
+)
 def post_stream(
     payload: StreamRequest,
     gate: ChatGate = Depends(chat_gate),

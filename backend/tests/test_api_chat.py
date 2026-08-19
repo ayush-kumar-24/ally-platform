@@ -17,6 +17,7 @@ from types import SimpleNamespace
 
 from app.main import app
 from app.api.v1.chat import dependencies as deps
+from app.api.v1.privacy.dependencies import require_ai_processing_allowed_for_id
 from app.ai_chat import build_conversation_service
 from app.ai_chat.attachments import build_attachment_service
 from app.ai_chat.builders.context_window import ContextWindowBuilder
@@ -138,6 +139,12 @@ def world():
         deps.get_link_extractor: lambda: links,
         deps.get_chat_service: lambda: chat,
         deps.get_streaming_service: lambda: stream,
+        # This suite is deliberately offline (see module docstring) -- the
+        # real gate resolves a DB-backed PrivacyService, which this fixture
+        # has nothing to back. Overridden to a no-op, same as every other
+        # collaborator above; privacy-restriction behaviour itself is
+        # covered by the privacy module's own tests, not this file's.
+        require_ai_processing_allowed_for_id: lambda: None,
     }
     app.dependency_overrides.update(overrides)
     yield SimpleNamespace(client=TestClient(app), conv=conv, att=att, sug=sug, founder=founder)
