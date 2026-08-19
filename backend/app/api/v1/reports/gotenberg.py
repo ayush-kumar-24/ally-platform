@@ -26,3 +26,21 @@ def render_pdf(html: str, *, base_url: str, timeout: float = 30.0) -> bytes:
     except httpx.HTTPError as exc:
         raise GotenbergError(f"Gotenberg render failed: {exc}") from exc
     return resp.content
+
+
+def is_available(*, base_url: str, timeout: float = 3.0) -> bool:
+    """Is the Gotenberg sidecar reachable right now?
+
+    Separate from `render_pdf` on purpose: this answers "will report exports be
+    screen-accurate" without rendering anything, so it is cheap enough for a
+    boot check and a health probe.
+
+    Short timeout, and never raises. Both callers want a fact to report, not an
+    exception to handle -- a health endpoint that 500s because the PDF renderer
+    is down is worse than one that says the PDF renderer is down.
+    """
+    try:
+        resp = httpx.get(base_url.rstrip("/") + "/health", timeout=timeout)
+        return resp.status_code == 200
+    except httpx.HTTPError:
+        return False

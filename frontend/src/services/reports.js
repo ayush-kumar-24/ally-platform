@@ -78,8 +78,17 @@ export async function loadDna(which) {
   }
 }
 
-/** Keys inside a fact object that describe the report's machinery, not the founder. */
-const INTERNAL_FACT_KEYS = new Set(['code', 'is_confident', 'tentative', 'narrator']);
+/** Keys inside a fact object that describe the report's machinery, not the founder.
+ *
+ * `red_flag_note` is a pillar's SCORING RULE, written for whoever tunes the
+ * engine, and it rendered straight onto the Business DNA page: "A score below
+ * 35% in this pillar triggers Section H (Psychological State Note)...". The
+ * generator no longer puts it in founder-facing facts, but reports are stored
+ * once and read many times, so every report generated before that fix still
+ * carries it -- this filter is what keeps those readable. */
+const INTERNAL_FACT_KEYS = new Set([
+  'code', 'is_confident', 'tentative', 'narrator', 'red_flag_note',
+]);
 
 /** Top-level fact keys that drive rendering rather than telling the founder
  *  anything: `cta` is a flag the discovery-call section sets for itself, and

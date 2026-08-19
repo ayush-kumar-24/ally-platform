@@ -510,16 +510,22 @@ class StandardDiagnosticEngine(DiagnosticEngine):
                 )
         return triggers
 
-    def distress_signal_count(
+    def distress_signal_answers(
         self,
         classifications: list[AnswerClassification],
         questions: dict[int, Question],
         context: ReasoningContext,
-    ) -> int:
-        """Count Red answers on distress-tagged questions (or answers explicitly
-        flagged for distress). This is the signal DISTRESS_QUESTIONS_TRIGGER acts
-        on."""
-        count = 0
+    ) -> list[int]:
+        """The answer ids that count as distress signals: Red answers on
+        distress-tagged questions, or answers explicitly flagged for distress.
+
+        Returned as ids rather than only a count so the decision can be audited.
+        A live session reached distress_mode=True while the persisted
+        score_labels said no answer qualified -- with only a count there was no
+        way to tell whether the engine saw different classifications than the
+        ones on disk, or whether the flag came from somewhere else entirely.
+        """
+        signals = []
         for c in classifications:
             if c.label != ScoreLabel.RED:
                 continue
@@ -528,8 +534,18 @@ class StandardDiagnosticEngine(DiagnosticEngine):
                 question is not None and question.is_distress_tagged
             )
             if tagged:
-                count += 1
-        return count
+                signals.append(c.answer_id)
+        return signals
+
+    def distress_signal_count(
+        self,
+        classifications: list[AnswerClassification],
+        questions: dict[int, Question],
+        context: ReasoningContext,
+    ) -> int:
+        """How many answers count as distress signals -- the number
+        DISTRESS_QUESTIONS_TRIGGER acts on."""
+        return len(self.distress_signal_answers(classifications, questions, context))
 
     def is_distress_mode(
         self,

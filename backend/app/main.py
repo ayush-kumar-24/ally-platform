@@ -105,6 +105,41 @@ else:
 # rule as the Sentry branch above: refuse to be a silent gap, but do not refuse
 # to boot -- a founder who cannot sign up at all is a worse outcome, and the
 # other phases of the product are unaffected.
+# Report PDFs render through Gotenberg (headless Chromium) and fall back to a
+# plain reportlab document when it is unreachable -- see app/api/v1/reports/
+# routes.py::export_pdf. That fallback is the right behaviour (a founder should
+# still get their report) and an appalling thing to be silent about: both paths
+# return 200 with a real application/pdf body, so a deploy with no Gotenberg
+# looks identical to a working one from every angle except the document the
+# founder opens. Confirmed on the local stack, where every export ran as
+# reportlab-fallback until the sidecar was started -- nothing anywhere said so.
+#
+# GOTENBERG_URL defaults to http://localhost:3000, which is empty inside the API
+# container, so the misconfigured state is also the DEFAULT state. Probed once at
+# boot so it is answerable from the startup log rather than from a founder
+# noticing their report looks like a text file.
+#
+# Checked in production only: locally the sidecar is usually not running and
+# nobody is downloading reports, so an ERROR on every dev boot would be noise
+# that teaches people to ignore this line.
+if settings.is_production:
+    from app.api.v1.reports.gotenberg import is_available as _gotenberg_available
+
+    if _gotenberg_available(base_url=settings.GOTENBERG_URL):
+        logger.info("gotenberg_reachable", extra={"url": settings.GOTENBERG_URL})
+    else:
+        logger.error(
+            "gotenberg_unreachable",
+            extra={
+                "url": settings.GOTENBERG_URL,
+                "impact": (
+                    "every report export will silently fall back to a plain "
+                    "reportlab PDF instead of the founder's actual report -- "
+                    "see DEPLOY_AWS.md section 3a"
+                ),
+            },
+        )
+
 if not settings.diagnosis_scoring_configured:
     logger.error(
         "diagnosis_scoring_disabled",

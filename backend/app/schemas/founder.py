@@ -11,6 +11,34 @@ Feeling = Literal[
     "overwhelmed", "stuck", "determined", "hopeful",
 ]
 
+# --- Controlled vocabularies -------------------------------------------------
+#
+# Five founders columns carry a CHECK constraint listing their permitted values,
+# but FounderUpdate typed them as plain `str` with only a max_length. Anything
+# outside the list therefore passed validation, reached Postgres, and raised
+# CheckViolation -- an unhandled 500 with the whole profile update lost, exactly
+# like the width mismatch that preceded it (migration c8a1f47b93de). Measured on
+# a live journey run: business_model="D2C e-commerce" is a perfectly reasonable
+# thing to type, is not in the list, and 500'd the save.
+#
+# Typed as Literal for the same reason `Feeling` above is: it turns the 500 into
+# a 422 that names the accepted values, and publishes them in the OpenAPI schema
+# so a client can render a select instead of a free-text box.
+#
+# Kept in step with the database by test_profile_field_widths.py, which reads the
+# CHECK definitions out of Postgres and compares them against these.
+BusinessModel = Literal["B2B", "B2C", "B2B2C", "marketplace", "D2C", "other"]
+CurrentRevenue = Literal[
+    "pre_revenue", "under_1L", "1L_5L", "5L_25L", "25L_1Cr", "above_1Cr",
+]
+ExperienceLevel = Literal[
+    "first_time", "one_company", "serial", "investor", "mentor", "executive",
+]
+TeamSize = Literal["solo", "2_5", "6_10", "11_25", "26_50", "50_plus"]
+WorkingRelationship = Literal[
+    "coach", "cofounder", "strategist", "accountability", "brainstorm", "research",
+]
+
 
 def _clean_str_list(v: list[str] | None) -> list[str] | None:
     """Strip each entry, drop blanks, de-duplicate (case-insensitive), keep order.
@@ -211,9 +239,9 @@ class FounderUpdate(BaseModel):
     full_name: str | None = Field(default=None, min_length=1, max_length=200)
 
     founder_motivation: str | None = Field(default=None, max_length=5000)
-    working_relationship: str | None = Field(default=None, max_length=100)
+    working_relationship: WorkingRelationship | None = None
     support_preferences: CleanStrList | None = None
-    experience_level: str | None = Field(default=None, max_length=100)
+    experience_level: ExperienceLevel | None = None
     emotional_state: Feelings | None = None  # multi-select; rejects values outside the allowed 8
     decision_making_style: str | None = Field(default=None, max_length=100)
 
@@ -232,9 +260,9 @@ class FounderUpdate(BaseModel):
     invisible_gaps: CleanStrList | None = None
     goal_90_day: str | None = Field(default=None, max_length=5000)
     vision_1_year: str | None = Field(default=None, max_length=5000)
-    team_size: str | None = Field(default=None, max_length=50)
-    current_revenue: str | None = Field(default=None, max_length=50)
-    business_model: str | None = Field(default=None, max_length=100)
+    team_size: TeamSize | None = None
+    current_revenue: CurrentRevenue | None = None
+    business_model: BusinessModel | None = None
 
     website: str | None = Field(default=None, max_length=500)
     # Onboarding's "social handle" (Instagram or LinkedIn) -- validated as a

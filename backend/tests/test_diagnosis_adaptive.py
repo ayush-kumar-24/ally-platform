@@ -47,10 +47,44 @@ def test_resolve_next_empty_is_none():
 
 
 def test_insight_score_mapping():
-    assert AnswerInsight("green", 1.0, 1, "").score == 2
+    """answers.score carries RISK: green 0, amber 1, red 2. Higher is worse.
+
+    These exact numbers are the scoring schema, not a preference -- they live
+    in `scoring_rules` as QUESTION_SCORE_GREEN / _AMBER / _RED (0 / 1 / 2) and
+    every reader of answers.score assumes that direction.
+
+    This test previously asserted the inverse (green 2 … red 0), which is how
+    the inversion survived: the writer and its test agreed with each other and
+    disagreed with every consumer. See test_red_answers_score_worse_than_green
+    below for the property that actually matters.
+    """
+    assert AnswerInsight("green", 1.0, 1, "").score == 0
     assert AnswerInsight("amber", 1.0, 1, "").score == 1
-    assert AnswerInsight("red", 1.0, 1, "").score == 0
+    assert AnswerInsight("red", 1.0, 1, "").score == 2
     assert AnswerInsight(None, 1.0, 1, "").score is None
+
+
+def test_red_answers_score_worse_than_green():
+    """The direction, stated independently of the numbers.
+
+    business_health.py computes `risk_ratio = sum(scores) / (n * 2)` and then
+    `health = (1 - risk_ratio) * 100`. If this ordering ever flips again, a
+    founder's worst answers produce their best pillar bands -- which is exactly
+    what shipped before: 25 red + 5 amber summed to 5 rather than 55 and
+    reported 92/100 "Strong" across all six pillars.
+    """
+    green = AnswerInsight("green", 1.0, 1, "").score
+    amber = AnswerInsight("amber", 1.0, 1, "").score
+    red = AnswerInsight("red", 1.0, 1, "").score
+    assert green < amber < red, "answers.score is a risk scale; red must be highest"
+
+    # And the health inversion downstream must therefore rank them correctly.
+    def health(scores):
+        return round((1 - sum(scores) / (len(scores) * 2)) * 100)
+
+    assert health([red] * 10) == 0
+    assert health([green] * 10) == 100
+    assert health([red] * 10) < health([amber] * 10) < health([green] * 10)
 
 
 # --- parser -----------------------------------------------------------------
