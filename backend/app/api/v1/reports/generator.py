@@ -314,9 +314,29 @@ class ReportNarrativeGenerator:
                         "red_flag_triggered": pf.red_flag_triggered,
                         "red_flag_note": pf.red_flag_note} for pf in p.pillars]
             slots = {"overall_band": p.business_health_band, "pillars": pillars}
+            # `slots` is narrator input; `facts` is rendered to the founder. They
+            # must not be the same list. `red_flag_note` is the SCORING RULE for
+            # a pillar -- operator text, written for whoever tunes the engine --
+            # and shipping it in `facts` put this on a founder's Business DNA
+            # page verbatim:
+            #
+            #   "A score below 35% in this pillar triggers Section H
+            #    (Psychological State Note) in the Founder Clarity Report
+            #    regardless of all other scores."
+            #
+            # The frontend cannot save us here: services/reports.js flattens
+            # every fact key it does not explicitly know to be internal, so any
+            # new key added above is founder-visible by default. Strip it at the
+            # source instead, and leave `slots` intact -- the narrator may
+            # legitimately use the note as guidance for prose it then writes in
+            # the founder's own language.
+            founder_facing = [
+                {k: v for k, v in pillar.items() if k != "red_flag_note"}
+                for pillar in pillars
+            ]
             # Hard rule 2 in the facts: red-flag pillars are listed even when the
             # overall band is healthy.
-            facts = {"overall_band": p.business_health_band, "pillars": pillars,
+            facts = {"overall_band": p.business_health_band, "pillars": founder_facing,
                      "red_flag_pillars": [rp.name for rp in p.red_flag_pillars]}
             if p.business_health_band is None and not pillars:
                 return {}, {}

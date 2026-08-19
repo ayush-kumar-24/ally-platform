@@ -32,8 +32,24 @@ from app.services.llm import (
 )
 
 _VALID_LABELS = {"green", "amber", "red"}
-# answers.score is a 0/1/2 CHECK; score_label is the authoritative band. Higher = better.
-_LABEL_TO_SCORE = {"green": 2, "amber": 1, "red": 0}
+#: answers.score is a 0/1/2 CHECK carrying RISK, not health: HIGHER IS WORSE.
+#:
+#: This is not a local convention -- it is the scoring schema, stored in
+#: `scoring_rules` and sourced from the "Question-Level Scoring Schema"
+#: document: QUESTION_SCORE_GREEN=0 (Low Risk), QUESTION_SCORE_AMBER=1
+#: (Moderate Risk), QUESTION_SCORE_RED=2 (High Risk). Every reader of
+#: answers.score assumes it -- reasoning/engines/diagnostic.py bands answers by
+#: `score >= bands.red`, symptom_detection.py counts reds by the same band, and
+#: business_health.py computes `risk_ratio = sum(scores) / (n * 2)`.
+#:
+#: This map was inverted (green:2 … red:0), which silently flipped every
+#: downstream risk calculation. Verified end to end on 2026-08-19: a founder
+#: whose 30 answers scored 25 red + 5 amber summed to 5 instead of 55, giving
+#: risk_ratio 0.083 and a Business Health of 92/100 -- so a pre-revenue founder
+#: who had never spoken to a customer was told all six pillars were "Strong".
+#: business_health.py's own docstring names the failure exactly: "an
+#: exactly-backwards score that still looks plausible".
+_LABEL_TO_SCORE = {"green": 0, "amber": 1, "red": 2}
 
 
 @dataclass(frozen=True)

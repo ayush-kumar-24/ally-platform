@@ -361,9 +361,9 @@ class Founders(Base):
     # yet executed (including "still inside the grace window").
     deletion_executed_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
     founder_motivation: Mapped[Optional[str]] = mapped_column(Text)
-    working_relationship: Mapped[Optional[str]] = mapped_column(String(30))
+    working_relationship: Mapped[Optional[str]] = mapped_column(String(100))
     support_preferences: Mapped[Optional[dict]] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
-    experience_level: Mapped[Optional[str]] = mapped_column(String(20))
+    experience_level: Mapped[Optional[str]] = mapped_column(String(100))
     emotional_state: Mapped[Optional[dict]] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
     adaptive_reflection: Mapped[Optional[str]] = mapped_column(Text)
     adaptive_question_id: Mapped[Optional[str]] = mapped_column(String(20))
@@ -396,7 +396,7 @@ class Founders(Base):
         the side that owns the table.
         """
         return self.stage.stage_name if self.stage is not None else None
-    decision_making_style: Mapped[Optional[str]] = mapped_column(String(30))
+    decision_making_style: Mapped[Optional[str]] = mapped_column(String(100))
     building_summary: Mapped[Optional[str]] = mapped_column(Text)
     problem_statement: Mapped[Optional[str]] = mapped_column(Text)
     # Multi-select: onboarding asks "who are you building this for?" as chips.
@@ -421,10 +421,10 @@ class Founders(Base):
     invisible_gaps: Mapped[Optional[dict]] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
     goal_90_day: Mapped[Optional[str]] = mapped_column(Text)
     vision_1_year: Mapped[Optional[str]] = mapped_column(Text)
-    team_size: Mapped[Optional[str]] = mapped_column(String(20))
-    current_revenue: Mapped[Optional[str]] = mapped_column(String(30))
-    business_model: Mapped[Optional[str]] = mapped_column(String(30))
-    website: Mapped[Optional[str]] = mapped_column(String(300))
+    team_size: Mapped[Optional[str]] = mapped_column(String(50))
+    current_revenue: Mapped[Optional[str]] = mapped_column(String(50))
+    business_model: Mapped[Optional[str]] = mapped_column(String(100))
+    website: Mapped[Optional[str]] = mapped_column(String(500))
     linkedin_url: Mapped[Optional[str]] = mapped_column(String(300))
     avatar_url: Mapped[Optional[str]] = mapped_column(String(500))
     # Non-null = an S3 object under this key (see avatar_object_key() in
