@@ -17,6 +17,16 @@ export function exportData() {
   return get('/privacy/export');
 }
 
+/**
+ * A lighter answer than exportData() — counts per category, not the raw rows.
+ * Also served immediately: this used to be a queued request nothing in the
+ * backend could ever resolve or deliver (no email sender is set up), so it
+ * became self-service instead, the same way exportData() already is.
+ */
+export function getDataSummary() {
+  return get('/privacy/summary');
+}
+
 /** GDPR Art 17 — schedules erasure after a recovery window. Requires confirmation. */
 export function deleteAccount() {
   return del('/privacy/account', { data: { confirm: true } });

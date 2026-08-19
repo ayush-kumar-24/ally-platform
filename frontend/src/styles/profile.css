@@ -417,15 +417,62 @@
   border-top: 1px solid var(--bd, #e7e0d6);
 }
 
-.pr-privacy-history-title {
+/* Collapsible toggle -- was a static, always-expanded title div. */
+.pr-privacy-history-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
   font-family: var(--display);
   font-size: 9.5px;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--muted-2, #6c7a70);
-  margin-bottom: 12px;
   text-align: left;
+}
+
+.pr-privacy-history-toggle-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pr-privacy-history-count {
+  font-family: var(--body);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--muted-2, #6c7a70);
+  background: var(--card-2, rgba(0, 0, 0, 0.05));
+  border-radius: 999px;
+  padding: 1px 8px;
+  min-width: 20px;
+  text-align: center;
+}
+
+.pr-privacy-history-chevron {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  transition: transform 0.15s var(--ease, ease);
+}
+
+/* Scrolls internally past ~5 rows rather than growing the card indefinitely --
+   this is exactly the "long list, won't look good" case a founder testing
+   over weeks hits (repeated exports/summaries pile up). */
+.pr-privacy-history-list {
+  margin-top: 12px;
+  max-height: 260px;
+  overflow-y: auto;
 }
 
 .pr-privacy-history-item {

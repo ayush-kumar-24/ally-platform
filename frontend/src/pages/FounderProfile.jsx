@@ -10,6 +10,7 @@ import {
   deleteAccount,
   downloadExport,
   exportData,
+  getDataSummary,
   getPrivacyStatus,
   restrictProcessing,
   withdrawConsent,
@@ -19,6 +20,11 @@ import {
 
 // `kind` decides which right is exercised, and therefore which endpoint runs:
 //   export   -> GET    /privacy/export    (served immediately, downloads a file)
+//   summary  -> GET    /privacy/summary   (served immediately, downloads counts —
+//               no email delivery exists, so unlike `queued` below, this can't
+//               sit on a review queue nobody can ever resolve. "Request data
+//               correction" stays `queued` on purpose: there's nothing to
+//               download for a fix-my-record request, a person has to do it.)
 //   restrict -> POST   /privacy/restrict  (reversible pause)
 //   withdraw -> POST   /privacy/withdraw  (revokes consent, keeps the account)
 //   delete   -> DELETE /privacy/account   (schedules erasure)
@@ -43,17 +49,17 @@ const PRIVACY_ACTIONS = [
   },
   {
     type: 'view_data',
-    kind: 'queued',
+    kind: 'summary',
     label: 'View data summary',
-    desc: 'Request a summary of what personal and business data Ally currently holds for your account.',
+    desc: 'See a category-by-category count of what personal and business data Ally currently holds for your account.',
     icon: (
       <svg viewBox="0 0 24 24">
         <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
         <circle cx="12" cy="12" r="3" />
       </svg>
     ),
-    confirmTitle: 'Request data summary?',
-    confirmDesc: 'Ally will prepare a summary of the data held under your account for your review.',
+    confirmTitle: 'View your data summary?',
+    confirmDesc: 'Ally will count what\'s held under your account, by category, and download it now.',
     confirmColor: '#4338ca',
     confirmBg: '#f0f4ff',
   },
@@ -210,6 +216,10 @@ export default function FounderProfile() {
   const [progress, setProgress] = useState('');             // what's happening right now
   const [privacyRequests, setPrivacyRequests] = useState([]);
   const [requestsLoaded, setRequestsLoaded] = useState(false);
+  // Collapsed by default -- a founder who's clicked "Download my data" a dozen
+  // times over weeks of testing (this happens) would otherwise push the whole
+  // Danger Zone section off-screen behind a wall of history rows.
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [privacyState, setPrivacyState] = useState(null);   // restriction / deletion standing
   // Ref, not state: state updates are async, so two clicks in the same tick would
   // both see submitting === false. The ref flips synchronously.
@@ -249,6 +259,15 @@ export default function FounderProfile() {
           downloadExport(bundle, `ally-data-export-${new Date().toISOString().slice(0, 10)}.json`);
           setPrivacyRequests(prev => [bundle.request, ...prev]);
           showToast(`Export ready — ${bundle.record_count} records downloaded ✓`);
+          break;
+        }
+        case 'summary': {
+          setProgress('Counting your data…');
+          const summary = await getDataSummary();
+          setProgress('Preparing download…');
+          downloadExport(summary, `ally-data-summary-${new Date().toISOString().slice(0, 10)}.json`);
+          setPrivacyRequests(prev => [summary.request, ...prev]);
+          showToast(`Summary ready — ${summary.total_records} records across ${Object.keys(summary.counts).length} categories ✓`);
           break;
         }
         case 'restrict': {
@@ -489,7 +508,7 @@ export default function FounderProfile() {
               >
                 {submitting
                   ? (progress || 'Working…')
-                  : (pendingAction.kind === 'export' ? 'Download now' : 'Confirm')}
+                  : (['export', 'summary'].includes(pendingAction.kind) ? 'Download now' : 'Confirm')}
               </button>
             </div>
           </div>
@@ -1102,31 +1121,54 @@ export default function FounderProfile() {
               </svg>
               {action.kind === 'restrict' && privacyState?.processing_restricted ? 'Paused'
                 : action.kind === 'delete' && privacyState?.deletion_pending ? 'Scheduled'
-                : action.kind === 'export' ? 'Download'
+                : ['export', 'summary'].includes(action.kind) ? 'Download'
                 : 'Request'}
             </button>
           </div>
         ))}
 
-        {/* Request history */}
+        {/* Request history — collapsed by default; a founder who's clicked
+            "Download my data" repeatedly over time otherwise gets a long wall
+            of rows here instead of a card. */}
         {requestsLoaded && privacyRequests.length > 0 && (
           <div className="pr-privacy-history">
-            <div className="pr-privacy-history-title">Submitted requests</div>
-            {privacyRequests.map((req) => (
-              <div className="pr-privacy-history-item" key={req.request_id}>
-                <div className="pr-privacy-history-body">
-                  <div className="pr-privacy-history-label">
-                    {TYPE_LABELS[req.request_type] ?? req.request_type}
+            <button
+              type="button"
+              className="pr-privacy-history-toggle"
+              onClick={() => setHistoryOpen(o => !o)}
+              aria-expanded={historyOpen}
+            >
+              <span>Submitted requests</span>
+              <span className="pr-privacy-history-toggle-right">
+                <span className="pr-privacy-history-count">{privacyRequests.length}</span>
+                <svg
+                  viewBox="0 0 24 24"
+                  className="pr-privacy-history-chevron"
+                  style={{ transform: historyOpen ? 'rotate(180deg)' : 'none' }}
+                >
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </span>
+            </button>
+            {historyOpen && (
+              <div className="pr-privacy-history-list">
+                {privacyRequests.map((req) => (
+                  <div className="pr-privacy-history-item" key={req.request_id}>
+                    <div className="pr-privacy-history-body">
+                      <div className="pr-privacy-history-label">
+                        {TYPE_LABELS[req.request_type] ?? req.request_type}
+                      </div>
+                      <div className="pr-privacy-history-date">
+                        Submitted {fmtDate(req.requested_at ?? req.created_at)}
+                      </div>
+                    </div>
+                    <span className={`pr-privacy-badge ${req.status}`}>
+                      {req.status.replace('_', ' ')}
+                    </span>
                   </div>
-                  <div className="pr-privacy-history-date">
-                    Submitted {fmtDate(req.requested_at ?? req.created_at)}
-                  </div>
-                </div>
-                <span className={`pr-privacy-badge ${req.status}`}>
-                  {req.status.replace('_', ' ')}
-                </span>
+                ))}
               </div>
-            ))}
+            )}
           </div>
         )}
       </div>

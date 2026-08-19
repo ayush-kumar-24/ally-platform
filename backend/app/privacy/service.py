@@ -35,7 +35,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Callable
 
 from app.privacy.errors import DeletionAlreadyRequestedError
-from app.privacy.models import ExportBundle, PrivacyAction, PrivacyState
+from app.privacy.models import DataSummary, ExportBundle, PrivacyAction, PrivacyState
 from app.privacy.repository import PrivacyRepository
 
 # GDPR Art 12(3): respond to a request within one month.
@@ -68,6 +68,24 @@ class PrivacyService:
             founder_id, request_type="portability", details="Self-service export downloaded",
             at=now, due_by=None)
         return bundle, action
+
+    def data_summary(self, founder_id: int) -> tuple[DataSummary, PrivacyAction]:
+        """What "View data summary" actually does now: counts per category from
+        the same gather_export a full export uses, no raw rows returned. No
+        email is sent -- there is no delivery step to wait on, so unlike
+        view_data/correct_data's original design (a queued admin request this
+        codebase had no way to ever resolve or deliver), this answers
+        immediately, the same way export_data already does.
+        """
+        now = self._now()
+        bundle = self.repository.gather_export(founder_id, now)
+        counts = {label: (len(rows) if isinstance(rows, list) else 0)
+                 for label, rows in bundle.sections.items()}
+        summary = DataSummary(founder_id=founder_id, generated_at=now, counts=counts)
+        action = self.repository.log_request(
+            founder_id, request_type="view_data", details="Self-service summary viewed",
+            at=now, due_by=None)
+        return summary, action
 
     # --- Art 17: erasure ---------------------------------------------------
 

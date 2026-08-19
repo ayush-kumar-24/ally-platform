@@ -1,6 +1,7 @@
 """Privacy Center endpoints -- additive, transport only.
 
     GET    /privacy/export     download everything we hold (Art 15 + 20)
+    GET    /privacy/summary    counts per category -- lighter than a full export
     DELETE /privacy/account    schedule account erasure (Art 17)
     POST   /privacy/withdraw   withdraw consent, pause processing (Art 7(3))
     POST   /privacy/restrict   restrict / resume processing (Art 18)
@@ -15,6 +16,7 @@ from fastapi import APIRouter, Depends
 
 from app.api.v1.privacy.dependencies import get_current_founder_id, get_privacy_service
 from app.api.v1.privacy.responses import (
+    DataSummaryResponse,
     ExportResponse,
     PrivacyActionResponse,
     PrivacyActionResult,
@@ -40,6 +42,16 @@ def export_data(
 ) -> ExportResponse:
     bundle, action = service.export_data(founder_id)
     return ExportResponse.from_domain(bundle, action)
+
+
+@router.get("/summary", response_model=DataSummaryResponse,
+            summary="See what data Ally holds about you, by category (no full export)")
+def data_summary(
+    founder_id: int = Depends(get_current_founder_id),
+    service: PrivacyService = Depends(get_privacy_service),
+) -> DataSummaryResponse:
+    summary, action = service.data_summary(founder_id)
+    return DataSummaryResponse.from_domain(summary, action)
 
 
 @router.delete("/account", response_model=PrivacyActionResult,
