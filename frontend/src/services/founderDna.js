@@ -61,6 +61,12 @@ export function normalise(payload) {
     resolved: p.dimensions_resolved ?? [],
     remaining: p.dimensions_remaining ?? [],
     complete: p.is_complete === true,
+    // POST /answer only. `false` means the input wasn't an answer to the
+    // question -- nothing was stored, `question` is the SAME question, and
+    // `reprompt` is what Ally says back. Defaults to true so /start and
+    // /current, which never send it, aren't read as rejections.
+    accepted: payload?.accepted !== false,
+    reprompt: payload?.reprompt ?? null,
     question: q && {
       id: q.founder_dna_question_id,
       text: q.question_text ?? '',

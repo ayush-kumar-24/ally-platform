@@ -10,12 +10,18 @@ before narrowing into structured territory (decision style, values)", and
 round-robin scrambles it.
 
 Breadth is preserved a different way, so the original bug cannot come back:
-the BASE journey (arc_position < 90) is mandatory and already spans all six
-dimensions, so a founder covers every dimension by construction rather than
-by the selection order happening to interleave. Adaptive skipping now applies
-only to FOLLOW-UPS (arc_position >= 90), which is what the doc actually asks
-for -- "if an answer already resolves a dimension with high confidence, the
-next scripted question for that dimension is skipped".
+a dimension is only ever skipped AFTER it has been asked at least once and
+judged resolved, so the BASE journey (arc_position < 90) still reaches every
+dimension by construction rather than by the selection order happening to
+interleave.
+
+Within that guarantee, adaptive skipping applies to base questions and
+follow-ups alike -- which is what the doc asks for, "if an answer already
+resolves a dimension with high confidence, the next scripted question for
+that dimension is skipped". An earlier cut confined skipping to follow-ups
+(arc_position >= 90) and made base questions unconditional; the effect was
+that for the first nine turns a founder's answers could not influence the
+next question at all, while the screen said "Adaptive diagnosis".
 
 Shape per stage: 9 base + up to 2 follow-ups + 1 closing = 10-12 asked.
 
@@ -80,10 +86,10 @@ class FounderDnaSelectionEngine:
         journey is otherwise done. None only when even that is answered.
 
         Order of precedence:
-          1. BASE questions (arc_position < FOLLOW_UP_FLOOR), by arc_position.
-             Mandatory -- never skipped for a resolved dimension, because they
-             ARE the designed journey and skipping them is what would break
-             the arc.
+          1. BASE questions (arc_position < FOLLOW_UP_FLOOR), by arc_position,
+             skipping dimensions the advisor has resolved -- but never one
+             that has not been asked yet, so the arc still visits every
+             dimension.
           2. FOLLOW-UPS, by arc_position, only for dimensions the advisor has
              NOT resolved, and only while the budget leaves room for the
              closing question.
@@ -111,14 +117,47 @@ class FounderDnaSelectionEngine:
 
         closing = next((q for q in candidates if q.is_closing), None)
         pending = [q for q in candidates if not q.is_closing]
+        resolved = self.repository.get_resolved_dimensions(founder)
+        asked_per_dimension = self.repository.answers_per_dimension(
+            founder.founder_id, stage_group
+        )
 
         base = [q for q in pending if q.arc_position < FOLLOW_UP_FLOOR]
         if base:
-            return min(base, key=lambda q: (q.arc_position, q.founder_dna_question_id))
+            # Adaptive skipping applies to the BASE journey too, not only to
+            # follow-ups. Live testing found the opposite reading of "base is
+            # mandatory" -- which this engine used to implement -- meant a
+            # founder's answers could not affect the next question at all for
+            # the first nine turns. Whatever they wrote, the same scripted
+            # question came back, which is exactly what "Adaptive diagnosis"
+            # on the screen promises it is not doing.
+            #
+            # Breadth, which mandatory-base existed to guarantee, is preserved
+            # by the `asked_per_dimension` condition rather than by refusing to
+            # skip: a dimension is only ever skipped once it has ALREADY been
+            # asked at least once and the advisor has judged it resolved. So
+            # every dimension still gets its first base question by
+            # construction, and the original bug (a phase ending with
+            # dimensions never touched) cannot come back.
+            #
+            # The arc is preserved because this filters, never reorders --
+            # what survives is still taken in arc_position order.
+            unresolved_base = [
+                q for q in base
+                if q.dimension_code not in resolved
+                or asked_per_dimension.get(q.dimension_code, 0) == 0
+            ]
+            if unresolved_base:
+                return min(
+                    unresolved_base,
+                    key=lambda q: (q.arc_position, q.founder_dna_question_id),
+                )
+            # Every remaining base question belongs to an already-resolved
+            # dimension. Falling through to follow-ups/close is correct: there
+            # is nothing left worth asking, which is what "adaptive" means.
 
         # Base journey done -- follow-ups only where a dimension is still open,
         # and only if answering one still leaves the closing slot affordable.
-        resolved = self.repository.get_resolved_dimensions(founder)
         answered = self.repository.count_answered(founder.founder_id)
         closing_reserve = 1 if closing is not None else 0
         if answered + closing_reserve < settings.MAX_FOUNDER_DNA_QUESTIONS:
@@ -140,9 +179,6 @@ class FounderDnaSelectionEngine:
                 # than spending them all on whichever one sorts first.
                 # arc_position stays the tiebreaker, so authored order still
                 # decides between dimensions that have had equal attention.
-                asked_per_dimension = self.repository.answers_per_dimension(
-                    founder.founder_id, stage_group
-                )
                 return min(
                     follow_ups,
                     key=lambda q: (

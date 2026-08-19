@@ -48,6 +48,9 @@ export default function FounderDnaChat() {
   // the conversation. Set from the server's answered count on load, so it
   // survives a refresh mid-phase.
   const [showBrief, setShowBrief] = useState(false);
+  // Toggles the completion screen back to the transcript. See the button
+  // below for why this replaced a link to the Founder DNA page.
+  const [reviewing, setReviewing] = useState(false);
   const scrollRef = useRef(null);
 
   useEffect(() => {
@@ -116,6 +119,18 @@ export default function FounderDnaChat() {
         questionId: question?.id, answer: text,
       }));
       setResolved(state.resolved);
+      // Not an answer to what was asked -- Ally says so and the same question
+      // stands. Handled before the advance branch because the server sends
+      // that same question back as `question`, which would otherwise render
+      // as Ally asking it twice in a row with no explanation.
+      if (!state.accepted) {
+        setMessages(prev => [...prev, {
+          role: 'ally', time: clock(),
+          text: state.reprompt || "That didn't quite answer it — try again in your own words.",
+          closing: question?.isClosing,
+        }]);
+        return;
+      }
       if (state.question?.text && !state.complete) {
         setQuestion(state.question);
         setMessages(prev => [...prev, {
@@ -284,7 +299,10 @@ export default function FounderDnaChat() {
     );
   }
 
-  if (done) {
+  // `reviewing` deliberately falls through to the transcript below rather than
+  // rendering a second copy of it here -- the messages are already in state,
+  // and the read-only view is the same view with the composer suppressed.
+  if (done && !reviewing) {
     return (
       <div
         style={{
@@ -305,8 +323,20 @@ export default function FounderDnaChat() {
           <button type="button" className="btn-primary" onClick={() => navigate('/app/current-problem')}>
             Continue
           </button>
-          <button type="button" className="sugg" onClick={() => navigate('/app/founder-dna')}>
-            See my Founder DNA
+          {/* Was "See my Founder DNA", linking to /app/founder-dna. That page
+              renders the Founder DNA SECTION OF A DIAGNOSIS REPORT, and at
+              this exact moment no report exists -- the diagnosis has not been
+              run. So the button could only ever land on "isn't ready yet",
+              offered at the one point in the journey where it is guaranteed
+              to fail. PlatformLayout already locks that page in the nav until
+              a report exists (`needsReport`); this button was bypassing the
+              app's own gate.
+
+              What the founder actually has right now is what they just said,
+              so that is what this offers. No new route and no new request --
+              the transcript is already in `messages`. */}
+          <button type="button" className="sugg" onClick={() => setReviewing(true)}>
+            Review my answers
           </button>
         </div>
       </div>
@@ -386,6 +416,26 @@ export default function FounderDnaChat() {
           </div>
         )}
 
+        {/* Reviewing a finished phase: the transcript is the point, and a live
+            composer under it would invite an answer that submit_answer already
+            refuses (the phase is complete -- it 409s). Navigation replaces it
+            rather than sitting disabled next to it. */}
+        {done ? (
+          <div className="chat-input">
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
+              <button type="button" className="btn-primary"
+                      onClick={() => navigate('/app/current-problem')}>
+                Continue
+              </button>
+              <button type="button" className="sugg" onClick={() => setReviewing(false)}>
+                Back
+              </button>
+            </div>
+            <div className="ci-hint">
+              Your Founder DNA is mapped — this is what you told Ally.
+            </div>
+          </div>
+        ) : (
         <div className="chat-input">
           <div className={`ci-row${voice.status !== 'idle' ? ' voice-live' : ''}`}>
             {voice.status !== 'idle' && (
@@ -430,6 +480,7 @@ export default function FounderDnaChat() {
                   : 'Founder DNA · this comes before the business diagnosis'}
           </div>
         </div>
+        )}
       </div>
     </div>
   );
