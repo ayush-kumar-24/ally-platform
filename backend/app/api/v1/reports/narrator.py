@@ -188,6 +188,71 @@ class TemplateNarrator:
             "eye on these areas as you go: " + ", ".join(cats) + "."
         )
 
+    def _supporting_evidence(self, s, tone):
+        parts = []
+        probes = s.get("probes") or []
+        if probes:
+            parts.append(
+                f"This reads from what you told us before the diagnosis started "
+                f"-- {len(probes)} question{'s' if len(probes) != 1 else ''} in your own words."
+            )
+        causes = s.get("root_causes") or []
+        confirmed = [c["name"] for c in causes if c.get("confirmation_status") == "confirmed"]
+        unconfirmed = [c["name"] for c in causes if c.get("confirmation_status") != "confirmed"]
+        if confirmed:
+            parts.append("Confirmed by your answers: " + ", ".join(confirmed) + ".")
+        if unconfirmed:
+            # Never let an untested cause read as settled -- the confirm actions
+            # exist precisely to test these.
+            parts.append(
+                "Still to be tested: " + ", ".join(unconfirmed)
+                + ". Treat these as the leading hypotheses, not verdicts."
+            )
+        return " ".join(parts)
+
+    def _recommended_roadmap(self, s, tone):
+        """Prose explains the SHAPE of the sequence; `facts` carries the ordered
+        steps themselves.
+
+        Deliberately emits no digits. An earlier cut numbered the lines
+        ("1. Confirm: ...") and test_no_fabricated_numbers caught it: the report
+        must never print a number that is not in the payload, and while an
+        ordinal is formatting rather than a claim, the guard cannot tell the two
+        apart -- and it is a guard worth more than a numbered list. The order is
+        already structural in confirm_steps/solve_steps, which the client renders
+        in sequence.
+        """
+        confirm = s.get("confirm_steps") or []
+        solve = s.get("solve_steps") or []
+        if confirm and solve:
+            return (
+                "Work this in two passes. First confirm what is actually true, "
+                "then fix it -- the solve steps depend on what the confirm steps "
+                "turn up, so running them out of order means solving for a "
+                "problem you have not verified yet."
+            )
+        if confirm:
+            return (
+                "Start by confirming what is actually true. The fixes come after "
+                "and depend on what you find, so there is nothing to sequence "
+                "past this until these come back."
+            )
+        if solve:
+            return "These are the moves, in the order they build on each other."
+        return ""
+
+    def _why_steps(self, s, tone):
+        # Rationales come through as slots, not facts, precisely so they are
+        # retold rather than pasted -- but the template narrator cannot rewrite,
+        # only select. So it says what it can stand behind: which root causes
+        # these steps address. The LLM narrator does the fuller job.
+        causes = s.get("root_causes") or []
+        if not causes:
+            return ""
+        lead = {"Auditor": "These steps target",
+                "Validator": "These steps come from"}.get(tone.persona, "These steps are aimed at")
+        return f"{lead} what the diagnosis pointed to: " + ", ".join(causes) + "."
+
     def _acknowledgement(self, s, tone):
         # Founder-facing copy that FOLLOWS the distress protocol -- it never quotes it.
         # tone.distress_protocol is a system directive and must not reach the founder.
@@ -253,11 +318,44 @@ class LLMSectionNarrator:
     def narrate(self, section_key: str, slots: dict[str, Any], tone: ToneGuidance) -> str:
         return self.narrate_with_source(section_key, slots, tone)[0]
 
+    @staticmethod
+    def _has_narratable_content(slots: dict[str, Any]) -> bool:
+        """Is there anything here for a model to write FROM?
+
+        Booleans are excluded deliberately: a flag like `wellbeing_first`,
+        `brief` or `cta` steers the SHAPE of a section, it is not material to
+        write about. A section whose slots are only flags (or empty) has no
+        content, and asking a model to write it under a strict never-invent
+        instruction leaves it two options -- refuse, or fabricate.
+        """
+        for value in slots.values():
+            if isinstance(value, bool):
+                continue
+            if isinstance(value, (int, float)):
+                return True          # 0 is a value, not an absence
+            if value:
+                return True
+        return False
+
     def narrate_with_source(self, section_key, slots, tone) -> tuple[str, str]:
         """Return (prose, source). A silent fallback would hide degraded quality,
         so the source distinguishes real LLM output ('llm') from a template
         fallback after an error/empty output ('llm_fallback_template')."""
         import json
+
+        # Contentless sections never reach the model. `acknowledgement` and
+        # `support_recommendation` carry no slots at all -- they are fixed,
+        # carefully-worded copy that the template narrator already holds -- and
+        # sending them anyway produced exactly the refusal the instructions ask
+        # for: a live distress report opened with "I don't have enough
+        # information to write this section -- no facts were provided to draw
+        # from," twice, as the first two things a founder in distress read.
+        #
+        # `out` was non-empty, so the fallback below never fired. The fix is not
+        # to sniff the model's wording for a refusal -- that is brittle and
+        # locale-dependent -- but to stop asking a question that has no answer.
+        if not self._has_narratable_content(slots):
+            return self.fallback.narrate(section_key, slots, tone), "template_no_slots"
 
         directives = [
             "You are writing ONE section of a founder's clarity report. Write 1-3 warm, "
