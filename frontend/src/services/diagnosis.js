@@ -41,6 +41,16 @@ export function submitAnswer({ questionId, answer }) {
   // goes on to save the answer successfully seconds later; the founder's
   // next "retry" then correctly 409s because the session already moved on.
   // 45s gives real headroom without hiding a genuinely hung request forever.
+  //
+  // Still 45s, and the FINAL answer no longer needs anywhere near it. That
+  // request used to also run the whole reasoning pipeline inline -- profiled at
+  // 203s, so it could never have fit in this timeout under any value worth
+  // setting. Reasoning is now a background task (api/v1/diagnosis/router.py),
+  // so every answer including the last returns in classification time. Kept at
+  // 45s because the 12-15s figure above is about the per-answer LLM work, which
+  // has not changed; do not read the reduced tail latency as headroom to lower
+  // it. The wait for the report itself is owned by the Thinking screen, which
+  // polls for the report rather than holding a request open.
   return post('/diagnosis/answer', {
     question_id: questionId,
     answer_text: answer,

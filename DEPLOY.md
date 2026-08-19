@@ -24,10 +24,45 @@ this repo's `requirements.txt` + `backend/Dockerfile`, if App Runner ever
 stops being the right fit.
 
 Once it's live, confirm: `GET https://<backend>/` returns
-`{"status": "running", ...}`, and the three outstanding migrations
-(`customer_segment` → jsonb, `first_impression`, `diagnosis_rating`) have run
-against the production database — the Dockerfile runs `alembic upgrade head`
-on every start, so this happens automatically.
+`{"status": "running", ...}`, and that the migrations have run against the
+production database.
+
+**Migrations do NOT run automatically. You have to run them.** The Dockerfile's
+`CMD` does start with `alembic upgrade head`, but the ECS task definition sets
+an explicit `command`:
+
+```
+Dockerfile CMD:   sh -c "alembic upgrade head && uvicorn app.main:app ..."
+task definition:  uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+A task definition `command` REPLACES the image's `CMD`, so the migration step is
+dropped. This file previously claimed the opposite, which is the kind of wrong
+that stays invisible until a deploy "ships" a migration, the schema silently
+does not change, and the failures arrive later as missing-column errors nobody
+connects back to the deploy.
+
+Run them as a one-off task instead, which is the safer pattern anyway — the
+service runs two tasks, and restoring the migration to their startup command
+would have both racing the same `alembic upgrade head` on every deploy:
+
+```bash
+aws ecs run-task --region ap-south-1 \
+  --cluster ally-backend-cluster --task-definition ally_backend_task:<rev> \
+  --launch-type FARGATE --count 1 \
+  --network-configuration "awsvpcConfiguration={subnets=[<subnet-a>,<subnet-b>],securityGroups=[<sg>],assignPublicIp=ENABLED}" \
+  --overrides '{"containerOverrides":[{"name":"Main","command":["alembic","upgrade","head"]}]}'
+```
+
+It reuses the service's own image and secrets, so it reaches RDS with the same
+`DATABASE_URL` and needs no credentials of your own. Read the result from
+CloudWatch (`/ecs/ally-backend-task`, stream `ecs/Main/<task-id>`) and check the
+container's `exitCode` is 0 before updating the service.
+
+The same mechanism runs any other one-off against production —
+`scripts/reset_diagnosis_data.py`, for instance. RDS is not reachable from
+outside the VPC (private address, 5432 closed), and this needs no bastion, no
+VPN and no session-manager-plugin.
 
 ## 2. Frontend on Vercel
 
@@ -92,7 +127,8 @@ missing import, buttons with no handler. `no-undef` is enabled in
 ## Before you call it done
 
 - [ ] `GET /openapi.json` on the backend returns 200
-- [ ] `alembic upgrade head` has run against the production database
+- [ ] `alembic upgrade head` has been RUN as a one-off task (see §1 — the task
+      definition's `command` means it does not happen on its own)
 - [ ] Google sign-in completes and lands on `/guided/welcome`
 - [ ] A deep link (`/app/report`) survives a hard refresh
 - [ ] The onboarding → diagnosis → report → tour → dashboard journey completes

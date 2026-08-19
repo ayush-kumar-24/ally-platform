@@ -35,6 +35,7 @@ from app.api.v1.reasoning.engines import (
     StandardDiagnosticEngine,
     StandardRecommendationEngine,
     StandardRootCauseEngine,
+    StoredFirstAnswerClassifier,
     StoredScoreAnswerClassifier,
     SymptomDetector,
     WeightedConfidenceModel,
@@ -118,14 +119,33 @@ def get_answer_classifier(db: Session | None = None) -> AnswerClassifier:
     stored-score classifier as its runtime fallback); anything else uses the
     deterministic classifier directly. Falls back to deterministic when no db is
     available to resolve routing.
+
+    In the "llm" case the provider classifier is wrapped in
+    StoredFirstAnswerClassifier, so an answer the submit-time advisor already
+    scored is read rather than re-derived. Without that wrapper, running
+    ADAPTIVE_QUESTIONS=true alongside ANSWER_CLASSIFIER=llm -- which is what this
+    deployment actually runs -- paid for thirty provider calls per diagnosis to
+    recompute labels already stored on the rows. See the wrapper's own docstring;
+    it is the 161s of the 203s pipeline.
+
+    Note the two fallbacks are not redundant. StoredFirstAnswerClassifier decides
+    what to do BEFORE calling out (stored label present -> never call the
+    provider); LLMAnswerClassifier's own `fallback` decides what to do AFTER a
+    call has failed all its retries. Only the second can be reached now, and only
+    for answers that had no stored band to begin with -- so in practice it raises
+    LLMClassificationError, which is correct: an unscored answer whose
+    classification failed has no band to fall back to.
     """
     if settings.ANSWER_CLASSIFIER == "llm" and db is not None:
-        return LLMAnswerClassifier(
-            provider_for_task(db, LLMTask.ANSWER_INTERPRETATION),
-            fallback=StoredScoreAnswerClassifier(),
-            max_retries=settings.LLM_CLASSIFIER_MAX_RETRIES,
-            timeout_seconds=settings.LLM_CLASSIFIER_TIMEOUT_SECONDS,
-            temperature=settings.LLM_CLASSIFIER_TEMPERATURE,
+        return StoredFirstAnswerClassifier(
+            stored=StoredScoreAnswerClassifier(),
+            fallback=LLMAnswerClassifier(
+                provider_for_task(db, LLMTask.ANSWER_INTERPRETATION),
+                fallback=StoredScoreAnswerClassifier(),
+                max_retries=settings.LLM_CLASSIFIER_MAX_RETRIES,
+                timeout_seconds=settings.LLM_CLASSIFIER_TIMEOUT_SECONDS,
+                temperature=settings.LLM_CLASSIFIER_TEMPERATURE,
+            ),
         )
     return StoredScoreAnswerClassifier()
 

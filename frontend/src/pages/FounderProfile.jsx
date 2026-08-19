@@ -167,11 +167,15 @@ export default function FounderProfile() {
   /* The real plan, so this page stops insisting everyone is on Free. */
   const [plan, setPlan] = useState(null);
   const [tiers, setTiers] = useState([]);
-  // The "DNA mapped" ring below used to hardcode 100% for every founder,
+  // The completeness ring below used to hardcode 100% for every founder,
   // whether their profile was 5% or fully filled in. /profile/progress
   // already computes this server-side (same number /profile/validate's
   // "what's missing" list is built from); this just reads it instead of
   // asserting a number that was never true for most founders.
+  //
+  // It measures PROFILE FIELDS, not Founder DNA dimensions -- the ring was
+  // still labelled "Founder DNA mapped" long after it started reading this
+  // endpoint, which is a different quantity entirely. See the label itself.
   const [progressPct, setProgressPct] = useState(null);
   useEffect(() => {
     let cancelled = false;
@@ -604,11 +608,22 @@ export default function FounderProfile() {
             </svg>
             <div className="rep-ring-c">
               <b style={{ fontSize: '20px' }}>{progressPct != null ? `${progressPct}%` : '—'}</b>
-              <small style={{ fontSize: '6.5px', letterSpacing: '0.08em', marginTop: '1px' }}>DNA</small>
+              <small style={{ fontSize: '6.5px', letterSpacing: '0.08em', marginTop: '1px' }}>DONE</small>
             </div>
           </div>
+          {/* "Profile complete", not "Founder DNA mapped". The number here is
+              /profile/progress -- the share of profile FIELDS filled in (stage,
+              experience, problem statement, what you're building, who you serve
+              ...), which is the same set /profile/validate lists as missing. It
+              has never had anything to do with the 14 Founder DNA dimensions.
+              The old label was measurably wrong rather than merely loose: a
+              founder whose DNA data had been wiped to zero resolved dimensions
+              still read "64% Founder DNA mapped". Renaming the label rather than
+              repointing the ring, because profile completeness is genuinely the
+              useful number on a profile page -- it is the one the founder can
+              act on from here. */}
           <div className="fd-hero-label" style={{ fontSize: '9px', color: 'var(--on-dark-muted)', maxWidth: '90px', lineHeight: 1.2 }}>
-            Founder DNA mapped
+            Profile complete
           </div>
         </div>
       </div>

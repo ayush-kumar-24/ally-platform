@@ -42,20 +42,39 @@ def ensure_founder(identity: AuthUser, db: Session, ip_address: str = "0.0.0.0")
 
     Returns None when there is no founder and none can be created (provisioning
     disabled, or a dev identity).
+
+    Use `ensure_founder_with_status` when you need to know whether the row was
+    CREATED by this call or merely found -- this signature cannot express the
+    difference, which is what made /auth/session report `provisioned: true` for
+    founders that had existed for days.
+    """
+    founder, _created = ensure_founder_with_status(identity, db, ip_address=ip_address)
+    return founder
+
+
+def ensure_founder_with_status(
+    identity: AuthUser, db: Session, ip_address: str = "0.0.0.0"
+) -> tuple[Founder | None, bool]:
+    """As `ensure_founder`, plus whether this call actually created the row.
+
+    Returns (founder, created). `created` is True ONLY on the insert -- an
+    identity whose founder already existed comes back (founder, False), and a
+    dev identity comes back (founder_or_None, False) because dev never
+    provisions.
     """
     try:
         user_uuid = UUID(str(identity.id))
     except (ValueError, TypeError):
-        return None  # non-uuid subject (dev tokens) -- nothing to provision
+        return None, False  # non-uuid subject (dev tokens) -- nothing to provision
 
     set_founder_rls_context(db, str(user_uuid))
 
     existing = founder_repository.get_by_user_id(db, user_uuid)
     if existing is not None:
-        return existing
+        return existing, False
 
     if not settings.ENABLE_FOUNDER_PROVISIONING or identity.provider == "dev":
-        return None
+        return None, False
 
     # The grant amount comes from the catalog, never from the stored procedure:
     # a number baked into a function body would drift from catalog.py silently,
@@ -114,6 +133,6 @@ def ensure_founder(identity: AuthUser, db: Session, ip_address: str = "0.0.0.0")
             "Founder provisioning failed",
             extra={"founder_id": str(user_uuid)}, exc_info=exc,
         )
-        return None
+        return None, False
 
-    return founder_repository.get(db, founder_id)
+    return founder_repository.get(db, founder_id), True

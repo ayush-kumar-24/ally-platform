@@ -8,7 +8,7 @@ telegraph what the engine is looking for and bias the answer.
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
 
 
 class QuestionRead(BaseModel):
@@ -119,7 +119,20 @@ class SubmitAnswerResponse(BaseModel):
     session: SessionRead
     next_question: QuestionRead | None = Field(
         default=None,
-        description="Null when no questions remain; the session status will "
-        "then be 'completed'.",
+        description="DEPRECATED alias of `question`, kept for existing clients. "
+        "Null when no questions remain; the session status will then be "
+        "'completed'.",
     )
     is_complete: bool
+
+    @computed_field
+    @property
+    def question(self) -> QuestionRead | None:
+        """Canonical name for the question to ask next.
+
+        /start and /current call this `question`; only /answer called it
+        `next_question`, so a caller walking the phase had to know that the
+        SAME object changes key depending on which endpoint returned it. Both
+        keys now ship, `next_question` retained so nothing breaks.
+        """
+        return self.next_question

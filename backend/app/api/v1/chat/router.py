@@ -45,16 +45,41 @@ from app.api.v1.chat.schemas import (
 
 from app.api.v1.plans.dependencies import ChatGate, chat_gate
 from app.api.v1.privacy.dependencies import require_ai_processing_allowed_for_id
+from app.middleware.rate_limit import founder_rate_limit
 
 router = APIRouter(prefix="/chat", tags=["chat"])
+
+# Named module-level dependency objects, not inline `Depends(founder_rate_limit(...))`
+# calls -- FastAPI's `dependency_overrides` keys by the exact callable object
+# passed to Depends(), and a factory call produces a fresh closure every time.
+# Naming these lets tests override them the same way chat_gate already is
+# (see test_api_chat_e2e.py's `world` fixture): this suite validates the chat
+# pipeline's own throughput/concurrency, not this rate limiter, which has its
+# own dedicated tests (test_rate_limit.py).
+message_rate_limit = founder_rate_limit(
+    key="chat-message", limit=20, window_seconds=60,
+    founder_id_dependency=get_current_founder_id,
+)
+stream_rate_limit = founder_rate_limit(
+    key="chat-stream", limit=20, window_seconds=60,
+    founder_id_dependency=get_current_founder_id,
+)
 
 
 # --- messaging --------------------------------------------------------------
 
 
 @router.post(
-    "/message", response_model=ApiChatResponse, summary="Send a chat message",
-    dependencies=[Depends(require_ai_processing_allowed_for_id)],
+    "/message",
+    response_model=ApiChatResponse,
+    summary="Send a chat message",
+    # chat_gate (below) enforces plan/credit limits, but only when
+    # PLAN_ENFORCEMENT_ENABLED is on -- with it off (the documented default),
+    # message_rate_limit is the only ceiling on how fast one account can drive
+    # LLM spend, and require_ai_processing_allowed_for_id is what makes the
+    # Privacy Center's "Restrict processing" / "Withdraw consent" actually
+    # stop new AI processing rather than just recording that it was asked to.
+    dependencies=[Depends(message_rate_limit), Depends(require_ai_processing_allowed_for_id)],
 )
 def post_message(
     payload: MessageRequest,
@@ -81,8 +106,10 @@ def post_message(
 
 
 @router.post(
-    "/stream", summary="Stream a chat response (Server-Sent Events)",
-    dependencies=[Depends(require_ai_processing_allowed_for_id)],
+    "/stream",
+    summary="Stream a chat response (Server-Sent Events)",
+    # Same reasoning as /message above -- rate limit and the privacy gate both apply.
+    dependencies=[Depends(stream_rate_limit), Depends(require_ai_processing_allowed_for_id)],
 )
 def post_stream(
     payload: StreamRequest,
@@ -99,8 +126,15 @@ def post_stream(
         response_category=payload.response_category, request_id=payload.request_id,
         max_chunk_size=payload.max_chunk_size, timeout_seconds=payload.timeout_seconds,
     )
+    # The generator appends its StreamingResponse here once the stream ends;
+    # sse_event_stream turns that into the closing `summary` event, which is how
+    # a streaming client learns the conversation_id and assistant_message_id.
+    summary_sink: list = []
     return StreamingResponse(
-        sse_event_stream(metered_stream(service.stream(request), gate)),
+        sse_event_stream(
+            metered_stream(service.stream(request, sink=summary_sink), gate),
+            summary_sink=summary_sink,
+        ),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
@@ -214,8 +248,15 @@ def upload_attachment(
     conversation_id: str = Form(...),
     file: UploadFile = File(...),
     founder_id: int = Depends(get_current_founder_id),
+    conversations=Depends(get_conversation_service),
     service=Depends(get_attachment_service),
 ) -> AttachmentResponse:
+    # Ownership must be checked before the write: without it, any authenticated
+    # founder could upload an attachment into another founder's conversation_id
+    # (guessed, leaked via logs, or a future share feature) and inject content
+    # into that founder's AI context. Every other route in this file already
+    # does this check; this one was missed.
+    owned_conversation(conversations, conversation_id, founder_id)
     # Bytes are read only to derive metadata (size + checksum). Contents are never
     # parsed, embedded or OCR'd.
     content = file.file.read()

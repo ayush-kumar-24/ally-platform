@@ -48,6 +48,7 @@ from app.api.v1.reasoning.engines.diagnosis import DeterministicDiagnosisEngine
 from app.api.v1.reasoning.engines.distress_language import build_distress_assessment
 from app.api.v1.reasoning.errors import (
     FeatureDisabledError,
+    NoClassifiableAnswersError,
     ReasoningError,
     ReasoningPersistenceError,
     SessionNotAnalyzableError,
@@ -72,6 +73,7 @@ from app.api.v1.reasoning.schemas import (
     RecommendationType,
     ScoredRootCause,
 )
+from app.core.config import settings
 from app.core.logger import logger
 from app.models import (
     DetectedRootCause,
@@ -254,6 +256,32 @@ class ReasoningService:
             symptoms=len(diagnosis.symptoms),
             distress=diagnosis.distress_mode,
         )
+        # Zero classifications from a non-empty answer set means every answer was
+        # skipped as unscored, and everything downstream -- root causes,
+        # confidence, recommendations, the report itself -- would be derived from
+        # nothing. classify_answers skips bad rows individually on purpose, which
+        # is right for one and wrong for all of them; this is where "all of them"
+        # is caught. See NoClassifiableAnswersError for how configuration alone
+        # reaches this state, and why failing beats persisting an empty report.
+        if not diagnosis.classifications:
+            logger.error(
+                "no answer in this session could be classified; refusing to "
+                "generate an empty report",
+                extra={
+                    "session_id": session_id,
+                    "stage": "diagnosis",
+                    "answers": len(answers),
+                    # Both flags are logged because the pair is the usual cause and
+                    # neither is meaningful alone -- this line should be enough to
+                    # diagnose it without reading the deploy config.
+                    "answer_classifier": settings.ANSWER_CLASSIFIER,
+                    "adaptive_questions": settings.ADAPTIVE_QUESTIONS,
+                },
+            )
+            raise NoClassifiableAnswersError(
+                f"Session {session_id} has {len(answers)} answers but none could "
+                "be classified, so there is no evidence to reason from."
+            )
         if diagnosis.stage_detection.stage_id is not None:
             context = replace(context, stage_id=diagnosis.stage_detection.stage_id)
 

@@ -89,6 +89,22 @@ class FounderDnaSelectionEngine:
              closing question.
           3. The closing question, always last.
         """
+        # The close is TERMINAL, not merely last-sorted. Once it has been asked
+        # the journey is over, even if the budget would still afford another
+        # follow-up.
+        #
+        # Ordering used to fall out of budget exhaustion alone -- `closing` was
+        # returned only when no slot remained -- which held only because the
+        # ceiling happened to be exactly base + 1 + close. The moment there was
+        # any headroom, the close fired while follow-ups were still pending and
+        # one landed AFTER it. Verified live: Q16 was the close, Q17 an
+        # energy_patterns follow-up. Ending on an analytical question instead of
+        # the wow-close is precisely what this ordering exists to prevent, so it
+        # is now stated directly rather than being an emergent property of
+        # arithmetic elsewhere.
+        if self.repository.closing_answered(founder.founder_id, stage_group):
+            return None
+
         candidates = self.candidate_questions(founder, stage_group)
         if not candidates:
             return None
@@ -108,9 +124,32 @@ class FounderDnaSelectionEngine:
         if answered + closing_reserve < settings.MAX_FOUNDER_DNA_QUESTIONS:
             follow_ups = [q for q in pending if q.dimension_code not in resolved]
             if follow_ups:
+                # Fewest-asked dimension first, THEN arc_position.
+                #
+                # Ordering by arc_position alone let one stubborn low-arc
+                # dimension monopolise a budget that is already tight: 14
+                # dimensions against MAX_FOUNDER_DNA_QUESTIONS=16. Observed
+                # live -- `purpose_mission` took three follow-up slots while
+                # `core_values` and `energy_patterns` were never asked a second
+                # time, and the phase then closed reporting 12 of 14 resolved
+                # with those two blank forever.
+                #
+                # Every remaining question here belongs to an UNRESOLVED
+                # dimension, so they are all equally deserving; spreading the
+                # scarce slots across them resolves strictly more dimensions
+                # than spending them all on whichever one sorts first.
+                # arc_position stays the tiebreaker, so authored order still
+                # decides between dimensions that have had equal attention.
+                asked_per_dimension = self.repository.answers_per_dimension(
+                    founder.founder_id, stage_group
+                )
                 return min(
                     follow_ups,
-                    key=lambda q: (q.arc_position, q.founder_dna_question_id),
+                    key=lambda q: (
+                        asked_per_dimension.get(q.dimension_code, 0),
+                        q.arc_position,
+                        q.founder_dna_question_id,
+                    ),
                 )
 
         return closing
