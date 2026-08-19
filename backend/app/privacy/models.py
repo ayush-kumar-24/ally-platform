@@ -33,6 +33,23 @@ class ExportBundle:
 
 
 @dataclass(frozen=True)
+class DataSummary:
+    """A lighter answer to "what does Ally hold about me" than a full export --
+    counts per category, not the raw rows. Backs the self-service "View data
+    summary" action: originally a queued request nothing in the codebase could
+    ever resolve (no email delivery exists), turned instant/self-serve instead
+    since counting what gather_export already found needs no human review."""
+
+    founder_id: int
+    generated_at: datetime
+    counts: dict[str, int] = field(default_factory=dict)
+
+    @property
+    def total_records(self) -> int:
+        return sum(self.counts.values())
+
+
+@dataclass(frozen=True)
 class PrivacyState:
     """The founder's current standing under Art 17/18.
 

@@ -7,7 +7,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from app.privacy.models import ExportBundle, PrivacyAction, PrivacyState
+from app.privacy.models import DataSummary, ExportBundle, PrivacyAction, PrivacyState
 
 
 class PrivacyActionResponse(BaseModel):
@@ -63,4 +63,18 @@ class ExportResponse(BaseModel):
     def from_domain(cls, b: ExportBundle, a: PrivacyAction) -> "ExportResponse":
         return cls(founder_id=b.founder_id, generated_at=b.generated_at,
                    record_count=b.record_count, sections=b.sections,
+                   request=PrivacyActionResponse.from_domain(a))
+
+
+class DataSummaryResponse(BaseModel):
+    founder_id: int
+    generated_at: datetime
+    total_records: int
+    counts: dict[str, int]
+    request: PrivacyActionResponse
+
+    @classmethod
+    def from_domain(cls, s: DataSummary, a: PrivacyAction) -> "DataSummaryResponse":
+        return cls(founder_id=s.founder_id, generated_at=s.generated_at,
+                   total_records=s.total_records, counts=s.counts,
                    request=PrivacyActionResponse.from_domain(a))
