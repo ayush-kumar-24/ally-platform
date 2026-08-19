@@ -26,6 +26,7 @@ Two properties matter more than the mechanism, and both are pinned below:
 from __future__ import annotations
 
 from app.api.v1.diagnosis.advisor import AnswerInsight, LLMNextQuestionAdvisor
+from app.api.v1.diagnosis.service import should_discard_as_unresponsive
 
 
 def _parse(payload: str) -> AnswerInsight | None:
@@ -95,3 +96,46 @@ def test_the_prompt_tells_the_model_to_judge_topic_not_quality():
     assert "TOPIC ONLY" in system
     assert "when in doubt, true" in system.lower()
     assert "don't know" in system
+
+
+# --- the gate must never trap a founder -------------------------------------
+
+def _insight(responsive: bool) -> AnswerInsight:
+    return AnswerInsight("red", 0.9, 7, "", responsive=responsive)
+
+
+def test_an_unresponsive_answer_is_discarded_once():
+    assert should_discard_as_unresponsive(
+        _insight(False), created_here=True, already_reprompted=False) is True
+
+
+def test_the_same_question_is_never_rejected_twice():
+    """The property that matters most.
+
+    Without it the question never advances: the answer is discarded, the same
+    question comes back, and a founder who cannot satisfy the judge is stuck
+    forever. Reproduced on a full journey run before this existed -- one question
+    rejected three times running and the diagnosis stalled at 15 of 30 with no
+    report at all. The founder gets one nudge; whatever comes next is accepted.
+    """
+    assert should_discard_as_unresponsive(
+        _insight(False), created_here=True, already_reprompted=True) is False
+
+
+def test_a_responsive_answer_is_never_discarded():
+    assert should_discard_as_unresponsive(
+        _insight(True), created_here=True, already_reprompted=False) is False
+
+
+def test_no_insight_means_the_answer_stands():
+    """No advisor wired, a failed call, a timeout, an unparseable reply."""
+    assert should_discard_as_unresponsive(
+        None, created_here=True, already_reprompted=False) is False
+
+
+def test_only_this_request_s_own_insert_is_discarded():
+    """`created_here` False means the row came from the resume or race recovery
+    path -- it belongs to a call that already completed, and deleting it would
+    destroy an answer this request never wrote."""
+    assert should_discard_as_unresponsive(
+        _insight(False), created_here=False, already_reprompted=False) is False

@@ -1419,6 +1419,11 @@ class Sessions(Base):
     completed_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
     overall_confidence_score: Mapped[Optional[decimal.Decimal]] = mapped_column(Numeric(5, 2), server_default=text('0'), comment='Outer-layer rolled-up confidence (0-100), derived from inner-layer per-question scoring (answers.score) and the 4-factor weighted root cause ranking. Drives routing_state.')
     routing_state: Mapped[Optional[str]] = mapped_column(String(20), server_default=text("'continue'::character varying"), comment='continue (<60%) = keep asking questions. validate (60-80%) = present hypothesis to founder for confirmation. generate_report (>80%) = sufficient confidence to produce the Founder Clarity Report.')
+    #: The question this session has already been re-asked once, when an
+    #: answer did not address it. Bounds the diagnosis answer gate to a
+    #: single nudge per question: the judgement is a model's, so it can be
+    #: wrong, and a wrong one must never leave a founder unable to continue.
+    reprompted_question_id: Mapped[Optional[int]] = mapped_column(Integer)
     reviewed_by: Mapped[Optional[str]] = mapped_column(String(100))
     reviewed_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
     training_notes: Mapped[Optional[str]] = mapped_column(Text)

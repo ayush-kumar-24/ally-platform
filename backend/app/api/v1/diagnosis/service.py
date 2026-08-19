@@ -94,6 +94,26 @@ _REPROMPT = (
 )
 
 
+def should_discard_as_unresponsive(
+    insight, *, created_here: bool, already_reprompted: bool
+) -> bool:
+    """Whether to discard this answer and re-ask the question.
+
+    A pure predicate rather than an inline condition because it encodes a safety
+    property, and safety properties deserve a test that does not need a database:
+
+      * fails OPEN -- no insight (no advisor, failed call, unparseable reply) or
+        `responsive` True leaves the answer standing;
+      * only ever discards an answer THIS request inserted, never one recovered
+        by the resume/race paths, which belongs to a call that already completed;
+      * discards at most ONCE per question. The verdict is a model's and can be
+        wrong, and a wrong one must never leave a founder unable to continue.
+    """
+    if insight is None or insight.responsive:
+        return False
+    return created_here and not already_reprompted
+
+
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -407,7 +427,17 @@ class DiagnosisService:
         # Fails open in every direction: no advisor, a failed call, an
         # unparseable response or a model that does not know the field all leave
         # `responsive` True and the answer stands.
-        if insight is not None and not insight.responsive and created_here:
+        # ...but only ONCE per question. The verdict is a model's and can be
+        # wrong, and a wrong one must never leave a founder unable to continue:
+        # without this, the same question is discarded and re-asked indefinitely
+        # and the diagnosis dead-ends. Live-reproduced before this existed -- one
+        # question rejected three times running, the run stalled at 15 of 30 with
+        # no report. Second attempt is accepted and scored like any other answer.
+        if should_discard_as_unresponsive(
+            insight,
+            created_here=created_here,
+            already_reprompted=session.reprompted_question_id == question_id,
+        ):
             logger.info(
                 "Answer did not address the question; discarding and re-asking",
                 extra={
@@ -417,6 +447,7 @@ class DiagnosisService:
                 },
             )
             try:
+                session.reprompted_question_id = question_id
                 self.db.delete(answer)
                 self.db.commit()
             except SQLAlchemyError as exc:
@@ -450,6 +481,10 @@ class DiagnosisService:
             # previous answer's evidence and always be one question late.
             await incremental_confidence.recompute(self.db, session, founder)
 
+            # Cleared on every accepted answer: the marker means "this exact
+            # question is on its second attempt" and must not survive the move to
+            # the next one.
+            session.reprompted_question_id = None
             self._attach_question(session, next_question)
             self.db.commit()
         except IntegrityError as exc:
