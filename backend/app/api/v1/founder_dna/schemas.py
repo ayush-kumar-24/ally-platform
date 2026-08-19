@@ -91,6 +91,18 @@ class SubmitFounderDnaAnswerResponse(BaseModel):
         description="DEPRECATED alias of `question`, kept for existing clients. "
         "Null when the phase just completed.",
     )
+    #: False when the input was not an answer to the question asked (see
+    #: founder_dna/responsiveness.py). Nothing was stored, progress is
+    #: unchanged, and `question` is the SAME question re-asked.
+    #:
+    #: A 200 with accepted=false rather than a 4xx is deliberate: the client's
+    #: error path renders "that didn't save", which for a founder who pasted
+    #: the question back is both wrong (nothing was meant to save) and
+    #: alarming. This is Ally answering, not the request failing.
+    accepted: bool = True
+    #: Founder-facing copy for a rejected turn -- what Ally says instead of
+    #: moving on. Null when accepted.
+    reprompt: str | None = None
 
     @computed_field
     @property

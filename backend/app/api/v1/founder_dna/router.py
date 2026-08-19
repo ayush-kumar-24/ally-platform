@@ -106,7 +106,7 @@ async def submit_answer(
     advisor: DimensionResolutionAdvisor | None = Depends(get_dimension_resolution_advisor),
 ) -> SubmitFounderDnaAnswerResponse:
     service = FounderDnaService(db, advisor=advisor)
-    next_question, is_complete = await service.submit_answer(
+    next_question, is_complete, rejection = await service.submit_answer(
         founder=founder,
         question_id=payload.founder_dna_question_id,
         answer_text=payload.answer_text,
@@ -115,4 +115,6 @@ async def submit_answer(
     return SubmitFounderDnaAnswerResponse(
         progress=_progress(repository, founder, is_complete),
         next_question=next_question,
+        accepted=rejection is None,
+        reprompt=rejection.reprompt if rejection is not None else None,
     )

@@ -41,9 +41,15 @@ def get_dimension_resolution_advisor(
             db, LLMTask.FOUNDER_DNA_DIMENSION_RESOLUTION, founder_id=founder.founder_id
         )
     except LLMConfigurationError as exc:
-        logger.warning(
+        # error, not warning: the row is seeded by migration a7c419d0f2b3, so
+        # its absence now means a database that has not been migrated, not a
+        # feature awaiting rollout. This branch is the entire difference
+        # between an adaptive phase and a scripted one, and it went unnoticed
+        # in production precisely because it was logged as routine.
+        logger.error(
             "founder_dna_dimension_resolution has no active model_task_routing "
-            "row yet; falling back to deterministic pool-exhaustion stop",
+            "row; the Founder DNA phase will run NON-adaptively (dimensions "
+            "resolved by question count alone). Run migrations.",
             exc_info=exc,
         )
         return None

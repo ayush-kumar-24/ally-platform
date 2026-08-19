@@ -116,6 +116,18 @@ export default function FounderDnaChat() {
         questionId: question?.id, answer: text,
       }));
       setResolved(state.resolved);
+      // Not an answer to what was asked -- Ally says so and the same question
+      // stands. Handled before the advance branch because the server sends
+      // that same question back as `question`, which would otherwise render
+      // as Ally asking it twice in a row with no explanation.
+      if (!state.accepted) {
+        setMessages(prev => [...prev, {
+          role: 'ally', time: clock(),
+          text: state.reprompt || "That didn't quite answer it — try again in your own words.",
+          closing: question?.isClosing,
+        }]);
+        return;
+      }
       if (state.question?.text && !state.complete) {
         setQuestion(state.question);
         setMessages(prev => [...prev, {
