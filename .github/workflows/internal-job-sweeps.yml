@@ -1,0 +1,62 @@
+# Calls the backend's internal job sweeps on a schedule.
+#
+# Nothing else calls them. Without this: a founder whose reasoning task died
+# mid-pipeline (any deploy kills in-flight ones) is stranded with a COMPLETED
+# session, no report, and their one lifetime diagnosis already spent -- and
+# scheduled account erasures under DPDP never actually execute.
+#
+# All three endpoints are idempotent and take a shared secret, so running them
+# more often than needed is safe and a missed run costs only latency.
+#
+# GitHub's scheduled runs are best-effort and can be delayed under load, and
+# GitHub disables schedules after 60 days without repo activity. That is
+# acceptable for the report sweeps; if process-deletions needs a hard guarantee
+# for compliance, move that one to EventBridge Scheduler.
+
+name: Internal job sweeps
+
+on:
+  schedule:
+    # Report recovery + PDF backfill: every 10 minutes.
+    - cron: "*/10 * * * *"
+    # Account erasures: once a day, 02:30 UTC (08:00 IST).
+    - cron: "30 2 * * *"
+  workflow_dispatch:      # so it can be run by hand while testing
+
+concurrency:
+  group: internal-job-sweeps
+  cancel-in-progress: false
+
+jobs:
+  sweeps:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Reconcile missing reports
+        if: github.event.schedule == '*/10 * * * *' || github.event_name == 'workflow_dispatch'
+        run: |
+          curl -sS -f -X POST \
+            "$API/api/v1/internal/jobs/reconcile-reports" \
+            -H "X-Internal-Secret: $SECRET"
+        env:
+          API: ${{ vars.ALLY_API_BASE || 'https://api.goxlally.ai' }}
+          SECRET: ${{ secrets.INTERNAL_JOBS_SECRET }}
+
+      - name: Backfill report PDFs
+        if: github.event.schedule == '*/10 * * * *' || github.event_name == 'workflow_dispatch'
+        run: |
+          curl -sS -f -X POST \
+            "$API/api/v1/internal/jobs/backfill-report-pdfs" \
+            -H "X-Internal-Secret: $SECRET"
+        env:
+          API: ${{ vars.ALLY_API_BASE || 'https://api.goxlally.ai' }}
+          SECRET: ${{ secrets.INTERNAL_JOBS_SECRET }}
+
+      - name: Process due account deletions
+        if: github.event.schedule == '30 2 * * *' || github.event_name == 'workflow_dispatch'
+        run: |
+          curl -sS -f -X POST \
+            "$API/api/v1/internal/jobs/process-deletions" \
+            -H "X-Internal-Secret: $SECRET"
+        env:
+          API: ${{ vars.ALLY_API_BASE || 'https://api.goxlally.ai' }}
+          SECRET: ${{ secrets.INTERNAL_JOBS_SECRET }}
