@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getLatestReport, getRecommendations } from '../services/reports';
-import { DnaError, DnaLoading, DnaNoReport } from '../components/DnaState';
-import { IconChat } from '../utils/icons';
+import { DnaError, DnaLoading } from '../components/DnaState';
+import { IconChat, IconLock } from '../utils/icons';
 
 /**
  * Recommendations — Ally's synthesized next moves, from the real diagnosis.
@@ -62,7 +62,20 @@ export default function RecommendationsPage() {
 
       {state.status === 'loading' && <DnaLoading label="Pulling your recommendations…" />}
       {state.status === 'error' && <DnaError onRetry={load} />}
-      {state.status === 'no-report' && <DnaNoReport kind="Recommendations" />}
+
+      {state.status === 'no-report' && (
+        <section className="rcm-locked">
+          <div className="rcm-locked-ic"><IconLock /></div>
+          <h2>Complete your diagnosis to open this section</h2>
+          <p>
+            Recommendations are synthesized from your diagnosis, Founder DNA and Business
+            DNA — there's nothing for Ally to work from until you've run one.
+          </p>
+          <button type="button" className="btn btn-em" onClick={() => navigate('/app/founder-dna-journey')}>
+            Start Founder Diagnosis
+          </button>
+        </section>
+      )}
 
       {state.status === 'ready' && (
         state.actions.length === 0 ? (

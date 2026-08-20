@@ -15,6 +15,18 @@
 .rcm-hero h1 { font-family: var(--font-serif); font-size: clamp(22px, 2.8vw, 32px); line-height: 1.18; letter-spacing: -.01em; margin: 0 0 10px; font-weight: 500; }
 .rcm-hero p { margin: 0; color: var(--color-on-dark-muted, #a7c0b4); font-size: 13.5px; max-width: 60ch; }
 
+.rcm-locked {
+  text-align: center; padding: 48px 26px; border-radius: 18px;
+  border: 1px dashed var(--color-bd, #e7e0d6); background: var(--color-ivory-2, #fbf7f2);
+}
+.rcm-locked-ic {
+  width: 44px; height: 44px; margin: 0 auto 14px; border-radius: 12px;
+  display: grid; place-items: center; background: rgba(16,185,129,.12); color: #0b6a52;
+}
+.rcm-locked-ic svg { width: 20px; height: 20px; }
+.rcm-locked h2 { margin: 0 0 10px; font-family: var(--font-display); font-size: 19px; color: var(--color-forest, #1B4332); }
+.rcm-locked p { margin: 0 auto 20px; max-width: 480px; color: var(--color-muted, #556458); font-size: 13.5px; line-height: 1.65; }
+
 .rcm-empty {
   text-align: center; padding: 40px 26px; border-radius: 18px;
   border: 1px dashed var(--color-bd, #e7e0d6); background: var(--color-ivory-2, #fbf7f2);
