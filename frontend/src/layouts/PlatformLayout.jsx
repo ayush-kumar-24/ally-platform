@@ -22,6 +22,7 @@ import {
   IconPlus,
   IconEye,
   IconMapPin,
+  IconAward,
 } from '../utils/icons';
 
 function IconPulse(props) {
@@ -43,6 +44,7 @@ const ROUTE_EYE = {
   '/app/vision': 'Long-term',
   '/app/business-dna': 'Business',
   '/app/journey': 'Momentum',
+  '/app/achievements': 'Milestones',
   '/app/report': 'Executive report',
   '/app/next-steps': 'Momentum',
   '/app/plan': 'Today',
@@ -79,6 +81,12 @@ const NAV_GROUPS = [
          needsReport item but opens its own honest "coming soon" page
          instead of redirecting into the diagnosis flow. */
       { path: '/app/journey', tip: 'Journey', icon: IconMapPin, label: 'Journey', badge: null, comingSoon: true },
+      /* Not gated on report/plan -- gated on actually having talked to Ally
+         enough for there to be anything to remember. See
+         services/achievements.js: the page itself checks real message
+         counts and shows its own unlock progress; the nav lock here is
+         just the same visual treatment with a matching tooltip. */
+      { path: '/app/achievements', tip: 'Your Achievements', icon: IconAward, label: 'Your Achievements', badge: null, comingSoon: true, lockTip: 'Talk to Ally to unlock' },
       { path: '/app/report', tip: 'Report', icon: IconDocument, label: 'Report', badge: null, needsReport: true },
       { path: '/app/next-steps', tip: 'Next steps', icon: IconArrowRight, label: 'Next steps', badge: null, needsReport: true },
       /* badge was hardcoded to 3 — every founder saw "3 tasks due" forever,
@@ -220,7 +228,7 @@ export default function PlatformLayout() {
           {NAV_GROUPS.map((group) => (
             <div key={group.label}>
               <div className="sb-group">{group.label}</div>
-              {group.items.map(({ path, tip, icon: Icon, label, badge, needsReport, needsCallAccess, comingSoon }) => {
+              {group.items.map(({ path, tip, icon: Icon, label, badge, needsReport, needsCallAccess, comingSoon, lockTip }) => {
                 if (needsCallAccess && !canBookCall) return null;
                 const reportLocked = needsReport && !hasReport;
                 const locked = reportLocked || comingSoon;
@@ -228,7 +236,7 @@ export default function PlatformLayout() {
                   <button
                     key={path}
                     className={`nav-item${isActive(path) ? ' active' : ''}${locked ? ' locked' : ''}`}
-                    data-tip={comingSoon ? 'Coming soon' : reportLocked ? 'Finish your diagnosis to unlock' : tip}
+                    data-tip={comingSoon ? (lockTip || 'Coming soon') : reportLocked ? 'Finish your diagnosis to unlock' : tip}
                     data-nav={path}
                     aria-disabled={reportLocked}
                     onClick={() => {

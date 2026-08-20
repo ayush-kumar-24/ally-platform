@@ -38,6 +38,7 @@ const TITLES = {
   '/app/vision': 'Your Vision',
   '/app/business-dna': 'Business DNA',
   '/app/journey': 'Journey',
+  '/app/achievements': 'Your Achievements',
   '/app/profile': 'Your profile',
   '/app/plan': 'Plan your day',
   '/app/know-my-energy': 'Know my energy',

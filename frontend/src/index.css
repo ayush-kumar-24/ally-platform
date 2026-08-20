@@ -10,6 +10,7 @@
 @import "./styles/help.css";
 @import "./styles/vision.css";
 @import "./styles/journey.css";
+@import "./styles/achievements.css";
 
 @theme {
   /* ── Ivory palette ── */

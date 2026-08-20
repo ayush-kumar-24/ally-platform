@@ -102,7 +102,7 @@ const COMPASS_TILES = [
     desc: 'Review the health signals, constraints and patterns shaping your company across its core business dimensions.' },
   { title: 'Journey', path: '/app/journey', mini: 'Learn from your path',
     desc: 'Revisit the decisions, lessons, pivots and turning points that shaped how you build and lead today.' },
-  { title: 'Your Achievements', path: null, mini: 'Recognise meaningful progress',
+  { title: 'Your Achievements', path: '/app/achievements', mini: 'Recognise meaningful progress',
     desc: 'Capture business wins, leadership growth and impact milestones that Ally discovers across your journey.' },
   { title: 'Goals', path: null, mini: 'Track longer-term outcomes',
     desc: 'Set measurable business, founder and life outcomes, monitor progress and identify the next milestone.' },
