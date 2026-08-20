@@ -40,6 +40,7 @@ const TITLES = {
   '/app/journey': 'Journey',
   '/app/achievements': 'Your Achievements',
   '/app/goals': 'Goals',
+  '/app/recommendations': 'Recommendations',
   '/app/profile': 'Your profile',
   '/app/plan': 'Plan your day',
   '/app/know-my-energy': 'Know my energy',

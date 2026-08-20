@@ -24,6 +24,7 @@ import {
   IconMapPin,
   IconAward,
   IconList,
+  IconLightbulb,
 } from '../utils/icons';
 
 function IconPulse(props) {
@@ -47,6 +48,7 @@ const ROUTE_EYE = {
   '/app/journey': 'Momentum',
   '/app/achievements': 'Milestones',
   '/app/goals': 'Outcomes',
+  '/app/recommendations': 'What to do next',
   '/app/report': 'Executive report',
   '/app/next-steps': 'Momentum',
   '/app/plan': 'Today',
@@ -93,6 +95,9 @@ const NAV_GROUPS = [
          anything -- a founder can set a goal the moment they land here. No
          lock. */
       { path: '/app/goals', tip: 'Goals', icon: IconList, label: 'Goals', badge: null },
+      /* Real diagnosis output, same as Founder DNA/Business DNA/Report above --
+         gated the same way, not founder-authored like Vision/Goals. */
+      { path: '/app/recommendations', tip: 'Recommendations', icon: IconLightbulb, label: 'Recommendations', badge: null, needsReport: true },
       { path: '/app/report', tip: 'Report', icon: IconDocument, label: 'Report', badge: null, needsReport: true },
       { path: '/app/next-steps', tip: 'Next steps', icon: IconArrowRight, label: 'Next steps', badge: null, needsReport: true },
       /* badge was hardcoded to 3 — every founder saw "3 tasks due" forever,

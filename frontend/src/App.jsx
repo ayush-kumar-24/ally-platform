@@ -47,6 +47,7 @@ const VisionPage = lazy(() => import('./pages/VisionPage'));
 const JourneyPage = lazy(() => import('./pages/JourneyPage'));
 const AchievementsPage = lazy(() => import('./pages/AchievementsPage'));
 const GoalsPage = lazy(() => import('./pages/GoalsPage'));
+const RecommendationsPage = lazy(() => import('./pages/RecommendationsPage'));
 const BusinessDNA = lazy(() => import('./pages/BusinessDNA'));
 const NextSteps = lazy(() => import('./pages/NextSteps'));
 const DiscoveryCall = lazy(() => import('./pages/DiscoveryCall'));
@@ -209,6 +210,7 @@ export default function App() {
             <Route path="journey" element={<JourneyPage />} />
             <Route path="achievements" element={<AchievementsPage />} />
             <Route path="goals" element={<GoalsPage />} />
+            <Route path="recommendations" element={<RecommendationsPage />} />
             <Route path="profile" element={<FounderProfile />} />
             <Route path="plan" element={<PlanYourDay />} />
             <Route path="know-my-energy" element={<KnowMyEnergy />} />

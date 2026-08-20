@@ -106,7 +106,7 @@ const COMPASS_TILES = [
     desc: 'Capture business wins, leadership growth and impact milestones that Ally discovers across your journey.' },
   { title: 'Goals', path: '/app/goals', mini: 'Track longer-term outcomes',
     desc: 'Set measurable business, founder and life outcomes, monitor progress and identify the next milestone.' },
-  { title: 'Recommendations', path: '/app/next-steps', mini: 'Know what to do next',
+  { title: 'Recommendations', path: '/app/recommendations', mini: 'Know what to do next',
     desc: "See Ally's prioritised guidance after it considers your diagnosis, DNA, vision, energy, business and goals together." },
   { title: 'Plan Your Day', path: '/app/plan', mini: "Focus today's execution",
     desc: 'Convert current goals and recommendations into a focused daily plan with clear priorities and time blocks.' },
