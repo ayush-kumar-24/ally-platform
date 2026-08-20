@@ -263,7 +263,12 @@
 .msg{display:flex;gap:12px;max-width:76%;opacity:0;transform:translateY(10px);animation:rise .6s cubic-bezier(.2,.7,.2,1) forwards}
 .msg.me{flex-direction:row-reverse;align-self:flex-end}
 .m-av{width:30px;height:30px;border-radius:50%;flex-shrink:0;display:grid;place-items:center;font-size:11px;font-weight:700}
-.m-av.ally{background:rgba(16,185,129,.18);color:#34d399;border:1.5px solid rgba(16,185,129,.4)}
+/* The Ally avatar is the real product logo mark now, not the sparkle glyph
+   inside a circular badge -- no fill/border/shadow, just the mark itself
+   (ally-logo-mark.png: the square ivory background made transparent, edges
+   colour-decontaminated so no pale halo shows on this dark background). */
+.m-av.ally{background:none;border:none;color:#34d399}
+.m-av.ally img{width:100%;height:100%;object-fit:contain}
 .m-av.me{background:linear-gradient(135deg,#34d399,#A8D94A);color:#06231a}
 .bubble{padding:13px 17px;border-radius:16px;font-size:14.5px;line-height:1.62}
 .msg.ally .bubble{background:rgba(255,255,255,.06);color:#eaf3ee;border:1px solid rgba(255,255,255,.08);border-bottom-left-radius:5px}
@@ -369,7 +374,9 @@
 .ac-bar .ac-barnew svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2}
 .ac-scroll{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:30px max(24px,calc(50% - 400px)) 30px;display:flex;flex-direction:column;gap:18px}
 .ac-empty{margin:auto;max-width:660px;width:100%;text-align:center;padding:20px 0 8px;animation:rise .6s cubic-bezier(.2,.7,.2,1)}
-.ac-empty .ac-av{width:60px;height:60px;border-radius:50%;margin:0 auto 20px;display:grid;place-items:center;font-size:23px;color:#34d399;background:rgba(16,185,129,.14);border:2px solid rgba(16,185,129,.4);box-shadow:0 0 44px rgba(16,185,129,.32)}
+/* No badge fill/border/glow -- just the logo mark, same reasoning as .m-av.ally above. */
+.ac-empty .ac-av{width:72px;height:72px;margin:0 auto 20px;display:grid;place-items:center}
+.ac-empty .ac-av img{width:100%;height:100%;object-fit:contain}
 .ac-empty h2{font-family:var(--serif);font-weight:500;font-size:clamp(24px,3.2vw,34px);color:#fff;letter-spacing:-.01em;margin:0 0 11px}
 .ac-empty h2 em{font-style:italic;color:#5eead4}
 .ac-empty .ac-lede{font-size:14.5px;line-height:1.6;color:#a7c0b4;max-width:48ch;margin:0 auto 28px}

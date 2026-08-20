@@ -43,6 +43,13 @@ const CurrentProblemChat = lazy(() => import('./pages/CurrentProblemChat'));
 const Thinking = lazy(() => import('./pages/Thinking'));
 const FounderProfile = lazy(() => import('./pages/FounderProfile'));
 const FounderDNA = lazy(() => import('./pages/FounderDNA'));
+const VisionPage = lazy(() => import('./pages/VisionPage'));
+const JourneyPage = lazy(() => import('./pages/JourneyPage'));
+const AchievementsPage = lazy(() => import('./pages/AchievementsPage'));
+const GoalsPage = lazy(() => import('./pages/GoalsPage'));
+const RecommendationsPage = lazy(() => import('./pages/RecommendationsPage'));
+const FrameworksPage = lazy(() => import('./pages/FrameworksPage'));
+const FrameworkDetail = lazy(() => import('./pages/FrameworkDetail'));
 const BusinessDNA = lazy(() => import('./pages/BusinessDNA'));
 const NextSteps = lazy(() => import('./pages/NextSteps'));
 const DiscoveryCall = lazy(() => import('./pages/DiscoveryCall'));
@@ -200,7 +207,14 @@ export default function App() {
             <Route path="diagnosis" element={<DiagnosisChat />} />
             <Route path="thinking" element={<Thinking />} />
             <Route path="founder-dna" element={<FounderDNA />} />
+            <Route path="vision" element={<VisionPage />} />
             <Route path="business-dna" element={<BusinessDNA />} />
+            <Route path="journey" element={<JourneyPage />} />
+            <Route path="achievements" element={<AchievementsPage />} />
+            <Route path="goals" element={<GoalsPage />} />
+            <Route path="recommendations" element={<RecommendationsPage />} />
+            <Route path="frameworks" element={<FrameworksPage />} />
+            <Route path="frameworks/:id" element={<FrameworkDetail />} />
             <Route path="profile" element={<FounderProfile />} />
             <Route path="plan" element={<PlanYourDay />} />
             <Route path="know-my-energy" element={<KnowMyEnergy />} />

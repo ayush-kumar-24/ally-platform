@@ -20,6 +20,12 @@ import {
   IconSettings,
   IconBell,
   IconPlus,
+  IconEye,
+  IconMapPin,
+  IconAward,
+  IconList,
+  IconLightbulb,
+  IconBook,
 } from '../utils/icons';
 
 function IconPulse(props) {
@@ -38,7 +44,13 @@ const ROUTE_EYE = {
   '/app/current-problem': 'In your words',
   '/app/diagnosis': 'Diagnosis',
   '/app/founder-dna': 'Founder first',
+  '/app/vision': 'Long-term',
   '/app/business-dna': 'Business',
+  '/app/journey': 'Momentum',
+  '/app/achievements': 'Milestones',
+  '/app/goals': 'Outcomes',
+  '/app/recommendations': 'What to do next',
+  '/app/frameworks': 'Thinking toolkit',
   '/app/report': 'Executive report',
   '/app/next-steps': 'Momentum',
   '/app/plan': 'Today',
@@ -66,7 +78,31 @@ const NAV_GROUPS = [
          report -> tour, and until the report lands there is nothing here to
          open. Locked, with a reason, instead of silently empty. */
       { path: '/app/founder-dna', tip: 'Founder DNA', icon: IconUser, label: 'Founder DNA', badge: null, needsReport: true },
+      /* Unlike the four above, this isn't derived from a diagnosis report --
+         it's the founder's own long-term vision, written whenever they like.
+         No needsReport gate: nothing here depends on one existing. */
+      { path: '/app/vision', tip: 'Your Vision', icon: IconEye, label: 'Your Vision', badge: null },
       { path: '/app/business-dna', tip: 'Business DNA', icon: IconTrendingUp, label: 'Business DNA', badge: null, needsReport: true },
+      /* Not built yet -- comingSoon shows the same lock treatment as a
+         needsReport item but opens its own honest "coming soon" page
+         instead of redirecting into the diagnosis flow. */
+      { path: '/app/journey', tip: 'Journey', icon: IconMapPin, label: 'Journey', badge: null, comingSoon: true },
+      /* Not gated on report/plan -- gated on actually having talked to Ally
+         enough for there to be anything to remember. See
+         services/achievements.js: the page itself checks real message
+         counts and shows its own unlock progress; the nav lock here is
+         just the same visual treatment with a matching tooltip. */
+      { path: '/app/achievements', tip: 'Your Achievements', icon: IconAward, label: 'Your Achievements', badge: null, comingSoon: true, lockTip: 'Talk to Ally to unlock' },
+      /* Unlike Achievements, nothing here depends on Ally having learned
+         anything -- a founder can set a goal the moment they land here. No
+         lock. */
+      { path: '/app/goals', tip: 'Goals', icon: IconList, label: 'Goals', badge: null },
+      /* Real diagnosis output, same as Founder DNA/Business DNA/Report above --
+         gated the same way, not founder-authored like Vision/Goals. */
+      { path: '/app/recommendations', tip: 'Recommendations', icon: IconLightbulb, label: 'Recommendations', badge: null, needsReport: true },
+      /* Static reference content (see data/frameworks.js) -- no diagnosis
+         needed, available from the start like Goals. */
+      { path: '/app/frameworks', tip: 'Frameworks', icon: IconBook, label: 'Frameworks', badge: null },
       { path: '/app/report', tip: 'Report', icon: IconDocument, label: 'Report', badge: null, needsReport: true },
       { path: '/app/next-steps', tip: 'Next steps', icon: IconArrowRight, label: 'Next steps', badge: null, needsReport: true },
       /* badge was hardcoded to 3 — every founder saw "3 tasks due" forever,
@@ -208,20 +244,24 @@ export default function PlatformLayout() {
           {NAV_GROUPS.map((group) => (
             <div key={group.label}>
               <div className="sb-group">{group.label}</div>
-              {group.items.map(({ path, tip, icon: Icon, label, badge, needsReport, needsCallAccess }) => {
+              {group.items.map(({ path, tip, icon: Icon, label, badge, needsReport, needsCallAccess, comingSoon, lockTip }) => {
                 if (needsCallAccess && !canBookCall) return null;
-                const locked = needsReport && !hasReport;
+                const reportLocked = needsReport && !hasReport;
+                const locked = reportLocked || comingSoon;
                 return (
                   <button
                     key={path}
                     className={`nav-item${isActive(path) ? ' active' : ''}${locked ? ' locked' : ''}`}
-                    data-tip={locked ? 'Finish your diagnosis to unlock' : tip}
+                    data-tip={comingSoon ? (lockTip || 'Coming soon') : reportLocked ? 'Finish your diagnosis to unlock' : tip}
                     data-nav={path}
-                    aria-disabled={locked}
+                    aria-disabled={reportLocked}
                     onClick={() => {
-                      // Send them to the thing that unlocks it rather than to an
-                      // empty page they have to work out for themselves.
-                      if (locked) { handleNav('/app/founder-dna-journey'); return; }
+                      // A report-gated item sends them to the thing that
+                      // unlocks it rather than an empty page they'd have to
+                      // work out for themselves. A not-yet-built feature has
+                      // nothing to unlock -- it opens its own honest
+                      // "coming soon" page instead of redirecting anywhere.
+                      if (reportLocked) { handleNav('/app/founder-dna-journey'); return; }
                       handleNav(path);
                     }}
                   >

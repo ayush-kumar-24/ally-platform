@@ -85,6 +85,39 @@ function Pill({ children, active = false }) {
   return <span className={`dash-pill${active ? ' active' : ''}`}>{children}</span>;
 }
 
+/* The Compass grid, ported from the GoXL Ally reference mockup's dashboard.
+   The mockup shows 13 tiles; only the ones with `path` have a real page in
+   this app today, so the rest render as visibly inert "Coming soon" tiles
+   rather than linking to nothing. */
+const COMPASS_TILES = [
+  { title: 'Adaptive Diagnosis', path: '/app/founder-dna-journey', mini: 'Understand what is really wrong',
+    desc: 'Describe a business symptom, answer adaptive questions and let Ally trace it to the underlying root cause.' },
+  { title: 'Talk to Ally', path: '/app/ally-chat', mini: 'Your thinking partner',
+    desc: 'Brainstorm ideas, pressure-test decisions and get strategic guidance using context Ally already knows.' },
+  { title: 'Founder DNA', path: '/app/founder-dna', mini: 'Understand yourself as a founder',
+    desc: 'Understand your archetype, decision patterns, leadership style, strengths, blind spots and personal growth areas.' },
+  { title: 'Your Vision', path: '/app/vision', mini: 'Turn ambition into milestones',
+    desc: 'Define the future you want across life, business, impact, finances, ideal day and legacy, then make it measurable.' },
+  { title: 'Business DNA', path: '/app/business-dna', mini: 'See the whole business clearly',
+    desc: 'Review the health signals, constraints and patterns shaping your company across its core business dimensions.' },
+  { title: 'Journey', path: '/app/journey', mini: 'Learn from your path',
+    desc: 'Revisit the decisions, lessons, pivots and turning points that shaped how you build and lead today.' },
+  { title: 'Your Achievements', path: '/app/achievements', mini: 'Recognise meaningful progress',
+    desc: 'Capture business wins, leadership growth and impact milestones that Ally discovers across your journey.' },
+  { title: 'Goals', path: '/app/goals', mini: 'Track longer-term outcomes',
+    desc: 'Set measurable business, founder and life outcomes, monitor progress and identify the next milestone.' },
+  { title: 'Recommendations', path: '/app/recommendations', mini: 'Know what to do next',
+    desc: "See Ally's prioritised guidance after it considers your diagnosis, DNA, vision, energy, business and goals together." },
+  { title: 'Plan Your Day', path: '/app/plan', mini: "Focus today's execution",
+    desc: 'Convert current goals and recommendations into a focused daily plan with clear priorities and time blocks.' },
+  { title: 'Frameworks', path: '/app/frameworks', mini: 'Think through complexity',
+    desc: 'Use your personal thinking toolkit to structure difficult decisions, assumptions, priorities and experiments.' },
+  { title: 'Reports', path: '/app/report', mini: 'Keep a record of insights',
+    desc: 'Review complete diagnosis reports, supporting evidence, confidence levels and sequenced action roadmaps.' },
+  { title: 'Profile & Settings', path: '/app/profile', mini: 'Manage your account',
+    desc: 'Manage personal details, preferences, account data, subscription, billing history and invoices.' },
+];
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const { user, startTour } = useApp();
@@ -220,64 +253,30 @@ export default function Dashboard() {
           </section>
         )}
 
-        <header className="dash-head">
-          <div className="dash-head-eyebrow">{greeting}, {firstName}</div>
-          <h2>How can Ally help you today?</h2>
-        </header>
+        <section className="compass-hero">
+          <div className="compass-kicker">{greeting}, {firstName} · Your Compass</div>
+          <h2 className="compass-quote">"Clarity doesn't come from doing more. It comes from knowing <em>what matters next.</em>"</h2>
+          <p className="compass-note">A quick view of your founder, business and momentum — everything important, in one place.</p>
+        </section>
 
-        <section className="dash-actions">
-          <button className="dash-action-card" type="button" onClick={() => navigate('/app/ally-chat')}>
-            <div className="dash-action-top">
-              <div className="dash-action-ic ic-chat">
-                <IconChat />
-              </div>
-            </div>
-            <h3>Chat with Ally</h3>
-            <p>
-              Ask anything about your business. Brainstorm, pressure-test ideas, and get strategic guidance - or pick up a previous conversation.
-            </p>
-            <div className="dash-chips">
-              <span className="dash-chip">Marketing</span>
-              <span className="dash-chip">Sales</span>
-              <span className="dash-chip">Hiring</span>
-              <span className="dash-chip">Fundraising</span>
-              <span className="dash-chip">Pricing</span>
-            </div>
-            <div className="dash-action-foot">
-              <span className="dash-action-btn">Open Chat <IconArrowRight /></span>
-              <span className="dash-badge">Always available</span>
-            </div>
-          </button>
-
-          <button className="dash-action-card alt" type="button" onClick={() => navigate('/app/founder-dna-journey')}>
-            <div className="dash-action-top">
-              <div className="dash-action-ic ic-diag">
-                <IconLightbulb />
-              </div>
-            </div>
-            <h3>Start Founder Diagnosis</h3>
-            <p>
-              A structured AI assessment that traces the real root cause holding your business back - end to end.
-            </p>
-            <div className="dash-chips">
-              <span className="dash-chip">Founder DNA</span>
-              <span className="dash-chip">Business DNA</span>
-              <span className="dash-chip">Root Cause</span>
-              <span className="dash-chip">Founder Report</span>
-            </div>
-            <div className="dash-action-foot">
-              <span className="dash-action-link">Start Diagnosis <IconArrowRight /></span>
-              {/* Covers BOTH phases the chips above promise: the Founder DNA
-                  phase (adaptive, ~6-9 questions) then the business
-                  diagnosis (up to 30). The old "~20 min" predated the
-                  Founder DNA phase and now under-promises the real journey.
-                  Kept as an upper bound, not an average -- a founder whose
-                  answers resolve dimensions quickly finishes well inside it,
-                  and under-running a stated time is the harmless direction
-                  to be wrong in. */}
-              <span className="dash-badge quiet">under 40 min</span>
-            </div>
-          </button>
+        <section className="compass-grid" aria-label="Workspace overview">
+          {COMPASS_TILES.map((tile) => (
+            <article
+              key={tile.title}
+              className={`compass-glimpse${tile.path ? '' : ' is-disabled'}`}
+              role={tile.path ? 'button' : undefined}
+              tabIndex={tile.path ? 0 : -1}
+              onClick={tile.path ? () => navigate(tile.path) : undefined}
+              onKeyDown={tile.path ? (e) => { if (e.key === 'Enter' || e.key === ' ') navigate(tile.path); } : undefined}
+            >
+              <span className="cg-top">
+                <h3>{tile.title}</h3>
+                <span className="cg-arrow">{tile.path ? 'Overview' : 'Coming soon'}</span>
+              </span>
+              <p>{tile.desc}</p>
+              <span className="cg-mini">{tile.mini}</span>
+            </article>
+          ))}
         </section>
 
         <section className="dash-feature">

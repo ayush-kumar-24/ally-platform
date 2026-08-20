@@ -1,12 +1,19 @@
 @import "tailwindcss";
 @import "./styles/tokens.css";
 @import "./styles/platform.css";
+@import "./styles/dashboard-compass.css";
 @import "./styles/founder-dna.css";
 @import "./styles/report.css";
 @import "./styles/plan.css";
 @import "./styles/discovery.css";
 @import "./styles/profile.css";
 @import "./styles/help.css";
+@import "./styles/vision.css";
+@import "./styles/journey.css";
+@import "./styles/achievements.css";
+@import "./styles/goals.css";
+@import "./styles/recommendations.css";
+@import "./styles/frameworks.css";
 
 @theme {
   /* ── Ivory palette ── */
