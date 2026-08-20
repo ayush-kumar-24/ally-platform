@@ -11,6 +11,7 @@
 @import "./styles/vision.css";
 @import "./styles/journey.css";
 @import "./styles/achievements.css";
+@import "./styles/goals.css";
 
 @theme {
   /* ── Ivory palette ── */

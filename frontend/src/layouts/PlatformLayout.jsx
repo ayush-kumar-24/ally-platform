@@ -23,6 +23,7 @@ import {
   IconEye,
   IconMapPin,
   IconAward,
+  IconList,
 } from '../utils/icons';
 
 function IconPulse(props) {
@@ -45,6 +46,7 @@ const ROUTE_EYE = {
   '/app/business-dna': 'Business',
   '/app/journey': 'Momentum',
   '/app/achievements': 'Milestones',
+  '/app/goals': 'Outcomes',
   '/app/report': 'Executive report',
   '/app/next-steps': 'Momentum',
   '/app/plan': 'Today',
@@ -87,6 +89,10 @@ const NAV_GROUPS = [
          counts and shows its own unlock progress; the nav lock here is
          just the same visual treatment with a matching tooltip. */
       { path: '/app/achievements', tip: 'Your Achievements', icon: IconAward, label: 'Your Achievements', badge: null, comingSoon: true, lockTip: 'Talk to Ally to unlock' },
+      /* Unlike Achievements, nothing here depends on Ally having learned
+         anything -- a founder can set a goal the moment they land here. No
+         lock. */
+      { path: '/app/goals', tip: 'Goals', icon: IconList, label: 'Goals', badge: null },
       { path: '/app/report', tip: 'Report', icon: IconDocument, label: 'Report', badge: null, needsReport: true },
       { path: '/app/next-steps', tip: 'Next steps', icon: IconArrowRight, label: 'Next steps', badge: null, needsReport: true },
       /* badge was hardcoded to 3 — every founder saw "3 tasks due" forever,

@@ -104,7 +104,7 @@ const COMPASS_TILES = [
     desc: 'Revisit the decisions, lessons, pivots and turning points that shaped how you build and lead today.' },
   { title: 'Your Achievements', path: '/app/achievements', mini: 'Recognise meaningful progress',
     desc: 'Capture business wins, leadership growth and impact milestones that Ally discovers across your journey.' },
-  { title: 'Goals', path: null, mini: 'Track longer-term outcomes',
+  { title: 'Goals', path: '/app/goals', mini: 'Track longer-term outcomes',
     desc: 'Set measurable business, founder and life outcomes, monitor progress and identify the next milestone.' },
   { title: 'Recommendations', path: '/app/next-steps', mini: 'Know what to do next',
     desc: "See Ally's prioritised guidance after it considers your diagnosis, DNA, vision, energy, business and goals together." },
