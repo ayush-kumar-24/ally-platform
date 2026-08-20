@@ -1,10 +1,12 @@
 /**
  * services/vision.js — the founder's long-term vision, kept in front of them.
  *
- * Frontend-only for now: no backend model exists for this yet, so it lives in
- * localStorage rather than pretending to be synced across devices. Keyed by
- * founder id (falling back to a shared key only when no id is known yet) so
- * two founders signing into the same browser don't see each other's vision.
+ * Backed by the real /vision endpoints (see backend/app/vision) -- previously
+ * this lived in localStorage, keyed by founder id, and never survived a
+ * cache-clear or showed up on another device. The server is now the single
+ * source of truth and enforces the same rules the UI does (a non-empty
+ * statement to save a territory) so they can't be bypassed by calling the
+ * API directly.
  *
  * Nothing here is pre-filled with sample numbers. The reference mockup this
  * was built from ships demo copy ("Build a ₹100Cr company...") baked into
@@ -14,7 +16,7 @@
  * territory starts genuinely empty until the founder writes their own.
  */
 
-const KEY_PREFIX = 'ally.vision.';
+import { get, put } from './api';
 
 /** The six vision territories, in the order they're shown. */
 export const TERRITORIES = [
@@ -26,39 +28,35 @@ export const TERRITORIES = [
   { key: 'legacy', label: 'My Legacy', placeholder: 'What outlasts you?' },
 ];
 
-function keyFor(founderId) {
-  return `${KEY_PREFIX}${founderId || 'anon'}`;
+function toTerritory(t) {
+  return { statement: t.statement, tag1: t.tag1, tag2: t.tag2 };
 }
 
-const EMPTY_TERRITORY = { statement: '', tag1: '', tag2: '' };
+function toSummary(s) {
+  return { target: s.target, current: s.current, unit: s.unit };
+}
 
-function emptyVision() {
+/** { territories: {key: {statement,tag1,tag2}}, summary: {target,current,unit} } */
+export async function loadVision() {
+  const res = await get('/vision');
   return {
-    territories: Object.fromEntries(TERRITORIES.map(t => [t.key, { ...EMPTY_TERRITORY }])),
-    summary: { target: '', current: '', unit: '' },
+    territories: Object.fromEntries(
+      TERRITORIES.map(({ key }) => [key, toTerritory(res.territories?.[key] ?? { statement: '', tag1: '', tag2: '' })])
+    ),
+    summary: toSummary(res.summary ?? { target: '', current: '', unit: '' }),
   };
 }
 
-/** Load the founder's saved vision, or an empty shape if they haven't written one yet. */
-export function loadVision(founderId) {
-  try {
-    const raw = localStorage.getItem(keyFor(founderId));
-    if (!raw) return emptyVision();
-    const parsed = JSON.parse(raw);
-    // Merge over the empty shape so an older save (fewer territories, e.g.)
-    // never crashes the page on a field that doesn't exist yet.
-    const base = emptyVision();
-    return {
-      territories: { ...base.territories, ...(parsed.territories || {}) },
-      summary: { ...base.summary, ...(parsed.summary || {}) },
-    };
-  } catch {
-    return emptyVision();
-  }
+export async function saveTerritory(key, { statement, tag1 = '', tag2 = '' }) {
+  const t = await put(`/vision/territories/${key}`, { statement, tag1, tag2 });
+  return toTerritory(t);
 }
 
-export function saveVision(founderId, vision) {
-  localStorage.setItem(keyFor(founderId), JSON.stringify(vision));
+/** Partial: only the passed fields change; an omitted field keeps its
+ *  previous value server-side (see VisionService.upsert_summary). */
+export async function saveSummary(fields) {
+  const s = await put('/vision/summary', fields);
+  return toSummary(s);
 }
 
 /** Numeric gap between target and current, when both parse as plain numbers

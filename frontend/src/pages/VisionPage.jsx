@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
-import { computeGap, loadVision, saveVision, TERRITORIES } from '../services/vision';
+import { computeGap, loadVision, saveSummary, saveTerritory, TERRITORIES } from '../services/vision';
+import { DnaError, DnaLoading } from '../components/DnaState';
 import Modal from '../components/Modal';
 import { IconAnchor, IconAward, IconChat, IconClock, IconDollar, IconEdit, IconPlus, IconTrendingUp, IconUsers } from '../utils/icons';
 
@@ -16,6 +17,8 @@ const TERRITORY_ICON = {
   ideal_day: IconClock,
   legacy: IconAward,
 };
+
+const EMPTY_TERRITORY = { statement: '', tag1: '', tag2: '' };
 
 function TerritoryCard({ territory, data, onEdit, onTalk }) {
   const isEmpty = !data.statement.trim();
@@ -57,6 +60,7 @@ function TerritoryEditor({ territory, data, onSave, onClose }) {
   const [statement, setStatement] = useState(data.statement);
   const [tag1, setTag1] = useState(data.tag1);
   const [tag2, setTag2] = useState(data.tag2);
+  const [saving, setSaving] = useState(false);
 
   return (
     <Modal open onClose={onClose} title={territory.label}>
@@ -85,14 +89,25 @@ function TerritoryEditor({ territory, data, onSave, onClose }) {
           </label>
         </div>
         <div className="vt-editor-actions">
-          <button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button type="button" className="btn btn-ghost" onClick={onClose} disabled={saving}>Cancel</button>
           <button
             type="button"
             className="btn btn-em"
-            disabled={!statement.trim()}
-            onClick={() => { onSave({ statement: statement.trim(), tag1: tag1.trim(), tag2: tag2.trim() }); onClose(); }}
+            disabled={!statement.trim() || saving}
+            onClick={async () => {
+              setSaving(true);
+              try {
+                await onSave({ statement: statement.trim(), tag1: tag1.trim(), tag2: tag2.trim() });
+                onClose();
+              } catch {
+                // Save failed -- onSave() already surfaced a toast. Leave the
+                // modal open so the founder's draft isn't lost and they can retry.
+              } finally {
+                setSaving(false);
+              }
+            }}
           >
-            Save
+            {saving ? 'Saving…' : 'Save'}
           </button>
         </div>
       </div>
@@ -102,30 +117,54 @@ function TerritoryEditor({ territory, data, onSave, onClose }) {
 
 export default function VisionPage() {
   const navigate = useNavigate();
-  const { user, showToast } = useApp();
-  const [vision, setVision] = useState(() => loadVision(user?.founderId));
+  const { showToast } = useApp();
+  const [state, setState] = useState({ status: 'loading', vision: null, error: null });
   const [editingKey, setEditingKey] = useState(null);
 
-  // Re-read if the signed-in founder changes underneath this page (rare, but
-  // the id starts null and hydrates a moment after mount).
-  useEffect(() => {
-    setVision(loadVision(user?.founderId));
-  }, [user?.founderId]);
-
-  const persist = (next) => {
-    setVision(next);
-    saveVision(user?.founderId, next);
+  const load = () => {
+    setState((s) => ({ ...s, status: 'loading', error: null }));
+    loadVision()
+      .then((vision) => setState({ status: 'ready', vision, error: null }))
+      .catch((err) => setState({ status: 'error', vision: null, error: err }));
   };
 
-  const saveTerritory = (key, value) => {
-    const next = { ...vision, territories: { ...vision.territories, [key]: value } };
-    persist(next);
-    showToast('Saved to your vision');
+  useEffect(load, []);
+
+  const saveOneTerritory = async (key, value) => {
+    try {
+      const saved = await saveTerritory(key, value);
+      setState((s) => ({ ...s, vision: { ...s.vision, territories: { ...s.vision.territories, [key]: saved } } }));
+      showToast('Saved to your vision');
+    } catch {
+      showToast("Couldn't save that. Try again.");
+      throw new Error('save failed');
+    }
   };
 
+  // Debounced so the VISION/CURRENT/unit inputs (which update on every
+  // keystroke, unlike the territory editor's explicit Save button) don't
+  // fire a request per character -- see hooks/useDebounce.js's own note on
+  // the same tradeoff for the admin search box.
+  const pendingSummary = useRef({});
+  const summaryTimer = useRef(null);
   const updateSummary = (field, value) => {
-    persist({ ...vision, summary: { ...vision.summary, [field]: value } });
+    setState((s) => ({ ...s, vision: { ...s.vision, summary: { ...s.vision.summary, [field]: value } } }));
+    pendingSummary.current[field] = value;
+    clearTimeout(summaryTimer.current);
+    summaryTimer.current = setTimeout(() => {
+      const fields = pendingSummary.current;
+      pendingSummary.current = {};
+      saveSummary(fields).catch(() => showToast("Couldn't save your vision summary. Try again."));
+    }, 500);
   };
+
+  if (state.status === 'loading') return <DnaLoading label="Loading your vision…" />;
+  if (state.status === 'error') return <DnaError onRetry={load} />;
+
+  const { vision } = state;
+  const filledCount = TERRITORIES.filter(t => vision.territories[t.key]?.statement.trim()).length;
+  const gap = computeGap(vision.summary.target, vision.summary.current);
+  const hasSummary = vision.summary.target.trim() || vision.summary.current.trim();
 
   // Opens Ally chat pre-filled with the founder's own words about that one
   // territory -- dropped into the composer for them to review/edit, never
@@ -138,10 +177,6 @@ export default function VisionPage() {
       : `I want to think through my vision for ${territory.label} — ${territory.placeholder}`;
     navigate('/app/ally-chat', { state: { prefill } });
   };
-
-  const filledCount = TERRITORIES.filter(t => vision.territories[t.key]?.statement.trim()).length;
-  const gap = computeGap(vision.summary.target, vision.summary.current);
-  const hasSummary = vision.summary.target.trim() || vision.summary.current.trim();
 
   return (
     <div className="vis-page">
@@ -181,7 +216,7 @@ export default function VisionPage() {
           <TerritoryCard
             key={t.key}
             territory={t}
-            data={vision.territories[t.key] || { statement: '', tag1: '', tag2: '' }}
+            data={vision.territories[t.key] || EMPTY_TERRITORY}
             onEdit={setEditingKey}
             onTalk={talkAboutTerritory}
           />
@@ -221,8 +256,8 @@ export default function VisionPage() {
       {editingKey && (
         <TerritoryEditor
           territory={TERRITORIES.find(t => t.key === editingKey)}
-          data={vision.territories[editingKey] || { statement: '', tag1: '', tag2: '' }}
-          onSave={(value) => saveTerritory(editingKey, value)}
+          data={vision.territories[editingKey] || EMPTY_TERRITORY}
+          onSave={(value) => saveOneTerritory(editingKey, value)}
           onClose={() => setEditingKey(null)}
         />
       )}

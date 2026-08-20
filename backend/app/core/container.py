@@ -54,6 +54,8 @@ from app.founder_goals.db_repository import SqlAlchemyFounderGoalRepository
 from app.founder_goals.service import FounderGoalService
 from app.achievements.db_repository import SqlAlchemyAchievementRepository
 from app.achievements.service import AchievementService
+from app.vision.db_repository import SqlAlchemyVisionRepository
+from app.vision.service import VisionService
 from app.consents.db_repository import SqlAlchemyConsentRepository
 from app.consents.service import ConsentService
 from app.privacy.db_repository import SqlAlchemyPrivacyRepository
@@ -316,6 +318,13 @@ class Container:
         Tests override the endpoint dependency with an in-memory-backed
         service."""
         return AchievementService(SqlAlchemyAchievementRepository(db))
+
+    # --- Vision accessor (DB-backed, per-request) ---------------------------
+
+    def vision_service(self, db: Session) -> VisionService:
+        """Request-scoped VisionService over the SQLAlchemy repository. Tests
+        override the endpoint dependency with an in-memory-backed service."""
+        return VisionService(SqlAlchemyVisionRepository(db))
 
     # --- Consents accessor (DB-backed, per-request) -----------------------
 
