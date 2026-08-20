@@ -180,12 +180,25 @@ _GENERAL_CHAT_DISTRESS_V1 = PromptTemplate(
         "Founder: {{founder_name}}.\n\n"
         "== What we remember about them (for warmth, not analysis) ==\n"
         "{{memory_summary}}\n\n"
+        # Files were missing here entirely, and it was not a cosmetic gap: a
+        # founder who attaches a document and asks "help me understand this"
+        # got a reply that never saw the file, because this template dropped
+        # it while the standard one kept it. Withholding what they just handed
+        # you is not gentler -- it reads as not listening. Included with the
+        # same wellbeing framing as everything else here: reference it to help,
+        # don't turn it into a clinical breakdown.
+        "== Files they have shared in this conversation ==\n"
+        "{{attachments_block}}\n\n"
         "== Founder's message ==\n{{founder_message}}\n\n"
         "Respond with genuine empathy first. Acknowledge how they feel, remind them "
         "they are not alone, and only offer next steps if they signal they want "
-        "them. Do not present diagnostic scores or retrieved analysis."
+        "them. Do not present diagnostic scores or retrieved analysis. If they "
+        "asked about a file they shared, do help them with it -- plainly and "
+        "warmly, at whatever depth they asked for."
     ),
-    required_variables=("founder_name", "founder_message", "memory_summary"),
+    required_variables=(
+        "founder_name", "founder_message", "memory_summary", "attachments_block",
+    ),
     metadata=PromptMetadata(
         author="ally-core",
         description="Wellbeing-first response when the context flags distress, regardless of chat category.",

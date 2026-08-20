@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import FeedbackPrompt from '../components/FeedbackPrompt';
 import { FEEDBACK, submitFeedback } from '../services/feedback';
@@ -32,7 +33,13 @@ const TOPIC_LABEL = Object.fromEntries(TOPICS.map((t) => [t.id, t.label]));
 
 export default function Feedback() {
   const { showToast } = useApp();
-  const [topic, setTopic] = useState('idea');
+  // Help & Support's "Report a bug" / "Request a feature" quick actions land
+  // here with the matching topic already chosen, so the founder isn't asked to
+  // re-state something they just told us by picking that button. Falls back to
+  // 'idea' for a direct visit, and ignores anything that isn't a real topic id.
+  const { state } = useLocation();
+  const preselected = TOPICS.some((t) => t.id === state?.topic) ? state.topic : 'idea';
+  const [topic, setTopic] = useState(preselected);
   const [message, setMessage] = useState('');
   const [ratingOpen, setRatingOpen] = useState(false);
   const [sending, setSending] = useState(false);

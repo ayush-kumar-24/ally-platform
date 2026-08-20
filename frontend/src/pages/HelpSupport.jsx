@@ -1,32 +1,49 @@
-import { useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { useNavigate } from 'react-router-dom';
 import { useCallAccess } from '../hooks/useCallAccess';
+import Modal from '../components/Modal';
+import { FEEDBACK, submitFeedback } from '../services/feedback';
+import { ApiError } from '../services/api';
 
+/* Answers are checked against what the code actually does, not what the product
+   is meant to do eventually. Four of the originals were wrong -- the worst
+   claimed Pro "unlocks unlimited diagnoses", while every tier including Pro is
+   capped at diagnosis_lifetime_limit = 1 (backend/app/plans/catalog.py), and
+   described a two-tier ladder when Starter exists. A support page that
+   overstates a paid plan is worse than no support page. */
 const FAQS = [
   {
     q: 'How do I start a diagnosis?',
-    a: 'Click "New diagnosis" in the top right corner of the dashboard to initialize a full diagnostic chat session. Ally will guide you through questions to evaluate your leadership archetype and operational priorities.'
+    a: 'Click "New diagnosis" at the top right of any page — or "Start Founder Diagnosis" on your dashboard. Ally begins with Founder DNA (how you decide and work), then moves to your current problem, then the business itself.'
   },
   {
     q: 'How do plans work?',
-    a: 'We offer a Free plan with core diagnostics, and a Pro subscription that unlocks unlimited diagnoses, team sharing, document uploading/analysis, and direct access to GoXL advisors.'
+    a: 'There are three: Free (₹0), Starter (₹450/month) and Pro (₹999/month). All three include the diagnosis, Founder DNA, Business DNA, reports and next steps. What changes is daily chat allowance (Free 4,000 tokens, Starter 6,000, Pro 8,000), free discovery calls per month (Free none, Starter 1, Pro 2), and voice inside Ally Chat plus Plan Your Day, which are paid features.'
+  },
+  {
+    q: 'How many diagnoses do I get?',
+    a: 'One full diagnosis per account, on every plan including Pro — it is a deep one-time mapping, not something to re-run weekly. Upgrading raises your chat allowance and calls, not the diagnosis count. If you genuinely need a second run, contact support and we will look at it case by case.'
   },
   {
     q: 'How do reminders work?',
-    a: 'Your active tasks from the "Plan Your Day" dashboard generate upcoming indicators. Reminder alerts will trigger automatically at the set times to keep you accountable.'
+    a: 'Tasks you set in Plan Your Day show up as "Next due", and Ally nudges you about anything overdue or due today while you are in the app. There are no push notifications or reminder emails yet, so Ally cannot reach you when the app is closed.'
   },
   {
     q: 'How do I upgrade?',
-    a: 'To upgrade your account, go to the Profile section and click the "Upgrade plan" button under the Subscription details card.'
+    a: 'Go to Profile, then the Subscription & billing card, and click "Upgrade plan".'
   },
   {
     q: 'Can I edit my Founder Profile?',
-    a: 'Yes! Go to the Profile page, click "Edit" in the Founder Identity section, adjust your name, location, or social links, and click "Save" to apply changes.'
+    a: 'Yes. Go to Profile, click "Edit" in the Founder Identity section, change your name, email or LinkedIn URL, and save.'
   },
   {
-    q: 'Can I export reports?',
-    a: 'Absolutely. On the Executive Report page, you will find action buttons to "Download PDF" or "Share" your diagnostic results instantly.'
+    q: 'Can I export or download my report?',
+    a: 'Not yet from the report page — there is no download or share button there today. What you can do right now is export everything Ally holds about you, including your full diagnosis history, from Profile → Privacy Center → "Download my data". It arrives as a JSON file immediately.'
+  },
+  {
+    q: 'What happens to my data, and can I delete it?',
+    a: 'Profile → Privacy Center is the single place for this. You can download everything we hold, see a category-by-category summary, pause AI processing, withdraw consent, or request account deletion — which is scheduled with a 30-day recovery window before anything is permanently erased.'
   }
 ];
 
@@ -35,13 +52,59 @@ export default function HelpSupport() {
   const navigate = useNavigate();
   const { canBook: canBookCall } = useCallAccess();
   const [openFaq, setOpenFaq] = useState(null);
+  const [query, setQuery] = useState('');
+  const [supportOpen, setSupportOpen] = useState(false);
+  const [supportMsg, setSupportMsg] = useState('');
+  const [sending, setSending] = useState(false);
+  const faqRef = useRef(null);
+
+  /* Every quick action used to call one handler that only showed a toast
+     ending in a tick -- five buttons plus the primary "Email support" CTA, all
+     of them inert, on the page a founder reaches precisely because they are
+     already stuck. Each now does the thing its label promises. */
 
   const toggleFaq = (idx) => {
     setOpenFaq(prev => (prev === idx ? null : idx));
   };
 
-  const handleAction = (act) => {
-    showToast(`Quick action triggered: ${act} ✓`);
+  // The intro copy always said "search the answers below"; there was never a
+  // search box. Matches every word separately across question AND answer text,
+  // not the phrase as typed -- someone asking "delete my data" should land on
+  // the privacy answer even though that exact phrase appears in neither its
+  // question nor its wording. Phrase matching found nothing for that query.
+  const filteredFaqs = useMemo(() => {
+    const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    if (!words.length) return FAQS;
+    return FAQS.filter(f => {
+      const haystack = `${f.q} ${f.a}`.toLowerCase();
+      return words.every(w => haystack.includes(w));
+    });
+  }, [query]);
+
+  const scrollToFaqs = () => {
+    // Honour reduced-motion: a long smooth scroll is exactly the kind of
+    // unrequested movement that setting exists to suppress.
+    const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    faqRef.current?.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' });
+  };
+
+  const sendSupportMessage = async () => {
+    const trimmed = supportMsg.trim();
+    if (!trimmed || sending) return;
+    setSending(true);
+    try {
+      // Same pipeline as the Feedback page: lands in founder_feedback and shows
+      // up in the admin panel. Tagged so the team can tell a support request
+      // apart from general feedback in that queue.
+      await submitFeedback({ type: FEEDBACK.GENERAL, comment: `[Support request] ${trimmed}` });
+      showToast('Sent — our team will get back to you by email.');
+      setSupportMsg('');
+      setSupportOpen(false);
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.detail : "Couldn't send that just now — your message is still here.");
+    } finally {
+      setSending(false);
+    }
   };
 
   return (
@@ -57,8 +120,8 @@ export default function HelpSupport() {
         </div>
         <h2 className="hp-help-title">Need help?</h2>
         <p className="hp-help-subtitle">
-          If you're facing any issue, our team is here to help — usually within a
-          few hours. Search the answers below or reach us directly.
+          If you're facing any issue, our team is here to help. Search the
+          answers below, or message us directly and we'll reply by email.
         </p>
       </div>
 
@@ -96,9 +159,13 @@ export default function HelpSupport() {
             </div>
           </div>
 
+          {/* Was "Ally is online now · avg. reply under 3 hours" beside a green
+              dot -- a hardcoded string, not a live status, which claimed
+              someone was online at 3am Sunday and contradicted the Mon-Fri
+              hours two lines above it. Stated as an aim now, with no fake
+              presence indicator. */}
           <div className="hp-contact-footer">
-            <span className="dot" />
-            Ally is online now · avg. reply under 3 hours
+            We aim to reply within one working day.
           </div>
         </div>
 
@@ -114,7 +181,7 @@ export default function HelpSupport() {
           <div className="hp-actions-grid">
             <button
               className="hp-action-btn"
-              onClick={() => handleAction('Report a bug')}
+              onClick={() => navigate('/app/feedback', { state: { topic: 'bug' } })}
               type="button"
             >
               <span className="hp-action-ic">
@@ -128,7 +195,7 @@ export default function HelpSupport() {
 
             <button
               className="hp-action-btn"
-              onClick={() => handleAction('Request a feature')}
+              onClick={() => navigate('/app/feedback', { state: { topic: 'idea' } })}
               type="button"
             >
               <span className="hp-action-ic">
@@ -141,7 +208,7 @@ export default function HelpSupport() {
 
             <button
               className="hp-action-btn"
-              onClick={() => handleAction('Contact support')}
+              onClick={() => setSupportOpen(true)}
               type="button"
             >
               <span className="hp-action-ic">
@@ -154,7 +221,7 @@ export default function HelpSupport() {
 
             <button
               className="hp-action-btn"
-              onClick={() => handleAction('Schedule assistance')}
+              onClick={() => navigate('/app/discovery-call')}
               type="button"
             >
               <span className="hp-action-ic">
@@ -171,7 +238,7 @@ export default function HelpSupport() {
             <button
               className="hp-action-btn"
               style={{ gridColumn: '1 / -1' }}
-              onClick={() => handleAction('View FAQs')}
+              onClick={scrollToFaqs}
               type="button"
             >
               <span className="hp-action-ic">
@@ -187,22 +254,44 @@ export default function HelpSupport() {
       </div>
 
       {/* FAQs Section */}
-      <h3 className="hp-faq-title-sec stagger d3">Frequently asked questions</h3>
+      <h3 className="hp-faq-title-sec stagger d3" ref={faqRef}>Frequently asked questions</h3>
+
+      <div className="hp-faq-search stagger d3">
+        <label className="sr-only" htmlFor="hp-faq-search">Search the answers</label>
+        <input
+          id="hp-faq-search"
+          type="search"
+          className="hp-faq-search-input"
+          placeholder="Search the answers…"
+          value={query}
+          onChange={(e) => { setQuery(e.target.value); setOpenFaq(null); }}
+        />
+      </div>
+
       <div className="hp-faq-list stagger d3">
-        {FAQS.map((faq, idx) => (
+        {filteredFaqs.length === 0 && (
+          <p className="hp-faq-empty">
+            Nothing here matches “{query.trim()}”. Try fewer words, or message
+            support above and a person will answer.
+          </p>
+        )}
+        {/* Keyed by question text, not list index: once the list can be
+            filtered, index 0 is a different question depending on the search,
+            so index keys would leave the wrong row expanded. */}
+        {filteredFaqs.map((faq, idx) => (
           <div
-            key={idx}
-            className={`hp-faq-row ${openFaq === idx ? 'open' : ''}`}
+            key={faq.q}
+            className={`hp-faq-row ${openFaq === faq.q ? 'open' : ''}`}
           >
             {/* The trigger announced no expanded/collapsed state, and the answer
                 panel stayed in the DOM (hidden by CSS only) — so all six answers
                 were read out continuously regardless of what was open. */}
             <button
               className="hp-faq-trigger"
-              onClick={() => toggleFaq(idx)}
+              onClick={() => toggleFaq(faq.q)}
               type="button"
               id={`faq-trigger-${idx}`}
-              aria-expanded={openFaq === idx}
+              aria-expanded={openFaq === faq.q}
               aria-controls={`faq-panel-${idx}`}
             >
               <span className="hp-faq-q">{faq.q}</span>
@@ -221,7 +310,7 @@ export default function HelpSupport() {
               id={`faq-panel-${idx}`}
               role="region"
               aria-labelledby={`faq-trigger-${idx}`}
-              inert={openFaq !== idx}
+              inert={openFaq !== faq.q}
             >
               <div className="hp-faq-answer-inner">{faq.a}</div>
             </div>
@@ -241,14 +330,14 @@ export default function HelpSupport() {
         <div className="hp-footer-actions">
           <button
             className="hp-footer-btn-green"
-            onClick={() => handleAction('Email Support')}
+            onClick={() => setSupportOpen(true)}
             type="button"
           >
             <svg viewBox="0 0 24 24">
               <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
               <polyline points="22,6 12,13 2,6" />
             </svg>
-            Email support
+            Message support
           </button>
           {/* A support page is the worst place to offer something they cannot
               have -- someone reaches it precisely because they are already
@@ -280,6 +369,50 @@ export default function HelpSupport() {
           </button>
         </div>
       </div>
+
+      {/* Posts through the same pipeline as the Feedback page rather than a
+          mailto: handoff -- there is no server-side email sender configured
+          yet, and a mailto: silently does nothing for anyone without a mail
+          client set up, which is the exact failure this page existed to
+          rescue people from. */}
+      <Modal
+        open={supportOpen}
+        onClose={() => !sending && setSupportOpen(false)}
+        title="Message support"
+      >
+        <p className="modal-sub">
+          Tell us what's happening and we'll reply by email, usually within one
+          working day. Your name and email come along automatically.
+        </p>
+        <label className="sr-only" htmlFor="hp-support-msg">Your message</label>
+        <textarea
+          id="hp-support-msg"
+          className="modal-textarea"
+          rows={5}
+          placeholder="What's happening? Include what you expected and what you saw instead."
+          value={supportMsg}
+          disabled={sending}
+          onChange={(e) => setSupportMsg(e.target.value)}
+        />
+        <div className="modal-actions">
+          <button
+            className="btn btn-ghost"
+            type="button"
+            onClick={() => setSupportOpen(false)}
+            disabled={sending}
+          >
+            Cancel
+          </button>
+          <button
+            className="btn btn-em"
+            type="button"
+            onClick={sendSupportMessage}
+            disabled={!supportMsg.trim() || sending}
+          >
+            {sending ? 'Sending…' : 'Send message'}
+          </button>
+        </div>
+      </Modal>
     </div>
   );
 }

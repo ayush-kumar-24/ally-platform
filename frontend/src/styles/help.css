@@ -202,6 +202,44 @@
   text-align: left;
 }
 
+/* The page copy promised "search the answers below" long before there was a
+   search box; this is that box. */
+.hp-faq-search {
+  margin: 0 2px 14px;
+}
+
+.hp-faq-search-input {
+  width: 100%;
+  padding: 11px 14px;
+  font-family: var(--body);
+  font-size: 14px;
+  color: var(--ink, #16241c);
+  background: #ffffff;
+  border: 1px solid var(--bd, #e7e0d6);
+  border-radius: 10px;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.hp-faq-search-input::placeholder { color: var(--muted-2, #8a9186); }
+
+.hp-faq-search-input:focus-visible {
+  border-color: var(--forest, #1b4332);
+  box-shadow: 0 0 0 3px rgba(27, 67, 50, 0.12);
+}
+
+.hp-faq-empty {
+  font-family: var(--body);
+  font-size: 13.5px;
+  color: var(--muted-2, #6c7a70);
+  background: #ffffff;
+  border: 1px dashed var(--bd, #e7e0d6);
+  border-radius: 10px;
+  padding: 18px 16px;
+  margin: 0;
+  text-align: left;
+}
+
 .hp-faq-list {
   display: flex;
   flex-direction: column;
