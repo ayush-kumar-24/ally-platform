@@ -170,7 +170,13 @@ def build_distress_assessment(
     cumulative = scorer.session_distress_score(occ)
     acute = any(state_by_id.get(sid) == _ACUTE_STATE for sid in present)
     # State-D fires immediately; cumulative >= threshold fires independently.
-    is_high = acute or cumulative >= high_distress_score
+    # Strict >, not >=: a founder's session measured exactly 36.0000 against a
+    # 36.0000 threshold and was routed to distress support on a tie -- the
+    # narrowest possible margin, with zero corroborating answer-level signals.
+    # A threshold should be a value you must exceed, not one you can equal.
+    # `acute` still fires immediately and deliberately: a genuine crisis signal
+    # must never wait for a cumulative total.
+    is_high = acute or cumulative > high_distress_score
     score = max(cumulative, high_distress_score) if is_high else cumulative
 
     code = None

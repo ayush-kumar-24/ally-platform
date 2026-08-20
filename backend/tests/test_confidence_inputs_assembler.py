@@ -247,11 +247,13 @@ def test_distress_override_by_session_score_zeroes_reliability():
         questions_answered=20, context=ctx,
     )
     assert got.distress_override is True
-    # Distress says "discount this entirely" with an explicit zero. It used to
-    # say it with None, which the strategy also produced for an unresolvable
-    # lookup -- so a config miss was indistinguishable from maximum distress
-    # and silently zeroed a healthy score.
-    assert got.reliability_factor == D("0")
+    # Distress discounts heavily but must NOT annihilate: reliability multiplies
+    # the whole model, so a zero here reported 0/100 for a completed 30-question
+    # session whose root causes had ranked cleanly. Still an explicit value, not
+    # None -- the point that a config miss must stay distinguishable from
+    # distress (it degrades to NEUTRAL) is unchanged.
+    assert got.reliability_factor == D("0.70")
+    assert got.reliability_factor > D("0")
 
 
 def test_distress_override_by_diagnosis_flag():
@@ -263,11 +265,13 @@ def test_distress_override_by_diagnosis_flag():
         questions_answered=20, context=ctx,
     )
     assert got.distress_override is True
-    # Distress says "discount this entirely" with an explicit zero. It used to
-    # say it with None, which the strategy also produced for an unresolvable
-    # lookup -- so a config miss was indistinguishable from maximum distress
-    # and silently zeroed a healthy score.
-    assert got.reliability_factor == D("0")
+    # Distress discounts heavily but must NOT annihilate: reliability multiplies
+    # the whole model, so a zero here reported 0/100 for a completed 30-question
+    # session whose root causes had ranked cleanly. Still an explicit value, not
+    # None -- the point that a config miss must stay distinguishable from
+    # distress (it degrades to NEUTRAL) is unchanged.
+    assert got.reliability_factor == D("0.70")
+    assert got.reliability_factor > D("0")
 
 
 def test_flagged_category_count():

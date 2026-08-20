@@ -50,6 +50,20 @@ from app.models.enums import ConfirmationStatus
 _QUANT = Decimal("0.0001")
 _ZERO = Decimal("0")
 _ONE = Decimal("1")
+
+# High Distress reliability. session_state_bands stores NULL for this band, and
+# that NULL used to become 0 here -- which, since reliability multiplies the
+# whole model, reported 0/100 confidence for a completed 30-question session
+# whose root causes had ranked cleanly. Live-reproduced: a founder answering
+# candidly ("it stings", "I felt sick for an evening") tripped the language
+# detector and had every measured signal thrown away.
+#
+# The band's own text asks for "diagnostic accuracy is low" and "report is
+# de-prioritised" -- low and de-prioritised, not void. The other three bands
+# step 1.00 -> 0.95 -> 0.85, so a cliff to 0.00 also breaks a gradient the
+# source table clearly intends. 0.70 continues that curve: a heavy discount
+# that still lets a real diagnosis through.
+_DISTRESS_RELIABILITY = Decimal("0.70")
 _CONFIDENCE_MIN = Decimal("0")
 _CONFIDENCE_MAX = Decimal("100")
 
@@ -298,7 +312,7 @@ class WeightedConfidenceModel(ConfidenceModel):
         # signal -- the rest of this model already excludes an unavailable input
         # and renormalises rather than scoring it zero.
         if distress_override:
-            reliability_factor = _ZERO
+            reliability_factor = _DISTRESS_RELIABILITY
         else:
             measured = self.repository.get_reliability_factor(distress_score)
             if measured is None:

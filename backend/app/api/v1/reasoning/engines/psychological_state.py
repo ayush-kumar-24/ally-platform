@@ -142,7 +142,9 @@ class PsychologicalStateEngine:
         occ = self._detect_deterministic(classifications, questions)
         acute = sum(occ.values())  # distress-tagged Reds = State-D acute signals
         cumulative = self.scorer.session_distress_score(occ)
-        is_high = acute >= 1 or cumulative >= self.high_distress_score
+        # Strict >, matching build_distress_assessment: a tie is not an
+        # exceedance. `acute` keeps its immediate trigger.
+        is_high = acute >= 1 or cumulative > self.high_distress_score
         score = max(cumulative, self.high_distress_score) if is_high else cumulative
         protocol_code = _STATE_PROTOCOL["D"] if acute >= 1 else None
         protocol_text = (

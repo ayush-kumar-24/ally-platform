@@ -46,6 +46,7 @@ from __future__ import annotations
 from decimal import ROUND_HALF_UP, Decimal
 
 from app.api.v1.reasoning.config import ConfidenceInputs, ConfidenceScoreWeights
+from app.core.logger import logger
 
 _ZERO = Decimal("0")
 _ONE = Decimal("1")
@@ -125,7 +126,36 @@ class ConfidenceScoreStrategy:
         reliability = inputs.reliability_factor if inputs.reliability_factor is not None else _ONE
 
         score = _round_int(base * reliability * self.stage_coherence_factor * _HUNDRED)
+        pre_rules = score
         score = self._apply_hard_rules(score, inputs)
+
+        # Why this is logged: a founder's report showed "0/100 confidence" after
+        # 30 answered questions and 8 ranked root causes, and nothing in the
+        # logs said which input collapsed. Every component is emitted here so a
+        # zero is attributable to the term that produced it rather than needing
+        # a reconstruction from the database afterwards. Same reasoning as the
+        # distress-decision log, which made that bug diagnosable in one line.
+        logger.info(
+            "confidence components",
+            extra={
+                "stage": "confidence_components",
+                "category_signal": str(_clamp01(inputs.category_signal)),
+                "evidence_coverage": str(_clamp01(inputs.evidence_coverage)),
+                "confirmation_ratio": str(_clamp01(inputs.confirmation_ratio)),
+                "separation": str(_clamp01(inputs.separation)),
+                "consistency_available": inputs.consistency_available,
+                "consistency_score": str(inputs.consistency_score),
+                "base": str(base),
+                "reliability_factor": str(reliability),
+                "stage_coherence_factor": str(self.stage_coherence_factor),
+                "score_before_hard_rules": str(pre_rules),
+                "score_after_hard_rules": str(score),
+                "distress_override": inputs.distress_override,
+                "any_category_flagged": inputs.any_category_flagged,
+                "questions_answered": inputs.questions_answered,
+                "stages_away": inputs.stages_away,
+            },
+        )
         return max(_MIN, min(_MAX, score))
 
     def _apply_hard_rules(self, score: Decimal, inputs: ConfidenceInputs) -> Decimal:

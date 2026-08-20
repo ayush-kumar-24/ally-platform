@@ -443,7 +443,25 @@ class ReasoningService:
         # `answers` to see whether the engine classified them differently from
         # what is on the row. INFO, not debug: this needs to be present in an
         # ordinary run, which is the only place the disagreement has shown up.
-        distress_mode = diagnosis.distress_mode or distress.is_high_distress
+        # Corroboration rule. This used to be a bare OR, so the language
+        # detector alone could declare high distress -- and did: a live session
+        # resolved True with signal_count 0 on the counting side, purely on
+        # tone, and the founder was told burnout and isolation were active
+        # blockers. Candour reads like distress to a language model; a founder
+        # willing to say "it stings" scores higher than one who says nothing.
+        #
+        # An ACUTE (State D) signal still fires alone and unconditionally --
+        # that is the crisis protocol and must never wait for a second opinion.
+        # What now needs corroboration is the *cumulative* path: tone-only
+        # distress requires the counting side (answers actually classified as
+        # distress signals) to agree before it overrides the whole session.
+        acute_present = distress.distress_red_count > 0
+        cumulative_only = distress.is_high_distress and not acute_present
+        distress_mode = (
+            diagnosis.distress_mode
+            or acute_present
+            or (cumulative_only and diagnosis.distress_signal_count > 0)
+        )
         logger.info(
             "distress decision",
             extra={
@@ -454,6 +472,9 @@ class ReasoningService:
                 "signal_answer_ids": list(diagnosis.distress_signal_answer_ids),
                 "trigger": str(self.config.distress.distress_questions_trigger),
                 "by_language": distress.is_high_distress,
+                "acute_present": acute_present,
+                "cumulative_only": cumulative_only,
+                "distress_red_count": distress.distress_red_count,
                 "language_score": str(distress.session_distress_score),
                 "language_status": getattr(distress, "detector_status", None),
                 "high_distress_threshold": str(self.config.distress.high_distress_score),
