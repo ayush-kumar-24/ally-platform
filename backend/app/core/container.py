@@ -52,6 +52,8 @@ from app.planning.db_repository import SqlAlchemyPlanningRepository
 from app.planning.service import PlanningService
 from app.founder_goals.db_repository import SqlAlchemyFounderGoalRepository
 from app.founder_goals.service import FounderGoalService
+from app.achievements.db_repository import SqlAlchemyAchievementRepository
+from app.achievements.service import AchievementService
 from app.consents.db_repository import SqlAlchemyConsentRepository
 from app.consents.service import ConsentService
 from app.privacy.db_repository import SqlAlchemyPrivacyRepository
@@ -306,6 +308,14 @@ class Container:
         app/founder_goals/models.py for why the two "Goal" concepts don't
         share a repository."""
         return FounderGoalService(SqlAlchemyFounderGoalRepository(db))
+
+    # --- Achievements accessor (DB-backed, per-request) --------------------
+
+    def achievement_service(self, db: Session) -> AchievementService:
+        """Request-scoped AchievementService over the SQLAlchemy repository.
+        Tests override the endpoint dependency with an in-memory-backed
+        service."""
+        return AchievementService(SqlAlchemyAchievementRepository(db))
 
     # --- Consents accessor (DB-backed, per-request) -----------------------
 

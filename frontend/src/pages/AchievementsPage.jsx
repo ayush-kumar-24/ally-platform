@@ -1,23 +1,29 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
-import { getEngagement, loadAchievements, saveAchievements, UNLOCK_MESSAGE_THRESHOLD } from '../services/achievements';
-import { DnaLoading } from '../components/DnaState';
+import {
+  createAchievement,
+  deleteAchievement as deleteAchievementApi,
+  getEngagement,
+  listAchievements,
+  updateAchievement,
+} from '../services/achievements';
+import { DnaError, DnaLoading } from '../components/DnaState';
 import Modal from '../components/Modal';
 import { IconAward, IconChat, IconEdit, IconPlus, IconTrash } from '../utils/icons';
 
 const CATEGORIES = ['Business', 'Leadership', 'Team', 'Impact', 'Personal'];
 
-function AchievementCard({ item, onEdit, onDelete }) {
+function AchievementCard({ item, onEdit, onDelete, disabled }) {
   return (
     <article className="ach-card">
       <div className="ach-card-top">
         <h3>{item.title}</h3>
         <div className="ach-card-acts">
-          <button type="button" className="ach-ic-btn" onClick={() => onEdit(item)} aria-label="Edit">
+          <button type="button" className="ach-ic-btn" onClick={() => onEdit(item)} disabled={disabled} aria-label="Edit">
             <IconEdit />
           </button>
-          <button type="button" className="ach-ic-btn" onClick={() => onDelete(item.id)} aria-label="Delete">
+          <button type="button" className="ach-ic-btn" onClick={() => onDelete(item.id)} disabled={disabled} aria-label="Delete">
             <IconTrash />
           </button>
         </div>
@@ -71,7 +77,7 @@ function AchievementEditor({ item, onSave, onClose }) {
             disabled={!title.trim()}
             onClick={() => {
               onSave({
-                id: item?.id || crypto.randomUUID(),
+                id: item?.id ?? null,
                 title: title.trim(),
                 description: description.trim(),
                 category,
@@ -90,7 +96,7 @@ function AchievementEditor({ item, onSave, onClose }) {
 
 function EngagementGate({ engagement }) {
   const navigate = useNavigate();
-  const pct = Math.min(100, Math.round((engagement.messageCount / UNLOCK_MESSAGE_THRESHOLD) * 100));
+  const pct = Math.min(100, Math.round((engagement.messageCount / engagement.threshold) * 100));
   return (
     <section className="ach-gate">
       <div className="ach-gate-ic"><IconChat /></div>
@@ -98,7 +104,7 @@ function EngagementGate({ engagement }) {
       <p>
         Achievements come from what Ally learns about you in conversation — there isn't
         enough of your story yet for this to mean anything. You're at{' '}
-        <b>{engagement.messageCount} of {UNLOCK_MESSAGE_THRESHOLD}</b> messages.
+        <b>{engagement.messageCount} of {engagement.threshold}</b> messages.
       </p>
       <div className="ach-gate-bar"><i style={{ width: `${pct}%` }} /></div>
       <button type="button" className="btn btn-em" onClick={() => navigate('/app/ally-chat')}>
@@ -109,11 +115,19 @@ function EngagementGate({ engagement }) {
 }
 
 export default function AchievementsPage() {
-  const { user } = useApp();
+  const { showToast } = useApp();
   const [engagement, setEngagement] = useState(null);
-  const [items, setItems] = useState([]);
+  const [state, setState] = useState({ status: 'loading', items: [], error: null });
   const [editing, setEditing] = useState(null); // null = closed, {} = new, {...} = editing existing
   const [showEditor, setShowEditor] = useState(false);
+  const [pending, setPending] = useState(false);
+
+  const loadItems = () => {
+    setState((s) => ({ ...s, status: 'loading', error: null }));
+    listAchievements()
+      .then((items) => setState({ status: 'ready', items, error: null }))
+      .catch((err) => setState({ status: 'error', items: [], error: err }));
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -122,20 +136,37 @@ export default function AchievementsPage() {
   }, []);
 
   useEffect(() => {
-    if (engagement?.unlocked) setItems(loadAchievements(user?.founderId));
-  }, [engagement?.unlocked, user?.founderId]);
+    if (engagement?.unlocked) loadItems();
+  }, [engagement?.unlocked]);
 
-  const persist = (next) => {
-    setItems(next);
-    saveAchievements(user?.founderId, next);
+  const saveItem = async (value) => {
+    setPending(true);
+    try {
+      if (value.id) {
+        const updated = await updateAchievement(value.id, value);
+        setState((s) => ({ ...s, items: s.items.map((i) => (i.id === updated.id ? updated : i)) }));
+      } else {
+        const created = await createAchievement(value);
+        setState((s) => ({ ...s, items: [created, ...s.items] }));
+      }
+    } catch {
+      showToast("Couldn't save that achievement. Try again.");
+    } finally {
+      setPending(false);
+    }
   };
 
-  const saveItem = (value) => {
-    const exists = items.some(i => i.id === value.id);
-    persist(exists ? items.map(i => (i.id === value.id ? value : i)) : [value, ...items]);
+  const deleteItem = async (id) => {
+    setPending(true);
+    try {
+      await deleteAchievementApi(id);
+      setState((s) => ({ ...s, items: s.items.filter((i) => i.id !== id) }));
+    } catch {
+      showToast("Couldn't delete that achievement. Try again.");
+    } finally {
+      setPending(false);
+    }
   };
-
-  const deleteItem = (id) => persist(items.filter(i => i.id !== id));
 
   return (
     <div className="ach-page">
@@ -151,29 +182,47 @@ export default function AchievementsPage() {
 
       {engagement?.unlocked && (
         <>
-          <div className="ach-toolbar">
-            <span className="ach-count">{items.length ? `${items.length} recorded` : 'None recorded yet'}</span>
-            <button type="button" className="btn btn-em" onClick={() => { setEditing({}); setShowEditor(true); }}>
-              <IconPlus /> Add achievement
-            </button>
-          </div>
+          {state.status === 'loading' && <DnaLoading label="Loading your achievements…" />}
 
-          {items.length === 0 ? (
-            <div className="ach-empty">
-              <IconAward />
-              <p>Nothing added yet. When something feels worth remembering, put it here.</p>
-            </div>
-          ) : (
-            <div className="ach-grid">
-              {items.map((item) => (
-                <AchievementCard
-                  key={item.id}
-                  item={item}
-                  onEdit={(i) => { setEditing(i); setShowEditor(true); }}
-                  onDelete={deleteItem}
-                />
-              ))}
-            </div>
+          {state.status === 'error' && (
+            <DnaError onRetry={loadItems} />
+          )}
+
+          {state.status === 'ready' && (
+            <>
+              <div className="ach-toolbar">
+                <span className="ach-count">
+                  {state.items.length ? `${state.items.length} recorded` : 'None recorded yet'}
+                </span>
+                <button
+                  type="button"
+                  className="btn btn-em"
+                  disabled={pending}
+                  onClick={() => { setEditing({}); setShowEditor(true); }}
+                >
+                  <IconPlus /> Add achievement
+                </button>
+              </div>
+
+              {state.items.length === 0 ? (
+                <div className="ach-empty">
+                  <IconAward />
+                  <p>Nothing added yet. When something feels worth remembering, put it here.</p>
+                </div>
+              ) : (
+                <div className="ach-grid">
+                  {state.items.map((item) => (
+                    <AchievementCard
+                      key={item.id}
+                      item={item}
+                      disabled={pending}
+                      onEdit={(i) => { setEditing(i); setShowEditor(true); }}
+                      onDelete={deleteItem}
+                    />
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </>
       )}

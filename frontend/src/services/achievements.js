@@ -1,60 +1,58 @@
 /**
  * services/achievements.js — Your Achievements.
  *
- * Frontend-only, same reasoning as services/vision.js: no backend model for
- * this yet, so entries are kept in localStorage, keyed per founder, and
- * nothing here is pre-filled with the reference mockup's sample wins
- * ("Crossed ₹1Cr ARR", "Zero-attrition year"...) -- those belong to one
- * fictional founder, not whoever is signed in.
- *
- * The one thing that IS real: the unlock gate. Ally can't discover
- * achievements from conversations that don't exist, so the page stays
- * locked until the founder has actually talked to Ally a meaningful
- * amount -- computed from listConversations()'s real message_count per
- * conversation, not a made-up number.
+ * Backed by the real /achievements endpoints (see backend/app/achievements)
+ * -- previously entries lived in localStorage and the engagement gate was
+ * recomputed client-side from listConversations(); both now come from the
+ * server, which is the single source of truth for the unlock threshold and
+ * enforces the gate on creation too (a UI gate alone can be bypassed by
+ * calling the API directly). Nothing here is pre-filled with the reference
+ * mockup's sample wins ("Crossed ₹1Cr ARR", "Zero-attrition year"...) --
+ * those belong to one fictional founder, not whoever is signed in.
  */
 
-import { listConversations } from './chat';
+import { del, get, patch, post } from './api';
 
-const KEY_PREFIX = 'ally.achievements.';
-
-/** Total messages across all of a founder's conversations with Ally is the
- *  honest stand-in for "how much Ally has to work with" until a real
- *  achievement-detection feature exists on the backend. */
-export const UNLOCK_MESSAGE_THRESHOLD = 15;
-
-function keyFor(founderId) {
-  return `${KEY_PREFIX}${founderId || 'anon'}`;
+function toAchievement(a) {
+  return {
+    id: a.achievement_id,
+    title: a.title,
+    description: a.description,
+    category: a.category,
+    date: a.occurred_on,
+  };
 }
 
-/** { messageCount, conversationCount, unlocked }, or a zeroed/locked shape
- *  if the conversation list can't be fetched -- never assume unlocked on a
- *  failure, that would open a gate nobody actually earned. */
+/** { messageCount, threshold, unlocked }, or a locked shape if the request
+ *  fails -- never assume unlocked on a failure, that would open a gate
+ *  nobody actually earned. */
 export async function getEngagement() {
   try {
-    const res = await listConversations();
-    const conversations = res?.conversations ?? [];
-    const messageCount = conversations.reduce((sum, c) => sum + (c.message_count || 0), 0);
-    return {
-      messageCount,
-      conversationCount: conversations.length,
-      unlocked: messageCount >= UNLOCK_MESSAGE_THRESHOLD,
-    };
+    const res = await get('/achievements/engagement');
+    return { messageCount: res.message_count, threshold: res.threshold, unlocked: res.unlocked };
   } catch {
-    return { messageCount: 0, conversationCount: 0, unlocked: false };
+    return { messageCount: 0, threshold: 15, unlocked: false };
   }
 }
 
-export function loadAchievements(founderId) {
-  try {
-    const raw = localStorage.getItem(keyFor(founderId));
-    const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
+export async function listAchievements() {
+  const res = await get('/achievements');
+  return (res.achievements ?? []).map(toAchievement);
 }
 
-export function saveAchievements(founderId, list) {
-  localStorage.setItem(keyFor(founderId), JSON.stringify(list));
+export async function createAchievement({ title, description = '', category = '', date = '' }) {
+  const a = await post('/achievements', { title, description, category, occurred_on: date });
+  return toAchievement(a);
+}
+
+export async function updateAchievement(id, { title, description, category, date }) {
+  const a = await patch(`/achievements/${id}`, {
+    title, description, category,
+    ...(date !== undefined ? { occurred_on: date } : {}),
+  });
+  return toAchievement(a);
+}
+
+export function deleteAchievement(id) {
+  return del(`/achievements/${id}`);
 }
