@@ -100,7 +100,7 @@ const COMPASS_TILES = [
     desc: 'Define the future you want across life, business, impact, finances, ideal day and legacy, then make it measurable.' },
   { title: 'Business DNA', path: '/app/business-dna', mini: 'See the whole business clearly',
     desc: 'Review the health signals, constraints and patterns shaping your company across its core business dimensions.' },
-  { title: 'Journey', path: null, mini: 'Learn from your path',
+  { title: 'Journey', path: '/app/journey', mini: 'Learn from your path',
     desc: 'Revisit the decisions, lessons, pivots and turning points that shaped how you build and lead today.' },
   { title: 'Your Achievements', path: null, mini: 'Recognise meaningful progress',
     desc: 'Capture business wins, leadership growth and impact milestones that Ally discovers across your journey.' },

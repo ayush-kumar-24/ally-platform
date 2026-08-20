@@ -9,6 +9,7 @@
 @import "./styles/profile.css";
 @import "./styles/help.css";
 @import "./styles/vision.css";
+@import "./styles/journey.css";
 
 @theme {
   /* ── Ivory palette ── */

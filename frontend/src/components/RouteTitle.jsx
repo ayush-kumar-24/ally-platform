@@ -37,6 +37,7 @@ const TITLES = {
   '/app/founder-dna': 'Founder DNA',
   '/app/vision': 'Your Vision',
   '/app/business-dna': 'Business DNA',
+  '/app/journey': 'Journey',
   '/app/profile': 'Your profile',
   '/app/plan': 'Plan your day',
   '/app/know-my-energy': 'Know my energy',

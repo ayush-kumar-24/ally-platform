@@ -21,6 +21,7 @@ import {
   IconBell,
   IconPlus,
   IconEye,
+  IconMapPin,
 } from '../utils/icons';
 
 function IconPulse(props) {
@@ -41,6 +42,7 @@ const ROUTE_EYE = {
   '/app/founder-dna': 'Founder first',
   '/app/vision': 'Long-term',
   '/app/business-dna': 'Business',
+  '/app/journey': 'Momentum',
   '/app/report': 'Executive report',
   '/app/next-steps': 'Momentum',
   '/app/plan': 'Today',
@@ -73,6 +75,10 @@ const NAV_GROUPS = [
          No needsReport gate: nothing here depends on one existing. */
       { path: '/app/vision', tip: 'Your Vision', icon: IconEye, label: 'Your Vision', badge: null },
       { path: '/app/business-dna', tip: 'Business DNA', icon: IconTrendingUp, label: 'Business DNA', badge: null, needsReport: true },
+      /* Not built yet -- comingSoon shows the same lock treatment as a
+         needsReport item but opens its own honest "coming soon" page
+         instead of redirecting into the diagnosis flow. */
+      { path: '/app/journey', tip: 'Journey', icon: IconMapPin, label: 'Journey', badge: null, comingSoon: true },
       { path: '/app/report', tip: 'Report', icon: IconDocument, label: 'Report', badge: null, needsReport: true },
       { path: '/app/next-steps', tip: 'Next steps', icon: IconArrowRight, label: 'Next steps', badge: null, needsReport: true },
       /* badge was hardcoded to 3 — every founder saw "3 tasks due" forever,
@@ -214,20 +220,24 @@ export default function PlatformLayout() {
           {NAV_GROUPS.map((group) => (
             <div key={group.label}>
               <div className="sb-group">{group.label}</div>
-              {group.items.map(({ path, tip, icon: Icon, label, badge, needsReport, needsCallAccess }) => {
+              {group.items.map(({ path, tip, icon: Icon, label, badge, needsReport, needsCallAccess, comingSoon }) => {
                 if (needsCallAccess && !canBookCall) return null;
-                const locked = needsReport && !hasReport;
+                const reportLocked = needsReport && !hasReport;
+                const locked = reportLocked || comingSoon;
                 return (
                   <button
                     key={path}
                     className={`nav-item${isActive(path) ? ' active' : ''}${locked ? ' locked' : ''}`}
-                    data-tip={locked ? 'Finish your diagnosis to unlock' : tip}
+                    data-tip={comingSoon ? 'Coming soon' : reportLocked ? 'Finish your diagnosis to unlock' : tip}
                     data-nav={path}
-                    aria-disabled={locked}
+                    aria-disabled={reportLocked}
                     onClick={() => {
-                      // Send them to the thing that unlocks it rather than to an
-                      // empty page they have to work out for themselves.
-                      if (locked) { handleNav('/app/founder-dna-journey'); return; }
+                      // A report-gated item sends them to the thing that
+                      // unlocks it rather than an empty page they'd have to
+                      // work out for themselves. A not-yet-built feature has
+                      // nothing to unlock -- it opens its own honest
+                      // "coming soon" page instead of redirecting anywhere.
+                      if (reportLocked) { handleNav('/app/founder-dna-journey'); return; }
                       handleNav(path);
                     }}
                   >
