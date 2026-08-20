@@ -16,19 +16,40 @@
 @media (max-width: 640px) { .vt-grid { grid-template-columns: 1fr; } }
 
 .vt-card {
-  text-align: left;
-  min-height: 168px;
-  padding: 18px;
   border-radius: 18px;
   border: 1px solid var(--color-bd, #e7e0d6);
   background: linear-gradient(150deg, #fff, var(--color-ivory-2, #fbf7f2));
   display: flex;
   flex-direction: column;
-  cursor: pointer;
   transition: .2s cubic-bezier(.2,.7,.2,1);
+  overflow: hidden;
 }
 .vt-card:hover { transform: translateY(-2px); border-color: rgba(16,185,129,.4); box-shadow: 0 1px 2px -1px rgba(6,20,13,.14), 0 6px 16px -6px rgba(6,20,13,.18); }
 .vt-card.is-empty { border-style: dashed; background: var(--color-ivory-2, #fbf7f2); }
+
+.vt-card-body {
+  text-align: left;
+  min-height: 150px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  cursor: pointer;
+  background: none;
+}
+
+/* Per-card "talk to Ally about this one" -- a footer strip, separate from
+   the edit surface above it so the two actions don't fight for the same
+   click. Always visible rather than hover-revealed, so it's just as
+   discoverable on touch as on desktop. */
+.vt-talk {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 9px 12px; font-size: 11.5px; font-weight: 700; color: #0b6a52;
+  background: rgba(16,185,129,.07); border: none; border-top: 1px solid var(--color-bd, #e7e0d6);
+  cursor: pointer;
+}
+.vt-talk svg { width: 13px; height: 13px; }
+.vt-talk:hover { background: rgba(16,185,129,.14); }
 
 .vt-top { display: flex; align-items: center; gap: 8px; }
 .vt-ic { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 8px; background: rgba(16,185,129,.12); color: #0b6a52; flex-shrink: 0; }

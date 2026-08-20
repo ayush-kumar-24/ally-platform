@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import {
   createConversation,
@@ -24,6 +25,8 @@ import { explainLimit, getMyPlan, can, FEATURES } from '../services/plans';
 
 export default function AllyChat() {
   const { user, showToast } = useApp();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [histOpen, setHistOpen] = useState(false);
   const [activeConv, setActiveConv] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -65,6 +68,24 @@ export default function AllyChat() {
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages, typing]);
+
+  // A page like Your Vision can hand off here with a message drafted from
+  // the founder's own words (see VisionPage's talkAboutTerritory). It only
+  // ever lands in the composer for them to review or edit -- never sent on
+  // their behalf. Consumed once via `replace`, so refreshing this page (or
+  // coming back to it later) doesn't keep re-dropping the same text in.
+  useEffect(() => {
+    const prefill = location.state?.prefill;
+    if (!prefill) return;
+    setInput(prefill);
+    navigate(location.pathname, { replace: true, state: {} });
+    // Give the textarea a beat to mount/receive the value before resizing
+    // and focusing it -- sizeTa() reads scrollHeight off the live element.
+    requestAnimationFrame(() => {
+      sizeTa();
+      taRef.current?.focus();
+    });
+  }, [location.state, location.pathname, navigate]);
 
   // Conversations are server-owned, so history survives a reload.
   useEffect(() => {

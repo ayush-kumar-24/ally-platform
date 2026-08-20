@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { computeGap, loadVision, saveVision, TERRITORIES } from '../services/vision';
 import Modal from '../components/Modal';
-import { IconAnchor, IconAward, IconClock, IconDollar, IconEdit, IconPlus, IconTrendingUp, IconUsers } from '../utils/icons';
+import { IconAnchor, IconAward, IconChat, IconClock, IconDollar, IconEdit, IconPlus, IconTrendingUp, IconUsers } from '../utils/icons';
 
 // Purely decorative -- which icon marks which territory. Not a stand-in for
 // data (there is none until the founder writes their own vision), just a
@@ -17,35 +17,39 @@ const TERRITORY_ICON = {
   legacy: IconAward,
 };
 
-function TerritoryCard({ territory, data, onEdit }) {
+function TerritoryCard({ territory, data, onEdit, onTalk }) {
   const isEmpty = !data.statement.trim();
   const Icon = TERRITORY_ICON[territory.key];
   return (
-    <button
-      type="button"
-      className={`vt-card${isEmpty ? ' is-empty' : ''}`}
-      onClick={() => onEdit(territory.key)}
-    >
-      <div className="vt-top">
-        <span className="vt-ic"><Icon /></span>
-        <span className="vt-label">{territory.label.toUpperCase()}</span>
-        {!isEmpty && <IconEdit className="vt-edit-ic" />}
-      </div>
-      {isEmpty ? (
-        <>
-          <p className="vt-placeholder">{territory.placeholder}</p>
-          <span className="vt-add"><IconPlus /> Add your vision</span>
-        </>
-      ) : (
-        <>
-          <p className="vt-statement">{data.statement}</p>
-          <div className="vt-tags">
-            {data.tag1 && <span className="vt-tag">{data.tag1}</span>}
-            {data.tag2 && <span className="vt-tag muted">{data.tag2}</span>}
-          </div>
-        </>
-      )}
-    </button>
+    <div className={`vt-card${isEmpty ? ' is-empty' : ''}`}>
+      {/* The edit surface and the "talk to Ally about this one" action are
+          siblings, not nested buttons -- a <button> inside a <button> is
+          invalid HTML and the inner click would also fire the outer one. */}
+      <button type="button" className="vt-card-body" onClick={() => onEdit(territory.key)}>
+        <div className="vt-top">
+          <span className="vt-ic"><Icon /></span>
+          <span className="vt-label">{territory.label.toUpperCase()}</span>
+          {!isEmpty && <IconEdit className="vt-edit-ic" />}
+        </div>
+        {isEmpty ? (
+          <>
+            <p className="vt-placeholder">{territory.placeholder}</p>
+            <span className="vt-add"><IconPlus /> Add your vision</span>
+          </>
+        ) : (
+          <>
+            <p className="vt-statement">{data.statement}</p>
+            <div className="vt-tags">
+              {data.tag1 && <span className="vt-tag">{data.tag1}</span>}
+              {data.tag2 && <span className="vt-tag muted">{data.tag2}</span>}
+            </div>
+          </>
+        )}
+      </button>
+      <button type="button" className="vt-talk" onClick={() => onTalk(territory, data)}>
+        <IconChat /> {isEmpty ? 'Brainstorm this with Ally' : 'Talk to Ally about this'}
+      </button>
+    </div>
   );
 }
 
@@ -123,6 +127,18 @@ export default function VisionPage() {
     persist({ ...vision, summary: { ...vision.summary, [field]: value } });
   };
 
+  // Opens Ally chat pre-filled with the founder's own words about that one
+  // territory -- dropped into the composer for them to review/edit, never
+  // sent on their behalf. No fabricated "Ally already thinks X" text; the
+  // prompt just carries what they themselves wrote (or the territory's own
+  // prompt question, if they haven't written anything yet).
+  const talkAboutTerritory = (territory, data) => {
+    const prefill = data.statement.trim()
+      ? `Let's talk through my vision for ${territory.label}: "${data.statement.trim()}"`
+      : `I want to think through my vision for ${territory.label} — ${territory.placeholder}`;
+    navigate('/app/ally-chat', { state: { prefill } });
+  };
+
   const filledCount = TERRITORIES.filter(t => vision.territories[t.key]?.statement.trim()).length;
   const gap = computeGap(vision.summary.target, vision.summary.current);
   const hasSummary = vision.summary.target.trim() || vision.summary.current.trim();
@@ -141,7 +157,20 @@ export default function VisionPage() {
           <button type="button" className="btn btn-ghost" onClick={() => setEditingKey(TERRITORIES.find(t => !vision.territories[t.key]?.statement.trim())?.key || TERRITORIES[0].key)}>
             <IconPlus /> Add vision
           </button>
-          <button type="button" className="btn btn-em" onClick={() => navigate('/app/ally-chat')}>
+          <button
+            type="button"
+            className="btn btn-em"
+            onClick={() => navigate('/app/ally-chat', {
+              state: {
+                prefill: filledCount
+                  ? `I want to talk through my overall vision — here's what I've written so far:\n\n${TERRITORIES
+                      .filter(t => vision.territories[t.key]?.statement.trim())
+                      .map(t => `${t.label}: ${vision.territories[t.key].statement.trim()}`)
+                      .join('\n')}`
+                  : 'I want to talk through my long-term vision, even though I haven’t written it down yet.',
+              },
+            })}
+          >
             Talk to Ally about my vision
           </button>
         </div>
@@ -154,6 +183,7 @@ export default function VisionPage() {
             territory={t}
             data={vision.territories[t.key] || { statement: '', tag1: '', tag2: '' }}
             onEdit={setEditingKey}
+            onTalk={talkAboutTerritory}
           />
         ))}
       </div>
