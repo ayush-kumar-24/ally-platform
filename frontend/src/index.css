@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @import "./styles/tokens.css";
 @import "./styles/platform.css";
+@import "./styles/dashboard-compass.css";
 @import "./styles/founder-dna.css";
 @import "./styles/report.css";
 @import "./styles/plan.css";

@@ -1,0 +1,26 @@
+/* Compass — hero quote card + workspace-overview tile grid, ported from the
+   GoXL Ally reference mockup's "Your Compass" dashboard section. Kept in its
+   own file rather than folded into platform.css so this addition stays a
+   small, reviewable diff. */
+.compass-hero{position:relative;overflow:hidden;padding:28px;border-radius:22px;color:#fff;background:radial-gradient(95% 140% at 100% 0%,#1b5b3d,var(--forest-deep,#0E2A1C) 58%,var(--forest-night,#06140d));box-shadow:0 2px 6px -2px rgba(0,0,0,.4),0 24px 60px -20px rgba(0,0,0,.55);margin-bottom:22px}
+.compass-kicker{font-size:10.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--emerald-bright,#34d399)}
+.compass-quote{font-family:var(--serif);font-size:clamp(25px,3vw,36px);line-height:1.2;max-width:780px;margin:12px 0 10px;font-weight:500}
+.compass-quote em{color:var(--emerald-glow,#5eead4);font-style:italic}
+.compass-note{margin:0;color:var(--on-dark-muted,#a7c0b4);font-size:13.5px}
+.compass-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-bottom:22px}
+.compass-glimpse{min-height:190px;padding:22px;border:1px solid var(--bd,#e7e0d6);border-radius:20px;background:linear-gradient(145deg,#fff,var(--ivory-2,#fbf7f2));text-align:left;transition:.25s cubic-bezier(.2,.7,.2,1);color:var(--ink,#16241c);display:flex;flex-direction:column;position:relative;overflow:hidden;cursor:pointer}
+.compass-glimpse::before{content:"";position:absolute;right:-45px;top:-45px;width:130px;height:130px;border-radius:50%;background:radial-gradient(circle,rgba(16,185,129,.1),transparent 68%)}
+.compass-glimpse:hover{transform:translateY(-3px);border-color:rgba(16,185,129,.45);box-shadow:0 1px 2px -1px rgba(6,20,13,.14),0 6px 16px -6px rgba(6,20,13,.18)}
+.compass-glimpse .cg-top{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.compass-glimpse h3{margin:0;font-family:var(--display);font-size:20px;letter-spacing:-.02em;color:#1B4332}
+.compass-glimpse .cg-arrow{color:#10B981;font-size:9px;font-weight:750;letter-spacing:.13em;text-transform:uppercase;background:rgba(16,185,129,.09);padding:5px 8px;border-radius:99px;white-space:nowrap}
+.compass-glimpse p{font-size:13px;line-height:1.6;color:var(--muted-2,#6c7a70);margin:12px 0 0;max-width:52ch}
+.compass-glimpse .cg-mini{display:inline-flex;align-self:flex-start;margin-top:auto;padding:6px 10px;border-radius:99px;background:rgba(16,185,129,.09);color:#0b6a52;font-size:10.5px;font-weight:700}
+/* A tile with no destination page yet -- still shown, per the reference
+   layout, but visibly inert rather than clicking through to nothing. */
+.compass-glimpse.is-disabled{cursor:default;opacity:.62}
+.compass-glimpse.is-disabled:hover{transform:none;border-color:var(--bd,#e7e0d6);box-shadow:none}
+.compass-glimpse.is-disabled .cg-arrow{color:#8a958b;background:rgba(0,0,0,.05)}
+.compass-glimpse.is-disabled .cg-mini{background:rgba(0,0,0,.05);color:#6f7d70}
+@media(max-width:1000px){.compass-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:560px){.compass-grid{grid-template-columns:1fr}.compass-hero{padding:22px}}
