@@ -22,15 +22,6 @@ import Markdown from '../components/Markdown';
 import { usePlan as usePlanGateEntitlements } from '../components/PlanGate';
 import { explainLimit, getMyPlan, can, FEATURES } from '../services/plans';
 
-const PROMPT_CARDS = [
-  { t: 'Help me increase revenue', s: 'Find the highest-leverage growth lever' },
-  { t: 'Review my pricing', s: 'Pressure-test packaging & price points' },
-  { t: 'Improve my sales strategy', s: 'Tighten the funnel and close rate' },
-  { t: 'Validate my startup idea', s: 'Stress-test demand and assumptions' },
-  { t: 'Help me hire my first employee', s: 'Scope the role and where to look' },
-  { t: 'Create a GTM strategy', s: 'A go-to-market plan for launch' },
-];
-
 export default function AllyChat() {
   const { user, showToast } = useApp();
   const [histOpen, setHistOpen] = useState(false);
@@ -432,16 +423,6 @@ export default function AllyChat() {
               <div className="ac-av">✦</div>
               <h2>{greetingNow()}, <em>{firstName}</em>. How can I help?</h2>
               <p className="ac-lede">Ask me anything — marketing, sales, hiring, fundraising, pricing, growth or strategy. I'm your always-on thinking partner, no assessment required.</p>
-              <div className="ac-cards">
-                {PROMPT_CARDS.map((c, i) => (
-                  /* Was a div with onClick: not focusable, not keyboard
-                     operable, and announced as nothing to a screen reader. */
-                  <button key={i} type="button" className="ac-pcard" onClick={() => send(c.t)}>
-                    <div className="pc-t">{c.t}</div>
-                    <div className="pc-s">{c.s}</div>
-                  </button>
-                ))}
-              </div>
             </div>
           ) : (
             <>
