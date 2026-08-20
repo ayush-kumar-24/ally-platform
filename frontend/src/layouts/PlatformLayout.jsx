@@ -20,6 +20,7 @@ import {
   IconSettings,
   IconBell,
   IconPlus,
+  IconEye,
 } from '../utils/icons';
 
 function IconPulse(props) {
@@ -38,6 +39,7 @@ const ROUTE_EYE = {
   '/app/current-problem': 'In your words',
   '/app/diagnosis': 'Diagnosis',
   '/app/founder-dna': 'Founder first',
+  '/app/vision': 'Long-term',
   '/app/business-dna': 'Business',
   '/app/report': 'Executive report',
   '/app/next-steps': 'Momentum',
@@ -66,6 +68,10 @@ const NAV_GROUPS = [
          report -> tour, and until the report lands there is nothing here to
          open. Locked, with a reason, instead of silently empty. */
       { path: '/app/founder-dna', tip: 'Founder DNA', icon: IconUser, label: 'Founder DNA', badge: null, needsReport: true },
+      /* Unlike the four above, this isn't derived from a diagnosis report --
+         it's the founder's own long-term vision, written whenever they like.
+         No needsReport gate: nothing here depends on one existing. */
+      { path: '/app/vision', tip: 'Your Vision', icon: IconEye, label: 'Your Vision', badge: null },
       { path: '/app/business-dna', tip: 'Business DNA', icon: IconTrendingUp, label: 'Business DNA', badge: null, needsReport: true },
       { path: '/app/report', tip: 'Report', icon: IconDocument, label: 'Report', badge: null, needsReport: true },
       { path: '/app/next-steps', tip: 'Next steps', icon: IconArrowRight, label: 'Next steps', badge: null, needsReport: true },

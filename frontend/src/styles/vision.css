@@ -1,0 +1,90 @@
+/* Your Vision — long-term founder vision, six territories + a vision/current/
+   gap summary. Frontend-only (services/vision.js), so nothing here reads
+   from a report or renders a number nobody entered. */
+
+.vis-page { padding: 18px 24px 64px; max-width: 1240px; margin: 0 auto; }
+
+.vis-head { margin-bottom: 22px; }
+.vis-kicker { font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--color-emerald, #10B981); margin-bottom: 8px; }
+.vis-head h1 { font-family: var(--font-display); font-size: clamp(26px, 3.2vw, 38px); line-height: 1.08; letter-spacing: -.02em; color: var(--color-forest, #1B4332); margin: 0 0 10px; }
+.vis-sub { font-size: 13.5px; line-height: 1.6; color: var(--color-muted-2, #6c7a70); max-width: 62ch; margin: 0 0 18px; }
+.vis-head-acts { display: flex; gap: 10px; flex-wrap: wrap; }
+.vis-head-acts .btn svg { width: 15px; height: 15px; }
+
+.vt-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-bottom: 22px; }
+@media (max-width: 1000px) { .vt-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 640px) { .vt-grid { grid-template-columns: 1fr; } }
+
+.vt-card {
+  text-align: left;
+  min-height: 168px;
+  padding: 18px;
+  border-radius: 18px;
+  border: 1px solid var(--color-bd, #e7e0d6);
+  background: linear-gradient(150deg, #fff, var(--color-ivory-2, #fbf7f2));
+  display: flex;
+  flex-direction: column;
+  cursor: pointer;
+  transition: .2s cubic-bezier(.2,.7,.2,1);
+}
+.vt-card:hover { transform: translateY(-2px); border-color: rgba(16,185,129,.4); box-shadow: 0 1px 2px -1px rgba(6,20,13,.14), 0 6px 16px -6px rgba(6,20,13,.18); }
+.vt-card.is-empty { border-style: dashed; background: var(--color-ivory-2, #fbf7f2); }
+
+.vt-top { display: flex; align-items: center; gap: 8px; }
+.vt-ic { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 8px; background: rgba(16,185,129,.12); color: #0b6a52; flex-shrink: 0; }
+.vt-ic svg { width: 14px; height: 14px; }
+.vt-label { font-size: 10.5px; font-weight: 800; letter-spacing: .1em; color: var(--color-muted-2, #6c7a70); flex: 1; }
+.vt-edit-ic { width: 14px; height: 14px; color: var(--color-muted-2, #8a958b); flex-shrink: 0; }
+
+.vt-placeholder { font-size: 13px; line-height: 1.55; color: var(--color-muted-2, #8a958b); margin: 14px 0 auto; }
+.vt-add { display: inline-flex; align-items: center; gap: 6px; margin-top: 14px; font-size: 12px; font-weight: 700; color: #0b6a52; }
+.vt-add svg { width: 14px; height: 14px; }
+
+.vt-statement { font-family: var(--font-display); font-size: 17px; line-height: 1.32; letter-spacing: -.01em; color: var(--color-forest, #1B4332); margin: 12px 0 auto; }
+.vt-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 14px; }
+.vt-tag { font-size: 11px; font-weight: 700; padding: 5px 10px; border-radius: 999px; background: rgba(16,185,129,.1); color: #0b6a52; }
+.vt-tag.muted { background: rgba(0,0,0,.05); color: var(--color-muted-2, #6c7a70); }
+
+/* Territory editor (inside Modal) */
+.vt-editor { display: flex; flex-direction: column; gap: 14px; }
+.vt-field { display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; font-weight: 700; color: var(--color-forest, #1B4332); }
+.vt-field input, .vt-field textarea {
+  font: inherit; font-weight: 500; font-size: 13.5px; padding: 10px 12px;
+  border-radius: 10px; border: 1px solid var(--color-bd, #e7e0d6); background: #fff; color: var(--color-ink, #16241c);
+  resize: vertical;
+}
+.vt-field input:focus, .vt-field textarea:focus { outline: 2px solid rgba(16,185,129,.4); outline-offset: 1px; }
+.vt-field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 480px) { .vt-field-row { grid-template-columns: 1fr; } }
+.vt-editor-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 4px; }
+
+/* Vision / Current / Gap summary strip */
+.vis-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 720px) { .vis-summary { grid-template-columns: 1fr; } }
+.vis-sum-box {
+  padding: 20px 22px; border-radius: 18px; border: 1px solid var(--color-bd, #e7e0d6);
+  background: linear-gradient(150deg, #fff, var(--color-ivory-2, #fbf7f2));
+  display: flex; flex-direction: column; gap: 6px;
+}
+.vis-sum-box.gap { background: radial-gradient(120% 140% at 100% 0%, #164a32, var(--color-forest-deep, #0E2A1C) 65%); border-color: transparent; color: #fff; }
+.vis-sum-label { font-size: 10.5px; font-weight: 800; letter-spacing: .12em; }
+.vis-sum-box:not(.gap) .vis-sum-label { color: var(--color-muted-2, #6c7a70); }
+.vis-sum-box.gap .vis-sum-label { color: #34d399; }
+.vis-sum-value, .vis-sum-value-input {
+  font-family: var(--font-display); font-size: 30px; font-weight: 800; letter-spacing: -.02em;
+}
+.vis-sum-box:not(.gap) .vis-sum-value-input { color: var(--color-forest, #1B4332); }
+.vis-sum-box.gap .vis-sum-value { color: #fff; }
+.vis-sum-value-input {
+  border: none; background: transparent; padding: 0; width: 100%;
+}
+.vis-sum-value-input:focus { outline: none; }
+.vis-sum-value-input::placeholder { color: var(--color-muted-2, #b7c2b9); font-weight: 700; }
+.vis-sum-sub { font-size: 12px; }
+.vis-sum-box:not(.gap) .vis-sum-sub { color: var(--color-muted-2, #8a958b); }
+.vis-sum-box.gap .vis-sum-sub { color: #a7c0b4; }
+.vis-sum-sub-input {
+  font: inherit; font-size: 12px; color: var(--color-muted-2, #8a958b); border: none; background: transparent; padding: 0; width: 100%;
+}
+.vis-sum-sub-input:focus { outline: none; }
+.vis-sum-sub-input::placeholder { color: var(--color-muted-2, #b7c2b9); }

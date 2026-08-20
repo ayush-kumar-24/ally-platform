@@ -43,6 +43,7 @@ const CurrentProblemChat = lazy(() => import('./pages/CurrentProblemChat'));
 const Thinking = lazy(() => import('./pages/Thinking'));
 const FounderProfile = lazy(() => import('./pages/FounderProfile'));
 const FounderDNA = lazy(() => import('./pages/FounderDNA'));
+const VisionPage = lazy(() => import('./pages/VisionPage'));
 const BusinessDNA = lazy(() => import('./pages/BusinessDNA'));
 const NextSteps = lazy(() => import('./pages/NextSteps'));
 const DiscoveryCall = lazy(() => import('./pages/DiscoveryCall'));
@@ -200,6 +201,7 @@ export default function App() {
             <Route path="diagnosis" element={<DiagnosisChat />} />
             <Route path="thinking" element={<Thinking />} />
             <Route path="founder-dna" element={<FounderDNA />} />
+            <Route path="vision" element={<VisionPage />} />
             <Route path="business-dna" element={<BusinessDNA />} />
             <Route path="profile" element={<FounderProfile />} />
             <Route path="plan" element={<PlanYourDay />} />

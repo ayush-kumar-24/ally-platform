@@ -96,7 +96,7 @@ const COMPASS_TILES = [
     desc: 'Brainstorm ideas, pressure-test decisions and get strategic guidance using context Ally already knows.' },
   { title: 'Founder DNA', path: '/app/founder-dna', mini: 'Understand yourself as a founder',
     desc: 'Understand your archetype, decision patterns, leadership style, strengths, blind spots and personal growth areas.' },
-  { title: 'Your Vision', path: null, mini: 'Turn ambition into milestones',
+  { title: 'Your Vision', path: '/app/vision', mini: 'Turn ambition into milestones',
     desc: 'Define the future you want across life, business, impact, finances, ideal day and legacy, then make it measurable.' },
   { title: 'Business DNA', path: '/app/business-dna', mini: 'See the whole business clearly',
     desc: 'Review the health signals, constraints and patterns shaping your company across its core business dimensions.' },
