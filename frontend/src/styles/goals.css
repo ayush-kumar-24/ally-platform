@@ -1,0 +1,45 @@
+/* Goals — same hero language as Vision/Journey/Achievements, then a plain
+   editable list. No engagement gate (unlike Achievements): a founder should
+   be able to set a goal the moment they land here. */
+
+.gl-page { padding: 18px 24px 64px; max-width: 1240px; margin: 0 auto; }
+
+.gl-hero {
+  position: relative; overflow: hidden; padding: 28px;
+  border-radius: 22px; color: #fff;
+  background: radial-gradient(95% 140% at 100% 0%, #1b5b3d, var(--color-forest-deep, #0E2A1C) 58%, var(--color-forest-night, #06140d));
+  box-shadow: 0 2px 6px -2px rgba(0,0,0,.4), 0 24px 60px -20px rgba(0,0,0,.55);
+  margin-bottom: 22px;
+}
+.gl-kicker { font-size: 10.5px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--color-emerald-bright, #34d399); margin-bottom: 8px; }
+.gl-hero h1 { font-family: var(--font-serif); font-size: clamp(24px, 3vw, 34px); line-height: 1.16; letter-spacing: -.01em; margin: 0 0 10px; font-weight: 500; }
+.gl-hero p { margin: 0; color: var(--color-on-dark-muted, #a7c0b4); font-size: 13.5px; max-width: 60ch; }
+
+.gl-toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.gl-count { font-size: 12.5px; font-weight: 700; color: var(--color-muted-2, #6c7a70); }
+
+.gl-empty {
+  text-align: center; padding: 48px 26px; border-radius: 18px;
+  border: 1px dashed var(--color-bd, #e7e0d6); background: var(--color-ivory-2, #fbf7f2);
+  color: var(--color-muted-2, #8a958b);
+}
+.gl-empty svg { width: 26px; height: 26px; margin-bottom: 10px; }
+.gl-empty p { margin: 0; font-size: 13.5px; }
+
+.gl-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 720px) { .gl-grid { grid-template-columns: 1fr; } }
+
+.gl-card {
+  padding: 20px; border-radius: 16px; border: 1px solid var(--color-bd, #e7e0d6);
+  background: #fff;
+}
+.gl-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.gl-card h3 { margin: 0; font-family: var(--font-display); font-size: 18px; color: var(--color-forest, #1B4332); }
+.gl-card p { font-size: 13px; line-height: 1.55; color: var(--color-muted-2, #6c7a70); margin: 8px 0 0; }
+.gl-card-acts { display: flex; gap: 4px; flex-shrink: 0; }
+.gl-ic-btn {
+  width: 26px; height: 26px; border-radius: 8px; border: none; background: transparent;
+  display: grid; place-items: center; color: var(--color-muted-2, #8a958b); cursor: pointer;
+}
+.gl-ic-btn:hover { background: rgba(0,0,0,.05); color: var(--color-forest, #1B4332); }
+.gl-ic-btn svg { width: 14px; height: 14px; }

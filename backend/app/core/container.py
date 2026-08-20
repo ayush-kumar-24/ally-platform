@@ -50,6 +50,14 @@ from app.admin.repository import InMemoryAdminRepository, InMemoryAnnouncementRe
 from app.admin.service import AdminService
 from app.planning.db_repository import SqlAlchemyPlanningRepository
 from app.planning.service import PlanningService
+from app.founder_goals.db_repository import SqlAlchemyFounderGoalRepository
+from app.founder_goals.service import FounderGoalService
+from app.achievements.db_repository import SqlAlchemyAchievementRepository
+from app.achievements.service import AchievementService
+from app.vision.db_repository import SqlAlchemyVisionRepository
+from app.vision.service import VisionService
+from app.framework_usage.db_repository import SqlAlchemyFrameworkUsageRepository
+from app.framework_usage.service import FrameworkUsageService
 from app.consents.db_repository import SqlAlchemyConsentRepository
 from app.consents.service import ConsentService
 from app.privacy.db_repository import SqlAlchemyPrivacyRepository
@@ -294,6 +302,39 @@ class Container:
         """Request-scoped PlanningService over the SQLAlchemy repository. Tests
         override the endpoint dependency with an in-memory-backed service."""
         return PlanningService(SqlAlchemyPlanningRepository(db))
+
+    # --- Founder Goals accessor (DB-backed, per-request) -------------------
+
+    def founder_goal_service(self, db: Session) -> FounderGoalService:
+        """Request-scoped FounderGoalService over the SQLAlchemy repository.
+        Tests override the endpoint dependency with an in-memory-backed
+        service. Deliberately separate from planning_service() above -- see
+        app/founder_goals/models.py for why the two "Goal" concepts don't
+        share a repository."""
+        return FounderGoalService(SqlAlchemyFounderGoalRepository(db))
+
+    # --- Achievements accessor (DB-backed, per-request) --------------------
+
+    def achievement_service(self, db: Session) -> AchievementService:
+        """Request-scoped AchievementService over the SQLAlchemy repository.
+        Tests override the endpoint dependency with an in-memory-backed
+        service."""
+        return AchievementService(SqlAlchemyAchievementRepository(db))
+
+    # --- Vision accessor (DB-backed, per-request) ---------------------------
+
+    def vision_service(self, db: Session) -> VisionService:
+        """Request-scoped VisionService over the SQLAlchemy repository. Tests
+        override the endpoint dependency with an in-memory-backed service."""
+        return VisionService(SqlAlchemyVisionRepository(db))
+
+    # --- Framework Usage accessor (DB-backed, per-request) ------------------
+
+    def framework_usage_service(self, db: Session) -> FrameworkUsageService:
+        """Request-scoped FrameworkUsageService over the SQLAlchemy
+        repository. Tests override the endpoint dependency with an
+        in-memory-backed service."""
+        return FrameworkUsageService(SqlAlchemyFrameworkUsageRepository(db))
 
     # --- Consents accessor (DB-backed, per-request) -----------------------
 

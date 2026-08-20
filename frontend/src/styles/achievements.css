@@ -1,0 +1,72 @@
+/* Your Achievements — same hero language as Journey/Vision, then either an
+   engagement gate or the (frontend-only, user-authored) achievements grid.
+   See services/achievements.js for why the gate exists and what unlocks it. */
+
+.ach-page { padding: 18px 24px 64px; max-width: 1240px; margin: 0 auto; }
+
+.ach-hero {
+  position: relative; overflow: hidden; padding: 28px;
+  border-radius: 22px; color: #fff;
+  background: radial-gradient(95% 140% at 100% 0%, #1b5b3d, var(--color-forest-deep, #0E2A1C) 58%, var(--color-forest-night, #06140d));
+  box-shadow: 0 2px 6px -2px rgba(0,0,0,.4), 0 24px 60px -20px rgba(0,0,0,.55);
+  margin-bottom: 22px;
+}
+.ach-kicker { font-size: 10.5px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--color-emerald-bright, #34d399); margin-bottom: 8px; }
+.ach-hero h1 { font-family: var(--font-serif); font-size: clamp(24px, 3vw, 34px); line-height: 1.16; letter-spacing: -.01em; margin: 0 0 10px; font-weight: 500; }
+.ach-hero p { margin: 0; color: var(--color-on-dark-muted, #a7c0b4); font-size: 13.5px; max-width: 60ch; }
+
+/* Engagement gate */
+.ach-gate {
+  text-align: center; padding: 48px 26px; border-radius: 18px;
+  border: 1px dashed var(--color-bd, #e7e0d6); background: var(--color-ivory-2, #fbf7f2);
+}
+.ach-gate-ic {
+  width: 44px; height: 44px; margin: 0 auto 14px; border-radius: 12px;
+  display: grid; place-items: center; background: rgba(16,185,129,.12); color: #0b6a52;
+}
+.ach-gate-ic svg { width: 22px; height: 22px; }
+.ach-gate h2 { margin: 0 0 10px; font-family: var(--font-display); font-size: 19px; color: var(--color-forest, #1B4332); }
+.ach-gate p { margin: 0 auto 18px; max-width: 480px; color: var(--color-muted, #556458); font-size: 13.5px; line-height: 1.65; }
+.ach-gate-bar { width: 240px; height: 6px; border-radius: 99px; background: rgba(0,0,0,.08); margin: 0 auto 20px; overflow: hidden; }
+.ach-gate-bar i { display: block; height: 100%; background: linear-gradient(90deg, #10B981, #A8D94A); border-radius: inherit; transition: width .5s ease; }
+
+/* Unlocked state */
+.ach-toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.ach-count { font-size: 12.5px; font-weight: 700; color: var(--color-muted-2, #6c7a70); }
+
+.ach-empty {
+  text-align: center; padding: 48px 26px; border-radius: 18px;
+  border: 1px dashed var(--color-bd, #e7e0d6); background: var(--color-ivory-2, #fbf7f2);
+  color: var(--color-muted-2, #8a958b);
+}
+.ach-empty svg { width: 26px; height: 26px; margin-bottom: 10px; }
+.ach-empty p { margin: 0; font-size: 13.5px; }
+
+.ach-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 720px) { .ach-grid { grid-template-columns: 1fr; } }
+
+.ach-card {
+  padding: 20px; border-radius: 16px; border: 1px solid var(--color-bd, #e7e0d6);
+  background: #fff;
+}
+.ach-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.ach-card h3 { margin: 0; font-family: var(--font-display); font-size: 18px; color: var(--color-forest, #1B4332); }
+.ach-card p { font-size: 13px; line-height: 1.55; color: var(--color-muted-2, #6c7a70); margin: 8px 0 0; }
+.ach-card-acts { display: flex; gap: 4px; flex-shrink: 0; }
+.ach-ic-btn {
+  width: 26px; height: 26px; border-radius: 8px; border: none; background: transparent;
+  display: grid; place-items: center; color: var(--color-muted-2, #8a958b); cursor: pointer;
+}
+.ach-ic-btn:hover { background: rgba(0,0,0,.05); color: var(--color-forest, #1B4332); }
+.ach-ic-btn svg { width: 14px; height: 14px; }
+.ach-tag {
+  display: inline-flex; margin-top: 14px; padding: 5px 10px; border-radius: 999px;
+  background: rgba(16,185,129,.1); color: #0b6a52; font-size: 11px; font-weight: 700;
+}
+
+/* Shared with VisionPage's editor modal (.vt-field etc.) -- just the select,
+   which vision.css doesn't style since Vision has no dropdown fields. */
+.vt-field select {
+  font: inherit; font-weight: 500; font-size: 13.5px; padding: 10px 12px;
+  border-radius: 10px; border: 1px solid var(--color-bd, #e7e0d6); background: #fff; color: var(--color-ink, #16241c);
+}

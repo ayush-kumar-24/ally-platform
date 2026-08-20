@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import {
   createConversation,
@@ -22,17 +23,10 @@ import Markdown from '../components/Markdown';
 import { usePlan as usePlanGateEntitlements } from '../components/PlanGate';
 import { explainLimit, getMyPlan, can, FEATURES } from '../services/plans';
 
-const PROMPT_CARDS = [
-  { t: 'Help me increase revenue', s: 'Find the highest-leverage growth lever' },
-  { t: 'Review my pricing', s: 'Pressure-test packaging & price points' },
-  { t: 'Improve my sales strategy', s: 'Tighten the funnel and close rate' },
-  { t: 'Validate my startup idea', s: 'Stress-test demand and assumptions' },
-  { t: 'Help me hire my first employee', s: 'Scope the role and where to look' },
-  { t: 'Create a GTM strategy', s: 'A go-to-market plan for launch' },
-];
-
 export default function AllyChat() {
   const { user, showToast } = useApp();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [histOpen, setHistOpen] = useState(false);
   const [activeConv, setActiveConv] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -74,6 +68,24 @@ export default function AllyChat() {
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages, typing]);
+
+  // A page like Your Vision can hand off here with a message drafted from
+  // the founder's own words (see VisionPage's talkAboutTerritory). It only
+  // ever lands in the composer for them to review or edit -- never sent on
+  // their behalf. Consumed once via `replace`, so refreshing this page (or
+  // coming back to it later) doesn't keep re-dropping the same text in.
+  useEffect(() => {
+    const prefill = location.state?.prefill;
+    if (!prefill) return;
+    setInput(prefill);
+    navigate(location.pathname, { replace: true, state: {} });
+    // Give the textarea a beat to mount/receive the value before resizing
+    // and focusing it -- sizeTa() reads scrollHeight off the live element.
+    requestAnimationFrame(() => {
+      sizeTa();
+      taRef.current?.focus();
+    });
+  }, [location.state, location.pathname, navigate]);
 
   // Conversations are server-owned, so history survives a reload.
   useEffect(() => {
@@ -429,19 +441,9 @@ export default function AllyChat() {
             </div>
           ) : isEmpty ? (
             <div className="ac-empty">
-              <div className="ac-av">✦</div>
+              <div className="ac-av"><img src="/ally-logo-mark.png" alt="" /></div>
               <h2>{greetingNow()}, <em>{firstName}</em>. How can I help?</h2>
               <p className="ac-lede">Ask me anything — marketing, sales, hiring, fundraising, pricing, growth or strategy. I'm your always-on thinking partner, no assessment required.</p>
-              <div className="ac-cards">
-                {PROMPT_CARDS.map((c, i) => (
-                  /* Was a div with onClick: not focusable, not keyboard
-                     operable, and announced as nothing to a screen reader. */
-                  <button key={i} type="button" className="ac-pcard" onClick={() => send(c.t)}>
-                    <div className="pc-t">{c.t}</div>
-                    <div className="pc-s">{c.s}</div>
-                  </button>
-                ))}
-              </div>
             </div>
           ) : (
             <>
@@ -451,7 +453,9 @@ export default function AllyChat() {
                       a founder whose name hadn't loaded was shown someone
                       else's monogram. */}
                   <div className={`m-av ${m.role}`} aria-hidden="true">
-                    {m.role === 'ally' ? '✦' : (user?.initials || firstName || '?').charAt(0).toUpperCase()}
+                    {m.role === 'ally'
+                      ? <img src="/ally-logo-mark.png" alt="" />
+                      : (user?.initials || firstName || '?').charAt(0).toUpperCase()}
                   </div>
                   <div>
                     <div className="bubble">
@@ -480,7 +484,7 @@ export default function AllyChat() {
               ))}
               {typing && (
                 <div className="typing">
-                  <div className="m-av ally">✦</div>
+                  <div className="m-av ally"><img src="/ally-logo-mark.png" alt="" /></div>
                   <div className="bubble">
                     <div className="td">
                       <span /><span /><span />
