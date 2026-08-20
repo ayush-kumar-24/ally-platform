@@ -25,6 +25,7 @@ import {
   IconAward,
   IconList,
   IconLightbulb,
+  IconBook,
 } from '../utils/icons';
 
 function IconPulse(props) {
@@ -49,6 +50,7 @@ const ROUTE_EYE = {
   '/app/achievements': 'Milestones',
   '/app/goals': 'Outcomes',
   '/app/recommendations': 'What to do next',
+  '/app/frameworks': 'Thinking toolkit',
   '/app/report': 'Executive report',
   '/app/next-steps': 'Momentum',
   '/app/plan': 'Today',
@@ -98,6 +100,9 @@ const NAV_GROUPS = [
       /* Real diagnosis output, same as Founder DNA/Business DNA/Report above --
          gated the same way, not founder-authored like Vision/Goals. */
       { path: '/app/recommendations', tip: 'Recommendations', icon: IconLightbulb, label: 'Recommendations', badge: null, needsReport: true },
+      /* Static reference content (see data/frameworks.js) -- no diagnosis
+         needed, available from the start like Goals. */
+      { path: '/app/frameworks', tip: 'Frameworks', icon: IconBook, label: 'Frameworks', badge: null },
       { path: '/app/report', tip: 'Report', icon: IconDocument, label: 'Report', badge: null, needsReport: true },
       { path: '/app/next-steps', tip: 'Next steps', icon: IconArrowRight, label: 'Next steps', badge: null, needsReport: true },
       /* badge was hardcoded to 3 — every founder saw "3 tasks due" forever,

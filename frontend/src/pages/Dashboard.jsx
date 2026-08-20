@@ -110,7 +110,7 @@ const COMPASS_TILES = [
     desc: "See Ally's prioritised guidance after it considers your diagnosis, DNA, vision, energy, business and goals together." },
   { title: 'Plan Your Day', path: '/app/plan', mini: "Focus today's execution",
     desc: 'Convert current goals and recommendations into a focused daily plan with clear priorities and time blocks.' },
-  { title: 'Frameworks', path: null, mini: 'Think through complexity',
+  { title: 'Frameworks', path: '/app/frameworks', mini: 'Think through complexity',
     desc: 'Use your personal thinking toolkit to structure difficult decisions, assumptions, priorities and experiments.' },
   { title: 'Reports', path: '/app/report', mini: 'Keep a record of insights',
     desc: 'Review complete diagnosis reports, supporting evidence, confidence levels and sequenced action roadmaps.' },
