@@ -50,6 +50,8 @@ from app.admin.repository import InMemoryAdminRepository, InMemoryAnnouncementRe
 from app.admin.service import AdminService
 from app.planning.db_repository import SqlAlchemyPlanningRepository
 from app.planning.service import PlanningService
+from app.founder_goals.db_repository import SqlAlchemyFounderGoalRepository
+from app.founder_goals.service import FounderGoalService
 from app.consents.db_repository import SqlAlchemyConsentRepository
 from app.consents.service import ConsentService
 from app.privacy.db_repository import SqlAlchemyPrivacyRepository
@@ -294,6 +296,16 @@ class Container:
         """Request-scoped PlanningService over the SQLAlchemy repository. Tests
         override the endpoint dependency with an in-memory-backed service."""
         return PlanningService(SqlAlchemyPlanningRepository(db))
+
+    # --- Founder Goals accessor (DB-backed, per-request) -------------------
+
+    def founder_goal_service(self, db: Session) -> FounderGoalService:
+        """Request-scoped FounderGoalService over the SQLAlchemy repository.
+        Tests override the endpoint dependency with an in-memory-backed
+        service. Deliberately separate from planning_service() above -- see
+        app/founder_goals/models.py for why the two "Goal" concepts don't
+        share a repository."""
+        return FounderGoalService(SqlAlchemyFounderGoalRepository(db))
 
     # --- Consents accessor (DB-backed, per-request) -----------------------
 

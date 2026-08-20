@@ -1,19 +1,20 @@
 import { useEffect, useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { loadGoals, saveGoals } from '../services/goals';
+import { createGoal, deleteGoal as deleteGoalApi, listGoals, updateGoal } from '../services/goals';
+import { DnaError, DnaLoading } from '../components/DnaState';
 import Modal from '../components/Modal';
 import { IconCheck, IconEdit, IconPlus, IconTrash } from '../utils/icons';
 
-function GoalCard({ goal, onEdit, onDelete }) {
+function GoalCard({ goal, onEdit, onDelete, disabled }) {
   return (
     <article className="gl-card">
       <div className="gl-card-top">
         <h3>{goal.title}</h3>
         <div className="gl-card-acts">
-          <button type="button" className="gl-ic-btn" onClick={() => onEdit(goal)} aria-label="Edit">
+          <button type="button" className="gl-ic-btn" onClick={() => onEdit(goal)} disabled={disabled} aria-label="Edit">
             <IconEdit />
           </button>
-          <button type="button" className="gl-ic-btn" onClick={() => onDelete(goal.id)} aria-label="Delete">
+          <button type="button" className="gl-ic-btn" onClick={() => onDelete(goal.id)} disabled={disabled} aria-label="Delete">
             <IconTrash />
           </button>
         </div>
@@ -48,7 +49,7 @@ function GoalEditor({ goal, onSave, onClose }) {
             disabled={!title.trim()}
             onClick={() => {
               onSave({
-                id: goal?.id || crypto.randomUUID(),
+                id: goal?.id ?? null,
                 title: title.trim(),
                 subtitle: subtitle.trim(),
               });
@@ -64,26 +65,55 @@ function GoalEditor({ goal, onSave, onClose }) {
 }
 
 export default function GoalsPage() {
-  const { user } = useApp();
-  const [goals, setGoals] = useState([]);
+  const { user, showToast } = useApp();
+  const [state, setState] = useState({ status: 'loading' });
   const [editing, setEditing] = useState(null);
   const [showEditor, setShowEditor] = useState(false);
+  // Per-goal save/delete in flight, so a slow request can't be fired twice
+  // from a second click and the button can show it's working.
+  const [pending, setPending] = useState(false);
 
-  useEffect(() => {
-    setGoals(loadGoals(user?.founderId));
-  }, [user?.founderId]);
-
-  const persist = (next) => {
-    setGoals(next);
-    saveGoals(user?.founderId, next);
+  const load = () => {
+    setState({ status: 'loading' });
+    listGoals()
+      .then((goals) => setState({ status: 'ready', goals }))
+      .catch((error) => setState({ status: 'error', error }));
   };
 
-  const saveGoal = (value) => {
-    const exists = goals.some(g => g.id === value.id);
-    persist(exists ? goals.map(g => (g.id === value.id ? value : g)) : [value, ...goals]);
+  useEffect(load, [user?.founderId]);
+
+  const goals = state.status === 'ready' ? state.goals : [];
+
+  const saveGoal = async (value) => {
+    setPending(true);
+    try {
+      if (value.id) {
+        const updated = await updateGoal(value.id, { title: value.title, subtitle: value.subtitle });
+        setState((s) => ({ ...s, goals: s.goals.map((g) => (g.id === updated.id ? updated : g)) }));
+      } else {
+        const created = await createGoal({ title: value.title, subtitle: value.subtitle });
+        setState((s) => ({ ...s, goals: [created, ...s.goals] }));
+      }
+    } catch {
+      // The modal already closed optimistically -- tell them it didn't
+      // actually save rather than silently dropping the goal.
+      showToast("Couldn't save that goal. Try again.");
+    } finally {
+      setPending(false);
+    }
   };
 
-  const deleteGoal = (id) => persist(goals.filter(g => g.id !== id));
+  const deleteGoal = async (id) => {
+    setPending(true);
+    try {
+      await deleteGoalApi(id);
+      setState((s) => ({ ...s, goals: s.goals.filter((g) => g.id !== id) }));
+    } catch {
+      showToast("Couldn't delete that goal. Try again.");
+    } finally {
+      setPending(false);
+    }
+  };
 
   return (
     <div className="gl-page">
@@ -93,29 +123,37 @@ export default function GoalsPage() {
         <p>Longer-horizon founder, business and life goals live here. Today's tasks stay in Plan Your Day.</p>
       </section>
 
-      <div className="gl-toolbar">
-        <span className="gl-count">{goals.length ? `${goals.length} active` : 'No goals yet'}</span>
-        <button type="button" className="btn btn-em" onClick={() => { setEditing({}); setShowEditor(true); }}>
-          <IconPlus /> Add goal
-        </button>
-      </div>
+      {state.status === 'ready' && (
+        <div className="gl-toolbar">
+          <span className="gl-count">{goals.length ? `${goals.length} active` : 'No goals yet'}</span>
+          <button type="button" className="btn btn-em" onClick={() => { setEditing({}); setShowEditor(true); }}>
+            <IconPlus /> Add goal
+          </button>
+        </div>
+      )}
 
-      {goals.length === 0 ? (
-        <div className="gl-empty">
-          <IconCheck />
-          <p>Nothing set yet. Add the outcome you're actually moving toward right now.</p>
-        </div>
-      ) : (
-        <div className="gl-grid">
-          {goals.map((goal) => (
-            <GoalCard
-              key={goal.id}
-              goal={goal}
-              onEdit={(g) => { setEditing(g); setShowEditor(true); }}
-              onDelete={deleteGoal}
-            />
-          ))}
-        </div>
+      {state.status === 'loading' && <DnaLoading label="Loading your goals…" />}
+      {state.status === 'error' && <DnaError onRetry={load} />}
+
+      {state.status === 'ready' && (
+        goals.length === 0 ? (
+          <div className="gl-empty">
+            <IconCheck />
+            <p>Nothing set yet. Add the outcome you're actually moving toward right now.</p>
+          </div>
+        ) : (
+          <div className="gl-grid">
+            {goals.map((goal) => (
+              <GoalCard
+                key={goal.id}
+                goal={goal}
+                onEdit={(g) => { setEditing(g); setShowEditor(true); }}
+                onDelete={deleteGoal}
+                disabled={pending}
+              />
+            ))}
+          </div>
+        )
       )}
 
       {showEditor && (
