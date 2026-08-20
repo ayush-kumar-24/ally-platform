@@ -7,6 +7,7 @@ from app.api.v1.planning.router import router as planning_router
 from app.api.v1.founder_goals.router import router as founder_goals_router
 from app.api.v1.achievements.router import router as achievements_router
 from app.api.v1.vision.router import router as vision_router
+from app.api.v1.framework_usage.router import router as framework_usage_router
 from app.api.v1.auth.routes import router as auth_router
 from app.api.v1.consents.router import router as consents_router
 from app.api.v1.privacy.router import router as privacy_router
@@ -61,6 +62,7 @@ api_router.include_router(planning_router)
 api_router.include_router(founder_goals_router)
 api_router.include_router(achievements_router)
 api_router.include_router(vision_router)
+api_router.include_router(framework_usage_router)
 api_router.include_router(consents_router)
 api_router.include_router(privacy_router)
 api_router.include_router(voice_router)

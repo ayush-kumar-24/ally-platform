@@ -56,6 +56,8 @@ from app.achievements.db_repository import SqlAlchemyAchievementRepository
 from app.achievements.service import AchievementService
 from app.vision.db_repository import SqlAlchemyVisionRepository
 from app.vision.service import VisionService
+from app.framework_usage.db_repository import SqlAlchemyFrameworkUsageRepository
+from app.framework_usage.service import FrameworkUsageService
 from app.consents.db_repository import SqlAlchemyConsentRepository
 from app.consents.service import ConsentService
 from app.privacy.db_repository import SqlAlchemyPrivacyRepository
@@ -325,6 +327,14 @@ class Container:
         """Request-scoped VisionService over the SQLAlchemy repository. Tests
         override the endpoint dependency with an in-memory-backed service."""
         return VisionService(SqlAlchemyVisionRepository(db))
+
+    # --- Framework Usage accessor (DB-backed, per-request) ------------------
+
+    def framework_usage_service(self, db: Session) -> FrameworkUsageService:
+        """Request-scoped FrameworkUsageService over the SQLAlchemy
+        repository. Tests override the endpoint dependency with an
+        in-memory-backed service."""
+        return FrameworkUsageService(SqlAlchemyFrameworkUsageRepository(db))
 
     # --- Consents accessor (DB-backed, per-request) -----------------------
 

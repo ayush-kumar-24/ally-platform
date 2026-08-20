@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useApp } from '../context/AppContext';
 import { FRAMEWORKS } from '../data/frameworks';
 import { formatUsedDate, loadLastUsed, loadNotes } from '../services/frameworks';
+import { DnaError, DnaLoading } from '../components/DnaState';
 
 function FrameworkCard({ framework, lastUsedIso, note, onOpen }) {
   return (
@@ -32,14 +32,19 @@ function FrameworkCard({ framework, lastUsedIso, note, onOpen }) {
 
 export default function FrameworksPage() {
   const navigate = useNavigate();
-  const { user } = useApp();
-  const [lastUsed, setLastUsed] = useState({});
-  const [notes, setNotes] = useState({});
+  const [state, setState] = useState({ status: 'loading', lastUsed: {}, notes: {}, error: null });
 
-  useEffect(() => {
-    setLastUsed(loadLastUsed(user?.founderId));
-    setNotes(loadNotes(user?.founderId));
-  }, [user?.founderId]);
+  const load = () => {
+    setState((s) => ({ ...s, status: 'loading', error: null }));
+    Promise.all([loadLastUsed(), loadNotes()])
+      .then(([lastUsed, notes]) => setState({ status: 'ready', lastUsed, notes, error: null }))
+      .catch((err) => setState({ status: 'error', lastUsed: {}, notes: {}, error: err }));
+  };
+
+  useEffect(load, []);
+
+  if (state.status === 'loading') return <DnaLoading label="Loading your toolkit…" />;
+  if (state.status === 'error') return <DnaError onRetry={load} />;
 
   return (
     <div className="fw-page">
@@ -55,8 +60,8 @@ export default function FrameworksPage() {
           <FrameworkCard
             key={f.id}
             framework={f}
-            lastUsedIso={lastUsed[f.id]}
-            note={notes[f.id]}
+            lastUsedIso={state.lastUsed[f.id]}
+            note={state.notes[f.id]}
             onOpen={(id) => navigate(`/app/frameworks/${id}`)}
           />
         ))}

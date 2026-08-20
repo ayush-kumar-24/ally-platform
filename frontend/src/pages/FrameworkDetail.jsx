@@ -7,6 +7,7 @@ import {
   BusinessModelCanvas, Okrs, Ikigai, LeanStartup,
 } from '../components/FrameworkDiagrams';
 import { formatUsedDate, loadNotes, recordUsed, saveNote } from '../services/frameworks';
+import { DnaError, DnaLoading } from '../components/DnaState';
 import { IconArrowLeft, IconChat, IconEdit } from '../utils/icons';
 import NotFound from './NotFound';
 
@@ -25,33 +26,50 @@ const FRAMEWORK_DIAGRAMS = {
 export default function FrameworkDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { user } = useApp();
+  const { showToast } = useApp();
   const framework = getFramework(id);
 
+  const [status, setStatus] = useState('loading'); // 'loading' | 'ready' | 'error'
   const [lastUsedIso, setLastUsedIso] = useState(null);
   const [note, setNote] = useState('');
   const [editingNote, setEditingNote] = useState(false);
   const [draft, setDraft] = useState('');
+  const [savingNote, setSavingNote] = useState(false);
 
   // Opening this page IS "using" the framework -- the one honest signal
   // available without a real usage-tracking feature on the backend. Recorded
   // once per visit, not on every render.
-  useEffect(() => {
+  const load = () => {
     if (!getFramework(id)) return;
-    const founderId = user?.founderId;
-    const map = recordUsed(founderId, id, new Date().toISOString());
-    setLastUsedIso(map[id]);
-    setNote(loadNotes(founderId)[id] || '');
-  }, [id, user?.founderId]);
+    setStatus('loading');
+    Promise.all([recordUsed(id), loadNotes()])
+      .then(([usedIso, notes]) => {
+        setLastUsedIso(usedIso);
+        setNote(notes[id] || '');
+        setStatus('ready');
+      })
+      .catch(() => setStatus('error'));
+  };
+
+  useEffect(load, [id]);
 
   if (!framework) return <NotFound />;
+  if (status === 'loading') return <DnaLoading label="Opening this framework…" />;
+  if (status === 'error') return <DnaError onRetry={load} />;
 
   const Diagram = FRAMEWORK_DIAGRAMS[framework.id];
 
-  const commitNote = () => {
-    saveNote(user?.founderId, framework.id, draft);
-    setNote(draft.trim());
-    setEditingNote(false);
+  const commitNote = async () => {
+    setSavingNote(true);
+    try {
+      const saved = await saveNote(framework.id, draft);
+      setNote(saved);
+      setEditingNote(false);
+    } catch {
+      showToast("Couldn't save your note. Try again.");
+    } finally {
+      setSavingNote(false);
+    }
   };
 
   return (
@@ -110,8 +128,10 @@ export default function FrameworkDetail() {
               autoFocus
             />
             <div className="fwd-note-acts">
-              <button type="button" className="btn btn-ghost" onClick={() => setEditingNote(false)}>Cancel</button>
-              <button type="button" className="btn btn-em" onClick={commitNote}>Save</button>
+              <button type="button" className="btn btn-ghost" onClick={() => setEditingNote(false)} disabled={savingNote}>Cancel</button>
+              <button type="button" className="btn btn-em" onClick={commitNote} disabled={savingNote}>
+                {savingNote ? 'Saving…' : 'Save'}
+              </button>
             </div>
           </div>
         ) : note ? (
