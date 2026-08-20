@@ -105,6 +105,27 @@ class PrivacyService:
             at=now, due_by=scheduled)
         return new_state, action
 
+    def cancel_account_deletion(self, founder_id: int) -> tuple[PrivacyState, PrivacyAction]:
+        """Undo a scheduled erasure while it is still inside the grace window.
+
+        The 30-day window exists so an erasure request is recoverable, but until
+        now only an admin could recover it (admin panel cancel-deletion) -- a
+        founder who mis-clicked had no way back and, because may_process() gates
+        on deletion_pending, silently lost every AI feature for those 30 days.
+        A recovery window nobody can reach is not a recovery window.
+
+        Refuses once the sweep has run (NoDeletionToCancelError from the
+        repository): after deletion_executed_at is set there is nothing left to
+        restore, and pretending otherwise would be worse than refusing.
+        """
+        now = self._now()
+        state = self.repository.cancel_deletion(founder_id)
+        action = self.repository.log_request(
+            founder_id, request_type="withdraw_consent",
+            details="Account deletion cancelled by the founder",
+            at=now, due_by=None)
+        return state, action
+
     # --- Art 7(3): withdraw consent ---------------------------------------
 
     def withdraw_consent(self, founder_id: int) -> tuple[PrivacyState, PrivacyAction]:

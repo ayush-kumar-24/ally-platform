@@ -1,4 +1,5 @@
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
+import DeletionPendingGate from '../components/DeletionPendingGate';
 import { useApp } from '../context/AppContext';
 import { useState, useRef, useEffect } from 'react';
 import ProductTour from '../components/ProductTour';
@@ -401,6 +402,10 @@ export default function PlatformLayout() {
           </div>
         </div>
       </div>
+      {/* Mounted here, not per-page: a pending deletion blocks every AI
+          feature server-side, so the founder must meet it once on the way
+          in rather than as a silent 403 somewhere deep in the product. */}
+      <DeletionPendingGate />
       <ProductTour />
     </div>
   );

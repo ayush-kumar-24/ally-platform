@@ -32,6 +32,15 @@ export function deleteAccount() {
   return del('/privacy/account', { data: { confirm: true } });
 }
 
+/**
+ * Undo a scheduled erasure while it is still inside the 30-day grace window.
+ * Without this the window was unreachable: only an admin could cancel, so a
+ * founder who mis-clicked lost every AI feature until support intervened.
+ */
+export function cancelAccountDeletion() {
+  return post('/privacy/account/cancel-deletion', {});
+}
+
 /** GDPR Art 7(3) — revoke consent, pause processing, keep the account. */
 export function withdrawConsent() {
   return post('/privacy/withdraw', { confirm: true });

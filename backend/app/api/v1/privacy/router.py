@@ -72,6 +72,27 @@ def delete_account(
     )
 
 
+@router.post("/account/cancel-deletion", response_model=PrivacyActionResult,
+             summary="Cancel a scheduled account deletion (inside the grace window)")
+def cancel_account_deletion(
+    founder_id: int = Depends(get_current_founder_id),
+    service: PrivacyService = Depends(get_privacy_service),
+) -> PrivacyActionResult:
+    """Founder-initiated undo of their own erasure request.
+
+    Deliberately NOT behind a confirm flag, unlike DELETE /account: keeping an
+    account is the safe direction, and the founder has already confirmed intent
+    by answering the prompt the app shows them on the way in. The destructive
+    direction is the one that needs a gate, not the recovery.
+    """
+    state, action = service.cancel_account_deletion(founder_id)
+    return PrivacyActionResult(
+        state=PrivacyStateResponse.from_domain(state),
+        request=PrivacyActionResponse.from_domain(action),
+        message="Your account deletion has been cancelled. Everything is exactly where you left it.",
+    )
+
+
 @router.post("/withdraw", response_model=PrivacyActionResult,
              summary="Withdraw consent and pause AI processing")
 def withdraw_consent(

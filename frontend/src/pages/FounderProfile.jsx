@@ -292,7 +292,15 @@ export default function FounderProfile() {
           setPrivacyState(res.state);
           setPrivacyRequests(prev => [res.request, ...prev]);
           showToast(res.message);
-          break;
+          // Signed out on the way out, deliberately. Every AI feature is gated
+          // on the pending deletion server-side, so staying logged in left the
+          // founder inside an app that had quietly stopped working. Signing out
+          // makes the request feel final; DeletionPendingGate is what greets
+          // them if they come back within the 30-day window and offers the undo.
+          setProgress('Signing you out…');
+          await logout();
+          window.location.href = '/guided/login';
+          return;
         }
         default: {
           // Rights that need a human to action — queued for review.
