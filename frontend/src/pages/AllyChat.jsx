@@ -420,7 +420,7 @@ export default function AllyChat() {
             </div>
           ) : isEmpty ? (
             <div className="ac-empty">
-              <div className="ac-av">✦</div>
+              <div className="ac-av"><img src="/ally-logo.png" alt="" /></div>
               <h2>{greetingNow()}, <em>{firstName}</em>. How can I help?</h2>
               <p className="ac-lede">Ask me anything — marketing, sales, hiring, fundraising, pricing, growth or strategy. I'm your always-on thinking partner, no assessment required.</p>
             </div>
@@ -432,7 +432,9 @@ export default function AllyChat() {
                       a founder whose name hadn't loaded was shown someone
                       else's monogram. */}
                   <div className={`m-av ${m.role}`} aria-hidden="true">
-                    {m.role === 'ally' ? '✦' : (user?.initials || firstName || '?').charAt(0).toUpperCase()}
+                    {m.role === 'ally'
+                      ? <img src="/ally-logo.png" alt="" />
+                      : (user?.initials || firstName || '?').charAt(0).toUpperCase()}
                   </div>
                   <div>
                     <div className="bubble">
@@ -461,7 +463,7 @@ export default function AllyChat() {
               ))}
               {typing && (
                 <div className="typing">
-                  <div className="m-av ally">✦</div>
+                  <div className="m-av ally"><img src="/ally-logo.png" alt="" /></div>
                   <div className="bubble">
                     <div className="td">
                       <span /><span /><span />
