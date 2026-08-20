@@ -306,6 +306,9 @@ class DiagnosisResult:
     distress_mode: bool
     distress_signal_count: int
     unscored_answer_ids: tuple[int, ...] = ()
+    #: The answers that produced distress_signal_count, so the decision can be
+    #: checked against what is actually stored on those rows.
+    distress_signal_answer_ids: tuple[int, ...] = ()
 
 
 # ---------------------------------------------------------------------------

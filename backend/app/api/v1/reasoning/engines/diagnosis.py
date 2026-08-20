@@ -52,9 +52,10 @@ class DeterministicDiagnosisEngine:
         follow_ups = self.category_engine.follow_up_triggers(
             classifications, questions, context
         )
-        distress_count = self.category_engine.distress_signal_count(
+        distress_signal_ids = self.category_engine.distress_signal_answers(
             classifications, questions, context
         )
+        distress_count = len(distress_signal_ids)
         distress_mode = distress_count >= context.config.distress.distress_questions_trigger
 
         # 2. Stage detection.
@@ -74,4 +75,5 @@ class DeterministicDiagnosisEngine:
             distress_mode=distress_mode,
             distress_signal_count=distress_count,
             unscored_answer_ids=unscored,
+            distress_signal_answer_ids=tuple(distress_signal_ids),
         )

@@ -361,9 +361,9 @@ class Founders(Base):
     # yet executed (including "still inside the grace window").
     deletion_executed_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
     founder_motivation: Mapped[Optional[str]] = mapped_column(Text)
-    working_relationship: Mapped[Optional[str]] = mapped_column(String(30))
+    working_relationship: Mapped[Optional[str]] = mapped_column(String(100))
     support_preferences: Mapped[Optional[dict]] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
-    experience_level: Mapped[Optional[str]] = mapped_column(String(20))
+    experience_level: Mapped[Optional[str]] = mapped_column(String(100))
     emotional_state: Mapped[Optional[dict]] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
     adaptive_reflection: Mapped[Optional[str]] = mapped_column(Text)
     adaptive_question_id: Mapped[Optional[str]] = mapped_column(String(20))
@@ -396,7 +396,7 @@ class Founders(Base):
         the side that owns the table.
         """
         return self.stage.stage_name if self.stage is not None else None
-    decision_making_style: Mapped[Optional[str]] = mapped_column(String(30))
+    decision_making_style: Mapped[Optional[str]] = mapped_column(String(100))
     building_summary: Mapped[Optional[str]] = mapped_column(Text)
     problem_statement: Mapped[Optional[str]] = mapped_column(Text)
     # Multi-select: onboarding asks "who are you building this for?" as chips.
@@ -421,10 +421,10 @@ class Founders(Base):
     invisible_gaps: Mapped[Optional[dict]] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
     goal_90_day: Mapped[Optional[str]] = mapped_column(Text)
     vision_1_year: Mapped[Optional[str]] = mapped_column(Text)
-    team_size: Mapped[Optional[str]] = mapped_column(String(20))
-    current_revenue: Mapped[Optional[str]] = mapped_column(String(30))
-    business_model: Mapped[Optional[str]] = mapped_column(String(30))
-    website: Mapped[Optional[str]] = mapped_column(String(300))
+    team_size: Mapped[Optional[str]] = mapped_column(String(50))
+    current_revenue: Mapped[Optional[str]] = mapped_column(String(50))
+    business_model: Mapped[Optional[str]] = mapped_column(String(100))
+    website: Mapped[Optional[str]] = mapped_column(String(500))
     linkedin_url: Mapped[Optional[str]] = mapped_column(String(300))
     avatar_url: Mapped[Optional[str]] = mapped_column(String(500))
     # Non-null = an S3 object under this key (see avatar_object_key() in
@@ -1419,6 +1419,11 @@ class Sessions(Base):
     completed_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
     overall_confidence_score: Mapped[Optional[decimal.Decimal]] = mapped_column(Numeric(5, 2), server_default=text('0'), comment='Outer-layer rolled-up confidence (0-100), derived from inner-layer per-question scoring (answers.score) and the 4-factor weighted root cause ranking. Drives routing_state.')
     routing_state: Mapped[Optional[str]] = mapped_column(String(20), server_default=text("'continue'::character varying"), comment='continue (<60%) = keep asking questions. validate (60-80%) = present hypothesis to founder for confirmation. generate_report (>80%) = sufficient confidence to produce the Founder Clarity Report.')
+    #: The question this session has already been re-asked once, when an
+    #: answer did not address it. Bounds the diagnosis answer gate to a
+    #: single nudge per question: the judgement is a model's, so it can be
+    #: wrong, and a wrong one must never leave a founder unable to continue.
+    reprompted_question_id: Mapped[Optional[int]] = mapped_column(Integer)
     reviewed_by: Mapped[Optional[str]] = mapped_column(String(100))
     reviewed_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
     training_notes: Mapped[Optional[str]] = mapped_column(Text)
@@ -1551,6 +1556,14 @@ class FounderReports(Base):
     # Full ReportNarrative.as_dict() output, cached on first build. Lazily
     # populated -- see _build_narrative in app/api/v1/reports/routes.py.
     narrative_snapshot: Mapped[Optional[dict]] = mapped_column(JSONB)
+    #: Where this report's rendered PDF lives in object storage, once one has
+    #: been made. Null means it has never been rendered -- see
+    #: app/api/v1/reports/pdf_delivery.py.
+    pdf_storage_key: Mapped[Optional[str]] = mapped_column(Text)
+    #: Set when a download could not be served because the renderer was down.
+    #: The backfill sweep reads this, so the only PDFs rendered off the request
+    #: path are ones a founder actually asked for.
+    pdf_requested_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
 
     founder: Mapped['Founders'] = relationship('Founders', back_populates='founder_reports')
     session: Mapped['Sessions'] = relationship('Sessions', back_populates='founder_reports')

@@ -81,6 +81,39 @@ class DiagnosisPersistenceError(AppError):
         super().__init__(message, status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+#: What Ally says when an answer did not address the question that was asked.
+#:
+#: Deliberately blames the miss, not the founder, and does not quote the answer
+#: back at them. One fixed line rather than a generated one: this fires on the
+#: same request that already spent an LLM call, and a second call to phrase an
+#: apology is not worth the wait.
+_REPROMPT = (
+    "That one got away from the question I asked — I think you answered a "
+    "different one. Take another run at this one; a specific example is worth "
+    "more than a tidy answer."
+)
+
+
+def should_discard_as_unresponsive(
+    insight, *, created_here: bool, already_reprompted: bool
+) -> bool:
+    """Whether to discard this answer and re-ask the question.
+
+    A pure predicate rather than an inline condition because it encodes a safety
+    property, and safety properties deserve a test that does not need a database:
+
+      * fails OPEN -- no insight (no advisor, failed call, unparseable reply) or
+        `responsive` True leaves the answer standing;
+      * only ever discards an answer THIS request inserted, never one recovered
+        by the resume/race paths, which belongs to a call that already completed;
+      * discards at most ONCE per question. The verdict is a model's and can be
+        wrong, and a wrong one must never leave a founder unable to continue.
+    """
+    if insight is None or insight.responsive:
+        return False
+    return created_here and not already_reprompted
+
+
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -239,11 +272,16 @@ class DiagnosisService:
         founder: Founder,
         question_id: int,
         answer_text: str,
-    ) -> tuple[DiagnosisSession, Question | None]:
+    ) -> tuple[DiagnosisSession, Question | None, str | None]:
         """Store an answer, advance progress, and select the next question.
 
-        Returns (session, next_question). `next_question` is None once the bank
-        is exhausted, at which point the session is marked completed.
+        Returns (session, next_question, reprompt). `next_question` is None once
+        the bank is exhausted, at which point the session is marked completed.
+
+        `reprompt` is non-None when the answer did not answer the question that
+        was asked: nothing was kept, progress did not move, `next_question` is
+        the SAME question, and the string is what Ally says back. See the
+        responsiveness block below for why that has to undo a commit.
 
         Adaptive (Hybrid): when an advisor is wired, the LLM reads the answer,
         scores it (persisted on the answer), and re-ranks the deterministic
@@ -280,6 +318,7 @@ class DiagnosisService:
         if question is None:
             raise QuestionMismatchError(f"Question {question_id} does not exist.")
 
+        created_here = False
         answer = self.repository.get_answer(session.session_id, question_id)
         if answer is not None:
             # Not a duplicate submission -- a genuine one would target a
@@ -301,6 +340,11 @@ class DiagnosisService:
                 },
             )
         else:
+            # Tracked because the responsiveness check below may need to undo this
+            # insert, and it must only ever undo an answer IT created -- never one
+            # recovered by the resume/race paths above, which belongs to a call
+            # that already completed.
+            created_here = True
             answer = Answer(
                 session_id=session.session_id,
                 founder_id=founder.founder_id,
@@ -359,7 +403,79 @@ class DiagnosisService:
         # The answer is safely committed from here on. Everything below is the
         # slow part (two LLM calls) and touches only session-progress fields,
         # which the recovery path above can always redo from scratch.
-        next_question = await self._choose_next_question(session, founder, question, answer)
+        next_question, insight = await self._choose_next_question(
+            session, founder, question, answer
+        )
+
+        # --- responsiveness -------------------------------------------------
+        # The answer is already committed by this point, and deliberately so
+        # (see the docstring: the two LLM calls below used to hold a transaction
+        # open long enough for Supabase's pooler to drop the connection). So a
+        # "this did not answer the question" verdict cannot simply decline to
+        # save -- it has to delete the row it just wrote. That is safe precisely
+        # because `created_here` narrows it to this call's own insert.
+        #
+        # Why gate at all, when the founder can write whatever they like: a
+        # non-answer is scored like an answer, and that score is load-bearing.
+        # Live-observed on 2026-08-19 -- a scripted answer about time allocation
+        # landed on "Think of the last time you faced real uncertainty outside of
+        # work", correctly scored Red for having no evidence in it, and two such
+        # Reds on distress-tagged questions flipped the whole report into the
+        # distress variant, opening it with "what you are carrying right now
+        # matters more than any diagnosis". The measurement was of nothing.
+        #
+        # Fails open in every direction: no advisor, a failed call, an
+        # unparseable response or a model that does not know the field all leave
+        # `responsive` True and the answer stands.
+        # ...but only ONCE per question. The verdict is a model's and can be
+        # wrong, and a wrong one must never leave a founder unable to continue:
+        # without this, the same question is discarded and re-asked indefinitely
+        # and the diagnosis dead-ends. Live-reproduced before this existed -- one
+        # question rejected three times running, the run stalled at 15 of 30 with
+        # no report. Second attempt is accepted and scored like any other answer.
+        if should_discard_as_unresponsive(
+            insight,
+            created_here=created_here,
+            already_reprompted=session.reprompted_question_id == question_id,
+        ):
+            logger.info(
+                "Answer did not address the question; discarding and re-asking",
+                extra={
+                    "founder_id": founder.founder_id,
+                    "session_id": session.session_id,
+                    "question_id": question_id,
+                },
+            )
+            try:
+                session.reprompted_question_id = question_id
+                self.db.delete(answer)
+                self.db.commit()
+            except SQLAlchemyError as exc:
+                # Keeping a non-answer is worse than failing the request, but not
+                # much -- it is exactly today's behaviour. Let it stand rather
+                # than 500 at a founder who did nothing wrong.
+                self.db.rollback()
+                logger.warning(
+                    "Could not discard the unresponsive answer; keeping it",
+                    extra={"founder_id": founder.founder_id},
+                    exc_info=exc,
+                )
+                return session, question, None
+            return session, question, _REPROMPT
+
+        # The answer is being kept, so it gets the score the advisor produced --
+        # including when the one-reprompt bound accepted it over a second
+        # unresponsive verdict. Responsiveness and quality are separate axes and
+        # the model reported both; dropping the score because of the other field
+        # leaves the row unscored, and an unscored answer is not neutral. With
+        # ANSWER_CLASSIFIER=llm it is re-scored from scratch at reasoning time,
+        # which is how seven answers in one live session came back Red, two of
+        # them on distress-tagged questions, and tripped
+        # DISTRESS_QUESTIONS_TRIGGER -- so a founder whose language detector
+        # reported "Open and Engaged" was handed a distress report telling him
+        # burnout and isolation appeared to be active blockers.
+        if insight is not None:
+            self._apply_insight(answer, insight)
 
         try:
             # Derived from the actual row count, not incremented -- a retry
@@ -379,6 +495,10 @@ class DiagnosisService:
             # previous answer's evidence and always be one question late.
             await incremental_confidence.recompute(self.db, session, founder)
 
+            # Cleared on every accepted answer: the marker means "this exact
+            # question is on its second attempt" and must not survive the move to
+            # the next one.
+            session.reprompted_question_id = None
             self._attach_question(session, next_question)
             self.db.commit()
         except IntegrityError as exc:
@@ -409,24 +529,27 @@ class DiagnosisService:
         # response, and a client trusting the question over the status would
         # ask it and get a 409.
         if session.status != SessionStatus.IN_PROGRESS.value:
-            return session, None
-        return session, next_question
+            return session, None, None
+        return session, next_question, None
 
     async def _choose_next_question(
         self, session: DiagnosisSession, founder: Founder, answered: Question, answer: Answer
-    ) -> Question | None:
+    ) -> tuple[Question | None, AnswerInsight | None]:
         """Deterministic pick, optionally overridden by the LLM advisor.
 
         Never raises: an advisor failure or an out-of-shortlist recommendation
         falls back to the deterministic head, so the assessment always advances.
+
+        Returns the insight alongside the pick so the caller can act on its
+        responsiveness verdict; None when no advisor ran or it failed.
         """
         candidates = self.engine.candidate_questions(session, founder)
         if not candidates:
-            return None  # bank exhausted -> completion
+            return None, None  # bank exhausted -> completion
 
         ordered = self.engine.order_candidates(candidates, session)
         if self.advisor is None:
-            return ordered[0]
+            return ordered[0], None
 
         shortlist = ordered[: settings.ADAPTIVE_SHORTLIST_SIZE]
         history = self.repository.recent_qa(session.session_id, limit=5)
@@ -445,9 +568,12 @@ class DiagnosisService:
                 exc_info=exc,
             )
 
-        if insight is not None:
-            self._apply_insight(answer, insight)
-        return resolve_next(ordered, shortlist, insight)
+        # Scoring is the CALLER's decision, not this method's: an answer is
+        # scored if and only if it is kept, and only submit_answer knows that.
+        # This used to score only `responsive` answers, which silently created a
+        # third state -- kept but unscored -- for every answer accepted by the
+        # one-reprompt bound. See submit_answer for what that cost.
+        return resolve_next(ordered, shortlist, insight), insight
 
     def _apply_insight(self, answer: Answer, insight: AnswerInsight) -> None:
         """Persist the LLM's Green/Amber/Red read on the answer, so the reasoning

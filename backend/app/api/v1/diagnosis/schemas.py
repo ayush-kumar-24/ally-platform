@@ -124,6 +124,16 @@ class SubmitAnswerResponse(BaseModel):
         "'completed'.",
     )
     is_complete: bool
+    #: False when the answer did not address the question that was asked. Nothing
+    #: was kept, the session did not advance, and `question` is the SAME question
+    #: re-asked. Mirrors the Founder DNA phase's contract exactly.
+    #:
+    #: 200 rather than a 4xx on purpose: the client's error path says "that
+    #: didn't save", which is both wrong (nothing was meant to save) and
+    #: alarming. This is Ally answering, not the request failing.
+    accepted: bool = True
+    #: Founder-facing copy for a rejected turn. Null when accepted.
+    reprompt: str | None = None
 
     @computed_field
     @property

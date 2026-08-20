@@ -32,8 +32,24 @@ from app.services.llm import (
 )
 
 _VALID_LABELS = {"green", "amber", "red"}
-# answers.score is a 0/1/2 CHECK; score_label is the authoritative band. Higher = better.
-_LABEL_TO_SCORE = {"green": 2, "amber": 1, "red": 0}
+#: answers.score is a 0/1/2 CHECK carrying RISK, not health: HIGHER IS WORSE.
+#:
+#: This is not a local convention -- it is the scoring schema, stored in
+#: `scoring_rules` and sourced from the "Question-Level Scoring Schema"
+#: document: QUESTION_SCORE_GREEN=0 (Low Risk), QUESTION_SCORE_AMBER=1
+#: (Moderate Risk), QUESTION_SCORE_RED=2 (High Risk). Every reader of
+#: answers.score assumes it -- reasoning/engines/diagnostic.py bands answers by
+#: `score >= bands.red`, symptom_detection.py counts reds by the same band, and
+#: business_health.py computes `risk_ratio = sum(scores) / (n * 2)`.
+#:
+#: This map was inverted (green:2 … red:0), which silently flipped every
+#: downstream risk calculation. Verified end to end on 2026-08-19: a founder
+#: whose 30 answers scored 25 red + 5 amber summed to 5 instead of 55, giving
+#: risk_ratio 0.083 and a Business Health of 92/100 -- so a pre-revenue founder
+#: who had never spoken to a customer was told all six pillars were "Strong".
+#: business_health.py's own docstring names the failure exactly: "an
+#: exactly-backwards score that still looks plausible".
+_LABEL_TO_SCORE = {"green": 0, "amber": 1, "red": 2}
 
 
 @dataclass(frozen=True)
@@ -48,6 +64,14 @@ class AnswerInsight:
     confidence: float
     next_question_id: int | None
     rationale: str
+    #: Did the answer actually answer the question that was asked?
+    #:
+    #: Defaults True and is only ever set False by an explicit verdict, because
+    #: every failure here must fail OPEN: an unparseable response, an older model
+    #: that does not know the field, a timeout -- none of those are evidence that
+    #: a founder wrote something irrelevant, and refusing a real answer is far
+    #: worse than accepting a poor one.
+    responsive: bool = True
 
     @property
     def score(self) -> int | None:
@@ -127,9 +151,18 @@ class LLMNextQuestionAdvisor(NextQuestionAdvisor):
             "the one that will most improve the diagnosis given what they just said "
             "(e.g. probe deeper on a weak/avoidant answer, move on after a strong one). "
             "You MUST pick next_question_id from the candidate ids listed; never invent "
-            "one.\nRespond with a single JSON object and nothing else: "
+            "one.\n"
+            "Also judge whether the answer is RESPONSIVE: whether it is an attempt "
+            "to answer THIS question at all, as opposed to text about a different "
+            "topic, the question pasted back, or filler. Judge TOPIC ONLY, never "
+            "quality -- a short answer, a vague answer, an uncomfortable admission "
+            "and an explicit \"I don't know\" are all responsive, and belong in "
+            "score_label rather than here. Set responsive=false ONLY when the "
+            "answer does not engage with what was asked. When in doubt, true.\n"
+            "Respond with a single JSON object and nothing else: "
             '{"score_label":"green|amber|red","confidence":0.0-1.0,'
-            '"next_question_id":<candidate id>,"rationale":"one sentence"}'
+            '"next_question_id":<candidate id>,"rationale":"one sentence",'
+            '"responsive":true|false}'
         )
         user = (
             f"Recent Q&A:\n{hist}\n\n"
@@ -161,8 +194,12 @@ class LLMNextQuestionAdvisor(NextQuestionAdvisor):
         nid = self._coerce_int(data.get("next_question_id"))
         confidence = self._coerce_confidence(data.get("confidence"))
         rationale = str(data.get("rationale") or "").strip()
+        # Absent or non-boolean -> True. Only an explicit `false` rejects an
+        # answer; see AnswerInsight.responsive for why this fails open.
+        responsive = data.get("responsive") is not False
         return AnswerInsight(
-            score_label=label, confidence=confidence, next_question_id=nid, rationale=rationale
+            score_label=label, confidence=confidence, next_question_id=nid,
+            rationale=rationale, responsive=responsive,
         )
 
     @staticmethod

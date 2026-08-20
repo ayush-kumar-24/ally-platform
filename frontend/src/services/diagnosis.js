@@ -75,6 +75,12 @@ export function normalise(payload, resumed) {
     status: payload?.session?.status ?? null,
     answered: payload?.session?.questions_answered_count ?? 0,
     complete: payload?.is_complete === true,
+    // POST /answer only. `false` means the answer did not address the question
+    // -- nothing was kept, `question` is the SAME question, and `reprompt` is
+    // what Ally says back. Defaults true so /start and /current, which never
+    // send it, are not read as rejections.
+    accepted: payload?.accepted !== false,
+    reprompt: payload?.reprompt ?? null,
     question: q && {
       id: q.question_id,
       text: q.question_text ?? q.text ?? '',

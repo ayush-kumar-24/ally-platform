@@ -49,6 +49,13 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     return JSONResponse(
         status_code=exc.status_code,
         content={"error": "HTTPException", "message": str(exc.detail), "request_id": request_id},
+        # HTTPException carries headers for responses where the header IS part of
+        # the answer -- Retry-After on a 503, WWW-Authenticate on a 401. Building
+        # a fresh JSONResponse without them dropped every one of those silently;
+        # the raiser had no way to tell, since the status and body still looked
+        # right. Currently only the report export sets any, which is how this was
+        # noticed.
+        headers=getattr(exc, "headers", None),
     )
 
 

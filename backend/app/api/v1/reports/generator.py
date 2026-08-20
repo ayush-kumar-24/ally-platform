@@ -34,6 +34,9 @@ _HEADINGS = {
     "problem_path": "Root cause",
     "areas_to_monitor": "Areas to monitor",
     "priority_actions": "Priority actions",
+    "supporting_evidence": "What this is based on",
+    "recommended_roadmap": "How to sequence this",
+    "why_steps": "Why these steps",
     "acknowledgement": "Before we begin",
     "support_recommendation": "A first step for you",
     "hedge": "A note on certainty",
@@ -46,11 +49,21 @@ _HEADINGS = {
 _ACTION_LINES_PER_SIDE = 3
 
 # Frontend sections with NO backend source -- surfaced empty, never fabricated.
-# "expected_impact" covers the two frontend boxes (Expected Business / Founder Impact);
-# it was previously missing here, so it went absent SILENTLY instead of being declared.
-UNPOPULATED_SECTIONS = (
-    "supporting_evidence", "recommended_roadmap", "why_steps", "expected_impact",
-)
+#
+# Only "expected_impact" is genuinely sourceless: it covers the two frontend
+# boxes (Expected Business / Founder Impact) and nothing in `interventions` or
+# the reasoning output estimates an impact, so anything written there would be
+# invented. It stays declared-and-absent rather than guessed.
+#
+# The other three were listed here for the same reason but did NOT need to be:
+# the material was already on the payload and simply never assembled into
+# sections. supporting_evidence is the founder's own symptom probes plus the
+# root causes' confirmation status; recommended_roadmap is the confirm-then-
+# solve ordering the engine already produces; why_steps is ActionItem.rationale,
+# which was carried all the way onto the payload and then dropped. A founder was
+# getting a root cause and three actions with no evidence trail, no sequencing,
+# and no statement of why those three.
+UNPOPULATED_SECTIONS = ("expected_impact",)
 
 
 @dataclass(frozen=True)
@@ -191,15 +204,27 @@ class ReportNarrativeGenerator:
                 body.insert(0, "psychological_note")
             return head + body
 
+        # supporting_evidence sits directly after the root cause it supports, and
+        # the roadmap/why pair directly after the actions they sequence and
+        # justify. Each is dropped by _slots_and_facts when its source is empty,
+        # so ordering them unconditionally here costs nothing.
+        #
+        # DISTRESS deliberately gets none of them (see above): that variant
+        # de-prioritises business content entirely, and handing a founder in
+        # distress a sequenced execution plan is the same mistake as handing
+        # them a sales CTA.
         if variant is ReportVariant.NO_CLEAR_DIAGNOSIS:
             order = ["founder_summary", "founder_dna", "business_dna",
-                     "areas_to_monitor", "priority_actions"]
+                     "areas_to_monitor", "priority_actions",
+                     "recommended_roadmap", "why_steps"]
         elif variant is ReportVariant.LOW_CONFIDENCE:
             order = ["hedge", "founder_summary", "founder_dna", "business_dna",
-                     "problem_path", "priority_actions"]
+                     "problem_path", "supporting_evidence", "priority_actions",
+                     "recommended_roadmap", "why_steps"]
         else:  # STANDARD
             order = ["founder_summary", "founder_dna", "business_dna",
-                     "problem_path", "priority_actions"]
+                     "problem_path", "supporting_evidence", "priority_actions",
+                     "recommended_roadmap", "why_steps"]
 
         # Hard rule 1: Founder Psychology leads the narrative when flagged --
         # place the psychological note before Business DNA + Root cause.
@@ -314,9 +339,29 @@ class ReportNarrativeGenerator:
                         "red_flag_triggered": pf.red_flag_triggered,
                         "red_flag_note": pf.red_flag_note} for pf in p.pillars]
             slots = {"overall_band": p.business_health_band, "pillars": pillars}
+            # `slots` is narrator input; `facts` is rendered to the founder. They
+            # must not be the same list. `red_flag_note` is the SCORING RULE for
+            # a pillar -- operator text, written for whoever tunes the engine --
+            # and shipping it in `facts` put this on a founder's Business DNA
+            # page verbatim:
+            #
+            #   "A score below 35% in this pillar triggers Section H
+            #    (Psychological State Note) in the Founder Clarity Report
+            #    regardless of all other scores."
+            #
+            # The frontend cannot save us here: services/reports.js flattens
+            # every fact key it does not explicitly know to be internal, so any
+            # new key added above is founder-visible by default. Strip it at the
+            # source instead, and leave `slots` intact -- the narrator may
+            # legitimately use the note as guidance for prose it then writes in
+            # the founder's own language.
+            founder_facing = [
+                {k: v for k, v in pillar.items() if k != "red_flag_note"}
+                for pillar in pillars
+            ]
             # Hard rule 2 in the facts: red-flag pillars are listed even when the
             # overall band is healthy.
-            facts = {"overall_band": p.business_health_band, "pillars": pillars,
+            facts = {"overall_band": p.business_health_band, "pillars": founder_facing,
                      "red_flag_pillars": [rp.name for rp in p.red_flag_pillars]}
             if p.business_health_band is None and not pillars:
                 return {}, {}
@@ -385,6 +430,59 @@ class ReportNarrativeGenerator:
             if not confirm and not solve:
                 return {}, {}
             return slots, facts
+
+        if key == "supporting_evidence":
+            # The evidence trail for the root cause, in the founder's OWN words.
+            # symptom_probes are (question, answer) pairs they gave before the
+            # diagnosis ran, so quoting them back is not an assertion about them
+            # -- it is showing the working. Confirmation status travels with each
+            # root cause so an unconfirmed one cannot read as settled.
+            probes = [{"question": q, "answer": a} for q, a in p.symptom_probes]
+            causes = [{"name": rc.name, "rank": rc.rank,
+                       "confirmation_status": rc.confirmation_status}
+                      for rc in p.top_root_causes if rc.name]
+            if not probes and not causes:
+                return {}, {}
+            slots = {"stated_symptom": p.stated_symptom, "probes": probes,
+                     "root_causes": causes}
+            facts = {"probes": probes, "root_causes": causes}
+            return slots, facts
+
+        if key == "recommended_roadmap":
+            # Sequencing, not new advice: confirm/isolate before solve is the
+            # order the engine already produces, and it is the one thing the
+            # action list did not say out loud. Uncapped, unlike priority_actions
+            # -- that section is the free tier's "3+3" summary; this one is the
+            # full ordered set, and truncating a roadmap to three lines would
+            # make the sequence it exists to show incomplete.
+            def _steps(items):
+                return [{"priority": a.priority, "next_actions": list(a.next_actions)}
+                        for a in items if a.next_actions]
+
+            confirm, solve = _steps(p.confirm_actions), _steps(p.solve_actions)
+            if not confirm and not solve:
+                return {}, {}
+            slots = {"confirm_steps": confirm, "solve_steps": solve}
+            return slots, {"confirm_steps": confirm, "solve_steps": solve}
+
+        if key == "why_steps":
+            # ActionItem.rationale reached the payload and was then dropped, so a
+            # founder got three actions and no reason for any of them.
+            #
+            # It goes in SLOTS ONLY, never facts. Some rationales are engine
+            # bookkeeping -- "Confirm recommendation addressing 1 ranked root
+            # cause(s); lead cause ranked #1 (unconfirmed) in section
+            # 'Competitive Awareness'. Supported by 10 semantic evidence
+            # item(s)." -- and facts render verbatim, which is exactly how
+            # red_flag_note ended up on a founder's screen. Passing it as a slot
+            # hands it to the narrator to say in the founder's language instead,
+            # under the same never-invent contract as every other section.
+            rationales = [a.rationale for a in (*p.confirm_actions, *p.solve_actions)
+                          if a.rationale]
+            if not rationales:
+                return {}, {}
+            causes = [rc.name for rc in p.top_root_causes if rc.name]
+            return {"rationales": rationales, "root_causes": causes}, {}
 
         if key == "acknowledgement":
             return {}, {"wellbeing_first": True}

@@ -15,10 +15,12 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_founder_record
 from app.api.v1.reports.generator import ReportNarrative, ReportNarrativeGenerator
-from app.api.v1.reports.gotenberg import GotenbergError, render_pdf
 from app.api.v1.reports.payload import build_report_payload
-from app.api.v1.reports.pdf import build_report_pdf
-from app.api.v1.reports.print_html import build_report_html
+from app.api.v1.reports.pdf_delivery import (
+    mark_pdf_requested,
+    render_and_store,
+    stored_pdf,
+)
 from app.api.v1.reports.repository import reports_repository
 from app.core.config import settings
 from app.api.v1.reports.schemas import (
@@ -176,21 +178,44 @@ async def recommendations(report_id: int, founder: Founder = Depends(get_founder
 @router.post("/{report_id}/export")
 async def export_pdf(report_id: int, founder: Founder = Depends(get_founder_record),
                      db: Session = Depends(get_db)) -> Response:
-    n = _build_narrative(db, _owned_report(db, founder, report_id))
-    # Screen-parity path: print HTML -> Gotenberg. Fall back to reportlab if the
-    # sidecar is unreachable, and FLAG which renderer produced the PDF so a
-    # degraded (non-parity) export is never silent.
-    try:
-        pdf = render_pdf(build_report_html(n), base_url=settings.GOTENBERG_URL)
-        renderer = "gotenberg"
-    except GotenbergError:
-        pdf = build_report_pdf(n)
-        renderer = "reportlab-fallback"
+    """The founder's report as a PDF -- or an honest "not yet", never a substitute.
+
+    This used to fall back to a plain reportlab document whenever Gotenberg was
+    unreachable. Both paths return 200 with a real application/pdf body, so a
+    founder who downloaded during a blip got the wrong document and nothing ever
+    tried again. A missing PDF is recoverable; a wrong one that looks fine is
+    not, and it is the founder who carries the cost.
+
+    Order: serve the stored copy, else render and keep it, else say so and put
+    the request in the backfill sweep's queue.
+    """
+    report = _owned_report(db, founder, report_id)
+
+    pdf = stored_pdf(report)
+    if pdf is None:
+        pdf = render_and_store(db, report, _build_narrative(db, report))
+
+    if pdf is None:
+        mark_pdf_requested(db, report)
+        # 503 + Retry-After, not 500: nothing is broken about this founder's
+        # report, the renderer is momentarily unavailable and the backfill sweep
+        # is now holding their place. The message is written for the founder,
+        # because this one is shown to them rather than logged.
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "Your report PDF is still being prepared. It'll be ready in a few "
+            "minutes — try the download again shortly. Nothing is lost; your "
+            "report is on screen in the meantime.",
+            headers={"Retry-After": "300"},
+        )
+
     return Response(
         content=pdf, media_type="application/pdf",
         headers={
             "Content-Disposition": f'attachment; filename="clarity-report-{report_id}.pdf"',
-            "X-PDF-Renderer": renderer,
+            # Kept: it is now always "gotenberg", so anything else in a log means
+            # this endpoint grew a second renderer again.
+            "X-PDF-Renderer": "gotenberg",
         },
     )
 

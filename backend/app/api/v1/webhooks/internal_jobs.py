@@ -107,3 +107,36 @@ def reconcile_reports(
     return reconcile_missing_reports(
         db, older_than_minutes=older_than_minutes, limit=limit
     )
+
+
+@router.post(
+    "/backfill-report-pdfs",
+    summary="Render the report PDFs founders are waiting on",
+)
+def backfill_report_pdfs(
+    limit: int = 25,
+    x_internal_secret: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> dict:
+    """What makes "your PDF will be ready in a few minutes" a promise.
+
+    A download that could not be rendered (Gotenberg unreachable) no longer
+    returns a substitute document -- it tells the founder honestly and stamps
+    `founder_reports.pdf_requested_at`. This sweep is the other half: it renders
+    exactly those, stores them, and clears the flag, so the founder's next
+    attempt is served from storage instantly.
+
+    Only reports someone actually asked for. Most reports are never downloaded,
+    and pre-rendering all of them would spend Chromium time on documents nobody
+    opens.
+
+    Same shape and same auth as the two sweeps above -- shared secret,
+    idempotent, callable by whatever cron already runs them. Every 5-10 minutes
+    alongside reconcile-reports is the sensible cadence; the whole point is that
+    a founder who was told "a few minutes" is not waiting on a human.
+    """
+    _verify_secret(x_internal_secret)
+
+    from app.api.v1.reports.pdf_delivery import backfill_pending_pdfs
+
+    return backfill_pending_pdfs(db, limit=limit)
