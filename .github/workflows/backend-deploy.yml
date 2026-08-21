@@ -1,0 +1,278 @@
+name: Deploy Backend to AWS ECS
+
+on:
+  workflow_run:
+    workflows: ["Backend CI"]
+    types:
+      - completed
+
+  workflow_dispatch:
+
+concurrency:
+  group: production-backend-deploy
+  cancel-in-progress: false
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: ap-south-1
+  AWS_ACCOUNT_ID: "010724906865"
+
+  ECR_REPOSITORY: ally-backend
+
+  ECS_CLUSTER: ally-backend-cluster
+  ECS_SERVICE: ally-backend-service
+  TASK_FAMILY: ally_backend_task
+  CONTAINER_NAME: Main
+
+  SUBNETS: subnet-0e59e6f2a84ecf3a3,subnet-0f5a3c7d49c374b61
+  SECURITY_GROUP: sg-083db4ef98455c731
+
+jobs:
+  deploy:
+    name: Safe Backend Deployment
+
+    # Automatic deployment is allowed ONLY when:
+    # 1. Backend CI succeeded
+    # 2. CI was triggered by a push
+    # 3. The push was to main
+    #
+    # Manual deployment remains available through workflow_dispatch.
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'push' &&
+        github.event.workflow_run.head_branch == 'main'
+      )
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout exact tested commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Set deployment SHA
+        id: deploy-sha
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            DEPLOY_SHA="${{ github.event.workflow_run.head_sha }}"
+          else
+            DEPLOY_SHA="${{ github.sha }}"
+          fi
+
+          echo "sha=$DEPLOY_SHA" >> "$GITHUB_OUTPUT"
+          echo "Deploying commit: $DEPLOY_SHA"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::010724906865:role/ally-github-deploy
+          aws-region: ap-south-1
+
+      - name: Login to Amazon ECR
+        run: |
+          aws ecr get-login-password --region "$AWS_REGION" \
+            | docker login \
+                --username AWS \
+                --password-stdin \
+                "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
+
+      - name: Build and push Docker image
+        id: image
+        working-directory: backend
+        run: |
+          DEPLOY_SHA="${{ steps.deploy-sha.outputs.sha }}"
+
+          IMAGE_URI="$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:$DEPLOY_SHA"
+
+          echo "Building: $IMAGE_URI"
+
+          docker build -t "$IMAGE_URI" .
+          docker push "$IMAGE_URI"
+
+          echo "uri=$IMAGE_URI" >> "$GITHUB_OUTPUT"
+
+      - name: Create new ECS task definition
+        id: taskdef
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition "$TASK_FAMILY" \
+            --query taskDefinition \
+            > current-taskdef.json
+
+          jq \
+            --arg IMAGE "${{ steps.image.outputs.uri }}" \
+            --arg CONTAINER "$CONTAINER_NAME" \
+            '
+            .containerDefinitions |= map(
+              if .name == $CONTAINER
+              then .image = $IMAGE
+              else .
+              end
+            )
+            |
+            del(
+              .taskDefinitionArn,
+              .revision,
+              .status,
+              .requiresAttributes,
+              .compatibilities,
+              .registeredAt,
+              .registeredBy
+            )
+            ' \
+            current-taskdef.json > new-taskdef.json
+
+          NEW_TASK_ARN=$(aws ecs register-task-definition \
+            --cli-input-json file://new-taskdef.json \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)
+
+          echo "arn=$NEW_TASK_ARN" >> "$GITHUB_OUTPUT"
+          echo "New task definition: $NEW_TASK_ARN"
+
+      - name: Check new image against production DB
+        id: preflight
+        run: |
+          RESULT=$(aws ecs run-task \
+            --cluster "$ECS_CLUSTER" \
+            --launch-type FARGATE \
+            --task-definition "${{ steps.taskdef.outputs.arn }}" \
+            --network-configuration \
+            "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SECURITY_GROUP],assignPublicIp=ENABLED}" \
+            --overrides \
+            "{\"containerOverrides\":[{\"name\":\"$CONTAINER_NAME\",\"command\":[\"alembic\",\"current\"]}]}")
+
+          echo "$RESULT"
+
+          TASK_ARN=$(echo "$RESULT" | jq -r '.tasks[0].taskArn // empty')
+
+          if [ -z "$TASK_ARN" ]; then
+            echo "Could not start database compatibility task."
+            echo "$RESULT" | jq '.failures'
+            exit 1
+          fi
+
+          echo "task_arn=$TASK_ARN" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for DB compatibility check
+        run: |
+          aws ecs wait tasks-stopped \
+            --cluster "$ECS_CLUSTER" \
+            --tasks "${{ steps.preflight.outputs.task_arn }}"
+
+          EXIT_CODE=$(aws ecs describe-tasks \
+            --cluster "$ECS_CLUSTER" \
+            --tasks "${{ steps.preflight.outputs.task_arn }}" \
+            --query 'tasks[0].containers[0].exitCode' \
+            --output text)
+
+          echo "DB compatibility exit code: $EXIT_CODE"
+
+          if [ "$EXIT_CODE" != "0" ]; then
+            echo "New image cannot safely understand the production DB."
+            echo "DEPLOYMENT STOPPED."
+            exit 1
+          fi
+
+          echo "Production DB compatibility check passed."
+
+      - name: Run Alembic migration once
+        id: migrate
+        run: |
+          RESULT=$(aws ecs run-task \
+            --cluster "$ECS_CLUSTER" \
+            --launch-type FARGATE \
+            --task-definition "${{ steps.taskdef.outputs.arn }}" \
+            --network-configuration \
+            "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SECURITY_GROUP],assignPublicIp=ENABLED}" \
+            --overrides \
+            "{\"containerOverrides\":[{\"name\":\"$CONTAINER_NAME\",\"command\":[\"alembic\",\"upgrade\",\"head\"]}]}")
+
+          echo "$RESULT"
+
+          TASK_ARN=$(echo "$RESULT" | jq -r '.tasks[0].taskArn // empty')
+
+          if [ -z "$TASK_ARN" ]; then
+            echo "Could not start migration task."
+            echo "$RESULT" | jq '.failures'
+            exit 1
+          fi
+
+          echo "task_arn=$TASK_ARN" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for migration
+        run: |
+          aws ecs wait tasks-stopped \
+            --cluster "$ECS_CLUSTER" \
+            --tasks "${{ steps.migrate.outputs.task_arn }}"
+
+          EXIT_CODE=$(aws ecs describe-tasks \
+            --cluster "$ECS_CLUSTER" \
+            --tasks "${{ steps.migrate.outputs.task_arn }}" \
+            --query 'tasks[0].containers[0].exitCode' \
+            --output text)
+
+          echo "Migration exit code: $EXIT_CODE"
+
+          if [ "$EXIT_CODE" != "0" ]; then
+            echo "DATABASE MIGRATION FAILED."
+            echo "ECS service will NOT be updated."
+            exit 1
+          fi
+
+          echo "Database migration successful."
+
+      - name: Deploy new task definition to ECS
+        run: |
+          aws ecs update-service \
+            --cluster "$ECS_CLUSTER" \
+            --service "$ECS_SERVICE" \
+            --task-definition "${{ steps.taskdef.outputs.arn }}" \
+            --force-new-deployment
+
+      - name: Wait for ECS service to become stable
+        run: |
+          echo "Waiting for rolling deployment..."
+
+          aws ecs wait services-stable \
+            --cluster "$ECS_CLUSTER" \
+            --services "$ECS_SERVICE"
+
+          echo "ECS service is stable."
+
+      - name: Production API health check
+        run: |
+          echo "Checking api.goxlally.ai..."
+
+          for i in {1..12}; do
+            if curl --fail --silent --show-error \
+              https://api.goxlally.ai/api/v1/health
+            then
+              echo
+              echo "Production backend is healthy."
+              exit 0
+            fi
+
+            echo "Health check attempt $i failed. Retrying in 10 seconds..."
+            sleep 10
+          done
+
+          echo "Production health check failed."
+          exit 1
+
+      - name: Deployment summary
+        run: |
+          echo "============================================"
+          echo "ALLY BACKEND DEPLOYMENT SUCCESSFUL"
+          echo "============================================"
+          echo "Commit: ${{ steps.deploy-sha.outputs.sha }}"
+          echo "Image:  ${{ steps.image.outputs.uri }}"
+          echo "Task:   ${{ steps.taskdef.outputs.arn }}"
+          echo "API:    https://api.goxlally.ai"
+          echo "============================================"

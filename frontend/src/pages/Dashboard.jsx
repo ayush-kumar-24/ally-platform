@@ -2,6 +2,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { completionPercent, loadDashboard, markTourSeen, relativeDay } from '../services/dashboard';
+import { loadVision } from '../services/vision';
+import { listGoals } from '../services/goals';
+import { getLatestReport, getRecommendations } from '../services/reports';
 import { DnaLoading } from '../components/DnaState';
 import FeedbackPrompt from '../components/FeedbackPrompt';
 import { FEEDBACK } from '../services/feedback';
@@ -9,114 +12,81 @@ import { useCallAccess } from '../hooks/useCallAccess';
 import { greetingNow } from '../utils/helpers';
 import {
   IconArrowRight,
+  IconAward,
   IconChat,
-  IconCheck,
+  IconCompass,
   IconDocument,
-  IconLightbulb,
-  IconLock,
+  IconList,
+  IconMapPin,
   IconTrendingUp,
   IconX,
 } from '../utils/icons';
 
 /**
- * The clarity ring.
- *
- * Shows the band, not a number. The API deliberately never serves a raw score
- * (see backend/app/schemas/dashboard.py) -- `fill_pct` exists precisely so the
- * ring can be drawn without disclosing one. This used to read
- * `health.overall_score`, a field that does not exist in the response, so it
- * rendered a confident "0 clarity" for every founder including those with a
- * finished diagnosis.
+ * toActions — same parsing as RecommendationsPage.jsx's toActions() (duplicated
+ * rather than imported, same reasoning that page's own docstring gives: this
+ * page is allowed to read the same report differently without being coupled
+ * to that one). Plain action strings only -- the reference mockup's Bottleneck
+ * card shows per-item evidence bullets and a numeric confidence score; neither
+ * exists on /reports/:id/recommendations, so neither is shown here.
  */
-function ScoreRing({ fillPct, band, hasDiagnosis }) {
-  const radius = 38;
-  const circumference = 2 * Math.PI * radius;
-  const pct = Math.max(0, Math.min(100, fillPct ?? 0));
-  const offset = circumference - (pct / 100) * circumference;
+function toActions(recs) {
+  const facts = recs?.section?.facts;
+  if (!facts) return [];
+  const groups = [...(facts.solve_actions ?? []), ...(facts.confirm_actions ?? [])]
+    .slice()
+    .sort((a, b) => (a.priority ?? 99) - (b.priority ?? 99));
+  return groups.flatMap((g) => g.next_actions ?? []);
+}
 
+/** Percentage toward the founder's own vision target, only when both fields
+ *  parse as plain numbers (same rule as vision.js's computeGap -- this is one
+ *  founder's own two fields, not a fabricated score). Null means "don't know",
+ *  never 0. */
+function progressPct(target, current) {
+  const t = parseFloat(String(target ?? '').replace(/[^\d.-]/g, ''));
+  const c = parseFloat(String(current ?? '').replace(/[^\d.-]/g, ''));
+  if (!target || !current || Number.isNaN(t) || Number.isNaN(c) || t <= 0) return null;
+  return Math.max(0, Math.min(100, Math.round((c / t) * 100)));
+}
+
+/** The compass gauge -- an SVG dial, ported from the reference mockup's
+ *  Founder's Compass Overview. `pct` null renders a resting needle and an
+ *  empty arc rather than a fabricated reading. */
+function CompassGauge({ pct }) {
+  const r = 118;
+  const circumference = 2 * Math.PI * r;
+  const known = pct != null;
+  const offset = circumference - ((known ? pct : 0) / 100) * circumference;
+  const angle = known ? -90 + (pct / 100) * 180 : -90;
   return (
-    <div className="dash-ring" aria-label={band ? `Clarity band: ${band}` : 'No diagnosis yet'}>
-      <svg viewBox="0 0 92 92" aria-hidden="true">
-        <defs>
-          <linearGradient id="dash-ring-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#38d39f" />
-            <stop offset="100%" stopColor="#9ce14b" />
-          </linearGradient>
-        </defs>
-        <circle className="bg" cx="46" cy="46" r={radius} />
+    <figure className="compass-gauge" aria-label={known ? `${pct}% toward your vision target` : 'Not enough data yet'}>
+      <svg viewBox="0 0 300 300" role="img" aria-hidden="true">
+        <circle cx="150" cy="150" r="118" fill="none" stroke="rgba(27,67,50,.1)" strokeWidth="1" />
+        <circle cx="150" cy="150" r="96" fill="none" stroke="rgba(27,67,50,.07)" strokeWidth="1" />
         <circle
-          className="fg"
-          cx="46"
-          cy="46"
-          r={radius}
-          style={{ strokeDasharray: circumference, strokeDashoffset: offset }}
+          cx="150" cy="150" r="118" fill="none" stroke="var(--emerald)" strokeWidth="3" strokeLinecap="round"
+          strokeDasharray={circumference} strokeDashoffset={offset} transform="rotate(-90 150 150)"
+          style={{ transition: 'stroke-dashoffset 1s var(--ease)' }}
         />
+        <g style={{ transformOrigin: '150px 150px', transition: 'transform 1.1s var(--ease)', transform: `rotate(${angle}deg)` }}>
+          <path d="M150 62 L156 150 L150 160 L144 150 Z" fill="var(--forest)" />
+          <path d="M150 160 L156 150 L150 232 L144 150 Z" fill="rgba(27,67,50,.16)" />
+        </g>
+        <circle cx="150" cy="150" r="6" fill="var(--ivory-2)" stroke="var(--forest)" strokeWidth="1.5" />
       </svg>
-      <div className="mid">
-        <b className={band ? 'dash-ring-band' : ''}>{band || '—'}</b>
-        {/* A finished diagnosis can still carry no band. Saying "no diagnosis
-            yet" to someone who has one is a different lie from saying nothing. */}
-        <span>{band ? 'clarity' : hasDiagnosis ? 'not banded' : 'no diagnosis yet'}</span>
-      </div>
-    </div>
+      <figcaption className="compass-gauge-center">
+        <b>{known ? `${pct}%` : '—'}</b>
+        <span>{known ? 'toward your target' : 'not enough data'}</span>
+      </figcaption>
+    </figure>
   );
 }
 
-function StatCard({ icon, label, value, unit, sub, progress, tone = 'emerald' }) {
-  return (
-    <div className="dash-stat">
-      <div className="k">
-        <span className={`dot ${tone}`}>{icon}</span>
-        {label}
-      </div>
-      <div className="v">
-        {value}
-        <span className="u">{unit}</span>
-      </div>
-      <div className="s">{sub}</div>
-      <div className="bar">
-        <i style={{ width: `${progress}%` }} />
-      </div>
-    </div>
-  );
-}
-
-function Pill({ children, active = false }) {
-  return <span className={`dash-pill${active ? ' active' : ''}`}>{children}</span>;
-}
-
-/* The Compass grid, ported from the GoXL Ally reference mockup's dashboard.
-   The mockup shows 13 tiles; only the ones with `path` have a real page in
-   this app today, so the rest render as visibly inert "Coming soon" tiles
-   rather than linking to nothing. */
-const COMPASS_TILES = [
-  { title: 'Adaptive Diagnosis', path: '/app/founder-dna-journey', mini: 'Understand what is really wrong',
-    desc: 'Describe a business symptom, answer adaptive questions and let Ally trace it to the underlying root cause.' },
-  { title: 'Talk to Ally', path: '/app/ally-chat', mini: 'Your thinking partner',
-    desc: 'Brainstorm ideas, pressure-test decisions and get strategic guidance using context Ally already knows.' },
-  { title: 'Founder DNA', path: '/app/founder-dna', mini: 'Understand yourself as a founder',
-    desc: 'Understand your archetype, decision patterns, leadership style, strengths, blind spots and personal growth areas.' },
-  { title: 'Your Vision', path: '/app/vision', mini: 'Turn ambition into milestones',
-    desc: 'Define the future you want across life, business, impact, finances, ideal day and legacy, then make it measurable.' },
-  { title: 'Business DNA', path: '/app/business-dna', mini: 'See the whole business clearly',
-    desc: 'Review the health signals, constraints and patterns shaping your company across its core business dimensions.' },
-  { title: 'Journey', path: '/app/journey', mini: 'Learn from your path',
-    desc: 'Revisit the decisions, lessons, pivots and turning points that shaped how you build and lead today.' },
-  { title: 'Your Achievements', path: '/app/achievements', mini: 'Recognise meaningful progress',
-    desc: 'Capture business wins, leadership growth and impact milestones that Ally discovers across your journey.' },
-  { title: 'Goals', path: '/app/goals', mini: 'Track longer-term outcomes',
-    desc: 'Set measurable business, founder and life outcomes, monitor progress and identify the next milestone.' },
-  { title: 'Recommendations', path: '/app/recommendations', mini: 'Know what to do next',
-    desc: "See Ally's prioritised guidance after it considers your diagnosis, DNA, vision, energy, business and goals together." },
-  { title: 'Plan Your Day', path: '/app/plan', mini: "Focus today's execution",
-    desc: 'Convert current goals and recommendations into a focused daily plan with clear priorities and time blocks.' },
-  { title: 'Frameworks', path: '/app/frameworks', mini: 'Think through complexity',
-    desc: 'Use your personal thinking toolkit to structure difficult decisions, assumptions, priorities and experiments.' },
-  { title: 'Reports', path: '/app/report', mini: 'Keep a record of insights',
-    desc: 'Review complete diagnosis reports, supporting evidence, confidence levels and sequenced action roadmaps.' },
-  { title: 'Profile & Settings', path: '/app/profile', mini: 'Manage your account',
-    desc: 'Manage personal details, preferences, account data, subscription, billing history and invoices.' },
-];
+/* ScoreRing, StatCard, Pill and COMPASS_TILES (the old flat tile grid) were
+   removed here -- the new Founder's Compass Overview structure below
+   replaces what they rendered: readouts cover the score/stat cards, and the
+   five stones + loop diagram sections replace the tile grid as navigation. */
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -125,6 +95,10 @@ export default function Dashboard() {
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  // North star (Vision + Goals) and Bottleneck/Next steps (report recommendations)
+  // are fetched separately from loadDashboard()'s six sources -- same "resolve to
+  // null on failure" rule so one missing piece dims one section, not the page.
+  const [compassExtra, setCompassExtra] = useState(null);
   // Every discovery-call surface on this page hangs off this one signal.
   const { canBook: canBookCall } = useCallAccess();
 
@@ -133,6 +107,15 @@ export default function Dashboard() {
     loadDashboard()
       .then(setData)
       .finally(() => setLoading(false));
+
+    Promise.all([
+      loadVision().catch(() => null),
+      listGoals().catch(() => null),
+      getLatestReport().catch(() => null),
+    ]).then(async ([vision, goals, report]) => {
+      const recs = report ? await getRecommendations(report.report_id).catch(() => null) : null;
+      setCompassExtra({ vision, goals, hasReport: Boolean(report), actions: toActions(recs) });
+    });
   }, []);
 
   useEffect(load, [load]);
@@ -149,7 +132,6 @@ export default function Dashboard() {
   const health = data?.health;
   const hasHealth = Boolean(health?.available);
   const band = hasHealth ? health.band : null;
-  const fillPct = hasHealth ? health.fill_pct : null;
   const pillars = health?.pillars ?? [];
   const redFlags = health?.red_flags ?? [];
 
@@ -160,9 +142,6 @@ export default function Dashboard() {
      that never happened, a booked call that did not exist, report scores nobody
      produced. It is all real, and all already served by /dashboard/overview. */
   const overview = data?.overview;
-  const diagnosis = overview?.latest_diagnosis;
-  const hasDiagnosis = Boolean(diagnosis?.available);
-  const nextAction = overview?.upcoming_actions?.[0] || null;
   const conversations = overview?.recent_conversations ?? [];
   const recentReports = overview?.recent_reports ?? [];
   const call = overview?.upcoming_call;
@@ -171,6 +150,35 @@ export default function Dashboard() {
 
   const sessions = metrics?.sessions_completed ?? summary?.completed_sessions ?? 0;
   const reports = metrics?.reports ?? summary?.total_reports ?? 0;
+
+  // North star: real Vision + Goals data, no invented single "statement" field.
+  // Vision has six territories, not one -- 'business' is the closest read to
+  // the mockup's aspirational one-liner; falls back to the first written
+  // territory, then to an honest empty prompt.
+  const visionTerritories = compassExtra?.vision?.territories;
+  const visionSummary = compassExtra?.vision?.summary;
+  const northStarStatement = visionTerritories?.business?.statement?.trim()
+    || Object.values(visionTerritories || {}).find((t) => t?.statement?.trim())?.statement?.trim()
+    || '';
+  const goalsList = compassExtra?.goals ?? [];
+  const topGoal = goalsList[0] || null;
+  const northStarPct = progressPct(visionSummary?.target, visionSummary?.current);
+
+  // Bottleneck + today's next steps: same report.recommendations data
+  // RecommendationsPage.jsx reads -- plain action strings, no fabricated
+  // evidence bullets or confidence score (see toActions()'s docstring above).
+  const hasReport = Boolean(compassExtra?.hasReport);
+  const recActions = compassExtra?.actions ?? [];
+  const bottleneckAction = recActions[0] || null;
+  const nextStepsPreview = recActions.slice(0, 3);
+
+  const latestConversation = conversations[0] || null;
+
+  const discuss = (text) => {
+    navigate('/app/ally-chat', {
+      state: { prefill: text ? `Let's talk through this: "${text}"` : 'I want to talk through what matters most right now.' },
+    });
+  };
 
   const plan = data?.plan;
   const planLabel = plan?.plan_name ? `Ally ${plan.plan_name}` : 'Ally';
@@ -253,175 +261,252 @@ export default function Dashboard() {
           </section>
         )}
 
-        <section className="compass-hero">
-          <div className="compass-kicker">{greeting}, {firstName} · Your Compass</div>
-          <h2 className="compass-quote">"Clarity doesn't come from doing more. It comes from knowing <em>what matters next.</em>"</h2>
-          <p className="compass-note">A quick view of your founder, business and momentum — everything important, in one place.</p>
+        <header className="compass-page-head">
+          <div className="compass-kicker">{greeting}, {firstName} · Founder's Compass</div>
+          <h1 className="compass-headline">Your living map of where you've been, where you are, and <em>where you're going.</em></h1>
+        </header>
+
+        <section className="compass-askbar-wrap">
+          <form
+            className="compass-askbar"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const text = e.currentTarget.elements.compassAsk.value.trim();
+              discuss(text);
+            }}
+          >
+            <input name="compassAsk" type="text" placeholder="Ask Ally about anything on this page…" autoComplete="off" />
+            <button className="btn btn-em btn-sm" type="submit"><IconArrowRight />Ask Ally</button>
+          </form>
         </section>
 
-        <section className="compass-grid" aria-label="Workspace overview">
-          {COMPASS_TILES.map((tile) => (
-            <article
-              key={tile.title}
-              className={`compass-glimpse${tile.path ? '' : ' is-disabled'}`}
-              role={tile.path ? 'button' : undefined}
-              tabIndex={tile.path ? 0 : -1}
-              onClick={tile.path ? () => navigate(tile.path) : undefined}
-              onKeyDown={tile.path ? (e) => { if (e.key === 'Enter' || e.key === ' ') navigate(tile.path); } : undefined}
-            >
-              <span className="cg-top">
-                <h3>{tile.title}</h3>
-                <span className="cg-arrow">{tile.path ? 'Overview' : 'Coming soon'}</span>
-              </span>
-              <p>{tile.desc}</p>
-              <span className="cg-mini">{tile.mini}</span>
-            </article>
-          ))}
-        </section>
-
-        <section className="dash-feature">
-          <div className="dash-feature-copy">
-            <div className="dash-kicker">Your latest diagnosis</div>
-            <div className="dash-feature-tag">
-              <span className="dot" /> Your founder clarity
+        {/* CURRENT STATE — real readouts, no invented deltas (there is no
+            historical trend data to compute a "week over week" change from). */}
+        <section className="compass-section">
+          <div className="compass-section-head">
+            <div className="compass-eyebrow">Current state</div>
+            <h2>Where you're reading right now</h2>
+          </div>
+          <div className="compass-readouts">
+            <div className="compass-readout">
+              <span className="crl">Founder clarity</span>
+              <span className="crv">{band || '—'}</span>
+              <span className="crs">{hasHealth ? 'From your latest diagnosis' : 'Run a diagnosis to see this'}</span>
             </div>
-            <h3>
-              {hasDiagnosis
-                ? (diagnosis.title || 'Your diagnosis is ready.')
-                : 'Your diagnosis hasn’t run yet.'}
-            </h3>
-            <p>
-              {hasDiagnosis
-                ? diagnosis.summary
-                : 'Once you complete a diagnosis, Ally traces your symptoms to a single root cause and explains it here.'}
-            </p>
-            <div className="dash-feature-acts">
-              {hasDiagnosis ? (
+            <div className="compass-readout">
+              <span className="crl">Dimensions scanned</span>
+              <span className="crv">{pillars.length || '—'}</span>
+              <span className="crs">{pillars.length ? 'From your latest diagnosis' : 'No diagnosis yet'}</span>
+            </div>
+            <div className="compass-readout">
+              <span className="crl">Red flags</span>
+              <span className="crv">{hasHealth ? redFlags.length : '—'}</span>
+              <span className="crs">{hasHealth ? (redFlags.length ? 'Needs attention' : 'None detected') : 'No diagnosis yet'}</span>
+            </div>
+            <div className="compass-readout">
+              <span className="crl">Reports</span>
+              <span className="crv">{reports || '—'}</span>
+              <span className="crs">{sessions ? `${sessions} session${sessions === 1 ? '' : 's'} completed` : 'No sessions yet'}</span>
+            </div>
+          </div>
+        </section>
+
+        {/* NORTH STAR — the founder's own Vision + Goals, nothing invented. */}
+        <section className="compass-section">
+          <div className="compass-northstar">
+            <div>
+              <div className="compass-eyebrow">Your north star</div>
+              {northStarStatement ? (
+                <p className="compass-statement">"{northStarStatement}"</p>
+              ) : (
+                <p className="compass-statement is-empty">You haven't written your vision yet.</p>
+              )}
+              <dl className="compass-ns-rows">
+                <div className="compass-ns-row"><dt>Vision</dt><dd>{visionSummary?.target?.trim() || 'Not set yet'}</dd></div>
+                <div className="compass-ns-row"><dt>Goal this year</dt><dd>{topGoal?.title || 'No goals set yet'}</dd></div>
+                {topGoal?.subtitle && (
+                  <div className="compass-ns-row"><dt>Next milestone</dt><dd>{topGoal.subtitle}</dd></div>
+                )}
+              </dl>
+              <div className="btn-row" style={{ marginTop: 22 }}>
+                <button className="btn btn-em" type="button" onClick={() => navigate('/app/vision')}>View vision</button>
+                <button className="btn btn-ghost" type="button" onClick={() => navigate('/app/goals')}>See goals <IconArrowRight /></button>
+              </div>
+            </div>
+            <CompassGauge pct={northStarPct} />
+          </div>
+        </section>
+
+        {/* BOTTLENECK — the founder's own top diagnosis recommendation, or an
+            honest lock when there's no diagnosis to draw one from yet. No
+            invented evidence bullets or confidence score -- see toActions(). */}
+        <section className="compass-section">
+          {hasReport ? (
+            <article className="compass-bottleneck">
+              <div className="compass-eyebrow">What Ally would flag first</div>
+              {bottleneckAction ? (
                 <>
-                  <button className="btn btn-em" type="button" onClick={() => navigate('/app/ally-chat')}>
-                    <IconChat />
-                    Discuss with Ally
-                  </button>
-                  <button className="btn btn-dark-ghost" type="button" onClick={() => navigate('/app/report')}>
-                    View full report
-                  </button>
+                  <p className="compass-bottleneck-text">{bottleneckAction}</p>
+                  <div className="btn-row" style={{ marginTop: 18 }}>
+                    <button className="btn btn-em" type="button" onClick={() => discuss(bottleneckAction)}>
+                      <IconChat /> Discuss with Ally
+                    </button>
+                    <button className="btn btn-ghost" type="button" onClick={() => navigate('/app/recommendations')}>
+                      All recommendations
+                    </button>
+                  </div>
                 </>
               ) : (
-                <button className="btn btn-em" type="button" onClick={() => navigate('/app/founder-dna-journey')}>
-                  <IconArrowRight />
-                  Start your diagnosis
-                </button>
+                <p className="compass-bottleneck-text is-empty">Your latest report didn't produce a top recommendation.</p>
               )}
-            </div>
-          </div>
-          <ScoreRing fillPct={fillPct} band={band} hasDiagnosis={hasDiagnosis} />
-        </section>
-
-        <section className="dash-progress">
-          <div className="dash-section-head compact">
-            <div className="dash-section-title">Your progress</div>
-          </div>
-
-          <div className="dash-pills">
-            <Pill active={profilePct === 100}>Founder profile</Pill>
-            <Pill active={sessions > 0}>Conversation</Pill>
-            <Pill active={sessions > 0}>Diagnosis</Pill>
-            <Pill active={reports > 0}>Report</Pill>
-            <Pill active={hasHealth}>Next steps</Pill>
-            {/* Was hardcoded false, so a founder who had booked a call still saw it unlit. */}
-            {/* A progress track ending in a step they cannot take reads as an
-                incomplete journey rather than a finished one. Kept only if it
-                is reachable, or already done. */}
-            {(canBookCall || (metrics?.discovery_calls_booked ?? 0) > 0) && (
-              <Pill active={(metrics?.discovery_calls_booked ?? 0) > 0}>Discovery call</Pill>
-            )}
-          </div>
-
-          <div className="dash-stats">
-            <StatCard icon={<IconCheck />} label="Founder clarity"
-                      value={band || '—'} unit=""
-                      sub={hasHealth ? 'From your latest diagnosis' : 'Run a diagnosis to see this'}
-                      progress={fillPct ?? 0} />
-            <StatCard icon={<IconTrendingUp />} label="Dimensions scanned"
-                      value={pillars.length} unit={pillars.length ? 'scanned' : ''}
-                      sub={pillars.length ? 'From your latest diagnosis' : 'No diagnosis yet'}
-                      progress={pillars.length ? 100 : 0} />
-            <StatCard icon={<IconLightbulb />} label="Red flags"
-                      value={redFlags.length} unit={redFlags.length === 1 ? 'found' : 'found'}
-                      sub={redFlags.length ? 'Needs attention' : 'None detected'}
-                      progress={redFlags.length ? 100 : 0} />
-            <StatCard icon={<IconDocument />} label="Reports"
-                      value={reports} unit={reports === 1 ? 'report' : 'reports'}
-                      sub={sessions ? `${sessions} session${sessions === 1 ? '' : 's'} completed` : 'No sessions yet'}
-                      progress={reports ? 100 : 0} />
-          </div>
-        </section>
-
-        <section className="dash-grid">
-          <div className="dash-stack">
-            <section className="dash-section dash-note-card">
-              <div className="dash-section-head">
-                <div>
-                  <div className="dash-kicker">Next recommended action</div>
-                  <div className="dash-section-title">
-                    {nextAction?.title || (hasDiagnosis ? 'Nothing outstanding' : 'Not yet')}
-                  </div>
-                </div>
-                {nextAction && (
-                  <button className="dash-link" type="button" onClick={() => navigate('/app/plan')}>
-                    See roadmap <IconArrowRight />
-                  </button>
-                )}
-              </div>
-              <p>
-                {nextAction?.description
-                  || (hasDiagnosis
-                    ? 'You have no open actions right now. Plan your day to add one.'
-                    : 'Your action plan is written from your diagnosis — run one and Ally will tell you where to start.')}
+            </article>
+          ) : (
+            <article className="compass-bottleneck is-locked">
+              <div className="compass-eyebrow">What Ally would flag first</div>
+              <p className="compass-bottleneck-text is-empty">
+                Complete your diagnosis and Ally will surface the one thing most worth your attention.
               </p>
-              <div className="dash-note-actions">
-                <button className="btn btn-primary" type="button"
-                        onClick={() => navigate(hasDiagnosis ? '/app/plan' : '/app/founder-dna-journey')}>
-                  {nextAction ? 'Open your plan'
-                    : hasDiagnosis ? 'Plan your day'
-                    : 'Start your diagnosis'}
-                </button>
-              </div>
-            </section>
+              <button className="btn btn-em" type="button" onClick={() => navigate('/app/founder-dna-journey')} style={{ marginTop: 14 }}>
+                Start Founder Diagnosis
+              </button>
+            </article>
+          )}
+        </section>
 
-            <section className="dash-section">
-              <div className="dash-section-head">
-                <div className="dash-section-title">Recent conversations</div>
-                <button className="dash-link" type="button" onClick={() => navigate('/app/ally-chat')}>Open <IconArrowRight /></button>
-              </div>
-              <div className="dash-list">
-                {conversations.length === 0 && (
-                  <p className="dash-empty">
-                    You haven’t talked to Ally yet. Your conversations will show up here.
-                  </p>
-                )}
-                {conversations.map((c) => (
-                  <button
-                    key={c.conversation_id}
-                    className="dash-list-row"
-                    type="button"
-                    onClick={() => navigate('/app/ally-chat')}
-                  >
-                    <span className="dash-list-ic"><IconChat /></span>
-                    <span className="dash-list-body">
-                      <span className="dash-list-title">{c.title || 'Untitled conversation'}</span>
-                      <span className="dash-list-sub">
-                        {c.message_count != null
-                          ? `${c.message_count} message${c.message_count === 1 ? '' : 's'}`
-                          : 'Conversation'}
-                      </span>
-                    </span>
-                    <span className="dash-list-meta">{relativeDay(c.last_message_at || c.created_at)}</span>
-                  </button>
-                ))}
-              </div>
-            </section>
+        {/* FIVE STONES — pure navigation to the pages that build this picture. */}
+        <section className="compass-section">
+          <div className="compass-section-head">
+            <div className="compass-eyebrow">Your five stones</div>
+            <h2>The five things Ally keeps track of</h2>
+            <p className="compass-sub">Each one feeds the next.</p>
+          </div>
+          <div className="compass-stones">
+            <button className="compass-stone" type="button" onClick={() => navigate('/app/journey')}>
+              <span className="cs-ix">01</span><IconMapPin />
+              <span className="cs-title">Founder journey</span>
+              <span className="cs-sub">Where you've been</span>
+            </button>
+            <button className="compass-stone" type="button" onClick={() => navigate('/app/founder-dna')}>
+              <span className="cs-ix">02</span><IconCompass />
+              <span className="cs-title">Motivation codes</span>
+              <span className="cs-sub">Why you build</span>
+            </button>
+            <button className="compass-stone" type="button" onClick={() => navigate('/app/vision')}>
+              <span className="cs-ix">03</span><IconTrendingUp />
+              <span className="cs-title">Vision</span>
+              <span className="cs-sub">Where you're going</span>
+            </button>
+            <button className="compass-stone" type="button" onClick={() => navigate('/app/goals')}>
+              <span className="cs-ix">04</span><IconList />
+              <span className="cs-title">Goals &amp; milestones</span>
+              <span className="cs-sub">What you're building toward</span>
+            </button>
+            <button className="compass-stone" type="button" onClick={() => navigate('/app/next-steps')}>
+              <span className="cs-ix">05</span><IconArrowRight />
+              <span className="cs-title">Next steps</span>
+              <span className="cs-sub">What matters now</span>
+            </button>
+          </div>
+        </section>
 
+        {/* RECENT CONVERSATION — the founder's real last thread, or an honest
+            empty state. Same data as the old "Recent conversations" list,
+            shown as a single preview here instead of a list. */}
+        <section className="compass-section">
+          <div className="compass-section-head">
+            <div className="compass-eyebrow">Continue where you left off</div>
+            <h2>Your last conversation with Ally</h2>
+          </div>
+          {latestConversation ? (
+            <article className="compass-convo">
+              <div className="cc-title">{latestConversation.title || 'Untitled conversation'}</div>
+              <div className="cc-meta">
+                {relativeDay(latestConversation.last_message_at || latestConversation.created_at)}
+                {latestConversation.message_count != null
+                  ? ` · ${latestConversation.message_count} message${latestConversation.message_count === 1 ? '' : 's'}`
+                  : ''}
+              </div>
+              <button className="btn btn-em btn-sm" type="button" onClick={() => navigate('/app/ally-chat')} style={{ marginTop: 16 }}>
+                Continue with Ally
+              </button>
+            </article>
+          ) : (
+            <p className="dash-empty">You haven't talked to Ally yet. Your conversations will show up here.</p>
+          )}
+        </section>
+
+        {/* TODAY'S NEXT STEPS — same recommendation actions as Bottleneck's
+            source, just up to three of them, each with its own Discuss CTA. */}
+        <section className="compass-section">
+          <div className="compass-section-head">
+            <div className="compass-eyebrow">Today's next steps</div>
+            <h2>{hasReport ? 'Pulled from your diagnosis' : 'Nothing pulled yet'}</h2>
+          </div>
+          {nextStepsPreview.length > 0 ? (
+            <ol className="compass-steps">
+              {nextStepsPreview.map((text, i) => (
+                <li key={i} className="compass-step">
+                  <span className="cst-num">{String(i + 1).padStart(2, '0')}</span>
+                  <div className="cst-body">
+                    <p>{text}</p>
+                    <button type="button" className="btn btn-em btn-sm" onClick={() => discuss(text)}>
+                      <IconChat /> Discuss
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p className="dash-empty">
+              {hasReport ? 'Your latest report has no next steps to show here.' : 'Complete your diagnosis to see next steps here.'}
+            </p>
+          )}
+        </section>
+
+        {/* WHAT CHANGED — no time-series metric exists yet to compute a real
+            week-over-week delta from, so this is an honest "coming soon"
+            rather than an invented trend, same treatment as Journey. */}
+        <section className="compass-section">
+          <div className="compass-section-head">
+            <div className="compass-eyebrow">What changed since your last check-in</div>
+            <h2>Coming soon</h2>
+          </div>
+          <p className="dash-empty">
+            Tracking founder, business and execution trends week over week isn't built yet —
+            it needs history Ally hasn't started collecting.
+          </p>
+        </section>
+
+        {/* LOOP — pure navigation, mirrors the mockup's 12-node loop diagram
+            mapped onto this app's real routes. */}
+        <section className="compass-section">
+          <div className="compass-section-head">
+            <div className="compass-eyebrow">How the compass works</div>
+            <h2>One loop, running continuously</h2>
+            <p className="compass-sub">Everything you do feeds back into your journey.</p>
+          </div>
+          <div className="compass-loop">
+            <button className="compass-loop-node" type="button" onClick={() => navigate('/app/journey')}><b>01 · You</b>My journey</button>
+            <button className="compass-loop-node" type="button" onClick={() => navigate('/app/founder-dna')}><b>02 · You</b>My motivations</button>
+            <button className="compass-loop-node" type="button" onClick={() => navigate('/app/vision')}><b>03 · You</b>My vision</button>
+            <button className="compass-loop-node" type="button" onClick={() => navigate('/app/goals')}><b>04 · You</b>My goals</button>
+            <button className="compass-loop-node" type="button" onClick={() => navigate('/app/business-dna')}><b>05 · Signals</b>My current reality</button>
+            <button className="compass-loop-node is-ai" type="button" onClick={() => navigate('/app/founder-dna')}><b>06 · Ally</b>Founder + Business DNA</button>
+            <button className="compass-loop-node is-ai" type="button" onClick={() => navigate('/app/founder-dna-journey')}><b>07 · Ally</b>Adaptive diagnosis</button>
+            <button className="compass-loop-node is-ai" type="button" onClick={() => navigate('/app/ally-chat')}><b>08 · Ally</b>Talk to Ally</button>
+            <button className="compass-loop-node" type="button" onClick={() => navigate('/app/next-steps')}><b>09 · You</b>Next steps</button>
+            <button className="compass-loop-node" type="button" onClick={() => navigate('/app/plan')}><b>10 · You</b>Execution</button>
+            <button className="compass-loop-node" type="button" onClick={() => navigate('/app/achievements')}><IconAward /><b>11 · You</b>Achievement</button>
+            <button className="compass-loop-node is-you" type="button" onClick={() => navigate('/app/journey')}><b>12 · Back to 01</b>My journey evolves</button>
+          </div>
+        </section>
+
+        {/* Discovery call is now the ONLY thing left in the left column (its
+            two siblings moved into the new Bottleneck/recent-conversation
+            sections above) -- when it's hidden, the left column would render
+            empty and the grid would leave a large blank gap on the left. */}
+        <section className={`dash-grid${(canBookCall || hasCall) ? '' : ' no-left-col'}`}>
+          <div className="dash-stack">
             {/* Hidden entirely when they cannot book, EXCEPT when they already
                 have a call on the books -- an existing booking is theirs and
                 hiding it would be worse than advertising the feature. Hiding
@@ -581,45 +666,6 @@ export default function Dashboard() {
                 ))}
               </div>
             </section>
-          </div>
-        </section>
-
-        <section className="dash-unlock">
-          <div className="dash-section-head">
-            <div className="dash-section-title">Unlock more with Ally</div>
-            <button className="dash-link" type="button" onClick={() => navigate('/app/billing')}>See plans <IconArrowRight /></button>
-          </div>
-          <div className="dash-unlock-grid">
-            <article className="dash-unlock-card">
-              <div className="dash-unlock-viz ring"></div>
-              <div className="dash-unlock-lock"><IconLock /></div>
-              <h4>Weekly Founder MRI</h4>
-              <p>A deep scan of your leadership blind spots and momentum.</p>
-              <div className="dash-unlock-foot">
-                <span className="dash-unlock-link">Upgrade to Pro <IconArrowRight /></span>
-                <span className="dash-unlock-help">Why is this locked?</span>
-              </div>
-            </article>
-            <article className="dash-unlock-card">
-              <div className="dash-unlock-viz bars"></div>
-              <div className="dash-unlock-lock"><IconLock /></div>
-              <h4>Compare against 10,000 founders</h4>
-              <p>Compare your patterns against 10,000+ founders in your space.</p>
-              <div className="dash-unlock-foot">
-                <span className="dash-unlock-link">Upgrade to Pro+ <IconArrowRight /></span>
-                <span className="dash-unlock-help">Why is this locked?</span>
-              </div>
-            </article>
-            <article className="dash-unlock-card">
-              <div className="dash-unlock-viz spark"></div>
-              <div className="dash-unlock-lock"><IconLock /></div>
-              <h4>AI Decision Support</h4>
-              <p>Pressure-test big calls with Ally before you commit.</p>
-              <div className="dash-unlock-foot">
-                <span className="dash-unlock-link">Upgrade to Pro <IconArrowRight /></span>
-                <span className="dash-unlock-help">Why is this locked?</span>
-              </div>
-            </article>
           </div>
         </section>
       </div>

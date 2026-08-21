@@ -1,0 +1,38 @@
+name: AWS OIDC Connection Test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  test-aws-connection:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::010724906865:role/ally-github-deploy
+          aws-region: ap-south-1
+
+      - name: Verify AWS identity
+        run: aws sts get-caller-identity
+
+      - name: Verify ECR access
+        run: |
+          aws ecr describe-repositories \
+            --repository-names ally-backend \
+            --region ap-south-1
+
+      - name: Verify ECS access
+        run: |
+          aws ecs describe-services \
+            --cluster ally-backend-cluster \
+            --services ally-backend-service \
+            --region ap-south-1

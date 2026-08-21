@@ -1,0 +1,94 @@
+name: Backend CI
+
+on:
+  pull_request:
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend-ci.yml"
+
+  push:
+    branches:
+      - main
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend-ci.yml"
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend-safety:
+    name: Backend Safety Checks
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: backend
+
+    env:
+      DATABASE_URL: postgresql+psycopg://ci:ci@localhost:5432/ci
+      SECRET_KEY: ci-only-secret-key
+      ENVIRONMENT: development
+      AUTH_PROVIDER: dev
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Python syntax check
+        run: python -m compileall -q app
+
+      - name: Run RLS regression tests
+        run: pytest tests/test_rls_context.py -q
+
+      - name: Verify Alembic migration graph
+        run: |
+          python - <<'PY'
+          from alembic.config import Config
+          from alembic.script import ScriptDirectory
+
+          config = Config("alembic.ini")
+          script = ScriptDirectory.from_config(config)
+
+          heads = script.get_heads()
+          print("Alembic heads:", heads)
+
+          if len(heads) != 1:
+              raise SystemExit(
+                  f"Unsafe Alembic graph: expected exactly 1 head, got {heads}"
+              )
+
+          head = heads[0]
+
+          revisions = {
+              revision.revision
+              for revision in script.walk_revisions()
+          }
+
+          required_revision = "6f1d2c9a4b70"
+
+          if required_revision not in revisions:
+              raise SystemExit(
+                  f"Required production reconciliation revision "
+                  f"{required_revision} is missing"
+              )
+
+          print(f"Alembic graph safe. Canonical head: {head}")
+          PY
+
+      - name: Build Docker image
+        run: docker build -t ally-backend-ci .

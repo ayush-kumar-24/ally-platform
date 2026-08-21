@@ -1,0 +1,96 @@
+name: Backend Deployment Preflight
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: ap-south-1
+  ECS_CLUSTER: ally-backend-cluster
+  TASK_DEFINITION: ally_backend_task
+  SUBNETS: subnet-0e59e6f2a84ecf3a3,subnet-0f5a3c7d49c374b61
+  SECURITY_GROUP: sg-083db4ef98455c731
+
+jobs:
+  database-preflight:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::010724906865:role/ally-github-deploy
+          aws-region: ap-south-1
+
+      - name: Get current task definition
+        id: task
+        run: |
+          TASK_ARN=$(aws ecs describe-task-definition \
+            --task-definition "$TASK_DEFINITION" \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)
+
+          CONTAINER_NAME=$(aws ecs describe-task-definition \
+            --task-definition "$TASK_DEFINITION" \
+            --query 'taskDefinition.containerDefinitions[0].name' \
+            --output text)
+
+          echo "task_arn=$TASK_ARN" >> "$GITHUB_OUTPUT"
+          echo "container_name=$CONTAINER_NAME" >> "$GITHUB_OUTPUT"
+
+          echo "Task definition: $TASK_ARN"
+          echo "Container: $CONTAINER_NAME"
+
+      - name: Run read-only Alembic state check
+        id: run
+        run: |
+          TASK_ARN=$(aws ecs run-task \
+            --cluster "$ECS_CLUSTER" \
+            --launch-type FARGATE \
+            --task-definition "${{ steps.task.outputs.task_arn }}" \
+            --network-configuration "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SECURITY_GROUP],assignPublicIp=ENABLED}" \
+            --overrides "{\"containerOverrides\":[{\"name\":\"${{ steps.task.outputs.container_name }}\",\"command\":[\"alembic\",\"current\"]}]}" \
+            --query 'tasks[0].taskArn' \
+            --output text)
+
+          if [ "$TASK_ARN" = "None" ] || [ -z "$TASK_ARN" ]; then
+            echo "Could not start Alembic preflight task."
+            exit 1
+          fi
+
+          echo "task_arn=$TASK_ARN" >> "$GITHUB_OUTPUT"
+          echo "Started validation task: $TASK_ARN"
+
+      - name: Wait for validation task
+        run: |
+          aws ecs wait tasks-stopped \
+            --cluster "$ECS_CLUSTER" \
+            --tasks "${{ steps.run.outputs.task_arn }}"
+
+      - name: Check validation result
+        run: |
+          EXIT_CODE=$(aws ecs describe-tasks \
+            --cluster "$ECS_CLUSTER" \
+            --tasks "${{ steps.run.outputs.task_arn }}" \
+            --query 'tasks[0].containers[0].exitCode' \
+            --output text)
+
+          REASON=$(aws ecs describe-tasks \
+            --cluster "$ECS_CLUSTER" \
+            --tasks "${{ steps.run.outputs.task_arn }}" \
+            --query 'tasks[0].stoppedReason' \
+            --output text)
+
+          echo "Exit code: $EXIT_CODE"
+          echo "Stopped reason: $REASON"
+
+          if [ "$EXIT_CODE" != "0" ]; then
+            echo "DATABASE PREFLIGHT FAILED."
+            echo "Do NOT run migrations or deploy."
+            exit 1
+          fi
+
+          echo "DATABASE PREFLIGHT PASSED."
