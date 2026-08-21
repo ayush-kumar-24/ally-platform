@@ -1916,9 +1916,9 @@ body.lp-done #landing-page { display:none; }
 .dash-chips{display:flex;flex-wrap:wrap;gap:7px;position:relative;z-index:1}
 .dash-chip{font-size:10.5px;font-weight:600;letter-spacing:.02em;padding:4px 9px;border-radius:999px;color:#a7c0b4;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12)}
 .dash-action-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:18px;position:relative;z-index:1}
-.dash-action-btn,.dash-action-link,.dash-link,.dash-unlock-link{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;cursor:pointer}
+.dash-action-btn,.dash-action-link,.dash-link{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;cursor:pointer}
 .dash-action-btn{padding:10px 14px;border-radius:12px;background:#10B981;color:#06231a;box-shadow:0 10px 22px -10px rgba(16,185,129,.55)}
-.dash-action-btn svg,.dash-action-link svg,.dash-link svg,.dash-unlock-link svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2}
+.dash-action-btn svg,.dash-action-link svg,.dash-link svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2}
 .dash-action-link{color:#9ce14b}
 .dash-badge{font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#89a08f;padding:4px 9px;border-radius:999px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.03)}
 .dash-badge.quiet{color:#7f9487}
@@ -2008,27 +2008,12 @@ body.lp-done #landing-page { display:none; }
 .dash-call-sub{font-size:12px;color:#6c7a70;margin-top:2px}
 .dash-call-btn{width:100%;justify-content:center}
 
-.dash-unlock{margin-top:22px}
-.dash-unlock-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
-.dash-unlock-card{position:relative;padding:18px;border-radius:20px;background:linear-gradient(180deg,#fff,#f8fbfa);border:1px solid #e7e0d6;box-shadow:0 1px 2px -1px rgba(6,20,13,.14),0 6px 16px -6px rgba(6,20,13,.18);overflow:hidden;min-height:210px}
-.dash-unlock-viz{height:70px;border-radius:16px 16px 0 0;margin:-18px -18px 12px;background:linear-gradient(180deg,#edf8f3,#f8fcfa);border-bottom:1px solid #e6efe4}
-.dash-unlock-viz.ring{background:radial-gradient(80px 80px at 15% 35%,rgba(16,185,129,.18),transparent 70%),linear-gradient(180deg,#edf8f3,#fbfdfc)}
-.dash-unlock-viz.bars{background:linear-gradient(180deg,#eefbf6,#fbfdfc)}
-.dash-unlock-viz.spark{background:radial-gradient(60px 60px at 20% 35%,rgba(168,217,74,.15),transparent 72%),linear-gradient(180deg,#eefbf6,#fbfdfc)}
-.dash-unlock-lock{width:34px;height:34px;border-radius:12px;background:#fff;border:1px solid #e4ddd2;display:grid;place-items:center;position:absolute;left:18px;top:54px;box-shadow:0 8px 18px -12px rgba(27,67,50,.28)}
-.dash-unlock-lock svg{width:16px;height:16px;stroke:#6c7a70;fill:none;stroke-width:2}
-.dash-unlock-card h4{font-size:14px;font-weight:800;color:#1B4332;margin:4px 0 6px}
-.dash-unlock-card p{font-size:12px;line-height:1.55;color:#6c7a70;margin:0 0 14px}
-.dash-unlock-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:11px}
-.dash-unlock-link{color:#10B981}
-.dash-unlock-help{color:#8a958b}
-
 @media (max-width: 1100px){
   /* minmax(0,1fr), not 1fr: a bare `1fr` is minmax(auto,1fr), and that auto
      minimum floors the column at its widest child's min-content. On narrow
      screens that made the column wider than its container, so cards overflowed
      and body{overflow-x:hidden} silently clipped them. */
-  .dash-actions,.dash-feature,.dash-grid,.dash-stats,.dash-unlock-grid{grid-template-columns:minmax(0,1fr)}
+  .dash-actions,.dash-feature,.dash-grid,.dash-stats{grid-template-columns:minmax(0,1fr)}
   .dash-stack,.dash-side{min-width:0}
   .dash-feature{justify-items:start}
   .dash-ring{margin-top:6px}
@@ -2047,7 +2032,7 @@ body.lp-done #landing-page { display:none; }
   .dash-action-card{min-height:0;padding:20px}
   .dash-stat{padding:14px}
   .dash-plan-actions{grid-template-columns:1fr}
-  .dash-section-head,.dash-call-row,.dash-unlock-foot{flex-direction:column;align-items:flex-start}
+  .dash-section-head,.dash-call-row{flex-direction:column;align-items:flex-start}
   .dash-list-row{align-items:flex-start}
 }
 

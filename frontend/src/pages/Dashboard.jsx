@@ -17,7 +17,6 @@ import {
   IconCompass,
   IconDocument,
   IconList,
-  IconLock,
   IconMapPin,
   IconTrendingUp,
   IconX,
@@ -667,45 +666,6 @@ export default function Dashboard() {
                 ))}
               </div>
             </section>
-          </div>
-        </section>
-
-        <section className="dash-unlock">
-          <div className="dash-section-head">
-            <div className="dash-section-title">Unlock more with Ally</div>
-            <button className="dash-link" type="button" onClick={() => navigate('/app/billing')}>See plans <IconArrowRight /></button>
-          </div>
-          <div className="dash-unlock-grid">
-            <article className="dash-unlock-card">
-              <div className="dash-unlock-viz ring"></div>
-              <div className="dash-unlock-lock"><IconLock /></div>
-              <h4>Weekly Founder MRI</h4>
-              <p>A deep scan of your leadership blind spots and momentum.</p>
-              <div className="dash-unlock-foot">
-                <span className="dash-unlock-link">Upgrade to Pro <IconArrowRight /></span>
-                <span className="dash-unlock-help">Why is this locked?</span>
-              </div>
-            </article>
-            <article className="dash-unlock-card">
-              <div className="dash-unlock-viz bars"></div>
-              <div className="dash-unlock-lock"><IconLock /></div>
-              <h4>Compare against 10,000 founders</h4>
-              <p>Compare your patterns against 10,000+ founders in your space.</p>
-              <div className="dash-unlock-foot">
-                <span className="dash-unlock-link">Upgrade to Pro+ <IconArrowRight /></span>
-                <span className="dash-unlock-help">Why is this locked?</span>
-              </div>
-            </article>
-            <article className="dash-unlock-card">
-              <div className="dash-unlock-viz spark"></div>
-              <div className="dash-unlock-lock"><IconLock /></div>
-              <h4>AI Decision Support</h4>
-              <p>Pressure-test big calls with Ally before you commit.</p>
-              <div className="dash-unlock-foot">
-                <span className="dash-unlock-link">Upgrade to Pro <IconArrowRight /></span>
-                <span className="dash-unlock-help">Why is this locked?</span>
-              </div>
-            </article>
           </div>
         </section>
       </div>
