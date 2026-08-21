@@ -524,13 +524,54 @@ class ReasoningService:
             business_profile=BusinessProfile(industry=industry_name),
             session_id=session.session_id,
             root_cause_labels={rid: rc.root_cause_name for rid, rc in rc_map.items()},
-            intervention_labels={iid: iv.intervention_code for iid, iv in iv_map.items()},
+            # capability_domain ("Quality Management"), not intervention_code
+            # ("INT-052"): this map is what the founder-facing report prints as
+            # the name of a recommendation, and a catalogue key is not a name.
+            # Falls back to the code only if a row has no domain set.
+            intervention_labels={
+                iid: (getattr(iv, "capability_domain", None) or iv.intervention_code)
+                for iid, iv in iv_map.items()
+            },
             business_health=business_health,
+            # The founder's own words, so findings can be shown with the evidence
+            # that produced them instead of generic catalogue text. Built here
+            # rather than in the bundle because ReasoningBundle deliberately does
+            # no DB access.
+            answer_evidence=self._answer_evidence(session.session_id),
         )
         return (
             self.report_generator.founder_report(bundle),
             self.report_generator.internal_report(bundle),
         )
+
+    def _answer_evidence(self, session_id: int) -> dict[int, tuple[str, str]]:
+        """question_id -> (question text, the founder's answer) for this session.
+
+        Answers are trimmed to a readable length: this is quoted back in the
+        report as supporting evidence, not reproduced in full.
+        """
+        try:
+            answers = self.repository.get_answers_for_session(session_id)
+            questions = self.repository.get_questions_by_ids(
+                {a.question_id for a in answers}
+            )
+        except Exception as exc:  # evidence is additive -- never fail a report for it
+            logger.warning(
+                "Could not load answer evidence for the report",
+                extra={"session_id": session_id}, exc_info=exc,
+            )
+            return {}
+
+        out: dict[int, tuple[str, str]] = {}
+        for a in answers:
+            q = questions.get(a.question_id)
+            text = (a.answer_text or "").strip()
+            if not q or not text:
+                continue
+            if len(text) > 320:
+                text = text[:319].rstrip() + "…"
+            out[a.question_id] = (q.question_text, text)
+        return out
 
     def _record_diagnosis_memory(self, founder: Founder, session, founder_report) -> None:
         """Record the completed diagnosis as founder memory (best-effort). Runs

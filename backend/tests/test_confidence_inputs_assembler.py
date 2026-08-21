@@ -237,7 +237,7 @@ def test_category_signal_zero_when_no_categories():
     assert got.any_category_flagged is False
 
 
-def test_distress_override_by_session_score_zeroes_reliability():
+def test_distress_override_by_session_score_leaves_reliability_alone():
     repo = FakeRepo(reliability=D("0.95"))
     model = WeightedConfidenceModel(repo)
     diagnosis = make_diagnosis(category_risks=[make_category("0.6", True)])
@@ -247,12 +247,13 @@ def test_distress_override_by_session_score_zeroes_reliability():
         questions_answered=20, context=ctx,
     )
     assert got.distress_override is True
-    # Distress discounts heavily but must NOT annihilate: reliability multiplies
-    # the whole model, so a zero here reported 0/100 for a completed 30-question
-    # session whose root causes had ranked cleanly. Still an explicit value, not
-    # None -- the point that a config miss must stay distinguishable from
-    # distress (it degrades to NEUTRAL) is unchanged.
-    assert got.reliability_factor == D("0.70")
+    # Distress no longer discounts reliability at all (product decision,
+    # 2026-08-20). The 0.70 discount was half of a double penalty -- combined
+    # with the now-removed hard cap it turned an 84% evidence base into a
+    # reported 59. Reliability now comes purely from the configured lookup for
+    # the measured distress score, so `distress_override` is still reported
+    # (routing and the report still use it) without rewriting the number.
+    assert got.reliability_factor == D("0.95")   # the repo's configured value
     assert got.reliability_factor > D("0")
 
 
@@ -265,12 +266,13 @@ def test_distress_override_by_diagnosis_flag():
         questions_answered=20, context=ctx,
     )
     assert got.distress_override is True
-    # Distress discounts heavily but must NOT annihilate: reliability multiplies
-    # the whole model, so a zero here reported 0/100 for a completed 30-question
-    # session whose root causes had ranked cleanly. Still an explicit value, not
-    # None -- the point that a config miss must stay distinguishable from
-    # distress (it degrades to NEUTRAL) is unchanged.
-    assert got.reliability_factor == D("0.70")
+    # Distress no longer discounts reliability at all (product decision,
+    # 2026-08-20). The 0.70 discount was half of a double penalty -- combined
+    # with the now-removed hard cap it turned an 84% evidence base into a
+    # reported 59. Reliability now comes purely from the configured lookup for
+    # the measured distress score, so `distress_override` is still reported
+    # (routing and the report still use it) without rewriting the number.
+    assert got.reliability_factor > D("0")
     assert got.reliability_factor > D("0")
 
 

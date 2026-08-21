@@ -12,6 +12,7 @@ from sqlalchemy import text as _text
 from sqlalchemy.orm import Session
 
 from app.models import Answer, DiagnosisSession, Question, SessionStatus
+from app.models.schema import FounderDnaAnswers, FounderDnaQuestions
 
 
 class DiagnosisRepository:
@@ -132,6 +133,7 @@ class DiagnosisRepository:
         self,
         session_id: int,
         stage_groups: list[str],
+        founder_id: int | None = None,
     ) -> list[Question]:
         """Every question still unanswered in this session and valid for the
         founder's stage.
@@ -158,6 +160,39 @@ class DiagnosisRepository:
             (Question.primary_stage_group.is_(None))
             | (Question.primary_stage_group.in_(stage_groups)),
         )
+
+        # Do not re-ask what Founder DNA already asked.
+        #
+        # 11 rows in `questions` (all category "Founder Psychology") are
+        # word-for-word identical to rows in `founder_dna_questions` -- e.g.
+        # q=309 == dna=103 "In one sentence, why does this problem deserve your
+        # next few years?". Founder DNA runs BEFORE the diagnosis in the journey,
+        # so the founder answers those there and is then asked them again here,
+        # verbatim. Observed live: two of one founder's ~30 diagnosis questions
+        # were re-runs of answers Ally already had.
+        #
+        # That is worse than wasted budget. A ~30-question diagnosis spending
+        # slots re-collecting known answers is a smaller diagnosis, and to the
+        # founder it reads as Ally having forgotten what they just said.
+        #
+        # Matched on normalised text rather than an id mapping because the two
+        # banks have no foreign key between them -- the duplication is literal
+        # text, so text is what identifies it. Scoped to answers THIS founder
+        # actually gave, so an unanswered Founder DNA question stays available.
+        if founder_id is not None:
+            already_told_us = (
+                select(func.lower(func.trim(FounderDnaQuestions.question_text)))
+                .join(
+                    FounderDnaAnswers,
+                    FounderDnaAnswers.founder_dna_question_id
+                    == FounderDnaQuestions.founder_dna_question_id,
+                )
+                .where(FounderDnaAnswers.founder_id == founder_id)
+            )
+            stmt = stmt.where(
+                func.lower(func.trim(Question.question_text)).not_in(already_told_us)
+            )
+
         return list(self.db.execute(stmt).scalars().all())
 
     # --- Pillar membership ---

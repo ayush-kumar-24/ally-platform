@@ -279,6 +279,9 @@ class QuestionSelectionEngine:
         return self.repository.list_candidate_questions(
             session_id=session.session_id,
             stage_groups=resolve_stage_groups(founder),
+            # Lets the repository drop questions this founder already answered
+            # verbatim during Founder DNA -- see list_candidate_questions.
+            founder_id=founder.founder_id,
         )
 
     def order_candidates(

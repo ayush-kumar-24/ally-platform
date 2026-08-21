@@ -63,7 +63,6 @@ _ONE = Decimal("1")
 # step 1.00 -> 0.95 -> 0.85, so a cliff to 0.00 also breaks a gradient the
 # source table clearly intends. 0.70 continues that curve: a heavy discount
 # that still lets a real diagnosis through.
-_DISTRESS_RELIABILITY = Decimal("0.70")
 _CONFIDENCE_MIN = Decimal("0")
 _CONFIDENCE_MAX = Decimal("100")
 
@@ -311,16 +310,24 @@ class WeightedConfidenceModel(ConfidenceModel):
         # degrades to NEUTRAL. Absence must not be able to destroy every measured
         # signal -- the rest of this model already excludes an unavailable input
         # and renormalises rather than scoring it zero.
-        if distress_override:
-            reliability_factor = _DISTRESS_RELIABILITY
-        else:
-            measured = self.repository.get_reliability_factor(distress_score)
-            if measured is None:
-                logger.warning(
-                    "No reliability factor resolved; treating it as neutral",
-                    extra={"distress_score": str(distress_score)},
-                )
-            reliability_factor = measured if measured is not None else _ONE
+        # Distress no longer discounts reliability either (product decision,
+        # 2026-08-20; see the DISTRESS OVERRIDE note in confidence_score.py).
+        # _DISTRESS_RELIABILITY (0.70) was the second half of a double penalty:
+        # combined with the now-removed hard cap it turned an 84% evidence base
+        # into a reported 59. A founder being candid about stress is not evidence
+        # that their answers are 30% less true -- and the honest, self-aware
+        # founders this product is for are exactly the ones who trip it.
+        #
+        # Distress remains fully measured and is surfaced to the founder through
+        # the support path; it is simply no longer allowed to silently rewrite
+        # the diagnostic score.
+        measured = self.repository.get_reliability_factor(distress_score)
+        if measured is None:
+            logger.warning(
+                "No reliability factor resolved; treating it as neutral",
+                extra={"distress_score": str(distress_score)},
+            )
+        reliability_factor = measured if measured is not None else _ONE
 
         flagged = [c for c in diagnosis.category_risks if c.is_flagged]
         return ConfidenceInputs(

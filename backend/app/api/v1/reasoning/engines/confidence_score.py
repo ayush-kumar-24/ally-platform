@@ -164,11 +164,24 @@ class ConfidenceScoreStrategy:
         The order is preserved for faithfulness to the spec; because every rule is
         a downward cap the net effect equals the minimum applicable cap.
         """
-        # 1. DISTRESS OVERRIDE -- wellbeing overrides diagnostic completeness. The
-        #    distress *path* is owned by the pipeline (distress_mode / high_distress);
-        #    numerically we guarantee a standard report is unreachable.
-        if inputs.distress_override:
-            score = min(score, self._floor_cap)
+        # 1. DISTRESS OVERRIDE -- REMOVED as a numeric cap (product decision,
+        #    2026-08-20). It used to force `score = min(score, floor_cap)`, which
+        #    made a standard report unreachable for any distressed founder.
+        #
+        #    Measured on a real session: evidence base 0.83676 (84%) with 30
+        #    answers and 8 ranked root causes was reported as 59, because
+        #    distress applied a 0.70 reliability multiplier AND this cap on top
+        #    of it. The founder saw "0/100" on their report in an earlier run of
+        #    the same journey.
+        #
+        #    Confidence answers "how sure are we of this diagnosis"; distress
+        #    answers "how is this founder doing". They are independent, and
+        #    collapsing one into the other corrupts both -- it discards evidence
+        #    that was gathered correctly and tells the founder their diagnosis is
+        #    worthless because they were honest about struggling. Distress is
+        #    still detected, still recorded on the session, still routes to the
+        #    support path, and is still surfaced in the report; it simply no
+        #    longer rewrites the diagnostic number.
 
         # 2. SEVERE STAGE MISMATCH -- evidence >= 2 stages from the self-reported
         #    stage: re-confirm the stage before any report, so block generate_report.

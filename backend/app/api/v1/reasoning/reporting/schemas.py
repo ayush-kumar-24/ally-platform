@@ -77,6 +77,10 @@ class ReasoningBundle:
     session_id: int | None = None
     root_cause_labels: Mapping[int, str] = field(default_factory=dict)
     intervention_labels: Mapping[int, str] = field(default_factory=dict)
+    # question_id -> (question_text, the founder's answer). Supplied by the
+    # caller for the same reason the label maps are: this container does no DB
+    # access. Lets the report quote the founder back to themselves as evidence.
+    answer_evidence: Mapping[int, tuple[str, str]] = field(default_factory=dict)
     # Weighted readiness across the six pillars (readiness_pillars); optional so
     # the bundle is constructible without it.
     business_health: BusinessHealthScore | None = None
@@ -135,6 +139,14 @@ class SymptomHighlight:
     symptoms: tuple[str, ...]
     severity: Decimal
     is_distress: bool
+    # What the founder actually said that produced this finding, as
+    # (question, their answer) pairs. `symptoms` above is generic catalogue text
+    # from problems.symptoms -- accurate about the PATTERN, but written before
+    # this founder existed. Printing it alone stated things about them they never
+    # said (one report told a founder she responds to challenge with "the market
+    # will catch up"; she had said nothing of the kind). Evidence is what makes a
+    # finding recognisable as their own rather than a horoscope.
+    evidence: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)

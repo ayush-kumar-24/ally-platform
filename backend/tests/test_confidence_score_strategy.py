@@ -248,10 +248,22 @@ def test_both_modifiers_compose():
 # --- The six hard rules ----------------------------------------------------
 
 
-def test_rule1_distress_override_caps_to_continue():
-    # Perfect evidence (would be 100) but distress -> capped at floor (59).
+def test_distress_no_longer_caps_the_confidence_score():
+    """Distress must not rewrite the diagnostic number (product decision,
+    2026-08-20).
+
+    This asserted `== 59` while distress capped the score. Measured on a real
+    session, that cap plus a 0.70 reliability discount turned an 84% evidence
+    base into a reported 59, and an earlier run of the same journey showed the
+    founder "0/100" on their report.
+
+    Confidence answers "how sure are we of this diagnosis"; distress answers
+    "how is this founder doing". They are independent. Distress is still
+    detected, recorded on the session and routed to the support path -- it just
+    no longer silently discards evidence that was gathered correctly.
+    """
     got = make_strategy().compute(make_inputs(distress_override=True))
-    assert got == D("59")
+    assert got == D("100")
 
 
 def test_rule2_severe_stage_mismatch_blocks_report():
@@ -301,9 +313,18 @@ def test_rule6_psychology_precedence_has_no_numeric_effect():
 
 
 def test_hard_rules_take_the_strongest_cap():
-    # Distress (cap 59) AND severe mismatch (cap 79) -> the lower cap wins.
-    got = make_strategy().compute(make_inputs(distress_override=True, stages_away=2))
+    # Distress no longer caps at all, so the severe-stage-mismatch cap (79) is
+    # the only one applying here. Rewritten to use two rules that DO still cap
+    # -- question floor (59) and stage mismatch (79) -- so this keeps testing
+    # "the strongest cap wins" rather than testing the removed distress cap.
+    got = make_strategy().compute(make_inputs(questions_answered=1, stages_away=2))
     assert got == D("59")
+
+    # And distress alongside a real cap must not change the outcome.
+    with_distress = make_strategy().compute(
+        make_inputs(questions_answered=1, stages_away=2, distress_override=True)
+    )
+    assert with_distress == D("59")
 
 
 def test_hard_rule_never_raises_the_score():
@@ -329,8 +350,14 @@ def test_caps_produce_expected_routing_states():
         validate_max=D("80"), generate_report_min=D("80"),
     )
     strat = make_strategy()
-    # floor cap (distress) -> continue
-    assert thresholds.routing_state_for(strat.compute(make_inputs(distress_override=True))) == "continue"
+    # floor cap (below the question floor) -> continue. Was distress_override,
+    # which no longer caps: a distressed founder keeps their real score, and the
+    # support routing is decided by the pipeline, not by crushing the number.
+    assert thresholds.routing_state_for(strat.compute(make_inputs(questions_answered=1))) == "continue"
+    # distress alone must NOT drag routing down to continue any more
+    assert thresholds.routing_state_for(
+        strat.compute(make_inputs(distress_override=True))
+    ) == "generate_report"
     # no-report cap (mismatch) -> validate
     assert thresholds.routing_state_for(strat.compute(make_inputs(stages_away=2))) == "validate"
     # clean 100 -> generate_report

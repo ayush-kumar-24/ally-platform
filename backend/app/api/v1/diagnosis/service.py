@@ -9,6 +9,7 @@ already been written. Every other public method still commits once.
 """
 
 from datetime import datetime, timezone
+from decimal import Decimal
 
 from fastapi import status
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -29,9 +30,14 @@ from app.models import (
     Founder,
     Question,
     RoutingState,
+    ScoreLabel,
     SessionState,
     SessionStatus,
 )
+
+#: Score paired with ScoreLabel.AMBER for an answer the advisor could not assess.
+#: Matches the Amber band in the question-score config (green 0 / amber 1 / red 2).
+_FALLBACK_SCORE = Decimal("1")
 
 
 class FounderDnaNotCompleteError(AppError):
@@ -476,6 +482,20 @@ class DiagnosisService:
         # burnout and isolation appeared to be active blockers.
         if insight is not None:
             self._apply_insight(answer, insight)
+        else:
+            # No insight means the advisor was absent or FAILED (timeout, bad
+            # reply). Leaving the row unscored is not neutral -- it is silent
+            # data loss: StoredScoreAnswerClassifier refuses to guess a band and
+            # the reasoning pipeline drops the answer entirely
+            # ("Skipping unscored answer during classification"). Measured on one
+            # live session, six of the founder's answers were kept, shown back to
+            # them as answered, and then contributed nothing to their diagnosis.
+            #
+            # An advisor outage must cost adaptivity, never the founder's answer.
+            # AMBER is the deliberate choice: it is the middle band, so an
+            # unassessable answer neither manufactures a clean signal (green) nor
+            # invents a problem the founder may not have (red).
+            self._apply_fallback_score(answer)
 
         try:
             # Derived from the actual row count, not incremented -- a retry
@@ -574,6 +594,25 @@ class DiagnosisService:
         # third state -- kept but unscored -- for every answer accepted by the
         # one-reprompt bound. See submit_answer for what that cost.
         return resolve_next(ordered, shortlist, insight), insight
+
+    def _apply_fallback_score(self, answer: Answer) -> None:
+        """Score a kept answer the advisor could not assess.
+
+        Logged at WARNING, not INFO: a fallback score means this answer carries
+        no real assessment, and a run full of them is a degraded diagnosis that
+        would otherwise look identical to a healthy one.
+        """
+        answer.score_label = ScoreLabel.AMBER.value
+        answer.score = _FALLBACK_SCORE
+        logger.warning(
+            "Answer kept without an advisor score; applying neutral fallback",
+            extra={
+                "stage": "answer_scoring_fallback",
+                "answer_id": answer.answer_id,
+                "question_id": answer.question_id,
+                "score_label": ScoreLabel.AMBER.value,
+            },
+        )
 
     def _apply_insight(self, answer: Answer, insight: AnswerInsight) -> None:
         """Persist the LLM's Green/Amber/Red read on the answer, so the reasoning
