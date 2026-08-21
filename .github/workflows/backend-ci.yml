@@ -63,18 +63,31 @@ jobs:
 
           config = Config("alembic.ini")
           script = ScriptDirectory.from_config(config)
-          heads = script.get_heads()
 
+          heads = script.get_heads()
           print("Alembic heads:", heads)
 
-          expected = ["6f1d2c9a4b70"]
-
-          if heads != expected:
+          if len(heads) != 1:
               raise SystemExit(
-                  f"Unsafe Alembic state. Expected {expected}, got {heads}"
+                  f"Unsafe Alembic graph: expected exactly 1 head, got {heads}"
               )
 
-          print("Alembic migration graph is safe.")
+          head = heads[0]
+
+          revisions = {
+              revision.revision
+              for revision in script.walk_revisions()
+          }
+
+          required_revision = "6f1d2c9a4b70"
+
+          if required_revision not in revisions:
+              raise SystemExit(
+                  f"Required production reconciliation revision "
+                  f"{required_revision} is missing"
+              )
+
+          print(f"Alembic graph safe. Canonical head: {head}")
           PY
 
       - name: Build Docker image
