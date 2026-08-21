@@ -1,7 +1,16 @@
 name: Deploy Backend to AWS ECS
 
 on:
+  workflow_run:
+    workflows: ["Backend CI"]
+    types:
+      - completed
+
   workflow_dispatch:
+
+concurrency:
+  group: production-backend-deploy
+  cancel-in-progress: false
 
 permissions:
   id-token: write
@@ -24,11 +33,40 @@ env:
 jobs:
   deploy:
     name: Safe Backend Deployment
+
+    # Automatic deployment is allowed ONLY when:
+    # 1. Backend CI succeeded
+    # 2. CI was triggered by a push
+    # 3. The push was to main
+    #
+    # Manual deployment remains available through workflow_dispatch.
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'push' &&
+        github.event.workflow_run.head_branch == 'main'
+      )
+
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout exact tested commit
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Set deployment SHA
+        id: deploy-sha
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            DEPLOY_SHA="${{ github.event.workflow_run.head_sha }}"
+          else
+            DEPLOY_SHA="${{ github.sha }}"
+          fi
+
+          echo "sha=$DEPLOY_SHA" >> "$GITHUB_OUTPUT"
+          echo "Deploying commit: $DEPLOY_SHA"
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -48,9 +86,11 @@ jobs:
         id: image
         working-directory: backend
         run: |
-          IMAGE_URI="$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:$GITHUB_SHA"
+          DEPLOY_SHA="${{ steps.deploy-sha.outputs.sha }}"
 
-          echo "Building $IMAGE_URI"
+          IMAGE_URI="$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:$DEPLOY_SHA"
+
+          echo "Building: $IMAGE_URI"
 
           docker build -t "$IMAGE_URI" .
           docker push "$IMAGE_URI"
@@ -140,6 +180,8 @@ jobs:
             exit 1
           fi
 
+          echo "Production DB compatibility check passed."
+
       - name: Run Alembic migration once
         id: migrate
         run: |
@@ -223,3 +265,14 @@ jobs:
 
           echo "Production health check failed."
           exit 1
+
+      - name: Deployment summary
+        run: |
+          echo "============================================"
+          echo "ALLY BACKEND DEPLOYMENT SUCCESSFUL"
+          echo "============================================"
+          echo "Commit: ${{ steps.deploy-sha.outputs.sha }}"
+          echo "Image:  ${{ steps.image.outputs.uri }}"
+          echo "Task:   ${{ steps.taskdef.outputs.arn }}"
+          echo "API:    https://api.goxlally.ai"
+          echo "============================================"
