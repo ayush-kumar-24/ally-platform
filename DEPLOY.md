@@ -124,9 +124,51 @@ Several bugs found in development built cleanly and failed at runtime — a
 missing import, buttons with no handler. `no-undef` is enabled in
 `.oxlintrc.json` and catches the first class.
 
+## Report PDFs need a second container
+
+The report PDF is rendered by **Gotenberg** (headless Chromium), which renders
+the exact HTML document the founder reads on screen. That is the whole reason
+the PDF matches the page — there is one builder, not two.
+
+Gotenberg is **not optional and not bundled**. Without it, every
+`POST /reports/{id}/export` returns 503 with "still being prepared…" *forever*,
+because nothing will ever render it. The message is written for a momentary
+outage; a permanently missing sidecar makes it a lie.
+
+Add it as a **second container in the same ECS task definition** as the backend:
+
+| | |
+|---|---|
+| Image | `gotenberg/gotenberg:8` |
+| Container port | `3000` |
+| Backend env `GOTENBERG_URL` | `http://localhost:3000` |
+| Task memory | **+1 GB** over the backend's own (Chromium) |
+
+`localhost` is correct because containers in one Fargate task share a network
+namespace. Do NOT put Gotenberg behind a load balancer or a public route — it
+converts arbitrary HTML to PDF for anyone who can reach it.
+
+Two related settings:
+
+- **`ATTACHMENT_S3_BUCKET`** also stores rendered PDFs. Empty means storage
+  no-ops and every download re-renders (~2–4s of Chromium per click). It works,
+  it is just wasteful.
+- **`PUBLIC_APP_URL`** (e.g. `https://goxlally.ai`) is the origin used to build
+  share links. Left empty they are built from the request's own host, which
+  behind the Vercel proxy is the API domain — a working link, but not one a
+  founder wants to send to an investor.
+
+Verify after deploy: `GET /reports/{id}/document` returns HTML, then
+`POST /reports/{id}/export` returns `application/pdf` with header
+`X-PDF-Renderer: gotenberg`. Anything else in that header means a second
+renderer has grown back.
+
 ## Before you call it done
 
 - [ ] `GET /openapi.json` on the backend returns 200
+- [ ] The Gotenberg sidecar is in the task definition, and
+      `POST /reports/{id}/export` returns a real PDF (not 503)
+- [ ] A share link (`/r/<token>`) opens the report for a signed-OUT browser
 - [ ] `alembic upgrade head` has been RUN as a one-off task (see §1 — the task
       definition's `command` means it does not happen on its own)
 - [ ] Google sign-in completes and lands on `/guided/welcome`

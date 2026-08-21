@@ -11,9 +11,11 @@ from __future__ import annotations
 import secrets
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_founder_record
+from app.api.v1.reports.document import build_report_document
 from app.api.v1.reports.generator import ReportNarrative, ReportNarrativeGenerator
 from app.api.v1.reports.payload import build_report_payload
 from app.api.v1.reports.pdf_delivery import (
@@ -124,6 +126,56 @@ async def shared_report(token: str, db: Session = Depends(get_db)) -> SharedRepo
     )
 
 
+@router.get("/shared/{token}/view", response_class=HTMLResponse)
+async def shared_report_page(token: str, db: Session = Depends(get_db)) -> HTMLResponse:
+    """PUBLIC. The shared report as a readable page.
+
+    The share link used to point at the JSON endpoint above, so whoever a founder
+    sent it to opened a wall of JSON. This renders the same document the founder
+    sees, through the same builder.
+
+    It is the FULL report, by product decision (2026-08-21): a link that shows a
+    stripped-down version is not the thing the founder thought they were sharing.
+    That means a visitor sees the wellbeing note and the founder's own answers,
+    so two guards matter here and are not optional:
+
+      * `noindex, nofollow` -- an unlisted link is not a secret one, and a search
+        engine that crawls it would make a founder's psychological state a public
+        search result. This is the difference between "anyone I send it to" and
+        "anyone at all".
+      * No Download or Share controls (`with_actions=False`): both call endpoints
+        that require the founder's own session, so to a visitor they are buttons
+        that can only fail.
+
+    Access control, expiry and the access counter all live in get_active_share.
+    An expired, revoked or unknown token is a 404 -- deliberately the same answer
+    for all three, so the endpoint cannot be used to probe which tokens exist.
+    """
+    share = reports_repository.get_active_share(db, token)
+    if share is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "This shared report is not available.")
+    report = db.get(FounderReport, share.report_id)
+    if report is None or not report.is_active:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "This shared report is not available.")
+
+    founder = db.get(Founder, report.founder_id)
+    return HTMLResponse(
+        build_report_document(
+            _build_narrative(db, report),
+            report.insights,
+            founder_name=getattr(founder, "full_name", None),
+            generated_at=report.generated_at,
+            with_actions=False,
+        ),
+        headers={
+            "X-Robots-Tag": "noindex, nofollow, noarchive",
+            # Shares are revocable and expire; a cached copy in a CDN would
+            # outlive the revocation the founder just performed.
+            "Cache-Control": "private, no-store",
+        },
+    )
+
+
 @router.get("/{report_id}", response_model=ReportView)
 async def full_report(
     report_id: int,
@@ -173,6 +225,34 @@ async def recommendations(report_id: int, founder: Founder = Depends(get_founder
                           db: Session = Depends(get_db)) -> SectionSlice:
     n = _build_narrative(db, _owned_report(db, founder, report_id))
     return SectionSlice(report_id=report_id, section=_section(n, "priority_actions"))
+
+
+@router.get("/{report_id}/document", response_class=HTMLResponse)
+async def report_document(
+    report_id: int,
+    founder: Founder = Depends(get_founder_record),
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    """The report as a rendered HTML document -- the same one the PDF is made of.
+
+    The screen and the PDF are the same builder with one flag between them
+    (app/api/v1/reports/document.py), so "the download looks like the page" is a
+    property of the code rather than something two implementations have to keep
+    agreeing on. The React page mounts this in an isolated frame; Gotenberg
+    renders the print variant of the identical markup.
+
+    Not cached at the HTTP layer: the narrative behind it already is
+    (narrative_snapshot), so a repeat view is a column fetch plus string
+    assembly, and a stale document is worse than a cheap one.
+    """
+    report = _owned_report(db, founder, report_id)
+    narrative = _build_narrative(db, report)
+    return HTMLResponse(build_report_document(
+        narrative,
+        report.insights,
+        founder_name=founder.full_name,
+        generated_at=report.generated_at,
+    ))
 
 
 @router.post("/{report_id}/export")
@@ -228,7 +308,11 @@ async def share_report(
 ) -> ShareCreated:
     _owned_report(db, founder, report_id)  # ownership before creating a public link
     token = secrets.token_urlsafe(24)
-    base = str(request.base_url).rstrip("/")
+    # PUBLIC_APP_URL when set, because request.base_url behind the Vercel proxy
+    # is the API host -- a correct link, but not one a founder wants to send to
+    # an investor. Falls back to the request's own origin so local and preview
+    # environments keep working without configuration.
+    base = (settings.PUBLIC_APP_URL or str(request.base_url)).rstrip("/")
     share = reports_repository.create_share(
         db, founder_id=founder.founder_id, report_id=report_id, token=token, base_url=base,
     )

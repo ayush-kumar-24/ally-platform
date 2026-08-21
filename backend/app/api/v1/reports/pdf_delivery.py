@@ -86,7 +86,8 @@ def render_and_store(db: Session, report: FounderReports, narrative) -> bytes | 
     on that path, so the request stays retryable.
     """
     try:
-        pdf = render_pdf(build_report_html(narrative), base_url=settings.GOTENBERG_URL)
+        pdf = render_pdf(build_report_html(db, report, narrative),
+                         base_url=settings.GOTENBERG_URL)
     except GotenbergError as exc:
         logger.warning(
             "gotenberg unavailable; no PDF produced",

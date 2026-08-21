@@ -66,6 +66,39 @@ _ACTION_LINES_PER_SIDE = 3
 UNPOPULATED_SECTIONS = ("expected_impact",)
 
 
+#: Fact keys that must never reach a founder-facing report.
+#:
+#: `facts` doubles as the narrator's input slots AND as label/value pairs the
+#: report UI renders. That meant internal routing keys were printed to the
+#: founder verbatim -- a real report showed "Section: H" and
+#: "Trigger: founder_readiness_critical_gap" next to the most personal section
+#: in the document. Those describe how the report was assembled, not anything
+#: about the founder's business.
+#:
+#: A denylist rather than an allowlist on purpose: an unrecognised NEW fact is
+#: far more likely to be real founder content than a new internal key, so the
+#: default has to be "show it". Internal keys are few and known.
+_INTERNAL_FACT_KEYS = frozenset({
+    "section",        # spec slot letter ("H")
+    "trigger",        # routing reason code ("founder_readiness_critical_gap")
+    "_narrator",      # which narrator produced the prose
+    "psychology_flagged",   # internal boolean; rendered as a bare "Yes"
+    "separate_identity",    # narrator tone switch, not a finding
+})
+
+
+def _founder_facts(facts: dict) -> dict:
+    """Drop internal routing keys and empty values from founder-facing facts.
+
+    Empty values go too: a label with None behind it renders as a heading with
+    nothing under it, which reads as a broken report rather than an absent fact.
+    """
+    return {
+        k: v for k, v in (facts or {}).items()
+        if k not in _INTERNAL_FACT_KEYS and v not in (None, "", [], {})
+    }
+
+
 @dataclass(frozen=True)
 class Section:
     key: str
@@ -158,8 +191,12 @@ class ReportNarrativeGenerator:
                 facts = {**facts, "_narrator": source}
             heading = _HEADINGS.get(key, key.title())
             if key == "psychological_note" and facts.get("section") == "H":
-                heading = "Section H — Psychological State Note"
-            sections.append(Section(key, heading, prose, facts))
+                # Was "Section H — Psychological State Note". "Section H" is the
+                # internal spec's name for this slot, not something that means
+                # anything to the founder reading it; it made the most personal
+                # part of the report read like a clause reference.
+                heading = "Before the business — how you're doing"
+            sections.append(Section(key, heading, prose, _founder_facts(facts)))
 
         by_source: dict[str, int] = {}
         for s in sources:

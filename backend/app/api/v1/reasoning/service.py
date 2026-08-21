@@ -544,6 +544,37 @@ class ReasoningService:
             self.report_generator.internal_report(bundle),
         )
 
+    def _warm_report_narrative(self, report) -> None:
+        """Generate the report narrative now, while the founder is already waiting.
+
+        GET /reports/{id} generates this lazily on first read -- 7 sequential
+        LLM calls, measured at 26.5s live -- and caches it forever after. That
+        cost landed on the founder's FIRST view of their own report: the browser
+        aborted the request and the page showed "Couldn't load your DNA" at the
+        single moment that matters most. Every later view was fast, so the
+        failure only ever hit people seeing their report for the first time.
+
+        This method runs inside the post-diagnosis reasoning pass, which is
+        already a background task the founder waits through behind the Thinking
+        screen, so the same work costs them nothing extra here.
+
+        Best-effort by design: a narrator failure must not fail the diagnosis or
+        lose the report that was just committed. If this does not succeed the
+        lazy path still works exactly as before -- this makes the cold read
+        unlikely, it does not replace it.
+        """
+        try:
+            from app.api.v1.reports.routes import _build_narrative
+
+            _build_narrative(self.db, report)
+        except Exception as exc:  # noqa: BLE001 -- never fail a diagnosis for this
+            logger.warning(
+                "Could not pre-generate the report narrative; "
+                "it will be generated on first read instead",
+                extra={"report_id": getattr(report, "report_id", None)},
+                exc_info=exc,
+            )
+
     def _answer_evidence(self, session_id: int) -> dict[int, tuple[str, str]]:
         """question_id -> (question text, the founder's answer) for this session.
 
@@ -724,6 +755,7 @@ class ReasoningService:
 
         self.db.refresh(session)
         self._record_diagnosis_memory(founder, session, founder_report)
+        self._warm_report_narrative(report)
         self._log_stage(
             "persist", session.session_id, start,
             detected_root_causes=len(scored), report_id=report.report_id,

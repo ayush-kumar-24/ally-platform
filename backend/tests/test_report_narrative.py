@@ -180,7 +180,7 @@ def test_business_dna_shows_bands_not_raw_numbers():
 
 
 # Feedback #3: Section H is a named, spec-defined section on Critical Gap.
-def test_section_h_named_and_uses_band_description():
+def test_psychological_note_uses_band_description_and_hides_internals():
     desc = ("The founder is psychologically unprepared for the demands of this journey "
             "right now. The report will include Section H (Psychological State Note).")
     fr = _pillar("Founder Readiness", 20, flag=True, note="flag", band="Critical Gap", desc=desc)
@@ -188,9 +188,16 @@ def test_section_h_named_and_uses_band_description():
                  pillars=(fr, _pillar("Market Clarity", 60)), red_flag_pillars=(fr,))
     n = _gen(p)
     sec = next(s for s in n.sections if s.key == "psychological_note")
-    assert sec.facts["section"] == "H"
-    assert "Section H" in sec.heading
+    # The band description still drives the prose -- that part is unchanged.
     assert "psychologically unprepared" in sec.prose
+
+    # But the internal routing keys must not reach the founder. A real report
+    # printed "Section: H" and "Trigger: founder_readiness_critical_gap" as
+    # label/value pairs beside the most personal section in the document.
+    assert "section" not in sec.facts
+    assert "trigger" not in sec.facts
+    assert "Section H" not in sec.heading
+    assert sec.heading == "Before the business — how you're doing"
     # The same paragraph is NOT duplicated inside Business DNA.
     biz = next(s for s in n.sections if s.key == "business_dna")
     assert "psychologically unprepared" not in biz.prose

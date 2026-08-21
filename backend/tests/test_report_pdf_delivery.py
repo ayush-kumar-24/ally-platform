@@ -64,13 +64,13 @@ def no_storage(monkeypatch):
 
 @pytest.fixture
 def renders_ok(monkeypatch):
-    monkeypatch.setattr(pdf_delivery, "build_report_html", lambda n: "<html></html>")
+    monkeypatch.setattr(pdf_delivery, "build_report_html", lambda db, report, n: "<html></html>")
     monkeypatch.setattr(pdf_delivery, "render_pdf", lambda html, *, base_url: b"%PDF-real")
 
 
 @pytest.fixture
 def renderer_down(monkeypatch):
-    monkeypatch.setattr(pdf_delivery, "build_report_html", lambda n: "<html></html>")
+    monkeypatch.setattr(pdf_delivery, "build_report_html", lambda db, report, n: "<html></html>")
 
     def _boom(html, *, base_url):
         raise pdf_delivery.GotenbergError("connection refused")

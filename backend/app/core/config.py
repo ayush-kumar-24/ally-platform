@@ -265,10 +265,21 @@ class Settings(BaseSettings):
     CORS_ORIGINS: str = "http://localhost:3000"
 
     # --- PDF rendering (Gotenberg headless-Chromium sidecar) ---
-    # The report PDF is rendered from the print HTML for screen parity. When the
-    # service is unreachable, export falls back to the reportlab renderer and
-    # flags it via the X-PDF-Renderer response header (visible degradation).
+    # The report PDF is rendered from the report document for screen parity.
+    # When the service is unreachable, export returns 503 and queues a backfill
+    # rather than substituting a different-looking document.
+    #
+    # DEPLOYMENT: this must point at a running Gotenberg. On ECS Fargate it is a
+    # second container in the SAME task definition (image gotenberg/gotenberg:8,
+    # port 3000), which is why localhost works -- containers in one task share a
+    # network namespace. Without that sidecar every PDF download 503s forever.
     GOTENBERG_URL: str = "http://localhost:3000"
+
+    # Public origin used to build shareable links. Empty falls back to the
+    # request's own base URL, which behind the Vercel proxy is the API host --
+    # correct but wrong-looking in a link a founder sends to an investor. Set
+    # this to the site people actually visit (e.g. https://goxlally.ai).
+    PUBLIC_APP_URL: str = ""
 
     # --- Observability ---
     SENTRY_DSN: str = ""

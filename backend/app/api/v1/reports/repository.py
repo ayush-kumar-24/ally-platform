@@ -50,11 +50,24 @@ class ReportsRepository:
     # --- shares -----------------------------------------------------------
     def create_share(
         self, db: Session, *, founder_id: int, report_id: int, token: str,
-        base_url: str, ttl_hours: int = 24,
+        base_url: str, ttl_hours: int = 24 * 30,
     ) -> ReportShares:
+        """A public link to this report.
+
+        Thirty days, not the 24 hours this used to default to: a founder who
+        sends their report to an investor on a Friday had a dead link by Monday,
+        which reads as broken rather than careful. It still expires, and the
+        founder can revoke it before then -- a link that works forever is one
+        that keeps working after it has been forwarded somewhere they did not
+        intend.
+
+        The URL points at the rendered PAGE (`/r/<token>`), not the JSON API it
+        used to name: this link is opened by whoever the founder sends it to, and
+        they should see the report, not a wall of JSON.
+        """
         share = ReportShares(
             founder_id=founder_id, report_id=report_id, share_token=token,
-            share_url=f"{base_url}/api/v1/reports/shared/{token}",
+            share_url=f"{base_url}/r/{token}",
             expires_at=datetime.now(timezone.utc) + timedelta(hours=ttl_hours),
             is_active=True, access_count=0,
         )

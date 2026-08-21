@@ -1,11 +1,70 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { factList, getLatestReport, getReport } from '../services/reports';
+import {
+  createShareLink, downloadReportPdf, factList,
+  getLatestReport, getReport, getReportDocument,
+} from '../services/reports';
 import { DnaError, DnaLoading, DnaNoReport } from '../components/DnaState';
 import FeedbackPrompt from '../components/FeedbackPrompt';
 import { FEEDBACK } from '../services/feedback';
 import { useApp } from '../context/AppContext';
 import { getOverview } from '../services/dashboard';
+
+/**
+ * The report document, mounted in an isolated frame.
+ *
+ * An iframe rather than dangerouslySetInnerHTML on purpose: the document brings
+ * its own complete stylesheet, and the platform shell's global CSS would
+ * otherwise bleed into it — at which point the screen stops matching the PDF,
+ * which is the one thing this whole path exists to guarantee. srcDoc frames are
+ * same-origin, so the parent can still wire the buttons up directly and the
+ * document itself stays script-free (and therefore identical to what Gotenberg
+ * renders).
+ *
+ * The frame is grown to its content height instead of scrolling internally, so
+ * the shell's own scroller keeps working — and with it the read-gate below.
+ */
+function ReportDocument({ html, onDownload, onShare, frameRef }) {
+  const [height, setHeight] = useState(900);
+
+  const wire = useCallback((event) => {
+    const frame = event.currentTarget;
+    const doc = frame.contentDocument;
+    if (!doc) return;
+
+    // documentElement, not body: the shell's bottom padding and the footnote's
+    // top margin sit outside body's own box, so measuring body alone left the
+    // frame ~45px short and clipped the footer off the end of the report.
+    const fit = () => setHeight(Math.max(
+      doc.documentElement.scrollHeight, doc.body.scrollHeight));
+    fit();
+    // Fonts settle after load and reflow the whole document; without this the
+    // frame keeps the pre-webfont height and the last section is cut off.
+    doc.fonts?.ready?.then(fit).catch(() => {});
+    const observer = new ResizeObserver(fit);
+    observer.observe(doc.documentElement);
+    frame._cleanup = () => observer.disconnect();
+
+    doc.querySelectorAll('[data-report-action="download"]')
+       .forEach(el => el.addEventListener('click', onDownload));
+    doc.querySelectorAll('[data-report-action="share"]')
+       .forEach(el => el.addEventListener('click', onShare));
+  }, [onDownload, onShare]);
+
+  useEffect(() => () => frameRef.current?._cleanup?.(), [frameRef]);
+
+  return (
+    <iframe
+      ref={frameRef}
+      title="Your clarity report"
+      srcDoc={html}
+      onLoad={wire}
+      style={{ width: '100%', height, border: 0, display: 'block',
+               colorScheme: 'light' }}
+    />
+  );
+}
+
 
 function ReportView({ report, meta, containerRef }) {
   const navigate = useNavigate();
@@ -180,8 +239,16 @@ export default function Report() {
           if (id === loadIdRef.current) setState({ status: 'no-report' });
           return;
         }
-        const full = await getReport(latest.report_id);
-        if (id === loadIdRef.current) setState({ status: 'ready', report: full, meta: latest });
+        // The rendered document is what the founder should see, but a failure
+        // to fetch it must not cost them their report: the JSON narrative still
+        // renders through ReportView below. Everyone gets their report.
+        const [full, html] = await Promise.all([
+          getReport(latest.report_id),
+          getReportDocument(latest.report_id).catch(() => null),
+        ]);
+        if (id === loadIdRef.current) {
+          setState({ status: 'ready', report: full, meta: latest, html });
+        }
       })
       .catch((error) => {
         if (id === loadIdRef.current) setState({ status: 'error', error });
@@ -195,7 +262,36 @@ export default function Report() {
   const contentRef = useRef(null);
   const hasRead = useHasRead(state.status === 'ready', contentRef);
 
-  const { startTour } = useApp();
+  const frameRef = useRef(null);
+  const pageNavigate = useNavigate();
+  const { startTour, showToast } = useApp();
+
+  const reportId = state.meta?.report_id ?? state.report?.report_id;
+
+  const handleDownload = useCallback(() => {
+    if (!reportId) return;
+    showToast('Preparing your PDF…');
+    downloadReportPdf(reportId)
+      .then(() => showToast('Downloaded.'))
+      .catch((err) => showToast(
+        // 503 is the renderer being momentarily down, and the service has
+        // already recovered the API's own sentence for that case -- it says
+        // more than anything generic we could put here.
+        err?.status === 503
+          ? err.message
+          : "That download didn't start. Try again in a moment.",
+        7000));
+  }, [reportId, showToast]);
+
+  const handleShare = useCallback(() => {
+    if (!reportId) return;
+    createShareLink(reportId)
+      .then(({ share_url }) => navigator.clipboard?.writeText(share_url)
+        .then(() => showToast('Share link copied to your clipboard.'))
+        .catch(() => showToast(`Share link: ${share_url}`, 8000)))
+      .catch(() => showToast("Couldn't create a share link. Try again in a moment.", 6000));
+  }, [reportId, showToast]);
+
   const offerTour = useCallback(() => {
     // Ask the server rather than assuming: it knows from tour_seen_at whether
     // this founder has been offered the tour before, on any device.
@@ -210,7 +306,28 @@ export default function Report() {
 
   return (
     <>
-      <ReportView report={state.report} meta={state.meta} containerRef={contentRef} />
+      {state.html ? (
+        <div className="fd-container" ref={contentRef}>
+          <ReportDocument
+            html={state.html}
+            frameRef={frameRef}
+            onDownload={handleDownload}
+            onShare={handleShare}
+          />
+          <div style={{ marginTop: 30, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <button className="btn btn-em" type="button"
+                    onClick={() => pageNavigate('/app/next-steps')}>
+              See your next steps
+            </button>
+            <button className="btn btn-ghost" type="button"
+                    onClick={() => pageNavigate('/app/ally-chat')}>
+              Discuss this with Ally
+            </button>
+          </div>
+        </div>
+      ) : (
+        <ReportView report={state.report} meta={state.meta} containerRef={contentRef} />
+      )}
       <FeedbackPrompt
         type={FEEDBACK.REPORT}
         when={hasRead}

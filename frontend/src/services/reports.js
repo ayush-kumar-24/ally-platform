@@ -8,7 +8,55 @@
  * the founder acts on it.
  */
 
-import { get } from './api';
+import { get, post } from './api';
+
+/**
+ * The report as a rendered HTML document — the same one the PDF is built from.
+ *
+ * The page mounts this rather than re-implementing the layout in JSX, because a
+ * second implementation is exactly how the PDF drifted from the screen before.
+ * One builder on the server, one flag between the two outputs.
+ */
+export function getReportDocument(reportId) {
+  return get(`/reports/${reportId}/document`, { responseType: 'text' });
+}
+
+/**
+ * Download the PDF of this report.
+ *
+ * Rejects rather than resolving on failure: the export endpoint answers 503 when
+ * the renderer is momentarily down, and that is a real "try again shortly", not
+ * a file. Handing the founder a broken download would be worse than saying so.
+ */
+export async function downloadReportPdf(reportId) {
+  let blob;
+  try {
+    blob = await post(`/reports/${reportId}/export`, null, { responseType: 'blob' });
+  } catch (err) {
+    // responseType 'blob' applies to error responses too, so the API's own
+    // founder-facing sentence arrives as an unread Blob and normalizeError
+    // falls back to axios's "Request failed with status code 503". Read it back
+    // out: the endpoint writes a better message than any generic one we'd
+    // substitute here, and it is the one the founder should see.
+    if (err?.data instanceof Blob) {
+      try {
+        const parsed = JSON.parse(await err.data.text());
+        if (typeof parsed?.message === 'string') err.message = parsed.message;
+      } catch { /* not JSON — keep the normalized message */ }
+    }
+    throw err;
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `clarity-report-${reportId}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  // Next tick — revoking synchronously can cancel the download before the
+  // browser has finished reading the blob.
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
 
 /** All reports for the signed-in founder, newest first. */
 export function listReports() {
@@ -139,4 +187,13 @@ export function factList(facts) {
       value: readable(value),
     }))
     .filter(f => f.value !== '');
+}
+
+/**
+ * A public link to this report. The shared view is a strict subset — headings
+ * and prose only, no scores, facts or reasoning — so sharing one cannot leak
+ * the engine's internals to whoever the founder sends it to.
+ */
+export function createShareLink(reportId) {
+  return post(`/reports/${reportId}/share`, {});
 }
