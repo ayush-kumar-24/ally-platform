@@ -24,7 +24,6 @@ env:
 
   ECS_CLUSTER: ally-backend-cluster
   ECS_SERVICE: ally-backend-service
-  TASK_FAMILY: ally_backend_task
   CONTAINER_NAME: Main
 
   SUBNETS: subnet-0e59e6f2a84ecf3a3,subnet-0f5a3c7d49c374b61
@@ -51,6 +50,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # ---------------------------------------------------------
+      # 1. CHECKOUT EXACT COMMIT THAT PASSED CI
+      # ---------------------------------------------------------
+
       - name: Checkout exact tested commit
         uses: actions/checkout@v4
         with:
@@ -68,11 +71,55 @@ jobs:
           echo "sha=$DEPLOY_SHA" >> "$GITHUB_OUTPUT"
           echo "Deploying commit: $DEPLOY_SHA"
 
+      # ---------------------------------------------------------
+      # 2. AWS AUTHENTICATION
+      # ---------------------------------------------------------
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::010724906865:role/ally-github-deploy
           aws-region: ap-south-1
+
+      # ---------------------------------------------------------
+      # 3. CAPTURE CURRENT PRODUCTION TASK
+      #
+      # This exact task definition becomes:
+      # - the template for the new deployment
+      # - the rollback target if deployment fails
+      #
+      # This also preserves:
+      # - Gotenberg sidecar
+      # - ports
+      # - secrets
+      # - environment variables
+      # - logging config
+      # ---------------------------------------------------------
+
+      - name: Capture current production task definition
+        id: previous-task
+        run: |
+          CURRENT_TASK_ARN=$(aws ecs describe-services \
+            --cluster "$ECS_CLUSTER" \
+            --services "$ECS_SERVICE" \
+            --query 'services[0].taskDefinition' \
+            --output text)
+
+          if [ -z "$CURRENT_TASK_ARN" ] || [ "$CURRENT_TASK_ARN" = "None" ]; then
+            echo "Could not determine current production task definition."
+            exit 1
+          fi
+
+          echo "arn=$CURRENT_TASK_ARN" >> "$GITHUB_OUTPUT"
+
+          echo "============================================"
+          echo "CURRENT PRODUCTION TASK"
+          echo "$CURRENT_TASK_ARN"
+          echo "============================================"
+
+      # ---------------------------------------------------------
+      # 4. LOGIN TO ECR
+      # ---------------------------------------------------------
 
       - name: Login to Amazon ECR
         run: |
@@ -81,6 +128,10 @@ jobs:
                 --username AWS \
                 --password-stdin \
                 "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
+
+      # ---------------------------------------------------------
+      # 5. BUILD + PUSH EXACT TESTED COMMIT
+      # ---------------------------------------------------------
 
       - name: Build and push Docker image
         id: image
@@ -97,11 +148,24 @@ jobs:
 
           echo "uri=$IMAGE_URI" >> "$GITHUB_OUTPUT"
 
+      # ---------------------------------------------------------
+      # 6. CREATE NEW TASK DEFINITION
+      #
+      # IMPORTANT:
+      # We copy the task definition currently used by the ECS
+      # production service.
+      #
+      # Only the Main backend container image is changed.
+      #
+      # Gotenberg and all other infrastructure configuration
+      # remain untouched.
+      # ---------------------------------------------------------
+
       - name: Create new ECS task definition
         id: taskdef
         run: |
           aws ecs describe-task-definition \
-            --task-definition "$TASK_FAMILY" \
+            --task-definition "${{ steps.previous-task.outputs.arn }}" \
             --query taskDefinition \
             > current-taskdef.json
 
@@ -133,8 +197,21 @@ jobs:
             --query 'taskDefinition.taskDefinitionArn' \
             --output text)
 
+          if [ -z "$NEW_TASK_ARN" ] || [ "$NEW_TASK_ARN" = "None" ]; then
+            echo "Could not register new ECS task definition."
+            exit 1
+          fi
+
           echo "arn=$NEW_TASK_ARN" >> "$GITHUB_OUTPUT"
-          echo "New task definition: $NEW_TASK_ARN"
+
+          echo "============================================"
+          echo "NEW TASK DEFINITION"
+          echo "$NEW_TASK_ARN"
+          echo "============================================"
+
+      # ---------------------------------------------------------
+      # 7. PRODUCTION DATABASE COMPATIBILITY CHECK
+      # ---------------------------------------------------------
 
       - name: Check new image against production DB
         id: preflight
@@ -169,7 +246,7 @@ jobs:
           EXIT_CODE=$(aws ecs describe-tasks \
             --cluster "$ECS_CLUSTER" \
             --tasks "${{ steps.preflight.outputs.task_arn }}" \
-            --query 'tasks[0].containers[0].exitCode' \
+            --query "tasks[0].containers[?name=='$CONTAINER_NAME'].exitCode | [0]" \
             --output text)
 
           echo "DB compatibility exit code: $EXIT_CODE"
@@ -181,6 +258,10 @@ jobs:
           fi
 
           echo "Production DB compatibility check passed."
+
+      # ---------------------------------------------------------
+      # 8. RUN ALEMBIC MIGRATION EXACTLY ONCE
+      # ---------------------------------------------------------
 
       - name: Run Alembic migration once
         id: migrate
@@ -215,7 +296,7 @@ jobs:
           EXIT_CODE=$(aws ecs describe-tasks \
             --cluster "$ECS_CLUSTER" \
             --tasks "${{ steps.migrate.outputs.task_arn }}" \
-            --query 'tasks[0].containers[0].exitCode' \
+            --query "tasks[0].containers[?name=='$CONTAINER_NAME'].exitCode | [0]" \
             --output text)
 
           echo "Migration exit code: $EXIT_CODE"
@@ -228,13 +309,27 @@ jobs:
 
           echo "Database migration successful."
 
+      # ---------------------------------------------------------
+      # 9. DEPLOY NEW TASK TO ECS
+      # ---------------------------------------------------------
+
       - name: Deploy new task definition to ECS
+        id: deploy-service
         run: |
+          echo "Deploying:"
+          echo "${{ steps.taskdef.outputs.arn }}"
+
           aws ecs update-service \
             --cluster "$ECS_CLUSTER" \
             --service "$ECS_SERVICE" \
             --task-definition "${{ steps.taskdef.outputs.arn }}" \
             --force-new-deployment
+
+          echo "ECS service update started."
+
+      # ---------------------------------------------------------
+      # 10. WAIT FOR ECS ROLLING DEPLOYMENT
+      # ---------------------------------------------------------
 
       - name: Wait for ECS service to become stable
         run: |
@@ -245,6 +340,10 @@ jobs:
             --services "$ECS_SERVICE"
 
           echo "ECS service is stable."
+
+      # ---------------------------------------------------------
+      # 11. PRODUCTION HEALTH CHECK
+      # ---------------------------------------------------------
 
       - name: Production API health check
         run: |
@@ -259,20 +358,115 @@ jobs:
               exit 0
             fi
 
-            echo "Health check attempt $i failed. Retrying in 10 seconds..."
+            echo "Health check attempt $i failed."
+            echo "Retrying in 10 seconds..."
+
             sleep 10
           done
 
-          echo "Production health check failed."
+          echo "============================================"
+          echo "PRODUCTION HEALTH CHECK FAILED"
+          echo "============================================"
+
           exit 1
 
+      # ---------------------------------------------------------
+      # 12. AUTOMATIC ROLLBACK
+      #
+      # Runs ONLY if:
+      # - ECS service had already been changed
+      # - a later deployment step failed
+      #
+      # It restores the exact task definition captured before
+      # deployment.
+      # ---------------------------------------------------------
+
+      - name: Roll back to previous production task
+        if: failure() && steps.deploy-service.outcome == 'success'
+        run: |
+          PREVIOUS_TASK="${{ steps.previous-task.outputs.arn }}"
+
+          echo "============================================"
+          echo "DEPLOYMENT FAILED"
+          echo "STARTING AUTOMATIC ROLLBACK"
+          echo "============================================"
+
+          echo "Restoring:"
+          echo "$PREVIOUS_TASK"
+
+          aws ecs update-service \
+            --cluster "$ECS_CLUSTER" \
+            --service "$ECS_SERVICE" \
+            --task-definition "$PREVIOUS_TASK" \
+            --force-new-deployment
+
+          echo "Waiting for rollback deployment to stabilize..."
+
+          aws ecs wait services-stable \
+            --cluster "$ECS_CLUSTER" \
+            --services "$ECS_SERVICE"
+
+          echo "Previous ECS task definition restored."
+
+          echo "Checking production API after rollback..."
+
+          for i in {1..12}; do
+            if curl --fail --silent --show-error \
+              https://api.goxlally.ai/api/v1/health
+            then
+              echo
+              echo "============================================"
+              echo "ROLLBACK SUCCESSFUL"
+              echo "Production backend is healthy again."
+              echo "============================================"
+              exit 0
+            fi
+
+            echo "Rollback health check attempt $i failed."
+            echo "Retrying in 10 seconds..."
+
+            sleep 10
+          done
+
+          echo "============================================"
+          echo "ROLLBACK COMPLETED BUT HEALTH CHECK FAILED"
+          echo "MANUAL INVESTIGATION REQUIRED"
+          echo "============================================"
+
+          exit 1
+
+      # ---------------------------------------------------------
+      # 13. SUCCESS SUMMARY
+      # ---------------------------------------------------------
+
       - name: Deployment summary
+        if: success()
         run: |
           echo "============================================"
           echo "ALLY BACKEND DEPLOYMENT SUCCESSFUL"
           echo "============================================"
-          echo "Commit: ${{ steps.deploy-sha.outputs.sha }}"
-          echo "Image:  ${{ steps.image.outputs.uri }}"
-          echo "Task:   ${{ steps.taskdef.outputs.arn }}"
-          echo "API:    https://api.goxlally.ai"
+
+          echo "Commit:"
+          echo "${{ steps.deploy-sha.outputs.sha }}"
+
+          echo
+          echo "Image:"
+          echo "${{ steps.image.outputs.uri }}"
+
+          echo
+          echo "Previous task:"
+          echo "${{ steps.previous-task.outputs.arn }}"
+
+          echo
+          echo "New task:"
+          echo "${{ steps.taskdef.outputs.arn }}"
+
+          echo
+          echo "API:"
+          echo "https://api.goxlally.ai"
+
+          echo
+          echo "Gotenberg and ECS sidecars:"
+          echo "Preserved from current production task definition."
+
           echo "============================================"
