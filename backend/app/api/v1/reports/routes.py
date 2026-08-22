@@ -120,12 +120,17 @@ def share_url_for(token: str, request: Request) -> str:
     So the pretty path is used only when PUBLIC_APP_URL says where the site
     lives. Without it we fall back to this API's own endpoint, which is uglier
     but always resolves. A link that works beats a link that looks right.
+
+    The fallback is reversed out of the route table rather than written as a
+    literal, so it follows the router if this module is ever remounted under a
+    different prefix. A hardcoded "/api/v1/..." would keep returning 200s from
+    url_path_for's point of view while silently pointing at nothing.
     """
     site = (settings.PUBLIC_APP_URL or "").strip().rstrip("/")
     if site:
         return f"{site}/r/{token}"
-    base = str(request.base_url).rstrip("/")
-    return f"{base}/api/v1/reports/shared/{token}/view"
+    path = request.app.url_path_for("shared_report_page", token=token)
+    return f"{str(request.base_url).rstrip('/')}{path}"
 
 
 # --- founder-scoped endpoints ----------------------------------------------

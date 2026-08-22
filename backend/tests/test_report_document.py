@@ -237,5 +237,10 @@ def test_share_url_falls_back_to_a_path_this_api_actually_serves(monkeypatch):
 
 
 class _FakeRequest:
+    """Enough of a Request for share_url_for: an origin and the real app, whose
+    route table the fallback reverses the path out of."""
+
     def __init__(self, base_url: str):
+        from app.main import app
         self.base_url = base_url
+        self.app = app
