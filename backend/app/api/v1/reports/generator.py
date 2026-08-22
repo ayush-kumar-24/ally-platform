@@ -265,9 +265,21 @@ class ReportNarrativeGenerator:
 
         # Hard rule 1: Founder Psychology leads the narrative when flagged --
         # place the psychological note before Business DNA + Root cause.
-        if show_psych:
-            insert_at = 2 if p.psychology_flagged else order.index("business_dna") + 1
-            order.insert(insert_at, "psychological_note")
+        #
+        # Computed from the section list in BOTH cases, rather than the literal
+        # 2 / index+1 pair this used to carry. That pair was wrong twice over:
+        # a hardcoded 2 is only the Business DNA slot on the variants whose
+        # order happens to start with two sections, so on LOW_CONFIDENCE (which
+        # opens with `hedge`) the note landed before Founder DNA instead; and
+        # `+ 1` put it AFTER Business DNA, which contradicts this very comment
+        # and matters -- _slots_and_facts blanks the Founder Readiness band
+        # description on the assumption Section H has already carried it, so
+        # that ordering showed the founder an emptied pillar before the section
+        # that explains it.
+        if show_psych and "business_dna" in order:
+            order.insert(order.index("business_dna"), "psychological_note")
+        elif show_psych:
+            order.insert(0, "psychological_note")
 
         # Discovery CTA is the last section on every NON-distress variant (it is how
         # GoXL converts, and the frontend renders it last).

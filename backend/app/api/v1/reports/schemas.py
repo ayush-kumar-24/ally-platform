@@ -3,7 +3,7 @@ strict subset -- prose only, no facts, no IDs, no reasoning internals."""
 
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class SectionOut(BaseModel):
@@ -56,3 +56,21 @@ class ShareCreated(BaseModel):
     share_token: str
     share_url: str
     expires_at: datetime
+
+
+class ShareOut(BaseModel):
+    """One live share link, as its owner sees it.
+
+    Carries access_count and last_accessed_at because the founder deciding
+    whether to revoke a link needs to know whether it has been opened -- and by
+    how many people -- not merely that it exists.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    share_token: str
+    share_url: str
+    expires_at: datetime
+    created_at: datetime | None = None
+    access_count: int = 0
+    last_accessed_at: datetime | None = None

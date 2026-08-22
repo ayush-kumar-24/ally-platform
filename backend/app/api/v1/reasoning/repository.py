@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Sequence
 from decimal import Decimal
 
-from sqlalchemy import delete, func, or_, select, text
+from sqlalchemy import delete, func, or_, select, text, update
 from sqlalchemy.orm import Session
 
 from app.models.schema import Archetypes, BehaviourPatterns, BlindSpots
@@ -31,7 +31,7 @@ from app.models import (
     ScoringRule,
     StageDiagnosisLogic,
 )
-from app.models.schema import ReadinessPillars
+from app.models.schema import ReadinessPillars, ReportShares
 
 
 class ReasoningRepository:
@@ -405,9 +405,13 @@ class ReasoningRepository:
         self.db.flush()
         return report
 
-    def deactivate_existing_reports(self, session_id: int) -> None:
+    def deactivate_existing_reports(self, session_id: int) -> list[int]:
         """Mark prior reports for the session inactive so only the latest is
-        current. Uses is_active rather than deletion to preserve history."""
+        current. Uses is_active rather than deletion to preserve history.
+
+        Returns the ids it deactivated so the caller can carry their share
+        links over -- see repoint_shares.
+        """
         stmt = (
             select(FounderReport)
             .where(
@@ -415,5 +419,35 @@ class ReasoningRepository:
                 FounderReport.is_active.is_(True),
             )
         )
+        deactivated: list[int] = []
         for report in self.db.execute(stmt).scalars().all():
             report.is_active = False
+            deactivated.append(report.report_id)
+        return deactivated
+
+    def repoint_shares(self, old_report_ids: list[int], new_report_id: int) -> int:
+        """Move live share links from superseded reports onto the new one.
+
+        Regeneration writes a NEW founder_reports row and deactivates the old
+        one, but report_shares.report_id still pointed at the old row -- and
+        both shared endpoints 404 a report that is not active. So regenerating
+        a report silently killed every link the founder had already sent, with
+        no notice to them and no way to see or reissue it: the investor who
+        opened it got "This shared report is not available".
+
+        A share is a promise about a founder's report, not about one row of it.
+        The token, its expiry and its access count all survive; only the row it
+        resolves to moves forward. Returns the number of shares moved.
+        """
+        ids = [int(i) for i in (old_report_ids or []) if i is not None]
+        if not ids or new_report_id is None:
+            return 0
+        result = self.db.execute(
+            update(ReportShares)
+            .where(
+                ReportShares.report_id.in_(ids),
+                ReportShares.is_active.is_(True),
+            )
+            .values(report_id=new_report_id)
+        )
+        return int(result.rowcount or 0)

@@ -670,7 +670,7 @@ class ReasoningService:
             session.session_state = self._session_state(session, distress_mode)
             session.last_activity_at = _utcnow()
 
-            self.repository.deactivate_existing_reports(session.session_id)
+            superseded = self.repository.deactivate_existing_reports(session.session_id)
 
             # Founder DNA jsonb -- archetype (always, when assigned) plus
             # whichever of the newer dimensions actually resolved to real data.
@@ -716,6 +716,7 @@ class ReasoningService:
                 founder_id=founder.founder_id,
                 session_id=session.session_id,
                 report_type=ReportType.FULL_DIAGNOSIS.value,
+                title=self._report_title(founder_report),
                 summary=founder_report.executive_summary,
                 top_root_cause_ids=[s.root_cause_id for s in scored if s.is_top_finding],
                 recommended_intervention_ids=list(recommendations.intervention_ids),
@@ -742,6 +743,21 @@ class ReasoningService:
                     distress_assessment, scored,
                 ),
             )
+
+            # Carry any live share links onto the report that just replaced the
+            # one they pointed at. Without this a regeneration silently broke
+            # every link the founder had already sent out -- see
+            # ReasoningRepository.repoint_shares.
+            moved = self.repository.repoint_shares(superseded, report.report_id)
+            if moved:
+                logger.info(
+                    "moved active share links onto the regenerated report",
+                    extra={
+                        "session_id": session.session_id,
+                        "report_id": report.report_id,
+                        "shares_moved": moved,
+                    },
+                )
 
             self.db.commit()
         except SQLAlchemyError as exc:
@@ -882,6 +898,22 @@ class ReasoningService:
             blind_spot_ids=blind_spot_ids,
             behaviour_pattern_ids=behaviour_pattern_ids,
         )
+
+    def _report_title(self, founder_report) -> str:
+        """A name for the report row.
+
+        founder_reports.title was never written -- the column existed, the
+        dashboard's recent-reports query selected it, and the report page read
+        meta?.title, so every report card rendered with a blank title and the
+        page fell back to the generic "Your diagnosis report". Named after the
+        lead root cause, which is the one thing that distinguishes one of a
+        founder's reports from another at a glance; the label only, never an
+        intervention id or a score.
+        """
+        causes = getattr(founder_report, "top_root_causes", ()) or ()
+        lead = str(getattr(causes[0], "label", "") or "").strip() if causes else ""
+        when = datetime.now(timezone.utc).strftime("%b %Y")
+        return f"{lead} · {when}" if lead else f"Clarity report · {when}"
 
     def _business_dna(self, business_health) -> dict | None:
         """Serialise the Business Health score to structured JSON for

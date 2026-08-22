@@ -42,6 +42,29 @@ class DiagnosisRepository:
             {"f": founder_id},
         )
 
+    def lock_session_for_update(self, session_id: int) -> None:
+        """Row-level lock on one session, held for the rest of this transaction.
+
+        Taken immediately before submit_answer's progress-update commit, NOT at
+        the top of the request: everything above that point is the two LLM calls,
+        and holding a transaction open across them is the exact failure the
+        two-commit split in submit_answer exists to avoid (Supabase's pooler
+        closes a connection left idle-in-transaction for tens of seconds).
+
+        What it protects: two concurrent answers to the same question -- a
+        double-click, or a client retry that overlapped the original -- both
+        reached the progress update with independently chosen next questions.
+        The unique index on answers stops the duplicate row, but nothing stopped
+        the second request overwriting the first's current_question_id, so the
+        founder's next submission 409'd against a question they were never
+        shown. With this lock the loser blocks here, then sees the pointer has
+        already moved and declines to clobber it.
+        """
+        self.db.execute(
+            _text("select session_id from sessions where session_id = :s for update"),
+            {"s": session_id},
+        )
+
     def get_session_by_id(self, session_id: int) -> DiagnosisSession | None:
         return self.db.get(DiagnosisSession, session_id)
 

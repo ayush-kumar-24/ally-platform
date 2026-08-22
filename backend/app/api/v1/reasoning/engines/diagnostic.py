@@ -527,13 +527,21 @@ class StandardDiagnosticEngine(DiagnosticEngine):
         """
         signals = []
         for c in classifications:
-            if c.label != ScoreLabel.RED:
-                continue
             question = questions.get(c.question_id)
-            tagged = c.is_distress_flagged or (
-                question is not None and question.is_distress_tagged
+            # Two independent qualifying routes, matching the docstring's "or".
+            # These used to be ANDed -- the RED check was a `continue` above the
+            # tag check -- so an answer EXPLICITLY flagged for distress counted
+            # for nothing unless it also happened to score Red. A founder whose
+            # answers carried the explicit flag but scored Amber never tripped
+            # distress mode and was handed the standard report, which is the
+            # opposite of what an explicit flag is for: the flag is a direct
+            # signal about the person, not a modifier on the business score.
+            red_on_distress_question = (
+                c.label == ScoreLabel.RED
+                and question is not None
+                and question.is_distress_tagged
             )
-            if tagged:
+            if red_on_distress_question or c.is_distress_flagged:
                 signals.append(c.answer_id)
         return signals
 

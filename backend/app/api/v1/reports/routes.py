@@ -26,7 +26,7 @@ from app.api.v1.reports.pdf_delivery import (
 from app.api.v1.reports.repository import reports_repository
 from app.core.config import settings
 from app.api.v1.reports.schemas import (
-    InsightsView, ReportView, SectionOut, SectionSlice, ShareCreated,
+    InsightsView, ReportView, SectionOut, SectionSlice, ShareCreated, ShareOut,
     SharedReportView, SharedSection,
 )
 from app.db.session import get_db
@@ -340,3 +340,45 @@ async def share_report(
     return ShareCreated(
         share_token=share.share_token, share_url=share.share_url, expires_at=share.expires_at,
     )
+
+
+@router.get("/{report_id}/shares", response_model=list[ShareOut])
+async def list_shares(
+    report_id: int,
+    founder: Founder = Depends(get_founder_record),
+    db: Session = Depends(get_db),
+) -> list[ShareOut]:
+    """Every live link to this report.
+
+    A founder cannot decide whether to revoke a link they cannot see. Shares
+    were creatable and (as of the endpoint below) revocable, but never
+    listable, so the only record of what had been shared was whatever the
+    founder remembered sending.
+    """
+    _owned_report(db, founder, report_id)
+    return [
+        ShareOut.model_validate(s)
+        for s in reports_repository.list_active_shares(
+            db, founder_id=founder.founder_id, report_id=report_id,
+        )
+    ]
+
+
+@router.delete("/{report_id}/share/{token}", status_code=status.HTTP_204_NO_CONTENT)
+async def revoke_share(
+    report_id: int, token: str,
+    founder: Founder = Depends(get_founder_record),
+    db: Session = Depends(get_db),
+) -> Response:
+    """Revoke a share link, immediately and permanently.
+
+    Ownership is checked on the report AND on the share row (the repository
+    scopes its update by founder_id), so a token belonging to someone else is a
+    404 rather than a revocation. An unknown or already-revoked token is also a
+    404 -- deliberately the same answer, so this cannot be used to probe which
+    tokens exist, matching the shared endpoints' own rule.
+    """
+    _owned_report(db, founder, report_id)
+    if not reports_repository.revoke_share(db, founder_id=founder.founder_id, token=token):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No such share link.")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

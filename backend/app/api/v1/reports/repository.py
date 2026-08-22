@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import text
+from sqlalchemy import select, text, update
 from sqlalchemy.orm import Session
 
 from app.models.schema import ReportShares
@@ -75,6 +75,51 @@ class ReportsRepository:
         db.commit()
         db.refresh(share)
         return share
+
+    def list_active_shares(
+        self, db: Session, *, founder_id: int, report_id: int,
+    ) -> list[ReportShares]:
+        """Live (unrevoked, unexpired) shares for one of the founder's reports.
+
+        Scoped by founder_id as well as report_id: the caller has already
+        checked ownership, and repeating the constraint here means a future
+        caller that forgets to cannot list someone else's links.
+        """
+        rows = db.execute(
+            select(ReportShares)
+            .where(
+                ReportShares.founder_id == founder_id,
+                ReportShares.report_id == report_id,
+                ReportShares.is_active.is_(True),
+                ReportShares.expires_at > datetime.now(timezone.utc),
+            )
+            .order_by(ReportShares.created_at.desc())
+        ).scalars().all()
+        return list(rows)
+
+    def revoke_share(self, db: Session, *, founder_id: int, token: str) -> bool:
+        """Kill one share link. True when a live share was revoked.
+
+        create_share's docstring has always said "the founder can revoke it
+        before then", and the shared page sends `Cache-Control: private,
+        no-store` specifically so a CDN copy cannot outlive a revocation -- but
+        there was no way to revoke anything. A founder who shared their report
+        by mistake had to wait thirty days.
+
+        Idempotent: revoking an already-revoked or unknown token is False, not
+        an error, and never reveals whether the token exists for someone else.
+        """
+        result = db.execute(
+            update(ReportShares)
+            .where(
+                ReportShares.share_token == token,
+                ReportShares.founder_id == founder_id,
+                ReportShares.is_active.is_(True),
+            )
+            .values(is_active=False)
+        )
+        db.commit()
+        return bool(result.rowcount)
 
     def get_active_share(self, db: Session, token: str) -> ReportShares | None:
         share = db.execute(

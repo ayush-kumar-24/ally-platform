@@ -228,6 +228,31 @@ STYLE = """
   line-height:1;font-variant-numeric:tabular-nums;}
 .rp .stat-label{font-size:13.5px;color:var(--ink-soft);}
 
+/* Facts: the label/value rows under a narrative section. Open-ended by design
+   -- an engine-owned fact key this module has never heard of still renders,
+   which is what lets a newly answered Founder-DNA dimension appear on the
+   report without a code change. */
+.rp .facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));
+  gap:16px;margin-top:22px;}
+.rp .fact{border-radius:12px;padding:18px 20px;background:var(--paper-card);
+  border:1px solid var(--paper-line);display:flex;flex-direction:column;gap:7px;}
+.rp .fact-k{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--signal);}
+.rp .fact-v{font-size:14.5px;line-height:1.55;color:var(--ink-soft);}
+.rp .fact-list{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:7px;}
+.rp .fact-list li{display:grid;grid-template-columns:14px minmax(0,1fr);gap:9px;}
+.rp .fact-list li::before{content:"";width:6px;height:6px;border-radius:50%;
+  background:var(--signal);margin-top:8px;}
+
+/* The confirm/solve heading inside Priority actions -- the 3+3 plan reads as
+   two moves, not one undifferentiated list of six. */
+.rp .action-group{font-size:12px;font-weight:700;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--signal);margin:22px 0 14px;}
+.rp .action-group:first-child{margin-top:0;}
+
+/* The DISTRESS hero: no ring, so it is one column rather than two. */
+.rp .hero-quiet{grid-template-columns:1fr;}
+
 .rp .close{margin-top:60px;border-radius:16px;padding:32px 36px;background:var(--paper-card);
   border:1px solid var(--paper-line);display:flex;align-items:center;
   justify-content:space-between;gap:26px;flex-wrap:wrap;}
@@ -265,6 +290,6 @@ PRINT_ONLY = """
 .rp section.block{margin-top:34px;}
 .rp .block-head{break-after:avoid;}
 .rp .panel,.rp .cause,.rp .action,.rp .road-card,.rp .stat,.rp .trail,
-.rp .finding,.rp .care,.rp .quote,.rp .close{break-inside:avoid;}
+.rp .finding,.rp .care,.rp .quote,.rp .close,.rp .fact{break-inside:avoid;}
 .rp .close{margin-top:34px;}
 """

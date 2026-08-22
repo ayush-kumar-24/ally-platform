@@ -102,5 +102,21 @@ export function normalise(payload, resumed) {
 export async function resumeOrStart() {
   const current = await getCurrentSession();
   if (current) return normalise(current, true);
-  return normalise(await startDiagnosis(), false);
+
+  // `resumed` is the SERVER's answer, not an assumption about which call we
+  // made. POST /start legitimately resumes: /current can 404 and another tab —
+  // or a retry of this very request — can create the session a moment later,
+  // which is the race the founder-row lock in start_session exists for. Passing
+  // a hardcoded `false` here threw that answer away, so a session already
+  // twenty questions deep was greeted with "Hi, I'm Ally. Let's get started",
+  // the exact "Ally forgetting the conversation was already underway" the
+  // greeting logic in DiagnosisChat says it prevents.
+  const started = await startDiagnosis();
+  if (started?.resumed === true) {
+    // /start carries no history, so a resumed session would render with an
+    // empty transcript. Re-read /current, which does.
+    const withHistory = await getCurrentSession();
+    if (withHistory) return normalise(withHistory, true);
+  }
+  return normalise(started, started?.resumed === true);
 }

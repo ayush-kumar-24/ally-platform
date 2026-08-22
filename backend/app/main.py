@@ -143,6 +143,36 @@ if settings.is_production:
             },
         )
 
+# Supabase's SESSION-mode pooler allows 15 client connections in total, shared
+# by every process that talks to it. This app's own per-process ceiling is
+# pool_size + max_overflow, so N instances can demand N x that -- and when the
+# demand crosses 15 the pooler answers with "(EMAXCONNSESSION) max clients
+# reached in session mode" and requests fail intermittently depending on who
+# got there first. Observed live against this project's pooler.
+#
+# Checked at startup because the failure is otherwise invisible until traffic
+# arrives, and then presents as unrelated 500s across whichever endpoints
+# happened to need a connection rather than as a configuration problem.
+_SESSION_MODE_POOLER_LIMIT = 15
+_per_process = settings.DB_POOL_SIZE + settings.DB_POOL_MAX_OVERFLOW
+if ":6543" not in (settings.DATABASE_URL or "") and _per_process * 2 > _SESSION_MODE_POOLER_LIMIT:
+    logger.error(
+        "db_pool_may_exhaust_session_mode_pooler",
+        extra={
+            "pool_size": settings.DB_POOL_SIZE,
+            "max_overflow": settings.DB_POOL_MAX_OVERFLOW,
+            "per_process_max": _per_process,
+            "pooler_limit": _SESSION_MODE_POOLER_LIMIT,
+            "impact": (
+                "two instances of this app can already demand more than the "
+                "session-mode pooler allows; new connections will be refused "
+                "with EMAXCONNSESSION and endpoints will 500 intermittently. "
+                "Lower DB_POOL_SIZE/DB_POOL_MAX_OVERFLOW, or -- the real fix -- "
+                "point DATABASE_URL at the transaction-mode pooler on port 6543"
+            ),
+        },
+    )
+
 if not settings.diagnosis_scoring_configured:
     logger.error(
         "diagnosis_scoring_disabled",

@@ -127,10 +127,15 @@ export default function DiagnosisChat() {
       setCategory(next?.category ?? null);
       // Trust the explicit is_complete flag over "no next question": a transient
       // gap must not be mistaken for the end of the diagnosis.
-      if (next?.text && !state.complete) {
-        setQuestion(next);
-        setMessages(prev => [...prev, { role: 'ally', time: clock(), text: next.text }]);
-      } else {
+      //
+      // Branch on `complete` FIRST. The previous shape — `if (next?.text &&
+      // !state.complete) ... else done` — fell into the completion branch on
+      // any falsy question regardless of the flag, which is the opposite of
+      // what the comment above describes. A response carrying no question and
+      // is_complete:false (an abandoned session, a serialisation gap) told the
+      // founder their diagnosis was over and sent them to /app/thinking, where
+      // no report would ever arrive.
+      if (state.complete) {
         setDone(true);
         setMessages(prev => [...prev, {
           role: 'ally', time: clock(),
@@ -141,6 +146,18 @@ export default function DiagnosisChat() {
         // founder has just experienced it, and navigating 1.2s later would tear
         // the dialog off the screen. FeedbackPrompt resolves immediately when
         // there is nothing to ask, so this never strands anyone.
+      } else if (next?.text) {
+        setQuestion(next);
+        setMessages(prev => [...prev, { role: 'ally', time: clock(), text: next.text }]);
+      } else {
+        // Not complete, but no question came back. The answer was accepted, so
+        // the founder has not lost anything — keep them on the question they
+        // are already sitting on rather than declaring the diagnosis over.
+        setMessages(prev => [...prev, {
+          role: 'ally', time: clock(),
+          text: "Got that. I lost my place for a second — give me the next one "
+            + 'again by refreshing, and nothing you have answered will be lost.',
+        }]);
       }
     } catch {
       // Live-reproduced: a client-side timeout on this call does not mean the
@@ -302,10 +319,23 @@ export default function DiagnosisChat() {
 
         {/* Was three buttons with no onClick at all, captioned with a fictional
             founder's business ("the SME churn pattern"). These answer the
-            question actually on screen, and they send. */}
+            question actually on screen, and they send.
+
+            "Can you rephrase that?" and "Skip this one" are gone. There is no
+            rephrase or skip endpoint — every chip posts to /diagnosis/answer —
+            so both sent a NON-ANSWER into the scored evidence set. The
+            responsiveness gate catches the first tap and re-asks, but it
+            discards at most once per question by design, so a second tap left
+            the non-answer KEPT and scored (almost certainly Red), permanently
+            skewing that category's risk, its pillar band and, on a
+            distress-tagged question, the distress trigger itself. The UI was
+            offering a button for the exact failure the gate was built to stop.
+
+            "I'm not sure" stays: it is a real answer, and the gate explicitly
+            treats it as one — it judges topic, not quality. */}
         {!done && question && (
           <div className="suggs">
-            {['I’m not sure', 'Can you rephrase that?', 'Skip this one'].map(t => (
+            {['I’m not sure'].map(t => (
               <button
                 key={t}
                 className="sugg"

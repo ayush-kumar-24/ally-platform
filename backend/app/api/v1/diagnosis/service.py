@@ -120,6 +120,29 @@ def should_discard_as_unresponsive(
     return created_here and not already_reprompted
 
 
+def needs_fallback_score(insight) -> bool:
+    """Whether a KEPT answer must be given the neutral fallback band.
+
+    A pure predicate for the same reason as the one above: it encodes the "an
+    answer is never left unscored" property, and that property was quietly
+    broken by a condition that looked right.
+
+    The broken version asked `insight is None`, on the assumption that an
+    insight always carries a usable band. It does not: advisor._parse
+    deliberately nulls score_label for any label outside {green, amber, red}
+    while still returning an insight (so the responsiveness verdict and the
+    next-question pick in the same reply are not thrown away). That left a
+    third state -- an insight with no band -- in which _apply_insight no-ops
+    and the fallback never runs. The answer is kept, shown back to the founder
+    as answered, and then dropped at classification time by
+    StoredScoreAnswerClassifier, which refuses to guess a band. Enough of them
+    in one session and NoClassifiableAnswersError kills the whole report.
+
+    So the question is about the SCORE, not about the object carrying it.
+    """
+    return insight is None or insight.score_label is None
+
+
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -190,6 +213,12 @@ class DiagnosisService:
                 extra={"founder_id": founder.founder_id},
             )
             question = self._current_question_for(existing, founder)
+            # Release the founder-row lock taken above. Returning straight out of
+            # here held it for the rest of the request -- through question lookup
+            # and response serialisation -- for a path that writes nothing.
+            # Nothing uncommitted is lost: the pointer repair inside
+            # _current_question_for commits its own work.
+            self.db.rollback()
             return existing, question, True
 
         # The doc's three sections in order: Founder DNA, then the Current
@@ -259,19 +288,79 @@ class DiagnosisService:
 
     def get_current_question(
         self, founder: Founder
-    ) -> tuple[DiagnosisSession, Question | None, list[tuple[str, str, str, datetime]]]:
+    ) -> tuple[DiagnosisSession, Question | None, list[tuple[str, str, str, datetime]], bool]:
         """Current question for the founder's active session, plus everything
         already answered so far.
 
         404s when there is no active session -- the caller must POST /start
         first. This is a read; it does not create one implicitly.
+
+        Returns (session, question, history, completed_now). That last flag is
+        not incidental: _current_question_for repairs a null pointer by
+        re-selecting, and _attach_question -- the single authority on "no
+        question left" -- COMPLETES the session when the bank is exhausted, the
+        budget is spent, or the incremental scorer already flipped
+        routing_state to generate_report. So a plain page reload really can end
+        a diagnosis. Only POST /answer used to schedule the completion
+        notifier, which meant a session completed on this path had no reasoning
+        run dispatched at all: the founder sat on the Thinking screen polling
+        for a report nothing was building, while their one free diagnosis was
+        already counted as spent. The router schedules the notifier when this
+        is True, so completion means the same thing on both paths.
         """
         session = self.repository.get_active_session_for_founder(founder.founder_id)
         if session is None:
             raise SessionNotFoundError()
 
+        was_in_progress = session.status == SessionStatus.IN_PROGRESS
         history = self.repository.full_qa_history(session.session_id)
-        return session, self._current_question_for(session, founder), history
+        question = self._current_question_for(session, founder)
+        completed_now = was_in_progress and session.status == SessionStatus.COMPLETED
+
+        return session, question, history, completed_now
+
+    def abandon_session(self, founder: Founder) -> DiagnosisSession:
+        """Abandon the founder's active session so they can start a new one.
+
+        SessionStatus.ABANDONED existed with no writer anywhere in the app,
+        which made it a state the system could describe but never reach -- and
+        start_session resumes an in-progress session unconditionally. A session
+        that had wedged (a pointer at a retired question, a stage group that
+        yields no candidates) therefore trapped the founder permanently: every
+        POST /start handed back the same broken session and there was no way
+        out without an operator editing the row.
+
+        Deliberately does NOT consume the lifetime allowance -- that cap counts
+        completed sessions only, precisely because someone who never reached a
+        report has not had their diagnosis (see _check_diagnosis_allowance).
+        """
+        session = self.repository.get_active_session_for_founder(founder.founder_id)
+        if session is None:
+            raise SessionNotFoundError()
+
+        session.status = SessionStatus.ABANDONED.value
+        session.current_question_id = None
+        session.current_category = None
+        session.last_activity_at = _utcnow()
+        session.updated_at = _utcnow()
+
+        try:
+            self.db.commit()
+        except SQLAlchemyError as exc:
+            self.db.rollback()
+            logger.error(
+                "Database error abandoning diagnosis session",
+                extra={"founder_id": founder.founder_id},
+                exc_info=exc,
+            )
+            raise DiagnosisPersistenceError("Could not abandon the session.")
+
+        logger.info(
+            "Abandoned diagnosis session",
+            extra={"founder_id": founder.founder_id, "session_id": session.session_id},
+        )
+        self.db.refresh(session)
+        return session
 
     async def submit_answer(
         self,
@@ -315,7 +404,25 @@ class DiagnosisService:
 
         # Guard against a stale client replaying an old question. Without this,
         # a retried request could attach an answer to the wrong question.
-        if session.current_question_id is not None and question_id != session.current_question_id:
+        #
+        # The pointer is REPAIRED before the comparison rather than the
+        # comparison being skipped when it is null. Gating the guard on
+        # "current_question_id is not None" made a null pointer accept ANY
+        # question_id the client sent -- and a null pointer on an active session
+        # is a state that genuinely occurs (a request that died between session
+        # creation and question selection, which is exactly why
+        # _current_question_for exists to self-heal it). The result was an
+        # answers row, scored and counted, for a question the founder was never
+        # shown. Repair first, then compare unconditionally: after this call the
+        # session is sitting on a real question, so a mismatch is a mismatch.
+        if session.current_question_id is None:
+            self._current_question_for(session, founder)
+            # Repair can legitimately land on "there is nothing left to ask",
+            # which completes the session. Say that rather than reporting the
+            # now-null pointer as a question mismatch.
+            self._assert_active(session)
+
+        if question_id != session.current_question_id:
             raise QuestionMismatchError(
                 f"Expected question {session.current_question_id}, received {question_id}."
             )
@@ -455,19 +562,32 @@ class DiagnosisService:
             try:
                 session.reprompted_question_id = question_id
                 self.db.delete(answer)
+                # The founder is mid-conversation, not idle: a run of reprompts
+                # left last_activity_at frozen at the last ACCEPTED answer, so a
+                # session actively being worked on looked stale to anything that
+                # reads activity.
+                session.last_activity_at = _utcnow()
+                session.updated_at = _utcnow()
                 self.db.commit()
+                return session, question, _REPROMPT
             except SQLAlchemyError as exc:
                 # Keeping a non-answer is worse than failing the request, but not
-                # much -- it is exactly today's behaviour. Let it stand rather
-                # than 500 at a founder who did nothing wrong.
+                # much. Let it stand rather than 500 at a founder who did nothing
+                # wrong -- and then fall THROUGH to the accept path below rather
+                # than returning here. Returning early reported accepted=true for
+                # an answer that was never scored, whose progress counters were
+                # never recomputed and whose session was never advanced: the
+                # founder saw the same question re-asked as though it were the
+                # next one, and an unscored row was left behind to be dropped at
+                # classification time. If the row is staying, it is treated
+                # exactly like any other kept answer.
                 self.db.rollback()
                 logger.warning(
-                    "Could not discard the unresponsive answer; keeping it",
+                    "Could not discard the unresponsive answer; keeping and "
+                    "scoring it like an accepted one",
                     extra={"founder_id": founder.founder_id},
                     exc_info=exc,
                 )
-                return session, question, None
-            return session, question, _REPROMPT
 
         # The answer is being kept, so it gets the score the advisor produced --
         # including when the one-reprompt bound accepted it over a second
@@ -480,11 +600,16 @@ class DiagnosisService:
         # DISTRESS_QUESTIONS_TRIGGER -- so a founder whose language detector
         # reported "Open and Engaged" was handed a distress report telling him
         # burnout and isolation appeared to be active blockers.
-        if insight is not None:
+        if not needs_fallback_score(insight):
             self._apply_insight(answer, insight)
         else:
-            # No insight means the advisor was absent or FAILED (timeout, bad
-            # reply). Leaving the row unscored is not neutral -- it is silent
+            # No USABLE score means the advisor was absent, FAILED (timeout, bad
+            # reply), or returned a label outside {green, amber, red} -- advisor
+            # _parse deliberately nulls score_label in that last case while still
+            # returning an insight, so gating this branch on `insight is None`
+            # alone let an unparseable label fall between the two: _apply_insight
+            # no-ops on a null score_label, and the fallback never ran.
+            # Leaving the row unscored is not neutral -- it is silent
             # data loss: StoredScoreAnswerClassifier refuses to guess a band and
             # the reasoning pipeline drops the answer entirely
             # ("Skipping unscored answer during classification"). Measured on one
@@ -496,6 +621,38 @@ class DiagnosisService:
             # unassessable answer neither manufactures a clean signal (green) nor
             # invents a problem the founder may not have (red).
             self._apply_fallback_score(answer)
+
+        # Serialize the progress update against a concurrent answer to the SAME
+        # question. Taken here rather than at the top of the request on purpose:
+        # the two LLM calls above must not run inside a held transaction (see
+        # this method's docstring). The lock therefore covers only the short
+        # write below, and a request that lost the race finds the pointer has
+        # already moved and returns the winner's question instead of overwriting
+        # it with a second, independently chosen one.
+        try:
+            self.repository.lock_session_for_update(session.session_id)
+            self.db.refresh(session)
+        except SQLAlchemyError as exc:
+            self.db.rollback()
+            logger.error(
+                "Database error locking session for the progress update",
+                extra={"founder_id": founder.founder_id},
+                exc_info=exc,
+            )
+            raise DiagnosisPersistenceError("Could not save your progress. Please try again.")
+
+        if session.current_question_id is not None and session.current_question_id != question_id:
+            logger.info(
+                "Concurrent answer already advanced this session; returning the "
+                "question it moved to instead of overwriting it",
+                extra={
+                    "founder_id": founder.founder_id,
+                    "session_id": session.session_id,
+                    "question_id": question_id,
+                },
+            )
+            self.db.rollback()  # release the lock; the winner already committed
+            return session, self._current_question_for(session, founder), None
 
         try:
             # Derived from the actual row count, not incremented -- a retry
@@ -663,11 +820,11 @@ class DiagnosisService:
             # session that ran out of budget or questions below the threshold is
             # completed but NOT confident, and stamping generate_report on it --
             # as this did unconditionally -- told the report layer the diagnosis
-            # was conclusive when it was merely over.
-            if not confident:
-                session.routing_state = (
-                    session.routing_state or RoutingState.CONTINUE.value
-                )
+            # was conclusive when it was merely over. Leaving routing_state
+            # alone is the whole of that rule; the `if not confident` branch
+            # that used to sit here assigned the attribute to itself and read
+            # as an active guard doing something it was not.
+            session.routing_state = session.routing_state or RoutingState.CONTINUE.value
             return
 
         session.current_question_id = question.question_id

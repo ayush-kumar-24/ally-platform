@@ -14,6 +14,7 @@ from app.api.deps import get_founder_record as get_current_founder
 from app.api.v1.diagnosis.schemas import (
     AnsweredQA,
     CurrentQuestionResponse,
+    SessionRead,
     StartSessionResponse,
     SubmitAnswerRequest,
     SubmitAnswerResponse,
@@ -68,18 +69,63 @@ def start_session(
     summary="Get the current question for the active session",
 )
 def get_current_question(
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     founder: Founder = Depends(get_current_founder),
+    completion_notifier: SessionCompletionNotifier = Depends(
+        get_session_completion_notifier
+    ),
 ) -> CurrentQuestionResponse:
-    session, question, history = DiagnosisService(db).get_current_question(founder)
+    session, question, history, completed_now = DiagnosisService(db).get_current_question(
+        founder
+    )
+
+    # A GET really can complete a session -- see get_current_question's
+    # docstring. When it does, the reasoning run has to be scheduled from here
+    # too, or the founder waits on the Thinking screen for a report that nobody
+    # is building. Same background-task hand-off as POST /answer, for the same
+    # reasons (the listener is a 203s pipeline; ids rather than the request's
+    # db/founder because those are gone by the time it runs).
+    if completed_now:
+        background_tasks.add_task(
+            completion_notifier.notify_session_completed,
+            founder.founder_id,
+            session.session_id,
+            str(founder.user_id),
+        )
+
     return CurrentQuestionResponse(
         session=session,
         question=question,
+        # Explicit, so a null question is never the only signal the client has.
+        # Without it the frontend saw {question: null} with nothing to say
+        # whether the diagnosis had ended or a question was momentarily missing,
+        # and rendered a blank chat with no way forward.
+        is_complete=session.status == SessionStatus.COMPLETED,
         history=[
             AnsweredQA(question_text=qt, category=cat, answer_text=at, answered_at=ts)
             for qt, cat, at, ts in history
         ],
     )
+
+
+@router.post(
+    "/abandon",
+    response_model=SessionRead,
+    summary="Abandon the active session so a new diagnosis can be started",
+    dependencies=[Depends(start_rate_limit)],
+)
+def abandon_session(
+    db: Session = Depends(get_db),
+    founder: Founder = Depends(get_current_founder),
+) -> SessionRead:
+    """Give up on the in-progress diagnosis.
+
+    The escape hatch for a session that cannot progress -- see
+    DiagnosisService.abandon_session. Does not count against the lifetime
+    allowance, which counts completed diagnoses only.
+    """
+    return DiagnosisService(db).abandon_session(founder)
 
 
 @router.post(

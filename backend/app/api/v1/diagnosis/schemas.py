@@ -84,6 +84,13 @@ class CurrentQuestionResponse(BaseModel):
 
     session: SessionRead
     question: QuestionRead | None = None
+    is_complete: bool = Field(
+        default=False,
+        description="True when the session has finished. Sent so a null "
+        "`question` is never the only signal the client has: a finished "
+        "diagnosis and a momentarily missing question are different states and "
+        "must not be guessed apart from the same empty field.",
+    )
     history: list[AnsweredQA] = Field(
         default_factory=list,
         description="Every turn already answered this session, oldest-first -- "

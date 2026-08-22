@@ -38,6 +38,23 @@ def _tone(score: int) -> str:
     return "t-ok"
 
 
+#: Band wording for a score whose real band the narrative did not carry.
+#:
+#: The report's stated contract is bands, not numbers (see generator.py's
+#: header and ReportNarrative.exposes_numeric_scores, which is False): raw
+#: pillar scores and confidence percentages are the grade-anxiety surface the
+#: diagnosis was designed to avoid. This document printed them anyway -- the
+#: bar value, the chip value, and "Confidence 42%" three times over -- so the
+#: page and the PDF contradicted the flag the API set on the very same report.
+#: Real bands come from readiness_pillars.score_bands via the narrative; these
+#: are the fallback for a pillar the narrative did not describe.
+_BAND_WORDS = {"t-critical": "Critical gap", "t-watch": "Developing", "t-ok": "Strong"}
+
+
+def _band_word(score: int) -> str:
+    return _BAND_WORDS[_tone(score)]
+
+
 def _num(value: Any, default: int = 0) -> int:
     """Scores arrive as Decimal, str or int depending on the path that wrote
     them. One coercion point beats a dozen int(float(...)) calls."""
@@ -83,24 +100,27 @@ def _facts(narrative, key: str) -> Mapping[str, Any]:
 
 # --- fragment builders -------------------------------------------------------
 
-def _bar(name: str, score: int, sub: str = "") -> str:
+def _bar(name: str, score: int, sub: str = "", band: str | None = None) -> str:
+    """One pillar. The BAR is proportional to the score; the label beside it is
+    the band, never the number -- a filled track shows relative standing without
+    handing the founder a mark out of 100."""
     sub_html = f'<span class="bar-weight">{e(sub)}</span>' if sub else ""
     return (
         f'<div class="bar-row {_tone(score)}">'
         f'<div class="bar-name">{e(name)}{sub_html}</div>'
         f'<div class="bar-track"><div class="bar-fill" style="width:{max(score, 0)}%"></div></div>'
-        f'<div class="bar-val">{score}</div></div>'
+        f'<div class="bar-val">{e(band or _band_word(score))}</div></div>'
     )
 
 
 def _chip(name: str, score: int) -> str:
     # A 0 would render as an invisible track, which reads as "no data" rather
-    # than "nothing here yet" -- floor the *bar* at 4% while the number stays 0.
+    # than "nothing here yet" -- floor the *bar* at 4%.
     width = max(score, 4)
     return (
         f'<div class="chip-row {_tone(score)}"><span>{e(name)}</span>'
         f'<div class="mini-track"><div class="mini-fill" style="width:{width}%"></div></div>'
-        f'<span class="chip-num">{score}</span></div>'
+        f'<span class="chip-num">{e(_band_word(score))}</span></div>'
     )
 
 
@@ -141,8 +161,20 @@ def _ring(band: str, score: int) -> str:
 # --- sections ----------------------------------------------------------------
 
 def _hero(name: str, health: Mapping[str, Any], categories: Sequence[Mapping[str, Any]],
-          pillars: Sequence[Mapping[str, Any]], confidence: int, when: str,
-          with_actions: bool) -> str:
+          pillars: Sequence[Mapping[str, Any]], when: str, with_actions: bool,
+          *, has_root_cause: bool, wellbeing_first: bool) -> str:
+    """The title header.
+
+    `wellbeing_first` is the DISTRESS variant's whole point: that founder is not
+    opened with a business-health ring and a claim about what is wrong with
+    their company. They get their name, the date, and then the acknowledgement
+    the variant put first -- the ring and the diagnosis lede are dropped, not
+    reordered around.
+
+    `has_root_cause` follows the narrative rather than the raw insights: on
+    NO_CLEAR_DIAGNOSIS the generator deliberately omits problem_path, and the
+    lede must not promise a root cause the report then does not state.
+    """
     band = str(health.get("band") or "In progress")
     overall = _num(health.get("overall_score"))
     # The band, not the number. Showing "31/100" to a founder is a grade; the
@@ -152,43 +184,60 @@ def _hero(name: str, health: Mapping[str, Any], categories: Sequence[Mapping[str
         '<button class="btn btn-primary" data-report-action="download">Download PDF</button>'
         '<button class="btn btn-ghost" data-report-action="share">Share</button></div>'
     ) if with_actions else ""
-    lede = (f"Ally scanned {len(categories)} business dimensions and {len(pillars)} pillars, "
-            f"and traced what&rsquo;s holding you back to one root cause")
-    lede += f" &mdash; with {confidence}% confidence." if confidence else "."
+
+    if wellbeing_first:
+        return (
+            f'<header class="hero hero-quiet"><div>'
+            f'<span class="eyebrow">Founder Clarity Report &middot; {e(when)}</span>'
+            f'<h1>{e(name)}, before anything about the business</h1>'
+            f'<p>This one starts with how you are doing, because that comes '
+            f'first.</p>{actions}</div></header>'
+        )
+
+    headline = (f"{e(name)}, here&rsquo;s what&rsquo;s actually in your way"
+                if has_root_cause else f"{e(name)}, here&rsquo;s where you stand")
+    lede = f"Ally scanned {len(categories)} business dimensions and {len(pillars)} pillars"
+    lede += (", and traced what&rsquo;s holding you back to one root cause."
+             if has_root_cause
+             else ". No single root cause separated out clearly &mdash; what "
+                  "follows is what the scan did show.")
     return (
         f'<header class="hero"><div>'
         f'<span class="eyebrow">Founder Clarity Report &middot; {e(when)}</span>'
-        f'<h1>{e(name)}, here&rsquo;s what&rsquo;s actually in your way</h1>'
+        f'<h1>{headline}</h1>'
         f'<p>{lede}</p>{actions}</div>{_ring(band, overall)}</header>'
     )
 
 
-def _care(narrative) -> str:
-    """The wellbeing note, when the diagnosis flagged one.
+def _pillar_bands(narrative) -> dict[str, str]:
+    """pillar name -> its written band, from the narrative's Business DNA facts.
 
-    Deliberately ABOVE section 01 and above every number: a founder in a hard
-    stretch is not led with a red score. Everyone gets the report -- this is
-    how they get it.
+    The bands are the report's own vocabulary for a score (readiness_pillars.
+    score_bands), so preferring them over a threshold guess keeps the page
+    saying what the narrative says about the same pillar.
     """
-    sec = _section(narrative, "psychological_note")
-    if sec is None or not sec.prose:
-        return ""
-    return (f'<div class="care"><h3>{e(sec.heading)}</h3>{_paras(sec.prose)}</div>')
+    out: dict[str, str] = {}
+    for p in (_facts(narrative, "business_dna").get("pillars") or []):
+        if isinstance(p, Mapping):
+            name, band = p.get("pillar_name"), p.get("band")
+            if name and band:
+                out[str(name)] = str(band)
+    return out
 
 
-def _standing(pillars: Sequence[Mapping[str, Any]]) -> str:
+def _standing(pillars: Sequence[Mapping[str, Any]], bands: Mapping[str, str]) -> str:
     if not pillars:
         return ""
     ranked = sorted(pillars, key=lambda p: _num(p.get("score")))
     bars = "".join(
         _bar(str(p.get("pillar_name") or "Pillar"), _num(p.get("score")),
-             f"{_num(p.get('weight'))}% of overall" if p.get("weight") else "")
+             f"{_num(p.get('weight'))}% of overall" if p.get("weight") else "",
+             band=bands.get(str(p.get("pillar_name") or "")))
         for p in ranked
     )
-    return _block("02", "Where you stand",
-                  "<p>Six pillars, weighted by how much each one decides survival at your "
-                  "stage. Lowest first &mdash; that is also the order to work in.</p>"
-                  f'<div class="bars">{bars}</div>')
+    return ("<p>Six pillars, weighted by how much each one decides survival at your "
+            "stage. Lowest first &mdash; that is also the order to work in.</p>"
+            f'<div class="bars">{bars}</div>')
 
 
 def _high_low(categories: Sequence[Mapping[str, Any]]) -> str:
@@ -208,8 +257,7 @@ def _high_low(categories: Sequence[Mapping[str, Any]]) -> str:
 
     left = "".join(_chip(n, s) for n, s in strengths)
     right = "".join(_chip(n, s) for n, s in gaps)
-    return _block(
-        "03", "Your high points and low points",
+    return (
         "<p>Every business dimension we scanned, ranked. The left column is what you can "
         "lean on right now; the right is what will decide the next few months.</p>"
         '<div class="split">'
@@ -238,6 +286,11 @@ def _root_cause(narrative, causes: Sequence[Mapping[str, Any]],
     label = str(primary.get("label") or primary.get("name") or "the pattern below")
     sec = _section(narrative, "problem_path")
     stated = str(_facts(narrative, "problem_path").get("stated_symptom") or "").strip()
+    # Hard rule 5 (generator.py): Not-Tested must never read as certain as
+    # Confirmed. The engine carries that categorically on every finding, which
+    # is the honest way to say it -- unlike a percentage, which invites the
+    # founder to read 62% as a mark rather than as how much evidence there was.
+    status = str(primary.get("confirmation_status") or "").replace("_", " ").strip()
 
     strongest = sorted(pillars, key=lambda p: _num(p.get("score")), reverse=True)[:3]
     worst_cat = max(categories, key=lambda c: _pct(c.get("risk")), default=None)
@@ -262,7 +315,7 @@ def _root_cause(narrative, causes: Sequence[Mapping[str, Any]],
                       "the same topic."))
     steps.append(("The conclusion",
                   f"One mechanism explains the rest: {label}."
-                  + (f" Confidence {conf}%." if conf else "")))
+                  + (f" Status: {status}." if status else "")))
 
     trail = "".join(
         f'<div class="trail-step"><span class="step-num">{i}</span>'
@@ -273,21 +326,23 @@ def _root_cause(narrative, causes: Sequence[Mapping[str, Any]],
         f'<div class="cause"><span class="cause-cat">'
         f'{e(c.get("category") or "Pattern")}</span>'
         f'<span class="cause-name">{e(c.get("label") or c.get("name"))}</span>'
-        f'<span class="cause-conf">{_pct(c.get("confidence"))}% confidence &middot; '
-        f'{"primary" if i == 0 else "supporting"}</span></div>'
+        f'<span class="cause-conf">'
+        f'{e(str(c.get("confirmation_status") or "").replace("_", " ") or "not tested")}'
+        f' &middot; {"primary" if i == 0 else "supporting"}</span></div>'
         for i, c in enumerate(causes[:3])
     )
     strength = "High" if conf >= 75 else ("Moderate" if conf >= 50 else "Early")
     lead = _paras(sec.prose) if sec is not None and sec.prose else ""
 
-    return _block(
-        "04", "Root cause",
+    return (
         f'<div class="finding"><div class="finding-tag"><span class="dot"></span>'
         f'Ally&rsquo;s finding &middot; {e(strength)} confidence</div>'
         f'<h3>What&rsquo;s in the way looks like <em>{e(label)}</em>.</h3>'
+        # The bar stays (it shows how settled the read is at a glance); the
+        # number beside it does not.
         f'<div class="conf-row"><div class="conf-track">'
         f'<div class="conf-fill" style="width:{conf}%"></div></div>'
-        f'<span class="conf-num">{conf}%</span></div></div>'
+        f'<span class="conf-num">{e(strength)}</span></div></div>'
         f'{lead}'
         f'<div class="trail"><div class="trail-head">Why Ally reached this conclusion</div>'
         f'{trail}</div>'
@@ -320,12 +375,66 @@ def _heard(symptoms: Sequence[Mapping[str, Any]]) -> str:
             break
     if not quotes:
         return ""
-    return _block("05", "What we heard",
-                  "<p>The reading above comes from what you actually said. These moments "
-                  "carried the most weight.</p>" + "".join(quotes))
+    return ("<p>The reading above comes from what you actually said. These moments "
+            "carried the most weight.</p>" + "".join(quotes))
 
 
-def _actions(actions: Sequence[Mapping[str, Any]]) -> str:
+def _plan_lines(narrative) -> tuple[list[str], list[str]]:
+    """The narrative's 3+3 plan as (confirm lines, solve lines).
+
+    The free tier's plan is "3 lines to confirm/isolate, 3 lines to solve", and
+    generator.py applies that cap carefully -- to the flattened LINES, because
+    one intervention can carry five steps. Reading the plan back off the
+    narrative keeps ONE source of truth for it. The document used to render
+    insights["priority_actions"][:5] instead: a second, independent rendering
+    of the same product rule, off the raw pipeline output, which could and did
+    disagree with the plan the prose beside it described.
+    """
+    facts = _facts(narrative, "priority_actions")
+
+    def lines(key: str) -> list[str]:
+        out: list[str] = []
+        for entry in (facts.get(key) or []):
+            if not isinstance(entry, Mapping):
+                continue
+            for step in (entry.get("next_actions") or []):
+                text = str(step).strip()
+                if text:
+                    out.append(text)
+        return out
+
+    return lines("confirm_actions"), lines("solve_actions")
+
+
+def _action_rows(items: Sequence[str], start: int, impact: str, tag_class: str) -> str:
+    return "".join(
+        f'<div class="action"><span class="action-num">{i}</span>'
+        f'<div class="action-body"><div class="action-text">{e(text)}</div>'
+        f'<div class="action-meta">'
+        f'<span class="tag {tag_class}">{impact}</span></div></div></div>'
+        for i, text in enumerate(items, start=start)
+    )
+
+
+def _actions(narrative, actions: Sequence[Mapping[str, Any]]) -> str:
+    """Priority actions, preferring the narrative's capped 3+3 plan.
+
+    Falls back to the raw pipeline actions only when the narrative carries no
+    plan at all (an older report whose snapshot predates the section), so a
+    report that has one never shows a different list beside the prose
+    describing it.
+    """
+    confirm, solve = _plan_lines(narrative)
+    if confirm or solve:
+        parts: list[str] = []
+        if confirm:
+            parts.append('<p class="action-group">First, confirm what is actually true:</p>'
+                         + _action_rows(confirm, 1, "Confirm", "tag-high"))
+        if solve:
+            parts.append('<p class="action-group">Then act on it:</p>'
+                         + _action_rows(solve, len(confirm) + 1, "Solve", "tag-med"))
+        return "".join(parts)
+
     if not actions:
         return ""
     rows: list[str] = []
@@ -345,9 +454,7 @@ def _actions(actions: Sequence[Mapping[str, Any]]) -> str:
             f'<div class="action-body"><div class="action-text">{e(text)}</div>'
             f'<div class="action-meta">'
             f'<span class="tag {tag_class}">{impact}</span>{link}</div></div></div>')
-    if not rows:
-        return ""
-    return _block("06", "Priority actions", "".join(rows))
+    return "".join(rows)
 
 
 # Two weeks, in the two moves a fortnight actually has: do the thing, then read
@@ -385,19 +492,140 @@ def _roadmap(steps: Sequence[str], stats: Sequence[tuple[str, str]]) -> str:
         f'<span class="stat-label">{e(label)}</span></div>'
         for num, label in stats
     ) if stats else ""
-    return _block(
-        "07", "Your next 2 weeks",
-        "<p>Two weeks, one question to answer. Everything here serves it.</p>"
-        f'<div class="road">{"".join(cards)}</div>'
-        + (f'<div class="stats">{strip}</div>' if strip else ""))
+    return ("<p>Two weeks, one question to answer. Everything here serves it.</p>"
+            f'<div class="road">{"".join(cards)}</div>'
+            + (f'<div class="stats">{strip}</div>' if strip else ""))
 
 
-def _summary(narrative) -> str:
-    for key in ("founder_dna", "executive_summary"):
-        sec = _section(narrative, key)
-        if sec is not None and sec.prose:
-            return _block("01", "Founder summary", _paras(sec.prose))
-    return ""
+# --- generic narrative rendering ---------------------------------------------
+
+def _fact_value(value: Any) -> str:
+    """One fact's value as readable HTML.
+
+    Facts are engine-owned and open-ended -- a string, a list of answers, or a
+    small dict like the archetype. Rendering them generically is what lets a
+    dimension the founder only answered last week appear without this module
+    knowing its name.
+    """
+    if isinstance(value, Mapping):
+        parts = [f"{e(str(k).replace('_', ' ').title())}: {e(v)}"
+                 for k, v in value.items()
+                 if not isinstance(v, (list, dict)) and v not in (None, "", True, False)]
+        return " &middot; ".join(parts)
+    if isinstance(value, (list, tuple)):
+        items = [e(v) for v in value if isinstance(v, (str, int, float)) and str(v).strip()]
+        if not items:
+            return ""
+        return '<ul class="fact-list">' + "".join(f"<li>{v}</li>" for v in items) + "</ul>"
+    return e(value)
+
+
+def _facts_html(facts: Mapping[str, Any], skip: Sequence[str] = ()) -> str:
+    """Founder-facing facts as labelled rows. Internal keys are already stripped
+    upstream by generator._founder_facts; this only shapes what is left."""
+    rows: list[str] = []
+    for key, value in (facts or {}).items():
+        if key in skip or value in (None, "", [], {}):
+            continue
+        rendered = _fact_value(value)
+        if not rendered:
+            continue
+        label = str(key).replace("_", " ").strip().title()
+        rows.append(f'<div class="fact"><span class="fact-k">{e(label)}</span>'
+                    f'<div class="fact-v">{rendered}</div></div>')
+    return f'<div class="facts">{"".join(rows)}</div>' if rows else ""
+
+
+def _callout(narrative, key: str) -> str:
+    """A lead-in section, rendered above the numbered body and above every
+    number.
+
+    These are the sections a founder must read BEFORE the business content, and
+    the variant machinery exists to put them there: DISTRESS leads with
+    acknowledgement + support_recommendation, LOW_CONFIDENCE opens with the
+    hedge, and the wellbeing note is deliberately placed above section 01. None
+    of them were rendered by this document at all -- a founder in distress was
+    led with a business-health ring and a root-cause verdict, which is the exact
+    thing the distress variant exists to prevent.
+    """
+    sec = _section(narrative, key)
+    if sec is None or not sec.prose:
+        return ""
+    return f'<div class="care"><h3>{e(sec.heading)}</h3>{_paras(sec.prose)}</div>'
+
+
+#: Sections rendered as un-numbered callouts ABOVE the numbered body, in the
+#: order the narrative put them. Everything else becomes a numbered block.
+_LEAD_SECTIONS = ("acknowledgement", "support_recommendation", "hedge",
+                  "psychological_note")
+
+#: Blocks whose CONTENT comes from `insights` rather than from narrator prose,
+#: paired with the heading to use when the narrative has no section to host
+#: them. narrative_snapshot is cached per report forever, so reports generated
+#: before a section existed carry a narrative that has never heard of it --
+#: gating these purely on the narrative would silently strip the pillar bars,
+#: the quotes and the two-week plan off every report written before those
+#: sections shipped. The data is right there in insights; render it.
+#:
+#: problem_path is deliberately NOT in this list. Its absence is a real signal
+#: rather than an old snapshot: NO_CLEAR_DIAGNOSIS omits it on purpose, and
+#: rendering a root cause anyway -- which is what reading top_root_causes
+#: straight off insights did -- told a founder whose diagnosis was inconclusive
+#: exactly what was wrong with their company.
+_ORPHAN_BLOCKS = (
+    ("business_dna", "Where you stand"),
+    ("supporting_evidence", "What we heard"),
+    ("priority_actions", "Priority actions"),
+    ("recommended_roadmap", "Your next 2 weeks"),
+)
+
+#: Facts already spoken by a section's own visual treatment, so rendering them
+#: again as label/value rows would just repeat the block above them.
+_FACTS_SKIP = {
+    "business_dna": ("pillars", "overall_band"),
+    "problem_path": ("root_causes", "stated_symptom", "symptom_probes"),
+    "priority_actions": ("confirm_actions", "solve_actions", "intervention_ids"),
+    "supporting_evidence": ("probes", "root_causes"),
+    "recommended_roadmap": ("confirm_steps", "solve_steps"),
+}
+
+
+def _section_body(key: str, narrative, ctx: Mapping[str, Any]) -> str:
+    """The body of one numbered section: its prose, plus whatever visual
+    treatment that section has.
+
+    Driven by the narrative's OWN section list, which is what makes the variant
+    rules real on the page. Previously this document consulted exactly three
+    narrative keys and derived everything else straight from `insights`, so:
+    every other section the generator wrote (the evidence trail, the sequencing,
+    why those steps, areas to monitor, the CTA, and the founder's DNA facts) was
+    silently dropped from the page, the share link and the PDF; and the root
+    cause rendered even on variants that deliberately omit it, because the raw
+    insights still carried one.
+    """
+    sec = _section(narrative, key)
+    prose = _paras(sec.prose) if sec is not None and sec.prose else ""
+    facts = (sec.facts or {}) if sec is not None else {}
+    extra = ""
+
+    if key == "business_dna":
+        extra = _standing(ctx["pillars"], ctx["bands"]) + _high_low(ctx["categories"])
+    elif key == "problem_path":
+        # The narrative's prose is rendered INSIDE _root_cause (it leads the
+        # trail), so it must not be prepended here too. When there is no cause
+        # to build the finding from, _root_cause yields nothing and the prose
+        # would go with it -- fall back to the prose alone rather than dropping
+        # a section the narrator actually wrote.
+        return _root_cause(narrative, ctx["causes"], ctx["categories"], ctx["pillars"]) or prose
+    elif key == "supporting_evidence":
+        extra = _heard(ctx["symptoms"])
+    elif key == "priority_actions":
+        extra = _actions(narrative, ctx["actions"])
+    elif key == "recommended_roadmap":
+        extra = _roadmap(ctx["steps"], ctx["stats"])
+
+    body = prose + extra + _facts_html(facts, skip=_FACTS_SKIP.get(key, ()))
+    return body
 
 
 # --- the document ------------------------------------------------------------
@@ -428,6 +656,13 @@ def build_report_document(
     Renders whatever the report actually has: every section returns "" when its
     data is missing, so a thin report degrades to a shorter document instead of
     a broken one. A founder always gets a report.
+
+    Section ORDER and section PRESENCE both come from the narrative, not from
+    this module. That is what makes the report variants real for the founder
+    rather than only for the API: DISTRESS leads with the acknowledgement and
+    drops the hero ring, LOW_CONFIDENCE opens with the hedge, and
+    NO_CLEAR_DIAGNOSIS states no root cause because the generator wrote no
+    problem_path section for it to state.
     """
     data: Mapping[str, Any] = insights or {}
     health = data.get("business_health_score") or {}
@@ -438,38 +673,69 @@ def build_report_document(
     symptoms = data.get("key_symptoms") or []
     steps = [s for s in (data.get("next_steps") or []) if str(s).strip()]
 
-    confidence = _pct(causes[0].get("confidence")) if causes else 0
     name = _first_name(founder_name)
     when = (generated_at or datetime.now()).strftime("%b %Y")
     flagged = sum(1 for c in categories if c.get("is_flagged"))
 
+    keys = [s.key for s in getattr(narrative, "sections", ()) if getattr(s, "key", None)]
+    has_root_cause = "problem_path" in keys
+    wellbeing_first = "acknowledgement" in keys or "support_recommendation" in keys
+
+    confirm_lines, solve_lines = _plan_lines(narrative)
+    planned = len(confirm_lines) + len(solve_lines) or len(actions)
+
     stats: list[tuple[str, str]] = []
-    if actions:
-        stats.append((str(len(actions)), "Actions to start in the next two weeks"))
+    if planned:
+        stats.append((str(planned), "Actions to start in the next two weeks"))
     if flagged:
         stats.append((str(flagged), "Dimensions needing attention"))
-    if confidence:
-        stats.append((str(confidence), "Confidence in this diagnosis"))
+
+    ctx = {
+        "pillars": pillars, "categories": categories, "causes": causes,
+        "actions": actions, "symptoms": symptoms, "steps": steps, "stats": stats,
+        "bands": _pillar_bands(narrative),
+    }
+
+    lead = "".join(_callout(narrative, k) for k in keys if k in _LEAD_SECTIONS)
+
+    blocks: list[str] = []
+    number = 0
+    for key in keys:
+        if key in _LEAD_SECTIONS:
+            continue
+        section_body = _section_body(key, narrative, ctx)
+        if not section_body:
+            continue
+        number += 1
+        sec = _section(narrative, key)
+        heading = (sec.heading if sec is not None and sec.heading else key.replace("_", " ").title())
+        blocks.append(_block(f"{number:02d}", heading, section_body))
+
+    # Insight-derived blocks the narrative had no section for -- see
+    # _ORPHAN_BLOCKS. Appended after the narrated ones, in a fixed order.
+    for key, heading in _ORPHAN_BLOCKS:
+        if key in keys:
+            continue
+        section_body = _section_body(key, narrative, ctx)
+        if not section_body:
+            continue
+        number += 1
+        blocks.append(_block(f"{number:02d}", heading, section_body))
 
     body = "".join([
-        _hero(name, health, categories, pillars, confidence, when,
-              with_actions and not for_print),
-        _care(narrative),
-        _summary(narrative),
-        _standing(pillars),
-        _high_low(categories),
-        _root_cause(narrative, causes, categories, pillars),
-        _heard(symptoms),
-        _actions(actions),
-        _roadmap(steps, stats),
+        _hero(name, health, categories, pillars, when,
+              with_actions and not for_print,
+              has_root_cause=has_root_cause, wellbeing_first=wellbeing_first),
+        lead,
+        "".join(blocks),
         '<div class="close"><div><h3>This report is yours to keep.</h3>'
         '<p>Come back and re-run the clarity check once these actions are done '
-        '&mdash; that is when these numbers will actually move.</p></div>'
+        '&mdash; that is when this picture will actually move.</p></div>'
         + ('<button class="btn btn-dark" data-report-action="download">Download PDF</button>'
            if (with_actions and not for_print) else "")
         + '</div>',
         f'<p class="footnote">Generated from your diagnosis on '
-        f'{e((generated_at or datetime.now()).strftime("%d %b %Y"))}. Confidence reflects how '
+        f'{e((generated_at or datetime.now()).strftime("%d %b %Y"))}. Bands reflect how '
         f'much evidence supported this read &mdash; not how well you are doing.</p>',
     ])
 
