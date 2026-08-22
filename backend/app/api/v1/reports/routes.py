@@ -108,6 +108,26 @@ def _section(narrative, key: str) -> SectionOut | None:
     return None
 
 
+def share_url_for(token: str, request: Request) -> str:
+    """The public URL for a share token.
+
+    `/r/<token>` is a REWRITE on the Vercel frontend (see frontend/vercel.json),
+    not a route on this backend -- so it only resolves against the site's own
+    origin. Building it against the API host instead produces a link that 404s,
+    which is the worst possible outcome for a feature whose entire job is to
+    hand someone a working URL.
+
+    So the pretty path is used only when PUBLIC_APP_URL says where the site
+    lives. Without it we fall back to this API's own endpoint, which is uglier
+    but always resolves. A link that works beats a link that looks right.
+    """
+    site = (settings.PUBLIC_APP_URL or "").strip().rstrip("/")
+    if site:
+        return f"{site}/r/{token}"
+    base = str(request.base_url).rstrip("/")
+    return f"{base}/api/v1/reports/shared/{token}/view"
+
+
 # --- founder-scoped endpoints ----------------------------------------------
 @router.get("/shared/{token}", response_model=SharedReportView)
 async def shared_report(token: str, db: Session = Depends(get_db)) -> SharedReportView:
@@ -308,13 +328,9 @@ async def share_report(
 ) -> ShareCreated:
     _owned_report(db, founder, report_id)  # ownership before creating a public link
     token = secrets.token_urlsafe(24)
-    # PUBLIC_APP_URL when set, because request.base_url behind the Vercel proxy
-    # is the API host -- a correct link, but not one a founder wants to send to
-    # an investor. Falls back to the request's own origin so local and preview
-    # environments keep working without configuration.
-    base = (settings.PUBLIC_APP_URL or str(request.base_url)).rstrip("/")
     share = reports_repository.create_share(
-        db, founder_id=founder.founder_id, report_id=report_id, token=token, base_url=base,
+        db, founder_id=founder.founder_id, report_id=report_id, token=token,
+        share_url=share_url_for(token, request),
     )
     return ShareCreated(
         share_token=share.share_token, share_url=share.share_url, expires_at=share.expires_at,

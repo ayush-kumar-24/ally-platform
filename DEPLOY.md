@@ -153,10 +153,12 @@ Two related settings:
 - **`ATTACHMENT_S3_BUCKET`** also stores rendered PDFs. Empty means storage
   no-ops and every download re-renders (~2–4s of Chromium per click). It works,
   it is just wasteful.
-- **`PUBLIC_APP_URL`** (e.g. `https://goxlally.ai`) is the origin used to build
-  share links. Left empty they are built from the request's own host, which
-  behind the Vercel proxy is the API domain — a working link, but not one a
-  founder wants to send to an investor.
+- **`PUBLIC_APP_URL`** (e.g. `https://goxlally.ai`) — **set this.** It is the
+  origin used to build share links. `/r/<token>` is a *rewrite on the Vercel
+  frontend*, not a backend route, so it only resolves against the site's own
+  domain. Without this setting, share links fall back to the API's own
+  `/api/v1/reports/shared/<token>/view`, which works but is an ugly thing to
+  send an investor.
 
 Verify after deploy: `GET /reports/{id}/document` returns HTML, then
 `POST /reports/{id}/export` returns `application/pdf` with header

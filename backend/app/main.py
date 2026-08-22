@@ -105,14 +105,17 @@ else:
 # rule as the Sentry branch above: refuse to be a silent gap, but do not refuse
 # to boot -- a founder who cannot sign up at all is a worse outcome, and the
 # other phases of the product are unaffected.
-# Report PDFs render through Gotenberg (headless Chromium) and fall back to a
-# plain reportlab document when it is unreachable -- see app/api/v1/reports/
-# routes.py::export_pdf. That fallback is the right behaviour (a founder should
-# still get their report) and an appalling thing to be silent about: both paths
-# return 200 with a real application/pdf body, so a deploy with no Gotenberg
-# looks identical to a working one from every angle except the document the
-# founder opens. Confirmed on the local stack, where every export ran as
-# reportlab-fallback until the sidecar was started -- nothing anywhere said so.
+# Report PDFs render through Gotenberg (headless Chromium), and there is no
+# second renderer -- see app/api/v1/reports/routes.py::export_pdf. When the
+# sidecar is unreachable the export answers 503 and queues a backfill, so a
+# founder gets their real report or an honest "not yet", never a lookalike.
+#
+# That makes this probe more important than it was, not less. The old fallback
+# at least produced a document; today a missing sidecar means downloads simply
+# do not work, and the founder-facing message ("still being prepared, try again
+# shortly") describes a momentary outage. If the sidecar was never deployed,
+# that message is a lie that repeats forever, and nothing else in the system
+# says so.
 #
 # GOTENBERG_URL defaults to http://localhost:3000, which is empty inside the API
 # container, so the misconfigured state is also the DEFAULT state. Probed once at

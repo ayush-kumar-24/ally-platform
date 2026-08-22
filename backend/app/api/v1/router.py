@@ -104,13 +104,20 @@ async def health(response: Response):
     # founders whose PDF looks plain. But it must be VISIBLE, because nothing
     # else makes it so -- the export returns 200 with a real PDF either way.
     #
-    # `gotenberg` means exports match the on-screen report. `reportlab-fallback`
-    # means every founder is getting the plain two-page document instead; see
-    # DEPLOY_AWS.md section 3a.
+    # `gotenberg` means exports work and match the on-screen report.
+    # `unavailable` means they do NOT work at all: the export endpoint answers
+    # 503 and queues a backfill rather than substituting a different document.
+    #
+    # This used to report `reportlab-fallback`, which was true when a second
+    # renderer existed. It no longer does -- a founder now gets their real
+    # report or an honest "not yet", never a plain lookalike. Leaving the old
+    # label would tell whoever is on call that founders are getting a simpler
+    # PDF, when in fact they are getting none, and that is the difference
+    # between "fix it this week" and "fix it now".
     pdf_renderer = (
         "gotenberg"
         if gotenberg_available(base_url=settings.GOTENBERG_URL)
-        else "reportlab-fallback"
+        else "unavailable"
     )
 
     return {

@@ -207,3 +207,35 @@ def test_a_thin_report_degrades_to_a_shorter_document(narrative):
 
 def test_missing_insights_entirely_still_renders(narrative):
     assert "</html>" in _doc(narrative, None)
+
+
+# --- share links must always resolve -----------------------------------------
+
+def test_share_url_uses_the_site_origin_when_configured(monkeypatch):
+    from app.api.v1.reports import routes
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "PUBLIC_APP_URL", "https://goxlally.ai/")
+    url = routes.share_url_for("tok123", _FakeRequest("https://api.goxlally.ai/"))
+    assert url == "https://goxlally.ai/r/tok123"
+
+
+def test_share_url_falls_back_to_a_path_this_api_actually_serves(monkeypatch):
+    """`/r/<token>` is a Vercel rewrite, not a backend route.
+
+    With PUBLIC_APP_URL unset the pretty path would be built against the API
+    host, where it 404s -- so the fallback must be the endpoint this service
+    really exposes, even though it is uglier.
+    """
+    from app.api.v1.reports import routes
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "PUBLIC_APP_URL", "")
+    url = routes.share_url_for("tok123", _FakeRequest("https://api.goxlally.ai/"))
+    assert url == "https://api.goxlally.ai/api/v1/reports/shared/tok123/view"
+    assert "/r/tok123" not in url
+
+
+class _FakeRequest:
+    def __init__(self, base_url: str):
+        self.base_url = base_url

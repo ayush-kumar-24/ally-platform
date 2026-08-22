@@ -50,7 +50,7 @@ class ReportsRepository:
     # --- shares -----------------------------------------------------------
     def create_share(
         self, db: Session, *, founder_id: int, report_id: int, token: str,
-        base_url: str, ttl_hours: int = 24 * 30,
+        share_url: str, ttl_hours: int = 24 * 30,
     ) -> ReportShares:
         """A public link to this report.
 
@@ -61,13 +61,13 @@ class ReportsRepository:
         that keeps working after it has been forwarded somewhere they did not
         intend.
 
-        The URL points at the rendered PAGE (`/r/<token>`), not the JSON API it
-        used to name: this link is opened by whoever the founder sends it to, and
-        they should see the report, not a wall of JSON.
+        The caller supplies the finished URL rather than a base to append to,
+        because which URL is correct depends on configuration the repository has
+        no business knowing -- see share_url_for() in the router.
         """
         share = ReportShares(
             founder_id=founder_id, report_id=report_id, share_token=token,
-            share_url=f"{base_url}/r/{token}",
+            share_url=share_url,
             expires_at=datetime.now(timezone.utc) + timedelta(hours=ttl_hours),
             is_active=True, access_count=0,
         )
