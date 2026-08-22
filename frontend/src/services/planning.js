@@ -9,6 +9,7 @@
  */
 
 import { del, get, patch, post } from './api';
+import { browserTimezone } from './calendar';
 
 const DEFAULT_PLAN_TITLE = 'My Plan';
 const DEFAULT_GOAL_TITLE = 'Tasks';
@@ -40,10 +41,23 @@ export async function listTasks() {
   return tasks;
 }
 
-export async function addTask(title, { priority = 'medium', dueDate = null } = {}) {
+/**
+ * Add a task. A `dueDate` is what makes it eligible for calendar sync — without
+ * one it is a list item and nothing is pushed anywhere.
+ *
+ * `dueTime` is optional and drives the reminder: Google measures reminder
+ * offsets backwards from the event start, so a task with a real time gets a
+ * popup 30 minutes before it, and one with only a date is placed at the
+ * server's default hour so the reminder still lands in the morning.
+ *
+ * The timezone rides along so "2pm" means 2pm where the founder is.
+ */
+export async function addTask(title, { priority = 'medium', dueDate = null,
+                                       dueTime = null } = {}) {
   const { goal } = await ensureDefaultGoal();
   return post(`/planning/goals/${goal.goal_id}/tasks`, {
-    title, priority, due_date: dueDate,
+    title, priority, due_date: dueDate, due_time: dueTime,
+    timezone: browserTimezone(),
   });
 }
 
@@ -51,12 +65,17 @@ export function setTaskStatus(taskId, status) {
   return patch(`/planning/tasks/${taskId}`, { status });
 }
 
-/** Title and/or priority -- the two fields the per-task edit menu exposes.
- * Both optional so a caller only sends what actually changed. */
-export function updateTask(taskId, { title, priority } = {}) {
-  const body = {};
+/** Title, priority, date and time -- what the per-task edit menu exposes.
+ * All optional so a caller only sends what actually changed; an explicit null
+ * clears the field, which is why `undefined` and `null` are distinguished here
+ * rather than collapsed. Changing a date or time updates the SAME calendar
+ * event, because the task carries the id of the one it created. */
+export function updateTask(taskId, { title, priority, dueDate, dueTime } = {}) {
+  const body = { timezone: browserTimezone() };
   if (title !== undefined) body.title = title;
   if (priority !== undefined) body.priority = priority;
+  if (dueDate !== undefined) body.due_date = dueDate;
+  if (dueTime !== undefined) body.due_time = dueTime;
   return patch(`/planning/tasks/${taskId}`, body);
 }
 

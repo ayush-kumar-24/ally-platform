@@ -244,3 +244,50 @@ class _FakeRequest:
         from app.main import app
         self.base_url = base_url
         self.app = app
+
+
+def test_the_vercel_rewrite_still_points_at_the_route_this_api_serves():
+    """The pretty share link and the backend route must not drift apart.
+
+    `/r/<token>` is a rewrite in frontend/vercel.json; the path it forwards to
+    is a route in this app. Nothing else compares them, and the failure is
+    invisible: remount the reports router and the fallback test above goes red,
+    someone updates its expected string, ships -- and the rewrite still names
+    the old path. The fallback link keeps working, so nothing is red anywhere.
+    The only symptom is the URL a founder actually forwards going back to 404ing.
+
+    Yes, this is a backend test reading a frontend file. That is deliberate:
+    vercel.json is deployed by Vercel and can import nothing from Python, so
+    this is the only place the two halves can be checked against each other.
+
+    Skipped, not failed, when the file is absent -- the backend image is built
+    from backend/ alone, and a missing frontend directory there is normal. A
+    vercel.json that EXISTS and is wrong always fails.
+    """
+    import json
+    from pathlib import Path
+
+    from app.main import app
+
+    vercel = Path(__file__).resolve().parents[2] / "frontend" / "vercel.json"
+    if not vercel.is_file():
+        pytest.skip("frontend/vercel.json not in this checkout (backend-only build context)")
+
+    rewrites = json.loads(vercel.read_text(encoding="utf-8")).get("rewrites", [])
+    # An explicit lookup rather than next(...): a bare StopIteration when the
+    # rule has been deleted says nothing about what broke or why it matters.
+    matching = [r for r in rewrites if r.get("source") == "/r/:token"]
+    assert matching, (
+        "frontend/vercel.json no longer rewrites /r/:token — every share link "
+        "built from PUBLIC_APP_URL will 404."
+    )
+
+    # The same call share_url_for uses, so this follows a remount instead of
+    # hardcoding the prefix a second time.
+    served = app.url_path_for("shared_report_page", token=":token")
+    destination = matching[0].get("destination", "")
+    assert destination.endswith(served), (
+        f"vercel.json rewrites /r/:token to {destination!r}, but this API serves "
+        f"{served!r}. The share link a founder forwards will 404 while the "
+        f"fallback link keeps working, so nothing else will go red."
+    )

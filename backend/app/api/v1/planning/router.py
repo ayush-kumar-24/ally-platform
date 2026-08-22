@@ -34,6 +34,10 @@ from app.api.v1.planning.schemas import (
     TaskCreate,
     TaskUpdate,
 )
+from sqlalchemy.orm import Session
+
+from app.calendar_sync import hooks
+from app.db.session import get_db
 from app.planning.service import PlanningService
 
 router = APIRouter(
@@ -140,9 +144,16 @@ def update_goal(goal_id: str, payload: GoalUpdate, founder_id: int = Depends(get
 
 @router.post("/goals/{goal_id}/tasks", response_model=TaskResponse, status_code=201, summary="Add a task")
 def add_task(goal_id: str, payload: TaskCreate, founder_id: int = Depends(get_current_founder_id),
-             service: PlanningService = Depends(get_planning_service)) -> TaskResponse:
-    return TaskResponse.from_domain(service.add_task(
-        founder_id, goal_id, title=payload.title, priority=payload.priority, due_date=payload.due_date))
+             service: PlanningService = Depends(get_planning_service),
+             db: Session = Depends(get_db)) -> TaskResponse:
+    # Saved first, synced second, and never the other way round: the task is
+    # committed before Google is contacted, so no calendar failure can cost the
+    # founder what they typed.
+    task = service.add_task(
+        founder_id, goal_id, title=payload.title, priority=payload.priority,
+        due_date=payload.due_date, due_time=payload.due_time)
+    task = hooks.after_task_saved(db, service, task, timezone_name=payload.timezone)
+    return TaskResponse.from_domain(task)
 
 
 @router.get("/goals/{goal_id}/tasks", response_model=TaskListResponse, summary="List tasks")
@@ -154,18 +165,33 @@ def list_tasks(goal_id: str, founder_id: int = Depends(get_current_founder_id),
 
 @router.patch("/tasks/{task_id}", response_model=TaskResponse, summary="Update a task")
 def update_task(task_id: str, payload: TaskUpdate, founder_id: int = Depends(get_current_founder_id),
-                service: PlanningService = Depends(get_planning_service)) -> TaskResponse:
-    fields = {k: v for k, v in payload.model_dump(exclude_unset=True).items() if k != "due_date"}
+                service: PlanningService = Depends(get_planning_service),
+                db: Session = Depends(get_db)) -> TaskResponse:
+    fields = {k: v for k, v in payload.model_dump(exclude_unset=True).items()
+              if k not in ("due_date", "due_time", "timezone")}
     fields.update(_date_kwargs(payload, "due_date", "clear_due_date"))
-    return TaskResponse.from_domain(service.update_task(founder_id, task_id, **fields))
+    fields.update(_date_kwargs(payload, "due_time", "clear_due_time"))
+    task = service.update_task(founder_id, task_id, **fields)
+    # Updates the existing event rather than adding a second one -- the task
+    # carries the event id it created last time.
+    task = hooks.after_task_saved(db, service, task, timezone_name=payload.timezone)
+    return TaskResponse.from_domain(task)
 
 
 @router.delete("/tasks/{task_id}", status_code=204, summary="Delete a task")
 def delete_task(task_id: str, founder_id: int = Depends(get_current_founder_id),
-                service: PlanningService = Depends(get_planning_service)) -> None:
+                service: PlanningService = Depends(get_planning_service),
+                db: Session = Depends(get_db)) -> None:
     # Unlike plans (archived, recoverable) a task has no restore path -- this
     # is a real row delete, so 204/no body rather than echoing back a
     # response_model for something that no longer exists.
+    #
+    # The event goes first, because its id lives on the task row we are about to
+    # remove. If Google is unreachable the delete still proceeds and leaves one
+    # orphaned calendar entry -- far better than a task that refuses to go away
+    # because of someone else's outage.
+    task = service.get_task(founder_id, task_id)
+    hooks.before_task_deleted(db, task)
     service.delete_task(founder_id, task_id)
 
 

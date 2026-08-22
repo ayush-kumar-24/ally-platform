@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, time, datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -51,6 +51,15 @@ class TaskCreate(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     priority: Priority = Priority.MEDIUM
     due_date: date | None = None
+    # Optional. Without a time the calendar event is placed at a configured
+    # default hour, because a reminder offset is only meaningful against a
+    # timed event -- see app/calendar_sync/sync.py.
+    due_time: time | None = None
+    # The founder's IANA zone, so "9am" means 9am where they are. Sent by the
+    # browser (Intl.DateTimeFormat().resolvedOptions().timeZone). UTC is a
+    # deliberate fallback rather than a guess at their location: wrong by a
+    # known amount beats wrong by an unknowable one.
+    timezone: str = Field(default="UTC", max_length=64)
 
 
 class TaskUpdate(BaseModel):
@@ -59,3 +68,5 @@ class TaskUpdate(BaseModel):
     status: ProgressStatus | None = None
     priority: Priority | None = None
     due_date: date | None = None
+    due_time: time | None = None
+    timezone: str = Field(default="UTC", max_length=64)

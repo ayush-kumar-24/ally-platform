@@ -48,7 +48,9 @@ def _task(row: TaskRow) -> Task:
     return Task(task_id=row.task_id, goal_id=row.goal_id, plan_id=row.plan_id, founder_id=row.founder_id,
                 title=row.title, status=ProgressStatus(row.status), priority=Priority(row.priority),
                 due_date=row.due_date, source=ItemSource(row.source), created_at=row.created_at,
-                updated_at=row.updated_at, completed_at=row.completed_at)
+                updated_at=row.updated_at, completed_at=row.completed_at,
+                due_time=row.due_time, calendar_event_id=row.calendar_event_id,
+                calendar_sync_status=row.calendar_sync_status)
 
 
 class SqlAlchemyPlanningRepository(PlanningRepository):
@@ -119,7 +121,9 @@ class SqlAlchemyPlanningRepository(PlanningRepository):
             task_id=task.task_id, goal_id=task.goal_id, plan_id=task.plan_id, founder_id=task.founder_id,
             title=task.title, status=task.status.value, priority=task.priority.value,
             due_date=task.due_date, source=task.source.value, created_at=task.created_at,
-            updated_at=task.updated_at, completed_at=task.completed_at))
+            updated_at=task.updated_at, completed_at=task.completed_at,
+            due_time=task.due_time, calendar_event_id=task.calendar_event_id,
+            calendar_sync_status=task.calendar_sync_status))
         self.db.commit()
         return task
 
@@ -133,6 +137,9 @@ class SqlAlchemyPlanningRepository(PlanningRepository):
             return self.add_task(task)
         row.title, row.status, row.priority = task.title, task.status.value, task.priority.value
         row.due_date, row.updated_at, row.completed_at = task.due_date, task.updated_at, task.completed_at
+        row.due_time = task.due_time
+        row.calendar_event_id = task.calendar_event_id
+        row.calendar_sync_status = task.calendar_sync_status
         self.db.commit()
         return task
 

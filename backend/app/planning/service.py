@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import replace
-from datetime import date, datetime, timezone
+from datetime import date, datetime, time, timezone
 from typing import Callable, Sequence
 
 from app.planning.defaults import DEFAULT_PLAN_STATUS, DEFAULT_PRIORITY, DEFAULT_PROGRESS
@@ -172,12 +172,14 @@ class PlanningService:
 
     def add_task(self, founder_id: int, goal_id: str, *, title: str,
                  priority: Priority = DEFAULT_PRIORITY, due_date: date | None = None,
+                 due_time: time | None = None,
                  source: ItemSource = ItemSource.MANUAL) -> Task:
         goal = self.get_goal(founder_id, goal_id)
         now = self._now()
         task = Task(task_id=self._new_id(), goal_id=goal_id, plan_id=goal.plan_id, founder_id=founder_id,
                     title=validate_title("title", title), status=DEFAULT_PROGRESS, priority=priority,
-                    due_date=due_date, source=source, created_at=now, updated_at=now)
+                    due_date=due_date, source=source, created_at=now, updated_at=now,
+                    due_time=due_time)
         return self.repository.add_task(task)
 
     def get_task(self, founder_id: int, task_id: str) -> Task:
@@ -196,16 +198,34 @@ class PlanningService:
 
     def update_task(self, founder_id: int, task_id: str, *, title: str | None = None,
                     status: ProgressStatus | None = None, priority: Priority | None = None,
-                    due_date: date | None = None, clear_due_date: bool = False) -> Task:
+                    due_date: date | None = None, clear_due_date: bool = False,
+                    due_time: time | None = None, clear_due_time: bool = False) -> Task:
         task = self.get_task(founder_id, task_id)
         now = self._now()
         new_status = task.status if status is None else status
+        # Clearing the date clears the time with it: a time of day with no day
+        # is not a schedule, and it would silently reappear if a date were set
+        # again later.
+        drop_time = clear_due_time or clear_due_date
         updated = replace(
             task,
             title=task.title if title is None else validate_title("title", title),
             status=new_status, priority=task.priority if priority is None else priority,
             due_date=None if clear_due_date else (task.due_date if due_date is None else due_date),
+            due_time=None if drop_time else (task.due_time if due_time is None else due_time),
             completed_at=self._completion(task.completed_at, new_status, now), updated_at=now)
+        return self.repository.replace_task(updated)
+
+    def record_calendar_sync(self, founder_id: int, task_id: str, *, status: str,
+                             event_id: str | None) -> Task:
+        """Store the outcome of a calendar push.
+
+        Separate from update_task so recording a sync result cannot touch
+        updated_at or completed_at -- a background retry must not make a task
+        look freshly edited, and must never re-open a completed one.
+        """
+        task = self.get_task(founder_id, task_id)
+        updated = replace(task, calendar_sync_status=status, calendar_event_id=event_id)
         return self.repository.replace_task(updated)
 
     # --- reminders -------------------------------------------------------

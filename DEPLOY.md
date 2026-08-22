@@ -165,6 +165,48 @@ Verify after deploy: `GET /reports/{id}/document` returns HTML, then
 `X-PDF-Renderer: gotenberg`. Anything else in that header means a second
 renderer has grown back.
 
+## Google Calendar sync (Plan Your Day)
+
+Dated tasks become events on the founder's own Google Calendar, with a popup
+reminder 30 minutes before. That reminder is the entire notification mechanism —
+Ally has no email or push system, and this is deliberately not one either.
+
+**Unset means the feature is invisible, not broken.** The Connect button does
+not render, tasks save exactly as before, and nothing errors. Configure it only
+when you want it live.
+
+Three settings, all on the backend:
+
+| Setting | Value |
+|---|---|
+| `GOOGLE_OAUTH_CLIENT_ID` | From a **Web application** OAuth client in Google Cloud Console |
+| `GOOGLE_OAUTH_CLIENT_SECRET` | Same client |
+| `GOOGLE_OAUTH_REDIRECT_URI` | `https://api.goxlally.ai/api/v1/calendar/callback` — must match the console entry **exactly** |
+| `CALENDAR_TOKEN_KEY` | Fernet key encrypting stored tokens (below) |
+| `PUBLIC_APP_URL` | Already needed for share links; the OAuth callback redirects here too |
+
+Generate the encryption key once and treat it like `SECRET_KEY`:
+
+```bash
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+**Rotating `CALENDAR_TOKEN_KEY` invalidates every stored connection** — existing
+tokens can no longer be decrypted and every founder has to reconnect. There is
+no silent fallback to plaintext: a missing or malformed key disables the feature
+rather than writing refresh tokens to the database in the clear.
+
+In Google Cloud Console the OAuth client needs the **Google Calendar API**
+enabled and the scope `.../auth/calendar.events` on its consent screen. That
+scope is narrower than the `calendar` scope the discovery-booking service
+account uses — it permits managing events, not reading every calendar the
+founder can see. While the consent screen is in "Testing", only accounts listed
+as test users can connect; publishing it is what opens it to everyone.
+
+This is entirely separate from the `GOOGLE_CALENDAR_*` service-account settings
+above, which act on GoXL's own calendar for discovery calls. Different account,
+different calendar, different auth model — do not reuse credentials between them.
+
 ## Before you call it done
 
 - [ ] `GET /openapi.json` on the backend returns 200

@@ -798,3 +798,260 @@
 @media (max-width: 860px) {
   .plan-grid { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* ── Month calendar + Google Calendar connection ───────────────────────────
+   Uses the page's existing tokens (--bd, --ink, --muted-2, --emerald) rather
+   than a second palette, so this reads as part of Plan Your Day. */
+
+/* A date picker is a FIXED-SIZE control. The first cut sized day cells with
+   aspect-ratio:1/1, which at full page width made every cell ~215px tall and
+   six rows swallowed the screen. Width is capped and cell height is fixed, so
+   the calendar looks the same whether the column is 400px or 1400px wide. */
+.cal {
+  width: 100%;
+  /* Fills the aside column so it lines up with the cards beneath it, but never
+     grows past a size that still reads as a date picker. */
+  max-width: 380px;
+  background: #ffffff;
+  border: 1px solid var(--bd, #e7e0d6);
+  border-radius: 14px;
+  padding: 12px 12px 10px;
+  margin-bottom: 20px;
+}
+
+.cal-head {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 28px;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.cal-selects { display: flex; gap: 6px; min-width: 0; }
+
+/* appearance:none so the native chrome does not fight the card's styling;
+   the arrow is drawn back on as a background so it still reads as a menu. */
+.cal-select {
+  flex: 1 1 auto;
+  min-width: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 1px solid var(--bd, #e7e0d6);
+  border-radius: 8px;
+  background-color: #ffffff;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%236c7a70' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  padding: 0 22px 0 9px;
+  height: 30px;
+  color: var(--ink, #16241c);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.cal-select-year { flex: 0 0 74px; }
+.cal-select:hover { border-color: var(--emerald, #10B981); }
+
+.cal-nav-btn {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--bd, #e7e0d6);
+  background: #ffffff;
+  color: var(--ink, #16241c);
+  border-radius: 8px;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.cal-nav-btn:hover { border-color: var(--emerald, #10B981); color: var(--emerald, #10B981); }
+
+.cal-select:focus-visible,
+.cal-nav-btn:focus-visible,
+.cal-today:focus-visible,
+.cal-day:focus-visible { outline: 2px solid var(--emerald, #10B981); outline-offset: 1px; }
+
+.cal-weekdays,
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.cal-weekdays {
+  margin-bottom: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  color: var(--muted-2, #6c7a70);
+  text-align: center;
+}
+
+.cal-weekdays abbr { text-decoration: none; cursor: default; }
+
+.cal-day {
+  position: relative;
+  /* Fixed, not derived from width — this is the whole fix. */
+  height: 38px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink, #16241c);
+  font-family: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.cal-day:hover { background: #f4f1ea; }
+/* Neighbouring months recede but stay — removing them would break the
+   seven-column rhythm and make the first week look ragged. */
+.cal-day-out { color: var(--muted-2, #6c7a70); opacity: .4; }
+.cal-day-today { border-color: var(--emerald, #10B981); font-weight: 750; }
+.cal-day-selected { background: var(--emerald, #10B981); color: #ffffff; font-weight: 700; }
+.cal-day-selected:hover { background: var(--emerald, #10B981); }
+.cal-day-num { line-height: 1; }
+
+.cal-day-dots { display: flex; align-items: center; gap: 2px; height: 4px; }
+
+.cal-dot { width: 4px; height: 4px; border-radius: 50%; background: var(--emerald, #10B981); }
+/* Done tasks read as outlines: a day that finished four tasks should not look
+   identical to an empty one. */
+.cal-dot-done { background: transparent; box-shadow: inset 0 0 0 1px var(--emerald, #10B981); }
+.cal-dot-more { width: 5px; border-radius: 1px; }
+.cal-day-selected .cal-dot { background: #ffffff; }
+.cal-day-selected .cal-dot-done { background: transparent; box-shadow: inset 0 0 0 1px #ffffff; }
+
+.cal-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 9px;
+  padding-top: 9px;
+  border-top: 1px solid var(--bd, #e7e0d6);
+}
+
+.cal-today {
+  border: 1px solid var(--bd, #e7e0d6);
+  background: #ffffff;
+  color: var(--ink, #16241c);
+  border-radius: 8px;
+  height: 27px;
+  padding: 0 12px;
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.cal-today:hover { border-color: var(--emerald, #10B981); color: var(--emerald, #10B981); }
+
+/* Names the day the add-task row will use. Without it the selection is a green
+   square whose consequence is invisible. */
+.cal-foot-hint {
+  font-size: 11.5px;
+  color: var(--muted-2, #6c7a70);
+  text-align: right;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --- connection card --- */
+
+.cal-conn {
+  background: #ffffff;
+  border: 1px solid var(--bd, #e7e0d6);
+  border-radius: 14px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+
+.cal-conn-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.cal-conn-title { font-size: 13.5px; font-weight: 700; color: var(--ink, #16241c); }
+.cal-conn-sub { font-size: 12px; color: var(--muted-2, #6c7a70); margin-top: 2px; }
+
+.cal-conn-btn {
+  border: 1px solid var(--emerald, #10B981);
+  background: var(--emerald, #10B981);
+  color: #ffffff;
+  border-radius: 9px;
+  padding: 8px 16px;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.cal-conn-btn:disabled { opacity: .6; cursor: default; }
+.cal-conn-ghost { background: #ffffff; color: var(--ink, #16241c); border-color: var(--bd, #e7e0d6); }
+.cal-conn-danger { background: #b3261e; border-color: #b3261e; }
+
+.cal-conn-confirm {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--bd, #e7e0d6);
+  font-size: 12.5px;
+  color: var(--muted-2, #6c7a70);
+}
+
+.cal-conn-confirm p { margin: 0 0 10px; line-height: 1.55; }
+.cal-conn-confirm strong { color: var(--ink, #16241c); }
+.cal-conn-confirm-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* --- per-task sync badge --- */
+
+.pl-sync {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  font-weight: 650;
+  padding: 2px 7px;
+  border-radius: 5px;
+  white-space: nowrap;
+}
+
+.pl-sync-ok { background: #e7f5ee; color: #0f5132; }
+.pl-sync-bad { background: #fdecea; color: #b3261e; }
+.pl-sync-muted { background: #f1efe9; color: var(--muted-2, #6c7a70); }
+
+@media (max-width: 560px) {
+  .cal { max-width: 100%; }
+  .cal-conn-row { align-items: flex-start; }
+}
+
+/* Escape hatch from the day filter, shown only when it would reveal something. */
+.pl-showall {
+  border: 1px solid var(--bd, #e7e0d6);
+  background: #ffffff;
+  color: var(--muted-2, #6c7a70);
+  border-radius: 7px;
+  padding: 3px 9px;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.pl-showall:hover { border-color: var(--emerald, #10B981); color: var(--emerald, #10B981); }
+.pl-showall:focus-visible { outline: 2px solid var(--emerald, #10B981); outline-offset: 1px; }

@@ -281,6 +281,33 @@ class Settings(BaseSettings):
     # this to the site people actually visit (e.g. https://goxlally.ai).
     PUBLIC_APP_URL: str = ""
 
+    # --- Google Calendar sync (per-founder, Plan Your Day) ---
+    # Separate from GOOGLE_CALENDAR_* above: those are a SERVICE ACCOUNT on
+    # GoXL's own calendar for discovery-call booking. These are a normal OAuth
+    # client used to reach each founder's OWN calendar, which they connect
+    # explicitly -- login is email-only, so Ally never has a Google token
+    # otherwise. Unset means the feature is simply unavailable; Plan Your Day
+    # keeps working without it.
+    GOOGLE_OAUTH_CLIENT_ID: str = ""
+    GOOGLE_OAUTH_CLIENT_SECRET: str = ""
+    # Must match a redirect URI registered on the OAuth client exactly.
+    GOOGLE_OAUTH_REDIRECT_URI: str = ""
+    # Fernet key encrypting stored access/refresh tokens. No default on purpose:
+    # see app/calendar_sync/crypto.py -- a missing key disables the feature
+    # rather than falling back to storing tokens in plaintext.
+    CALENDAR_TOKEN_KEY: str = ""
+    # Minutes before an event that the popup reminder fires. 30 was the team's
+    # choice; it only means anything on a TIMED event, which is why tasks carry
+    # an optional due_time and dateless-time tasks fall back to the hour below.
+    CALENDAR_REMINDER_MINUTES_BEFORE: int = 30
+    # The hour a task with a date but no time is scheduled at, so the reminder
+    # above lands in the morning rather than at 23:30 the previous night.
+    CALENDAR_DEFAULT_TASK_HOUR: int = 9
+    # How long a synced task event occupies on the calendar. Short on purpose:
+    # a task is a prompt, not a meeting, and hour-long blocks for every to-do
+    # would make a founder's calendar unreadable.
+    CALENDAR_EVENT_DURATION_MINUTES: int = 30
+
     # --- Observability ---
     SENTRY_DSN: str = ""
     LOG_LEVEL: str = "INFO"

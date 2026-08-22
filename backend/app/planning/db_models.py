@@ -6,9 +6,9 @@ Production persistence only; the hermetic test suite uses the in-memory reposito
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, time
 
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Date, DateTime, ForeignKey, Integer, String, Text, Time, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.session import Base
@@ -61,6 +61,11 @@ class TaskRow(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Google Calendar sync -- see migration e2b5c8d47f63 and app/calendar_sync/.
+    due_time: Mapped[time | None] = mapped_column(Time, nullable=True)
+    calendar_event_id: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    calendar_sync_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default="skipped")
 
 
 class ReminderRow(Base):

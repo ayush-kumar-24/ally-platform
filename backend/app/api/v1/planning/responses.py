@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, time
 
 from pydantic import BaseModel
 
@@ -58,13 +58,18 @@ class TaskResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     completed_at: datetime | None
+    due_time: time | None = None
+    # synced | failed | skipped | pending. The UI badges this so a founder is
+    # never left believing something reached their calendar when it did not.
+    calendar_sync_status: str = "skipped"
 
     @classmethod
     def from_domain(cls, t) -> "TaskResponse":
         return cls(task_id=t.task_id, goal_id=t.goal_id, plan_id=t.plan_id, founder_id=t.founder_id,
                    title=t.title, status=t.status.value, priority=t.priority.value, due_date=t.due_date,
                    source=t.source.value, created_at=t.created_at, updated_at=t.updated_at,
-                   completed_at=t.completed_at)
+                   completed_at=t.completed_at, due_time=t.due_time,
+                   calendar_sync_status=t.calendar_sync_status)
 
 
 class GoalWithTasksResponse(BaseModel):

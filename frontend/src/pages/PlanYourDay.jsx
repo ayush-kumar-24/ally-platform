@@ -5,6 +5,24 @@ import { FEATURES } from '../services/plans';
 import { addTask, deleteTask, listTasks, setTaskStatus, updateTask } from '../services/planning';
 import { ApiError } from '../services/api';
 import { greetingNow } from '../utils/helpers';
+import MonthCalendar from '../components/MonthCalendar';
+import { todayKey } from '../utils/dateKeys';
+import CalendarConnection from '../components/CalendarConnection';
+import { SYNC_LABELS } from '../services/calendar';
+
+/**
+ * How a task's calendar state reads to the founder.
+ *
+ * Renders nothing for 'skipped', which is the normal state for a dateless task
+ * or a founder with no calendar connected -- badging that would invent a
+ * problem. 'failed' is the one that matters: without it a founder walks away
+ * believing a reminder is set when none is.
+ */
+function SyncBadge({ status }) {
+  const meta = SYNC_LABELS[status];
+  if (!meta) return null;
+  return <span className={`pl-sync pl-sync-${meta.tone}`}>{meta.label}</span>;
+}
 
 /* There were five suggestion chips here -- "Investor meeting at 10", "Call
    Rahul", "Review CAC" and so on. They were somebody's imagined day, and
@@ -166,20 +184,25 @@ function PlanYourDayInner() {
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [dateString, setDateString] = useState('');
   // Only the manual-add tab exposes this -- "Plan with Ally" is a quick
   // brain-dump (deterministic comma-splitting, not AI parsing, see the note
   // on handlePlanMyDay below), so it always defaults to medium rather than
   // asking the founder to configure something on a "just talk" path. Every
   // task used to be created medium with no way to set anything else.
   const [manualPriority, setManualPriority] = useState('medium');
+  /* The date a new task gets, and which day the list below is filtered to --
+     one piece of state, because "the day I'm looking at" and "the day I'm
+     adding to" being different is exactly the confusion a calendar should
+     remove. Defaults to today so the page opens on the founder's actual day. */
+  const [selectedDate, setSelectedDate] = useState(todayKey);
+  const [manualTime, setManualTime] = useState('');
+  const [calendarConnected, setCalendarConnected] = useState(false);
+  /* Escape hatch from the day filter. Reset whenever the founder picks a
+     different day -- "show everything" is a momentary override, and leaving
+     it latched would silently disable the filter for the rest of the session. */
+  const [showAllTasks, setShowAllTasks] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState(null);
   const [savingEdit, setSavingEdit] = useState(false);
-
-  useEffect(() => {
-    const options = { weekday: 'long', month: 'long', day: 'numeric' };
-    setDateString(new Date().toLocaleDateString('en-US', options));
-  }, []);
 
   const refresh = useCallback(async () => {
     try {
@@ -224,6 +247,42 @@ function PlanYourDayInner() {
   // changed (that's what a "founder needs to redo their whole list every
   // morning" bug would look like).
   const activeGoals = sortByPriority(tasks.filter(t => t.status !== 'done'));
+
+  /* What the list shows for the day being viewed.
+   *
+   * The list used to be headed "Today's goals" and show every unfinished task
+   * whatever its date, so selecting a day changed nothing visible -- a task
+   * added to the 28th appeared instantly under a heading saying "Today's".
+   * The one piece of feedback the founder got actively contradicted what had
+   * just happened, which is why nobody could tell the calendar did anything.
+   *
+   * TODAY is deliberately not a strict equality match. The carry-forward rule
+   * above is right: an overdue task must not vanish because the clock rolled
+   * past midnight, and an undated task is still owed. So "today" means
+   * everything still outstanding -- due today, overdue, or undated. Any other
+   * day is that day exactly, because a past or future date is a question about
+   * that day specifically, not about what is outstanding in general.
+   */
+  const viewingToday = selectedDate === todayKey();
+  const dayGoals = showAllTasks ? activeGoals : activeGoals.filter((t) => (
+    viewingToday ? (!t.due_date || t.due_date <= selectedDate)
+                 : t.due_date === selectedDate
+  ));
+  const hiddenCount = activeGoals.length - dayGoals.length;
+
+  /** "Today" / "Fri 28 Aug" -- used by the heading, the header chip and the
+   *  add-task placeholder, so all three can never disagree again.
+   *
+   *  NOT named dayLabel: a module-level dayLabel() already formats completed-
+   *  history timestamps, and shadowing it here would turn that call into an
+   *  attempt to invoke a string. */
+  const headerDateLabel = new Date(`${selectedDate}T00:00:00`)
+    .toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+
+  const selectedDayLabel = viewingToday
+    ? 'Today'
+    : new Date(`${selectedDate}T00:00:00`).toLocaleDateString(undefined, {
+        weekday: 'short', day: 'numeric', month: 'short' });
   const doneGoals = tasks.filter(t => t.status === 'done');
   // "Completed today" used to show every done task the founder has ever had
   // -- a task finished two weeks ago read as finished "today" forever, with
@@ -290,9 +349,14 @@ function PlanYourDayInner() {
       // stays medium for every phrase -- it never asked which of several
       // brain-dumped items was more urgent than the others.
       const priority = activeTab === 'manual' ? manualPriority : 'medium';
+      // Every task lands on the day being viewed. A brain-dump split into five
+      // phrases all belongs to the same day -- that is what made it a dump.
+      const dueDate = selectedDate || null;
+      const dueTime = activeTab === 'manual' && manualTime ? `${manualTime}:00` : null;
       for (const title of titles) {
-        await addTask(title, { priority });
+        await addTask(title, { priority, dueDate, dueTime });
       }
+      setManualTime('');
       await refresh();
     } catch (err) {
       showToast(err instanceof ApiError ? err.detail : 'Could not add that task — please try again.');
@@ -364,7 +428,13 @@ function PlanYourDayInner() {
             <line x1="8" y1="2" x2="8" y2="6" />
             <line x1="3" y1="10" x2="21" y2="10" />
           </svg>
-          {dateString}
+          {/* The day being planned, not a frozen "today".
+              This chip used to render new Date() once on mount, so while the
+              calendar said "Adding to Aug 28" the most prominent date on the
+              page still read "Saturday, August 22". Two date displays
+              disagreeing is worse than either alone -- it is what made the
+              calendar look like it did nothing. */}
+          {headerDateLabel}
         </div>
       </div>
 
@@ -374,6 +444,11 @@ function PlanYourDayInner() {
           The manual-task path was the only way to add a task by typing, and a
           keyboard user could never reach it. Real <button>s in a tablist, with
           arrow keys and a roving tabindex. */}
+      {/* Connect/disconnect. Renders nothing when this deployment cannot offer
+          calendar sync, so it never advertises a feature that would 503. */}
+      <CalendarConnection onChange={(s) => setCalendarConnected(!!s?.connected)}
+                          showToast={showToast} />
+
       <div className="pl-tabs stagger d2" style={{ marginTop: 24 }} role="tablist" aria-label="Planning mode">
         <button
           type="button"
@@ -459,7 +534,9 @@ function PlanYourDayInner() {
               <textarea
                 id="pl-day"
                 className="pl-textarea"
-                placeholder="Whatever's on your plate today…"
+                placeholder={viewingToday
+                  ? "Whatever's on your plate today…"
+                  : `Whatever's on your plate for ${selectedDayLabel}…`}
                 value={inputText}
                 disabled={submitting}
                 onChange={(e) => setInputText(e.target.value)}
@@ -503,6 +580,35 @@ function PlanYourDayInner() {
                 ))}
               </div>
 
+              {/* Optional time of day. Without one the task still syncs -- the
+                  server places it at a default hour -- but a real time is what
+                  makes the "30 minutes before" reminder land when the founder
+                  actually needs it. Only shown on the manual tab: a
+                  comma-separated brain-dump has no single time. */}
+              <div className="pl-time-row" style={{ display: 'flex', alignItems: 'center',
+                                                    gap: '8px', marginBottom: '10px' }}>
+                <label htmlFor="pl-manual-time"
+                       style={{ fontSize: '12px', color: 'var(--muted-2, #6c7a70)' }}>
+                  Time (optional)
+                </label>
+                <input
+                  id="pl-manual-time"
+                  type="time"
+                  className="pl-time-input"
+                  style={{ height: '34px', padding: '0 10px', borderRadius: '8px',
+                           border: '1px solid var(--bd, #e7e0d6)', fontFamily: 'inherit',
+                           fontSize: '12.5px', background: '#fff' }}
+                  value={manualTime}
+                  disabled={submitting}
+                  onChange={(e) => setManualTime(e.target.value)}
+                />
+                {calendarConnected && (
+                  <span style={{ fontSize: '11.5px', color: 'var(--muted-2, #6c7a70)' }}>
+                    Reminder 30 min before
+                  </span>
+                )}
+              </div>
+
               <div style={{ display: 'flex', gap: '10px' }}>
                 <label className="sr-only" htmlFor="pl-manual-task">Task description</label>
                 <input
@@ -510,7 +616,9 @@ function PlanYourDayInner() {
                   type="text"
                   className="pl-textarea"
                   style={{ minHeight: 'auto', height: '40px', padding: '0 12px' }}
-                  placeholder="Task description..."
+                  placeholder={viewingToday
+                    ? 'Add a task for today…'
+                    : `Add a task for ${selectedDayLabel}…`}
                   value={inputText}
                   disabled={submitting}
                   onChange={(e) => setInputText(e.target.value)}
@@ -529,13 +637,28 @@ function PlanYourDayInner() {
             </div>
           )}
 
-          {/* Today's goals list */}
+          {/* The list for the selected day. The heading is the calendar's main
+              feedback: picking a date visibly changes what is listed here, so
+              the connection between the two is shown rather than explained. */}
           <div className="sec-row">
             <div className="sec-title" style={{ fontSize: '15px', fontWeight: 750 }}>
-              Today's goals
+              {showAllTasks ? 'All open tasks'
+                : viewingToday ? "Today's goals" : `${selectedDayLabel}`}
             </div>
-            <div className="plan-count" style={{ fontSize: '12px', color: 'var(--muted-2)' }}>
-              {activeGoals.length} to do
+            <div className="plan-count" style={{ fontSize: '12px', color: 'var(--muted-2)',
+                                                 display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span>{dayGoals.length} to do</span>
+              {/* Only offered when it would actually reveal something. A
+                  permanent toggle that changes nothing reads as broken. */}
+              {(showAllTasks || hiddenCount > 0) && (
+                <button
+                  type="button"
+                  className="pl-showall"
+                  onClick={() => setShowAllTasks(v => !v)}
+                >
+                  {showAllTasks ? 'Show this day only' : `Show all (${activeGoals.length})`}
+                </button>
+              )}
             </div>
           </div>
 
@@ -544,7 +667,7 @@ function PlanYourDayInner() {
               <div className="plan-empty" style={{ background: '#ffffff', padding: '24px', borderRadius: '14px', border: '1px solid var(--bd)' }}>
                 <p style={{ fontSize: '12.5px', color: 'var(--muted)', margin: 0 }}>Loading your tasks…</p>
               </div>
-            ) : activeGoals.length === 0 ? (
+            ) : dayGoals.length === 0 ? (
               /* "All caught up!" was shown to everyone with nothing active --
                  including a founder opening this page for the very first time,
                  who has not caught up on anything. */
@@ -554,6 +677,20 @@ function PlanYourDayInner() {
                     <h3 style={{ fontSize: '15px', fontWeight: 700, margin: '0 0 4px' }}>Nothing planned yet.</h3>
                     <p style={{ fontSize: '12.5px', color: 'var(--muted)', margin: 0 }}>
                       Tell Ally what your day holds and it'll break it into tasks.
+                    </p>
+                  </>
+                ) : !viewingToday ? (
+                  /* An empty OTHER day is not an achievement -- saying "all
+                     caught up" about a Thursday three weeks out would be
+                     nonsense. It also has to say where the rest of the tasks
+                     went, or an empty list reads as data loss. */
+                  <>
+                    <h3 style={{ fontSize: '15px', fontWeight: 700, margin: '0 0 4px' }}>
+                      Nothing on {selectedDayLabel}.
+                    </h3>
+                    <p style={{ fontSize: '12.5px', color: 'var(--muted)', margin: 0 }}>
+                      Add a task above and it'll land on this day
+                      {hiddenCount > 0 ? `, or show all ${activeGoals.length} open tasks.` : '.'}
                     </p>
                   </>
                 ) : (
@@ -566,7 +703,7 @@ function PlanYourDayInner() {
                 )}
               </div>
             ) : (
-              activeGoals.map((task) => (
+              dayGoals.map((task) => (
                 <div key={task.task_id} className="pl-goal-row">
                   {editingTaskId === task.task_id ? (
                     <TaskEditForm
@@ -601,9 +738,13 @@ function PlanYourDayInner() {
                                 <circle cx="12" cy="12" r="10" />
                                 <polyline points="12 6 12 12 16 14" />
                               </svg>
-                              due {task.due_date}
+                              due {task.due_date}{task.due_time ? ` · ${task.due_time.slice(0, 5)}` : ''}
                             </span>
                           )}
+                          {/* Only ever renders for 'synced' or 'failed'. A
+                              founder must not be left believing a reminder is
+                              set when the push never landed. */}
+                          <SyncBadge status={task.calendar_sync_status} />
                         </div>
                       </div>
                       <TaskMenu
@@ -756,6 +897,22 @@ function PlanYourDayInner() {
 
         {/* Right side panel */}
         <div className="plan-aside">
+          {/* The calendar lives in the aside, not the main column: it is a
+              fixed-size picker, and spanning the full content width made every
+              day cell enormous and pushed the actual task list off-screen.
+              This column is what the layout already reserves for compact
+              companion cards. */}
+          <MonthCalendar
+            tasks={tasks}
+            selectedDate={selectedDate}
+            onSelectDate={(d) => {
+              setSelectedDate(d || todayKey());
+              // Picking a day means "show me that day" -- leaving the show-all
+              // override latched would make the click appear to do nothing.
+              setShowAllTasks(false);
+            }}
+          />
+
           {/* Progress Card */}
           <div className="pl-prog-card">
             <div className="pl-prog-title">Today's progress</div>

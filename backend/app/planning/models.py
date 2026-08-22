@@ -9,7 +9,7 @@ and from them, so it can be swapped (in-memory <-> SQLAlchemy) without service c
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, time
 from enum import Enum
 
 
@@ -85,6 +85,20 @@ class Task:
     created_at: datetime
     updated_at: datetime
     completed_at: datetime | None = None
+    # Optional time of day. Google counts reminder offsets backwards from the
+    # event start, so an all-day event (starting at midnight) cannot carry a
+    # useful "30 minutes before" popup -- it would fire at 23:30 the night
+    # before. A task with a time becomes a timed event; one without is placed at
+    # a configured default hour. See app/calendar_sync/sync.py.
+    due_time: time | None = None
+    # The Google event this task owns, or None if it has never synced. Keeping
+    # it is what makes an edit update the same event instead of leaving a
+    # duplicate behind on every save.
+    calendar_event_id: str | None = None
+    # synced | failed | skipped | pending -- shown to the founder, because a
+    # task they believe reached their calendar and did not is worse than one
+    # they know did not.
+    calendar_sync_status: str = "skipped"
 
 
 @dataclass(frozen=True)
