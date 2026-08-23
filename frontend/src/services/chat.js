@@ -125,11 +125,31 @@ export function messageTime(iso) {
   return then.toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) + `, ${clock}`;
 }
 
+/* The server speaks OpenAI's vocabulary ('user' / 'assistant'); the UI speaks
+ * its own ('me' / 'ally'), which is what the stylesheet is written against.
+ *
+ * Both halves have to be translated. This used to map only 'assistant' and let
+ * everything else through untouched, so a stored 'user' message rendered as
+ * `.msg.user` -- a class the CSS has never defined. The bare `.bubble` rule
+ * carries no background and no colour, so the founder's own words came out as
+ * near-invisible text on the dark ground, left-aligned, with no green bubble.
+ * Live-confirmed against the database, which holds exactly 'user' and
+ * 'assistant'.
+ *
+ * It hid well because sending is optimistic: a message you have just typed is
+ * pushed with role 'me' and looks right. Only on REOPENING the conversation,
+ * when the transcript is rebuilt from the server, did half of it vanish.
+ */
+const UI_ROLE = { assistant: 'ally', ally: 'ally', user: 'me', me: 'me' };
+
 /** Normalise a server message into what the UI renders. */
 export function toUiMessage(m) {
   return {
     id: m.message_id ?? m.id,
-    role: m.role === 'assistant' ? 'ally' : m.role,
+    // Unknown roles fall back to 'ally' rather than passing through: an
+    // unstyled role renders invisibly, and silently dropping a message from a
+    // transcript is far worse than showing it in the wrong bubble.
+    role: UI_ROLE[m.role] ?? 'ally',
     text: m.content ?? m.text ?? '',
     time: messageTime(m.created_at),
   };

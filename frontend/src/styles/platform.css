@@ -270,7 +270,14 @@
 .m-av.ally{background:none;border:none;color:#34d399}
 .m-av.ally img{width:100%;height:100%;object-fit:contain}
 .m-av.me{background:linear-gradient(135deg,#34d399,#A8D94A);color:#06231a}
-.bubble{padding:13px 17px;border-radius:16px;font-size:14.5px;line-height:1.62}
+/* The base bubble now carries a readable background and colour of its own.
+   It used to supply only geometry, leaving background and colour entirely to
+   .msg.ally / .msg.me -- so a message whose role matched neither rendered as
+   invisible text on the dark ground. That is exactly what happened when the
+   server's 'user' role reached the DOM untranslated: the founder's own words
+   disappeared from their transcript. A message must always be legible, even
+   if it lands in the wrong-looking bubble. */
+.bubble{padding:13px 17px;border-radius:16px;font-size:14.5px;line-height:1.62;background:rgba(255,255,255,.06);color:#eaf3ee;border:1px solid rgba(255,255,255,.08)}
 .msg.ally .bubble{background:rgba(255,255,255,.06);color:#eaf3ee;border:1px solid rgba(255,255,255,.08);border-bottom-left-radius:5px}
 .msg.me .bubble{background:#10B981;color:#06231a;border-bottom-right-radius:5px;font-weight:450}
 .m-meta{font-size:10.5px;color:#7d9488;margin-top:5px}
