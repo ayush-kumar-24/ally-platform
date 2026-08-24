@@ -123,12 +123,41 @@ class Settings(BaseSettings):
     # same seeded catalogue and falls back to the lexical engine on any failure.
     ARCHETYPE_LLM: bool = False
 
+    # Infer the founder's lifecycle stage from their diagnosis answers when
+    # founders.stage_id is NULL. Off => the stage stays unknown, which is
+    # today's behaviour and is NOT neutral: DefaultInterventionRelevance reads
+    # an unknown stage as "every intervention is relevant", so a founder who
+    # shipped a year ago can be handed ideation-stage advice, and the
+    # Confidence Model loses its stage-adjusted root-cause priors entirely.
+    #
+    # Worth a flag rather than always-on because it adds one LLM call to the
+    # reasoning pipeline and, unlike the archetype seam, it changes what the
+    # founder is RECOMMENDED rather than how they are described. Measured on
+    # the live founders table when this was written: stage_id was NULL for 27
+    # of 45 founders, so this is the majority path, not an edge case.
+    #
+    # A declared stage is never overridden -- see stage_detection_llm.py.
+    STAGE_INFERENCE_LLM: bool = False
+
     # Write a recommendation when the curated intervention library covers none of
     # a detected root cause. Off => that cause yields nothing, silently, which is
     # the behaviour this replaces. Its own flag, not a shared diagnosis one: this
     # produces advice with no reviewed intervention behind it and should be
     # switchable on its own.
     RECOMMENDATION_FALLBACK_LLM: bool = False
+
+    # Complete the free report's 3+3 action plan when the curated library fills
+    # only one half of it. Off => the report ships whatever the library gave,
+    # which for a single diagnosed root cause is all-confirm or all-solve and
+    # never both (see engines/action_plan_llm.py for why the engine cannot
+    # produce the doc's shape). Reproduced live: three confirm lines, zero solve
+    # lines, with nothing on the page saying half the plan was missing.
+    #
+    # Its own flag, not folded into RECOMMENDATION_FALLBACK_LLM, and off by
+    # default for the same reason that one is: it puts founder-facing advice on
+    # the page with no reviewed intervention behind it. Curated lines are never
+    # replaced -- only the shortfall is authored.
+    ACTION_PLAN_BALANCE_LLM: bool = False
 
     # --- Diagnosis length ---
     # Hard cap on questions in one diagnosis. A diagnosis must reach a confident

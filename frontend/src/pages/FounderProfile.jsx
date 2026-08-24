@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { get, post } from '../services/api';
-import { getProfile, getProgress, updateProfile } from '../services/profile';
+import { getProfile, getProgress, updateBusinessSection, updateProfile } from '../services/profile';
+import { STAGE_GROUPS } from '../data/onboardingQuestions';
 import { getNotificationPreferences, updateNotificationPreferences } from '../services/settings';
 import { logout } from '../services/auth';
 import { getCatalog, getMyPlan } from '../services/plans';
@@ -348,7 +349,7 @@ export default function FounderProfile() {
   // neither was ever persisted anyway (PATCH /profile had no field for
   // either), so Edit silently did nothing for them.
   const [form, setForm] = useState({
-    name: '', email: '', linkedin: '',
+    name: '', email: '', linkedin: '', stage: '',
   });
   const [, setProfileLoaded] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState(null);
@@ -364,6 +365,9 @@ export default function FounderProfile() {
           name: p.full_name || '',
           email: p.email || '',
           linkedin: p.linkedin_url || '',
+          // stage_name, not stage_id: the API takes the NAME on write and
+          // resolves it (profile/routes.py), and the id is meaningless here.
+          stage: p.stage_name || '',
         });
         if (p.avatar_url) setAvatarUrl(p.avatar_url);
       })
@@ -471,6 +475,10 @@ export default function FounderProfile() {
         full_name: form.name.trim(),
         linkedin_url: form.linkedin.trim(),
       });
+      // Stage lives on the business section, not PATCH /profile. Sent only
+      // when set, so opening Edit and saving without touching it cannot clear
+      // a stage the founder already has.
+      if (form.stage) await updateBusinessSection({ stage: form.stage });
       setUser(prev => ({ ...prev, name: form.name.trim() }));
       setEditing(false);
       showToast('Profile saved ✓');
@@ -708,6 +716,44 @@ export default function FounderProfile() {
               />
             ) : (
               <div className="pr-val">{form.name}</div>
+            )}
+          </div>
+
+          {/* Stage. Editable HERE and not only in guided onboarding, because a
+              founder who reached the app without finishing that flow had no way
+              to set it at all -- founders.stage_id was NULL for 27 of 45 live
+              founders, and this page counted it toward "profile complete" while
+              offering nothing to complete it with.
+
+              It is not cosmetic. Founder DNA and Current Problem pick their
+              question bank by stage group, the recommendation engine filters
+              interventions by stage_id, and the report chooses its tone
+              (Validator / Compass / Auditor) by stage -- all of which fall back
+              to a default or switch off entirely when it is unset. */}
+          <div className="pr-field">
+            <label className="pr-lbl" htmlFor="pr-stage">Stage</label>
+            {editing ? (
+              <select
+                id="pr-stage"
+                className="pr-input"
+                value={form.stage}
+                onChange={e => setForm({ ...form, stage: e.target.value })}
+              >
+                <option value="">Select your stage…</option>
+                {STAGE_GROUPS.map(g => (
+                  <optgroup key={g.key} label={`${g.group} — ${g.label}`}>
+                    {g.stages.map(st => (
+                      <option key={st.name} value={st.name}>
+                        {st.name} — {st.blurb}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+            ) : (
+              <div className="pr-val">
+                {form.stage || 'Not set — add this so Ally can tailor your diagnosis'}
+              </div>
             )}
           </div>
 

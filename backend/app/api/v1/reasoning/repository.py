@@ -118,6 +118,20 @@ class ReasoningRepository:
     def get_founder_stage(self, stage_id: int) -> FounderStage | None:
         return self.db.get(FounderStage, stage_id)
 
+    def get_founder_stages(self) -> list[FounderStage]:
+        """The seeded lifecycle catalogue (8 rows), earliest stage first.
+
+        Ordered by stage_order rather than stage_id because stage_order is what
+        every consumer reasons about -- the group mapping in
+        stage_detection.py, the same mapping in diagnosis/engine.py, and the
+        stage-inference prompt, which presents the catalogue as a progression.
+        """
+        return list(
+            self.db.execute(select(FounderStage).order_by(FounderStage.stage_order))
+            .scalars()
+            .all()
+        )
+
     def get_stage_weights(self, stage_id: int) -> dict[int, Decimal]:
         """root_cause_id -> stage_weight for one stage (the stage-probability
         prior). One query instead of per-cause lookups to avoid N+1."""
