@@ -29,6 +29,23 @@ function SyncBadge({ status }) {
    "Rahul" was the mock founder's name. Prefilling a founder's plan with
    invented tasks is the opposite of asking them what their day holds. */
 
+/** Longest task title the API accepts -- planning/schemas.py caps `title` at
+ *  200 characters. Mirrored here so an over-long entry is caught before it is
+ *  sent, rather than coming back as a 422 the founder has to interpret.
+ *
+ *  Deliberately NOT a `maxLength` on the textarea: the cap is per TASK, and
+ *  "Plan with Ally" splits on commas, so three 90-character items are a
+ *  perfectly valid 280-character box. Capping the box would block that. */
+const TASK_TITLE_MAX = 200;
+
+/** The titles a given box of text would become -- comma-split for the Ally
+ *  tab, the whole string for manual add. Shared by the submit handler and the
+ *  live over-length hint so the two can never disagree about the split. */
+const titlesFrom = (text, activeTab) =>
+  activeTab === 'ally'
+    ? text.split(',').map(s => s.trim()).filter(Boolean)
+    : [text.trim()].filter(Boolean);
+
 const PRIORITY_RANK = { high: 0, medium: 1, low: 2 };
 const sortByPriority = (tasks) =>
   [...tasks].sort((a, b) => (PRIORITY_RANK[a.priority] ?? 1) - (PRIORITY_RANK[b.priority] ?? 1));
@@ -336,15 +353,34 @@ function PlanYourDayInner() {
   const handlePlanMyDay = async () => {
     const text = inputText.trim();
     if (!text || submitting) return;
+
+    // "Plan with Ally" accepts a comma-separated brain-dump and turns each
+    // phrase into its own task -- deterministic splitting, not AI parsing;
+    // it doesn't infer times or durations, only what's actually in the text.
+    const titles = titlesFrom(text, activeTab);
+
+    // Checked BEFORE anything is sent or the box is cleared. Reproduced live:
+    // a founder who typed a paragraph with no commas in it produced one
+    // 345-character title, the API rejected it with a 422, and what surfaced
+    // was the raw Pydantic error. That specific leak is fixed server-side
+    // (middleware/error_handler.py), but a founder should not have to make a
+    // round trip to learn the thing is too long -- and the message they get
+    // back cannot tell them the useful part, which is that commas are what
+    // splits this into separate tasks.
+    const tooLong = titles.find(t => t.length > TASK_TITLE_MAX);
+    if (tooLong) {
+      showToast(
+        activeTab === 'ally'
+          ? `That's ${tooLong.length} characters for one task — the limit is ${TASK_TITLE_MAX}. Separate your tasks with commas, or shorten it.`
+          : `That's ${tooLong.length} characters — the limit is ${TASK_TITLE_MAX}. Try shortening it.`,
+        6000,
+      );
+      return; // nothing sent, nothing cleared -- what they typed is still there
+    }
+
     setSubmitting(true);
     setInputText('');
     try {
-      // "Plan with Ally" accepts a comma-separated brain-dump and turns each
-      // phrase into its own task -- deterministic splitting, not AI parsing;
-      // it doesn't infer times or durations, only what's actually in the text.
-      const titles = activeTab === 'ally'
-        ? text.split(',').map(s => s.trim()).filter(Boolean)
-        : [text];
       // Manual add carries whatever the picker is set to; "Plan with Ally"
       // stays medium for every phrase -- it never asked which of several
       // brain-dumped items was more urgent than the others.
@@ -372,6 +408,12 @@ function PlanYourDayInner() {
   // while the numerator only counted today's -- badly undercounting the
   // moment any history existed. Active tasks carry forward into "today" by
   // design (see the isToday() note above), so they belong in the total.
+  /* The first phrase currently over the API's per-task cap, or undefined.
+     Drives the inline warning in the input footer -- computed from the SAME
+     split the submit handler applies, so what the founder is warned about is
+     exactly what would have been rejected. */
+  const overLongTitle = titlesFrom(inputText, activeTab).find(t => t.length > TASK_TITLE_MAX);
+
   const totalGoals = activeGoals.length + completedGoals.length;
   const completionPct = totalGoals > 0 ? Math.round((completedGoals.length / totalGoals) * 100) : 0;
   const strokeDashoffset = 308 - (completionPct / 100) * 308;
@@ -474,7 +516,7 @@ function PlanYourDayInner() {
           </div>
           <div className="pl-tab-content">
             <span className="pl-tab-title">Plan with Ally</span>
-            <span className="pl-tab-desc">Just talk — I'll organize it.</span>
+            <span className="pl-tab-desc">List them with commas — I'll add each one.</span>
           </div>
         </button>
 
@@ -535,8 +577,8 @@ function PlanYourDayInner() {
                 id="pl-day"
                 className="pl-textarea"
                 placeholder={viewingToday
-                  ? "Whatever's on your plate today…"
-                  : `Whatever's on your plate for ${selectedDayLabel}…`}
+                  ? "Call Rajesh about pricing, draft the follow-up email, book the factory visit…"
+                  : `What's on your plate for ${selectedDayLabel}? Separate tasks with commas…`}
                 value={inputText}
                 disabled={submitting}
                 onChange={(e) => setInputText(e.target.value)}
@@ -544,9 +586,15 @@ function PlanYourDayInner() {
               />
 
               <div className="pl-input-footer">
+                {/* The hint becomes the WARNING when something is already too
+                    long, rather than sitting alongside it -- a founder mid-
+                    paragraph finds out here, not after submitting. Same split
+                    the handler uses, so the two cannot disagree. */}
                 <div className="pl-input-hint">
                   <span className="dot" />
-                  Comma-separate a few things and I'll add them as separate tasks.
+                  {overLongTitle
+                    ? `That's ${overLongTitle.length} characters for one task — the limit is ${TASK_TITLE_MAX}. Add commas to split it up.`
+                    : "Comma-separate a few things and I'll add them as separate tasks."}
                 </div>
                 <button className="pl-plan-btn" onClick={handlePlanMyDay} disabled={submitting}>
                   {submitting && <span className="pl-spinner" aria-hidden="true" />}
@@ -676,7 +724,7 @@ function PlanYourDayInner() {
                   <>
                     <h3 style={{ fontSize: '15px', fontWeight: 700, margin: '0 0 4px' }}>Nothing planned yet.</h3>
                     <p style={{ fontSize: '12.5px', color: 'var(--muted)', margin: 0 }}>
-                      Tell Ally what your day holds and it'll break it into tasks.
+                      Type your tasks separated by commas and Ally will add each one.
                     </p>
                   </>
                 ) : !viewingToday ? (
