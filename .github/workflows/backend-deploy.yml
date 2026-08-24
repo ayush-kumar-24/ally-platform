@@ -26,6 +26,12 @@ env:
   ECS_SERVICE: ally-backend-service
   CONTAINER_NAME: Main
 
+  # Runtime ECS service keeps using its existing DATABASE_URL / ally_app role.
+  # Database migrations use a separate one-off task definition with the
+  # privileged schema-owner DATABASE_URL.
+  MIGRATION_TASK_FAMILY: ally_backend_migration_task
+  MIGRATION_DATABASE_URL_SECRET: "arn:aws:secretsmanager:ap-south-1:010724906865:secret:ally/backend/migration-Gy2dvu:DATABASE_URL::"
+
   SUBNETS: subnet-0e59e6f2a84ecf3a3,subnet-0f5a3c7d49c374b61
   SECURITY_GROUP: sg-083db4ef98455c731
 
@@ -38,9 +44,12 @@ jobs:
     # 2. CI was triggered by a push
     # 3. The push was to main
     #
-    # Manual deployment remains available through workflow_dispatch.
+    # Manual production deployment is also restricted to main.
     if: >
-      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event_name == 'workflow_dispatch' &&
+        github.ref == 'refs/heads/main'
+      ) ||
       (
         github.event.workflow_run.conclusion == 'success' &&
         github.event.workflow_run.event == 'push' &&
@@ -84,16 +93,18 @@ jobs:
       # ---------------------------------------------------------
       # 3. CAPTURE CURRENT PRODUCTION TASK
       #
-      # This exact task definition becomes:
-      # - the template for the new deployment
+      # This exact production task definition becomes:
+      # - the template for the new runtime task
       # - the rollback target if deployment fails
       #
-      # This also preserves:
+      # This preserves:
+      # - runtime DATABASE_URL (ally_app)
       # - Gotenberg sidecar
       # - ports
-      # - secrets
+      # - existing secrets
       # - environment variables
-      # - logging config
+      # - task/execution roles
+      # - logging configuration
       # ---------------------------------------------------------
 
       - name: Capture current production task definition
@@ -149,20 +160,20 @@ jobs:
           echo "uri=$IMAGE_URI" >> "$GITHUB_OUTPUT"
 
       # ---------------------------------------------------------
-      # 6. CREATE NEW TASK DEFINITION
+      # 6. CREATE NEW RUNTIME TASK DEFINITION
+      #
+      # This is the task definition that will eventually be
+      # deployed to ally-backend-service.
       #
       # IMPORTANT:
-      # We copy the task definition currently used by the ECS
-      # production service.
+      # Only the Main container image is changed.
       #
-      # Only the Main backend container image is changed.
-      #
-      # Gotenberg and all other infrastructure configuration
-      # remain untouched.
+      # DATABASE_URL remains the existing production runtime
+      # secret, which connects as ally_app.
       # ---------------------------------------------------------
 
-      - name: Create new ECS task definition
-        id: taskdef
+      - name: Create new runtime ECS task definition
+        id: runtime-taskdef
         run: |
           aws ecs describe-task-definition \
             --task-definition "${{ steps.previous-task.outputs.arn }}" \
@@ -190,36 +201,139 @@ jobs:
               .registeredBy
             )
             ' \
-            current-taskdef.json > new-taskdef.json
+            current-taskdef.json > runtime-taskdef.json
 
-          NEW_TASK_ARN=$(aws ecs register-task-definition \
-            --cli-input-json file://new-taskdef.json \
+          RUNTIME_TASK_ARN=$(aws ecs register-task-definition \
+            --cli-input-json file://runtime-taskdef.json \
             --query 'taskDefinition.taskDefinitionArn' \
             --output text)
 
-          if [ -z "$NEW_TASK_ARN" ] || [ "$NEW_TASK_ARN" = "None" ]; then
-            echo "Could not register new ECS task definition."
+          if [ -z "$RUNTIME_TASK_ARN" ] || [ "$RUNTIME_TASK_ARN" = "None" ]; then
+            echo "Could not register runtime ECS task definition."
             exit 1
           fi
 
-          echo "arn=$NEW_TASK_ARN" >> "$GITHUB_OUTPUT"
+          echo "arn=$RUNTIME_TASK_ARN" >> "$GITHUB_OUTPUT"
 
           echo "============================================"
-          echo "NEW TASK DEFINITION"
-          echo "$NEW_TASK_ARN"
+          echo "NEW RUNTIME TASK DEFINITION"
+          echo "$RUNTIME_TASK_ARN"
           echo "============================================"
 
       # ---------------------------------------------------------
-      # 7. PRODUCTION DATABASE COMPATIBILITY CHECK
+      # 7. CREATE SEPARATE MIGRATION TASK DEFINITION
+      #
+      # This task definition is NEVER deployed to the ECS service.
+      #
+      # It clones the new runtime task, but:
+      # - uses a separate family
+      # - replaces ONLY Main -> DATABASE_URL
+      # - points DATABASE_URL at the privileged migration secret
+      #
+      # Runtime production tasks therefore continue using ally_app.
       # ---------------------------------------------------------
 
-      - name: Check new image against production DB
-        id: preflight
+      - name: Create migration-only ECS task definition
+        id: migration-taskdef
+        run: |
+          jq \
+            --arg FAMILY "$MIGRATION_TASK_FAMILY" \
+            --arg CONTAINER "$CONTAINER_NAME" \
+            --arg DB_SECRET "$MIGRATION_DATABASE_URL_SECRET" \
+            '
+            .family = $FAMILY
+            |
+            .containerDefinitions |= map(
+              if .name == $CONTAINER then
+                .secrets = (
+                  (.secrets // [])
+                  | map(
+                      if .name == "DATABASE_URL"
+                      then .valueFrom = $DB_SECRET
+                      else .
+                      end
+                    )
+                )
+              else .
+              end
+            )
+            ' \
+            runtime-taskdef.json > migration-taskdef.json
+
+          MAIN_CONTAINER_COUNT=$(jq \
+            --arg CONTAINER "$CONTAINER_NAME" \
+            '[.containerDefinitions[] | select(.name == $CONTAINER)] | length' \
+            migration-taskdef.json)
+
+          DATABASE_SECRET_COUNT=$(jq \
+            --arg CONTAINER "$CONTAINER_NAME" \
+            '[
+              .containerDefinitions[]
+              | select(.name == $CONTAINER)
+              | (.secrets // [])[]
+              | select(.name == "DATABASE_URL")
+            ] | length' \
+            migration-taskdef.json)
+
+          DATABASE_SECRET_VALUE=$(jq -r \
+            --arg CONTAINER "$CONTAINER_NAME" \
+            '
+            .containerDefinitions[]
+            | select(.name == $CONTAINER)
+            | (.secrets // [])[]
+            | select(.name == "DATABASE_URL")
+            | .valueFrom
+            ' \
+            migration-taskdef.json)
+
+          if [ "$MAIN_CONTAINER_COUNT" != "1" ]; then
+            echo "Expected exactly one Main container."
+            echo "Found: $MAIN_CONTAINER_COUNT"
+            exit 1
+          fi
+
+          if [ "$DATABASE_SECRET_COUNT" != "1" ]; then
+            echo "Expected exactly one DATABASE_URL secret on Main."
+            echo "Found: $DATABASE_SECRET_COUNT"
+            exit 1
+          fi
+
+          if [ "$DATABASE_SECRET_VALUE" != "$MIGRATION_DATABASE_URL_SECRET" ]; then
+            echo "Migration DATABASE_URL secret replacement failed."
+            exit 1
+          fi
+
+          MIGRATION_TASK_ARN=$(aws ecs register-task-definition \
+            --cli-input-json file://migration-taskdef.json \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)
+
+          if [ -z "$MIGRATION_TASK_ARN" ] || [ "$MIGRATION_TASK_ARN" = "None" ]; then
+            echo "Could not register migration ECS task definition."
+            exit 1
+          fi
+
+          echo "arn=$MIGRATION_TASK_ARN" >> "$GITHUB_OUTPUT"
+
+          echo "============================================"
+          echo "MIGRATION-ONLY TASK DEFINITION"
+          echo "$MIGRATION_TASK_ARN"
+          echo "============================================"
+
+      # ---------------------------------------------------------
+      # 8. MIGRATION DATABASE PREFLIGHT
+      #
+      # Uses the migration-only task definition and therefore the
+      # privileged schema-owner DATABASE_URL.
+      # ---------------------------------------------------------
+
+      - name: Check migration task against production DB
+        id: migration-preflight
         run: |
           RESULT=$(aws ecs run-task \
             --cluster "$ECS_CLUSTER" \
             --launch-type FARGATE \
-            --task-definition "${{ steps.taskdef.outputs.arn }}" \
+            --task-definition "${{ steps.migration-taskdef.outputs.arn }}" \
             --network-configuration \
             "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SECURITY_GROUP],assignPublicIp=ENABLED}" \
             --overrides \
@@ -230,37 +344,48 @@ jobs:
           TASK_ARN=$(echo "$RESULT" | jq -r '.tasks[0].taskArn // empty')
 
           if [ -z "$TASK_ARN" ]; then
-            echo "Could not start database compatibility task."
+            echo "Could not start migration preflight task."
             echo "$RESULT" | jq '.failures'
             exit 1
           fi
 
           echo "task_arn=$TASK_ARN" >> "$GITHUB_OUTPUT"
 
-      - name: Wait for DB compatibility check
+      - name: Wait for migration DB preflight
         run: |
           aws ecs wait tasks-stopped \
             --cluster "$ECS_CLUSTER" \
-            --tasks "${{ steps.preflight.outputs.task_arn }}"
+            --tasks "${{ steps.migration-preflight.outputs.task_arn }}"
 
           EXIT_CODE=$(aws ecs describe-tasks \
             --cluster "$ECS_CLUSTER" \
-            --tasks "${{ steps.preflight.outputs.task_arn }}" \
+            --tasks "${{ steps.migration-preflight.outputs.task_arn }}" \
             --query "tasks[0].containers[?name=='$CONTAINER_NAME'].exitCode | [0]" \
             --output text)
 
-          echo "DB compatibility exit code: $EXIT_CODE"
+          echo "Migration DB preflight exit code: $EXIT_CODE"
 
           if [ "$EXIT_CODE" != "0" ]; then
-            echo "New image cannot safely understand the production DB."
+            echo "Migration task cannot safely connect to the production DB."
+
+            aws ecs describe-tasks \
+              --cluster "$ECS_CLUSTER" \
+              --tasks "${{ steps.migration-preflight.outputs.task_arn }}" \
+              --query 'tasks[0].{stoppedReason:stoppedReason,containers:containers[*].{name:name,reason:reason,exitCode:exitCode}}'
+
             echo "DEPLOYMENT STOPPED."
             exit 1
           fi
 
-          echo "Production DB compatibility check passed."
+          echo "Migration DB preflight passed."
 
       # ---------------------------------------------------------
-      # 8. RUN ALEMBIC MIGRATION EXACTLY ONCE
+      # 9. RUN ALEMBIC MIGRATION EXACTLY ONCE
+      #
+      # IMPORTANT:
+      # This uses the privileged migration-only task definition.
+      #
+      # The ECS production service has NOT been changed yet.
       # ---------------------------------------------------------
 
       - name: Run Alembic migration once
@@ -269,7 +394,7 @@ jobs:
           RESULT=$(aws ecs run-task \
             --cluster "$ECS_CLUSTER" \
             --launch-type FARGATE \
-            --task-definition "${{ steps.taskdef.outputs.arn }}" \
+            --task-definition "${{ steps.migration-taskdef.outputs.arn }}" \
             --network-configuration \
             "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SECURITY_GROUP],assignPublicIp=ENABLED}" \
             --overrides \
@@ -303,6 +428,12 @@ jobs:
 
           if [ "$EXIT_CODE" != "0" ]; then
             echo "DATABASE MIGRATION FAILED."
+
+            aws ecs describe-tasks \
+              --cluster "$ECS_CLUSTER" \
+              --tasks "${{ steps.migrate.outputs.task_arn }}" \
+              --query 'tasks[0].{stoppedReason:stoppedReason,containers:containers[*].{name:name,reason:reason,exitCode:exitCode}}'
+
             echo "ECS service will NOT be updated."
             exit 1
           fi
@@ -310,25 +441,90 @@ jobs:
           echo "Database migration successful."
 
       # ---------------------------------------------------------
-      # 9. DEPLOY NEW TASK TO ECS
+      # 10. VERIFY RUNTIME ROLE AFTER MIGRATION
+      #
+      # The migration has now completed, but the production service
+      # still has NOT been updated.
+      #
+      # Run the new runtime task definition using its normal
+      # ally_app DATABASE_URL to confirm that the runtime role can
+      # still connect to the migrated database.
       # ---------------------------------------------------------
 
-      - name: Deploy new task definition to ECS
+      - name: Check runtime task against migrated production DB
+        id: runtime-preflight
+        run: |
+          RESULT=$(aws ecs run-task \
+            --cluster "$ECS_CLUSTER" \
+            --launch-type FARGATE \
+            --task-definition "${{ steps.runtime-taskdef.outputs.arn }}" \
+            --network-configuration \
+            "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SECURITY_GROUP],assignPublicIp=ENABLED}" \
+            --overrides \
+            "{\"containerOverrides\":[{\"name\":\"$CONTAINER_NAME\",\"command\":[\"alembic\",\"current\"]}]}")
+
+          echo "$RESULT"
+
+          TASK_ARN=$(echo "$RESULT" | jq -r '.tasks[0].taskArn // empty')
+
+          if [ -z "$TASK_ARN" ]; then
+            echo "Could not start runtime DB compatibility task."
+            echo "$RESULT" | jq '.failures'
+            exit 1
+          fi
+
+          echo "task_arn=$TASK_ARN" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for runtime DB compatibility check
+        run: |
+          aws ecs wait tasks-stopped \
+            --cluster "$ECS_CLUSTER" \
+            --tasks "${{ steps.runtime-preflight.outputs.task_arn }}"
+
+          EXIT_CODE=$(aws ecs describe-tasks \
+            --cluster "$ECS_CLUSTER" \
+            --tasks "${{ steps.runtime-preflight.outputs.task_arn }}" \
+            --query "tasks[0].containers[?name=='$CONTAINER_NAME'].exitCode | [0]" \
+            --output text)
+
+          echo "Runtime DB compatibility exit code: $EXIT_CODE"
+
+          if [ "$EXIT_CODE" != "0" ]; then
+            echo "Runtime ally_app task cannot connect after migration."
+
+            aws ecs describe-tasks \
+              --cluster "$ECS_CLUSTER" \
+              --tasks "${{ steps.runtime-preflight.outputs.task_arn }}" \
+              --query 'tasks[0].{stoppedReason:stoppedReason,containers:containers[*].{name:name,reason:reason,exitCode:exitCode}}'
+
+            echo "ECS service will NOT be updated."
+            exit 1
+          fi
+
+          echo "Runtime DB compatibility check passed."
+
+      # ---------------------------------------------------------
+      # 11. DEPLOY NEW RUNTIME TASK TO ECS
+      #
+      # Migration credentials are NOT present in this task.
+      # ---------------------------------------------------------
+
+      - name: Deploy new runtime task definition to ECS
         id: deploy-service
         run: |
-          echo "Deploying:"
-          echo "${{ steps.taskdef.outputs.arn }}"
+          echo "Deploying runtime task:"
+          echo "${{ steps.runtime-taskdef.outputs.arn }}"
 
           aws ecs update-service \
             --cluster "$ECS_CLUSTER" \
             --service "$ECS_SERVICE" \
-            --task-definition "${{ steps.taskdef.outputs.arn }}" \
+            --task-definition "${{ steps.runtime-taskdef.outputs.arn }}" \
             --force-new-deployment
 
           echo "ECS service update started."
 
       # ---------------------------------------------------------
-      # 10. WAIT FOR ECS ROLLING DEPLOYMENT
+      # 12. WAIT FOR ECS ROLLING DEPLOYMENT
       # ---------------------------------------------------------
 
       - name: Wait for ECS service to become stable
@@ -342,7 +538,7 @@ jobs:
           echo "ECS service is stable."
 
       # ---------------------------------------------------------
-      # 11. PRODUCTION HEALTH CHECK
+      # 13. PRODUCTION HEALTH CHECK
       # ---------------------------------------------------------
 
       - name: Production API health check
@@ -371,14 +567,18 @@ jobs:
           exit 1
 
       # ---------------------------------------------------------
-      # 12. AUTOMATIC ROLLBACK
+      # 14. AUTOMATIC ECS ROLLBACK
       #
       # Runs ONLY if:
       # - ECS service had already been changed
       # - a later deployment step failed
       #
-      # It restores the exact task definition captured before
-      # deployment.
+      # This restores the exact previous runtime task definition.
+      #
+      # IMPORTANT:
+      # Database migrations are NOT automatically reversed.
+      # Migrations must therefore remain backward-compatible with
+      # the previous runtime during the deployment/rollback window.
       # ---------------------------------------------------------
 
       - name: Roll back to previous production task
@@ -388,7 +588,7 @@ jobs:
 
           echo "============================================"
           echo "DEPLOYMENT FAILED"
-          echo "STARTING AUTOMATIC ROLLBACK"
+          echo "STARTING AUTOMATIC ECS ROLLBACK"
           echo "============================================"
 
           echo "Restoring:"
@@ -406,7 +606,7 @@ jobs:
             --cluster "$ECS_CLUSTER" \
             --services "$ECS_SERVICE"
 
-          echo "Previous ECS task definition restored."
+          echo "Previous ECS runtime task definition restored."
 
           echo "Checking production API after rollback..."
 
@@ -436,7 +636,7 @@ jobs:
           exit 1
 
       # ---------------------------------------------------------
-      # 13. SUCCESS SUMMARY
+      # 15. SUCCESS SUMMARY
       # ---------------------------------------------------------
 
       - name: Deployment summary
@@ -454,12 +654,24 @@ jobs:
           echo "${{ steps.image.outputs.uri }}"
 
           echo
-          echo "Previous task:"
+          echo "Previous runtime task:"
           echo "${{ steps.previous-task.outputs.arn }}"
 
           echo
-          echo "New task:"
-          echo "${{ steps.taskdef.outputs.arn }}"
+          echo "New runtime task:"
+          echo "${{ steps.runtime-taskdef.outputs.arn }}"
+
+          echo
+          echo "Migration-only task:"
+          echo "${{ steps.migration-taskdef.outputs.arn }}"
+
+          echo
+          echo "Runtime DB credential:"
+          echo "Preserved from production task definition (ally_app)."
+
+          echo
+          echo "Migration DB credential:"
+          echo "Injected only into one-off migration task definition."
 
           echo
           echo "API:"
