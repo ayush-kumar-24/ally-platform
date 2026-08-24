@@ -234,6 +234,7 @@ def build_reasoning_service(db: Session) -> ReasoningService:
         # block carries it too, not only the session-scoped AllyContext.diagnosis.
         memory=build_db_memory_service(db),
         archetype_engine=build_archetype_engine(db, repository),
+        action_plan_balancer=_build_action_plan_balancer(db),
     )
 
 
@@ -278,6 +279,22 @@ def _build_recommendation_fallback(db: Session):
         return None
     from app.api.v1.reasoning.engines.recommendation_llm import LLMRecommendationFallback
     return LLMRecommendationFallback(
+        provider_for_task(db, LLMTask.DIAGNOSIS_REASONING),
+    )
+
+
+def _build_action_plan_balancer(db: Session):
+    """Fills the empty half of the free report's 3+3 plan, or None when off.
+
+    None is exactly today's behaviour: the report ships whatever the curated
+    library produced, which for a single diagnosed root cause is all-confirm or
+    all-solve. Its own flag for the same reason the gap-filler above has one --
+    it writes advice a founder reads with no reviewed intervention behind it.
+    """
+    if not settings.ACTION_PLAN_BALANCE_LLM:
+        return None
+    from app.api.v1.reasoning.engines.action_plan_llm import LLMActionPlanBalancer
+    return LLMActionPlanBalancer(
         provider_for_task(db, LLMTask.DIAGNOSIS_REASONING),
     )
 

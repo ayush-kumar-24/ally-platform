@@ -146,6 +146,19 @@ class Settings(BaseSettings):
     # switchable on its own.
     RECOMMENDATION_FALLBACK_LLM: bool = False
 
+    # Complete the free report's 3+3 action plan when the curated library fills
+    # only one half of it. Off => the report ships whatever the library gave,
+    # which for a single diagnosed root cause is all-confirm or all-solve and
+    # never both (see engines/action_plan_llm.py for why the engine cannot
+    # produce the doc's shape). Reproduced live: three confirm lines, zero solve
+    # lines, with nothing on the page saying half the plan was missing.
+    #
+    # Its own flag, not folded into RECOMMENDATION_FALLBACK_LLM, and off by
+    # default for the same reason that one is: it puts founder-facing advice on
+    # the page with no reviewed intervention behind it. Curated lines are never
+    # replaced -- only the shortfall is authored.
+    ACTION_PLAN_BALANCE_LLM: bool = False
+
     # --- Diagnosis length ---
     # Hard cap on questions in one diagnosis. A diagnosis must reach a confident
     # picture within this budget; it is not a walk through the whole bank (which
