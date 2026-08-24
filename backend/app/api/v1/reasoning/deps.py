@@ -156,7 +156,7 @@ def get_diagnosis_engine(
 ) -> DeterministicDiagnosisEngine:
     return DeterministicDiagnosisEngine(
         category_engine=StandardDiagnosticEngine(get_answer_classifier(db)),
-        stage_detector=StageDetector(repository),
+        stage_detector=build_stage_detector(db, repository),
         symptom_detector=SymptomDetector(repository),
     )
 
@@ -211,7 +211,7 @@ def build_reasoning_service(db: Session) -> ReasoningService:
     )
     diagnosis_engine = DeterministicDiagnosisEngine(
         category_engine=StandardDiagnosticEngine(get_answer_classifier(db)),
-        stage_detector=StageDetector(repository),
+        stage_detector=build_stage_detector(db, repository),
         symptom_detector=SymptomDetector(repository),
     )
     return ReasoningService(
@@ -279,6 +279,30 @@ def _build_recommendation_fallback(db: Session):
     from app.api.v1.reasoning.engines.recommendation_llm import LLMRecommendationFallback
     return LLMRecommendationFallback(
         provider_for_task(db, LLMTask.DIAGNOSIS_REASONING),
+    )
+
+
+def build_stage_detector(db: Session, repository: ReasoningRepository) -> StageDetector:
+    """LLM stage inference when STAGE_INFERENCE_LLM is on, declared-only otherwise.
+
+    Both satisfy the same StageDetectionStrategy shape, so DeterministicDiagnosisEngine
+    is unchanged either way, and the LLM path keeps DeclaredStageStrategy as the
+    thing it defers to -- a declared stage is never inferred over, and every
+    inference failure lands back on exactly today's answer.
+
+    Reuses DIAGNOSIS_REASONING rather than introducing a new LLMTask, matching
+    build_recommendation_fallback: a new task value needs a model_task_routing
+    row to exist before it resolves, and adding one here would make this fail
+    for a reason unrelated to what it does.
+    """
+    if not settings.STAGE_INFERENCE_LLM:
+        return StageDetector(repository)
+    from app.api.v1.reasoning.engines.stage_detection_llm import LLMStageInferenceStrategy
+    return StageDetector(
+        repository,
+        strategy=LLMStageInferenceStrategy(
+            provider_for_task(db, LLMTask.DIAGNOSIS_REASONING)
+        ),
     )
 
 

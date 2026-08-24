@@ -123,6 +123,22 @@ class Settings(BaseSettings):
     # same seeded catalogue and falls back to the lexical engine on any failure.
     ARCHETYPE_LLM: bool = False
 
+    # Infer the founder's lifecycle stage from their diagnosis answers when
+    # founders.stage_id is NULL. Off => the stage stays unknown, which is
+    # today's behaviour and is NOT neutral: DefaultInterventionRelevance reads
+    # an unknown stage as "every intervention is relevant", so a founder who
+    # shipped a year ago can be handed ideation-stage advice, and the
+    # Confidence Model loses its stage-adjusted root-cause priors entirely.
+    #
+    # Worth a flag rather than always-on because it adds one LLM call to the
+    # reasoning pipeline and, unlike the archetype seam, it changes what the
+    # founder is RECOMMENDED rather than how they are described. Measured on
+    # the live founders table when this was written: stage_id was NULL for 27
+    # of 45 founders, so this is the majority path, not an edge case.
+    #
+    # A declared stage is never overridden -- see stage_detection_llm.py.
+    STAGE_INFERENCE_LLM: bool = False
+
     # Write a recommendation when the curated intervention library covers none of
     # a detected root cause. Off => that cause yields nothing, silently, which is
     # the behaviour this replaces. Its own flag, not a shared diagnosis one: this
