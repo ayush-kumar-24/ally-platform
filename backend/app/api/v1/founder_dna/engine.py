@@ -39,6 +39,7 @@ from __future__ import annotations
 from app.api.v1.diagnosis.engine import resolve_stage_groups
 from app.api.v1.founder_dna.repository import FounderDnaRepository
 from app.core.config import settings
+from app.models import StageGroup
 from app.models.schema import FounderDnaQuestions, Founders
 
 #: Every dimension the phase asks about, in the doc's Section 2 order. Kept
@@ -58,16 +59,64 @@ ALL_DIMENSIONS: tuple[str, ...] = (
 #: instead of a second boolean that could disagree with it.
 FOLLOW_UP_FLOOR = 90
 
+#: The group a founder whose stage is NOT recorded is asked against.
+#:
+#: Stated as a named constant rather than falling out of `StageGroup`'s member
+#: order, which is what this used to do -- see resolve_founder_dna_stage_group.
+#: Reordering that enum must not silently rewrite which questions an
+#: unknown-stage founder is asked.
+#:
+#: Stage 0→1 (Validation, Prototype/MVP, Early Traction) rather than Stage 0
+#: (Ideation alone), for two reasons. It is the modal band -- three of the
+#: eight founder_stages sit in it, and it is where a founder who has come
+#: looking for a diagnosis of what is blocking them usually is. And it bounds
+#: the error: from the middle band the guess is at most one band out in either
+#: direction, where Stage 0 can be three stages short.
+#:
+#: The asymmetry matters more than the arithmetic. Asking a founder who has
+#: shipped an MVP "what is standing between you and actually starting" is not
+#: a slightly-off question, it is a statement that the product has not read
+#: anything they said -- observed live, to a founder with a working MVP and
+#: three running pilots. Asking a genuine ideation founder a validation-shaped
+#: question is merely early.
+#:
+#: This is still a guess. The real fix is to record the stage: it is collected
+#: only in guided onboarding (frontend/src/pages/guided/ProfileBuild.jsx), and
+#: a founder who reaches the app without completing that step has no way to set
+#: it afterwards -- /app/profile shows stage in its completeness ring but
+#: offers no field for it. Until that gap closes, this constant decides what
+#: every such founder is asked.
+UNKNOWN_STAGE_DEFAULT_GROUP: str = StageGroup.STAGE_0_TO_1.value
+
 
 def resolve_founder_dna_stage_group(founder: Founders) -> str:
-    """Founder DNA questions are authored per SINGLE stage group (unlike the
-    diagnosis bank, whose primary_stage_group also allows a stage-agnostic
-    NULL) -- resolve_stage_groups always returns exactly one group unless
-    the founder's stage is unset, in which case default to the group most
-    founders starting this phase are in.
+    """The single stage group to ask this founder against.
+
+    Founder DNA and Current Problem questions are authored per SINGLE stage
+    group (unlike the diagnosis bank, whose primary_stage_group also allows a
+    stage-agnostic NULL), so this must resolve to exactly one -- both phases
+    query `stage_group == <this>`.
+
+    resolve_stage_groups returns exactly one group for a founder whose stage
+    is known, and deliberately FAILS OPEN to every group for one whose stage
+    is not recorded ("the same 'we don't actually know' situation as no stage
+    at all -- fail open to every group rather than raise"). More than one
+    group back is therefore precisely the signal that the stage is unknown,
+    which is why that is what this branches on: it carries the same meaning
+    regardless of how StageGroup happens to be ordered.
+
+    Taking `groups[0]`, as this used to, threw that signal away. The fail-open
+    list is built by iterating StageGroup, whose first member is STAGE_0, so
+    every unknown-stage founder was silently pinned to pure ideation -- for
+    the whole of Founder DNA AND Current Problem, since both resolve through
+    here. The docstring already claimed to "default to the group most founders
+    starting this phase are in"; the code defaulted to whichever group the enum
+    listed first, and nothing tied the two together.
     """
     groups = resolve_stage_groups(founder)
-    return groups[0] if groups else "Stage 0"
+    if len(groups) == 1:
+        return groups[0]
+    return UNKNOWN_STAGE_DEFAULT_GROUP
 
 
 class FounderDnaSelectionEngine:
