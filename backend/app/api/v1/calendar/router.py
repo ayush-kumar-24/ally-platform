@@ -21,12 +21,14 @@ from app.api.v1.calendar.schemas import (
     CalendarStatusResponse,
     DisconnectResult,
 )
+from app.api.deps import get_founder_record
 from app.api.v1.planning.dependencies import get_current_founder_id
 from app.calendar_sync import connections, crypto, google_oauth, state
 from app.calendar_sync.db_models import STATUS_ACTIVE
 from app.core.config import settings
 from app.core.logger import logger
-from app.db.session import get_db
+from app.models import Founder
+from app.db.session import get_db, set_founder_rls_context
 
 router = APIRouter(prefix="/calendar", tags=["calendar"])
 
@@ -71,7 +73,7 @@ def calendar_status(founder_id: int = Depends(get_current_founder_id),
 
 @router.post("/connect", response_model=CalendarConnectStart,
              summary="Start connecting a Google Calendar")
-def start_connect(founder_id: int = Depends(get_current_founder_id)) -> CalendarConnectStart:
+def start_connect(founder: Founder = Depends(get_founder_record)) -> CalendarConnectStart:
     """Hand back the Google consent URL for the browser to visit.
 
     Both preconditions are checked HERE rather than at the callback. Discovering
@@ -91,8 +93,11 @@ def start_connect(founder_id: int = Depends(get_current_founder_id)) -> Calendar
             status.HTTP_503_SERVICE_UNAVAILABLE,
             "Calendar sync isn't set up on this deployment yet.")
 
+    # The auth UUID rides along in the signed state because the callback needs it
+    # to re-establish RLS context -- see state.issue() and the callback below.
     return CalendarConnectStart(
-        authorization_url=google_oauth.authorization_url(state.issue(founder_id)))
+        authorization_url=google_oauth.authorization_url(
+            state.issue(founder.founder_id, str(founder.user_id))))
 
 
 @router.get("/callback", include_in_schema=False)
@@ -116,7 +121,7 @@ def oauth_callback(code: str | None = Query(default=None),
         return RedirectResponse(_return_url("cancelled"), status_code=303)
 
     try:
-        founder_id = state.read(state_token)
+        founder_id, founder_uuid = state.read(state_token)
     except state.InvalidOAuthStateError as exc:
         logger.warning("calendar oauth callback with bad state", exc_info=exc)
         return RedirectResponse(_return_url("error", "Link expired — please try again."),
@@ -139,6 +144,14 @@ def oauth_callback(code: str | None = Query(default=None),
                                 status_code=303)
 
     try:
+        # THE reason this endpoint could not write. Every other founder-scoped
+        # write reaches the database through get_founder_record, which sets
+        # `app.current_founder_uuid` -- the value the founder RLS policies check.
+        # This endpoint has no auth dependency by necessity (Google redirects a
+        # browser here with no Authorization header), so nothing established that
+        # context and the INSERT was refused by RLS while the SELECT on /status
+        # merely returned zero rows. Hence "not connected", then "could not save".
+        set_founder_rls_context(db, founder_uuid)
         connections.save_connection(db, founder_id, bundle)
     except Exception as exc:
         logger.error("calendar connection could not be stored",

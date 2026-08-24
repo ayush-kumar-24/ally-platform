@@ -131,15 +131,20 @@ def test_tampered_ciphertext_raises(key):
 
 # --- OAuth state -------------------------------------------------------------
 
-def test_state_round_trips_the_founder():
-    assert state.read(state.issue(4242)) == 4242
+_UUID = "7a70613d-6fb9-58a0-8642-a85fdaa135f4"
+
+
+def test_state_round_trips_the_founder_and_their_uuid():
+    """The UUID matters as much as the id: the callback needs it to set the RLS
+    context, because it has no authenticated dependency that would."""
+    assert state.read(state.issue(4242, _UUID)) == (4242, _UUID)
 
 
 def test_tampered_state_is_rejected():
     """The callback has no auth header, so state is the ONLY thing binding the
     flow to a founder. If it were forgeable, anyone could attach their calendar
     to someone else's account."""
-    token = state.issue(4242)
+    token = state.issue(4242, _UUID)
     with pytest.raises(state.InvalidOAuthStateError):
         state.read(token[:-6] + "xxxxxx")
 
@@ -154,7 +159,7 @@ def test_a_token_issued_for_something_else_is_rejected():
     from jose import jwt
 
     other = jwt.encode(
-        {"founder_id": 1, "purpose": "password_reset",
+        {"founder_id": 1, "founder_uuid": _UUID, "purpose": "password_reset",
          "exp": int((datetime.now(timezone.utc) + timedelta(minutes=5)).timestamp())},
         settings.SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
     with pytest.raises(state.InvalidOAuthStateError):
@@ -165,7 +170,7 @@ def test_expired_state_is_rejected():
     from jose import jwt
 
     stale = jwt.encode(
-        {"founder_id": 1, "purpose": "calendar_oauth_state",
+        {"founder_id": 1, "founder_uuid": _UUID, "purpose": "calendar_oauth_state",
          "exp": int((datetime.now(timezone.utc) - timedelta(minutes=1)).timestamp())},
         settings.SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
     with pytest.raises(state.InvalidOAuthStateError):
@@ -419,3 +424,29 @@ def test_reconnect_keeps_an_existing_refresh_token_when_google_omits_one(monkeyp
         expires_at=datetime.now(timezone.utc) + timedelta(hours=1)))
 
     assert crypto.decrypt(row.refresh_token_encrypted) == "original-refresh"
+
+
+def test_state_without_a_uuid_is_rejected():
+    """A state carrying only founder_id would write the row with no RLS context.
+
+    That is the exact failure this pair of fields exists to prevent: under
+    row-level security the SELECT silently returns nothing and the INSERT is
+    refused, so the founder sees "not connected" and then "could not save".
+    Refusing the callback outright is better than half-completing it.
+    """
+    from jose import jwt
+
+    legacy = jwt.encode(
+        {"founder_id": 7, "purpose": "calendar_oauth_state",
+         "exp": int((datetime.now(timezone.utc) + timedelta(minutes=5)).timestamp())},
+        settings.SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
+
+    with pytest.raises(state.InvalidOAuthStateError):
+        state.read(legacy)
+
+
+def test_a_malformed_uuid_is_refused_at_mint_time():
+    """Fails while the founder is still in an authenticated request, where a real
+    error can be shown -- not at the callback, whose only outcome is a redirect."""
+    with pytest.raises(ValueError):
+        state.issue(7, "not-a-uuid")

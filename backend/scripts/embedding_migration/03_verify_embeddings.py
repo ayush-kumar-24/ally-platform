@@ -30,6 +30,11 @@ EXPECTED_MODEL = "text-embedding-3-small"
 TABLES = [
     "root_causes", "problems", "questions", "agent_interpretations",
     "behaviour_patterns", "archetypes", "rag_chunks",
+    # Added 2026-08-23 alongside the same entry in 02_regenerate_embeddings:
+    # this bank shipped with every embedding NULL, so it was invisible to any
+    # similarity lookup. Verifying it here means the same one command answers
+    # "is the whole corpus embedded" rather than all-of-it-except-this-one.
+    "founder_dna_questions",
 ]
 
 

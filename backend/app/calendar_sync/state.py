@@ -18,6 +18,7 @@ for an hour is an hour in which a leaked redirect URL still works.
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from uuid import UUID
 
 from jose import JWTError, jwt
 
@@ -31,11 +32,36 @@ class InvalidOAuthStateError(RuntimeError):
     """The state was missing, tampered with, expired, or for something else."""
 
 
-def issue(founder_id: int) -> str:
+def issue(founder_id: int, founder_uuid: str) -> str:
+    """Mint the state for one OAuth round trip.
+
+    Carries the founder's auth UUID as well as the internal id, because the
+    callback needs BOTH: the id to write the row, and the UUID to establish the
+    RLS context (`app.current_founder_uuid`) that the founder-scoped policies
+    check. Every other write path gets that context from `get_founder_record`,
+    but a Google redirect carries no Authorization header, so this endpoint has
+    no such dependency and nothing else can supply it.
+
+    Safe to put here precisely because the state is already a signed,
+    short-lived JWT: a caller cannot substitute someone else's UUID without
+    forging SECRET_KEY, which is the same property the founder_id already
+    relies on.
+    """
     now = datetime.now(timezone.utc)
+
+    # Normalised and validated at mint time so a malformed value fails here,
+    # where the founder is still in an authenticated request and can be shown a
+    # real error, rather than at the callback where the only outcome is a
+    # redirect carrying "something went wrong".
+    try:
+        founder_uuid = str(UUID(str(founder_uuid)))
+    except (ValueError, TypeError, AttributeError) as exc:
+        raise ValueError("Invalid founder UUID") from exc
+
     return jwt.encode(
         {
             "founder_id": founder_id,
+            "founder_uuid": founder_uuid,
             # Without this a token minted for some other purpose but signed with
             # the same key would be accepted here.
             "purpose": _PURPOSE,
@@ -47,8 +73,14 @@ def issue(founder_id: int) -> str:
     )
 
 
-def read(state: str | None) -> int:
-    """The founder id inside a valid state, or raise."""
+def read(state: str | None) -> tuple[int, str]:
+    """The founder id and auth UUID inside a valid state, or raise.
+
+    Both are required, and a state missing either is rejected rather than
+    partially honoured: writing the row without the UUID would mean writing
+    without an RLS context, which fails silently on a SELECT and loudly on an
+    INSERT. Better to refuse the callback than to half-complete it.
+    """
     if not state:
         raise InvalidOAuthStateError("Missing state.")
     try:
@@ -59,7 +91,15 @@ def read(state: str | None) -> int:
 
     if claims.get("purpose") != _PURPOSE:
         raise InvalidOAuthStateError("State was issued for something else.")
+
     founder_id = claims.get("founder_id")
     if not isinstance(founder_id, int):
         raise InvalidOAuthStateError("State carries no founder.")
-    return founder_id
+
+    try:
+        founder_uuid = str(UUID(str(claims.get("founder_uuid"))))
+    except (ValueError, TypeError, AttributeError) as exc:
+        raise InvalidOAuthStateError(
+            "State carries no valid founder identity.") from exc
+
+    return founder_id, founder_uuid

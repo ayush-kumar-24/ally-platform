@@ -44,6 +44,10 @@ TABLES: dict[str, tuple[str, str]] = {
     "behaviour_patterns": ("pattern_id", "COALESCE(pattern_name,'') || ' — ' || COALESCE(description,'')"),
     "archetypes": ("archetype_id", "COALESCE(archetype_name,'') || ' — ' || COALESCE(description,'')"),
     "rag_chunks": ("chunk_id", "COALESCE(chunk_text,'')"),
+    # Added 2026-08-23: all 57 rows shipped with a NULL embedding, so the
+    # founder-DNA bank was invisible to any similarity lookup. Same shape as
+    # `questions` above -- the question text is the whole content.
+    "founder_dna_questions": ("founder_dna_question_id", "COALESCE(question_text,'')"),
 }
 
 
@@ -70,7 +74,14 @@ def migrate_table(engine, provider, table: str, dry_run: bool) -> tuple[int, int
             vector = provider.embed(row["content"] or "")
             conn.execute(
                 text(
-                    f"UPDATE {table} SET embedding = :vec::vector, "
+                    # CAST(...), not `:vec::vector`. SQLAlchemy's text() parser
+                    # does not bind `:vec` when a `::` cast follows it
+                    # immediately -- it left the token in the SQL verbatim and
+                    # Postgres answered "syntax error at or near :". Every other
+                    # parameter in the same statement bound correctly, which is
+                    # what made this look like a pgvector problem rather than a
+                    # parsing one. Affected every table, not just one.
+                    f"UPDATE {table} SET embedding = CAST(:vec AS vector), "
                     "embedding_model = :model, embedding_dimension = :dim, "
                     f"embedding_version = :ver WHERE {pk} = :id"
                 ),

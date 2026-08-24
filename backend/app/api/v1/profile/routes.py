@@ -189,19 +189,51 @@ async def serve_avatar(founder_id: int, filename: str, db: Session = Depends(get
     avatar_storage_path exactly, so a stale/old URL 404s the moment a new
     photo replaces it, not just when it's manually deleted.
     """
+    # Every branch below answers the browser with the SAME opaque 404 -- this
+    # endpoint is unauthenticated, so it must not report whether a founder
+    # exists or what is stored. But each one is a completely different fault
+    # with a completely different fix, and until now none of them logged
+    # anything: "Avatar not found" was equally consistent with a stale URL, a
+    # missing bucket and a missing object, which is precisely why a real
+    # production failure could not be diagnosed. The founder-facing response is
+    # unchanged; the log now names which branch fired.
     founder = founder_repository.get(db, founder_id)
     key = avatar_object_key(founder_id, filename)
-    if founder is None or founder.avatar_storage_path != key:
+
+    if founder is None:
+        logger.warning("avatar 404: no such founder",
+                       extra={"stage": "avatar_serve", "reason": "founder_missing",
+                              "founder_id": founder_id})
+        raise HTTPException(status_code=404, detail="Avatar not found")
+
+    if founder.avatar_storage_path != key:
+        # Overwhelmingly the benign case: an older URL after a re-upload, which
+        # SHOULD 404. It is only a bug if the founder is looking at the URL the
+        # app just handed them -- hence logging both sides to compare.
+        logger.warning("avatar 404: requested key is not this founder's current avatar",
+                       extra={"stage": "avatar_serve", "reason": "key_mismatch",
+                              "founder_id": founder_id, "requested_key": key,
+                              "stored_key": founder.avatar_storage_path})
         raise HTTPException(status_code=404, detail="Avatar not found")
 
     storage = build_object_storage()
     if storage is None:
         # Row says S3, but this process has no bucket configured -- config
-        # drift (e.g. env var removed) rather than a missing photo.
+        # drift (e.g. ATTACHMENT_S3_BUCKET removed) rather than a missing photo.
+        logger.error("avatar 404: row points at S3 but no bucket is configured",
+                     extra={"stage": "avatar_serve", "reason": "storage_unconfigured",
+                            "founder_id": founder_id, "stored_key": key})
         raise HTTPException(status_code=404, detail="Avatar not found")
 
     content = storage.get(key)
     if content is None:
+        # The row and the bucket agree, but the object is not readable. Either
+        # the PUT never landed, or the task role can PutObject and not
+        # GetObject -- an asymmetric IAM policy looks exactly like a missing
+        # photo from here, and is invisible without this line.
+        logger.error("avatar 404: object missing or unreadable in S3",
+                     extra={"stage": "avatar_serve", "reason": "object_unreadable",
+                            "founder_id": founder_id, "stored_key": key})
         raise HTTPException(status_code=404, detail="Avatar not found")
 
     ext = filename.rsplit(".", 1)[-1].lower()
