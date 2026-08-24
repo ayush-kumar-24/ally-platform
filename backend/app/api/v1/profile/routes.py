@@ -120,7 +120,13 @@ async def upload_avatar(
     # jti-free, cache-busting filename: a browser (or CDN in front of this
     # later) must not keep serving yesterday's photo from cache under the
     # same URL just because the founder_id is unchanged.
-    filename = f"{founder.founder_id}.{uuid.uuid4().hex[:8]}.{ext}"
+    # Full uuid4 (32 hex), not the first 8. Access control for this photo IS the
+    # unguessability of its URL -- the serving route is public and no longer
+    # consults the database at all -- so the random component is the whole
+    # security boundary. 8 hex characters is ~4 billion, brute-forceable against
+    # an enumerable founder_id; 32 is not. Older 8-char names keep working: the
+    # route serves whatever key it is given.
+    filename = f"{founder.founder_id}.{uuid.uuid4().hex}.{ext}"
 
     old_storage_path = founder.avatar_storage_path
     storage = build_object_storage()
@@ -177,44 +183,37 @@ async def upload_avatar(
 
 
 @router.get("/avatar/{founder_id}/{filename}", include_in_schema=False)
-async def serve_avatar(founder_id: int, filename: str, db: Session = Depends(get_db)):
+async def serve_avatar(founder_id: int, filename: str):
     """Proxies an S3-stored avatar back to the browser.
 
     Deliberately unauthenticated, matching the security model the local-disk
     /uploads static mount already used: an <img src> tag sends no
-    Authorization header, so this can't require one either. Safety comes
-    from the same place it already did for local files -- founder_id plus an
-    unguessable random filename component (uuid4, 8 hex chars) -- rather
-    than from a bearer token. The filename must match the CURRENT
-    avatar_storage_path exactly, so a stale/old URL 404s the moment a new
-    photo replaces it, not just when it's manually deleted.
+    Authorization header, so this can't require one either. Safety comes from
+    the same place it already did for local files -- founder_id plus an
+    unguessable random filename component (a full uuid4) -- rather than from a
+    bearer token.
     """
-    # Every branch below answers the browser with the SAME opaque 404 -- this
-    # endpoint is unauthenticated, so it must not report whether a founder
-    # exists or what is stored. But each one is a completely different fault
-    # with a completely different fix, and until now none of them logged
-    # anything: "Avatar not found" was equally consistent with a stale URL, a
-    # missing bucket and a missing object, which is precisely why a real
-    # production failure could not be diagnosed. The founder-facing response is
-    # unchanged; the log now names which branch fired.
-    founder = founder_repository.get(db, founder_id)
+    # NO database read here, deliberately.
+    #
+    # This route used to look the founder up to confirm the requested filename
+    # matched their current avatar_storage_path. That check could never succeed
+    # in production: `founders` is under row-level security, the runtime connects
+    # as the non-superuser `ally_app`, and an <img> request carries no bearer
+    # token -- so no RLS context is ever established and the lookup returned
+    # None for every founder. The route then 404'd before it so much as reached
+    # S3, which is why the upload appeared to work and the image never did.
+    # Confirmed live: CURRENT_USER=ally_app, founder invisible without context.
+    #
+    # Establishing an RLS context here is not the answer either: there is no
+    # authenticated founder to establish it *for*. The lookup itself has to go.
+    #
+    # What that check bought us -- "an old URL stops working the moment a new
+    # photo replaces it" -- is preserved by the upload deleting the previous S3
+    # object, so a stale key resolves to nothing. That deletion is best-effort,
+    # so a stale URL can outlive its replacement if the delete failed; the
+    # widened random filename component (see upload_avatar) is what keeps that
+    # acceptable, since the URL is unguessable rather than merely stale.
     key = avatar_object_key(founder_id, filename)
-
-    if founder is None:
-        logger.warning("avatar 404: no such founder",
-                       extra={"stage": "avatar_serve", "reason": "founder_missing",
-                              "founder_id": founder_id})
-        raise HTTPException(status_code=404, detail="Avatar not found")
-
-    if founder.avatar_storage_path != key:
-        # Overwhelmingly the benign case: an older URL after a re-upload, which
-        # SHOULD 404. It is only a bug if the founder is looking at the URL the
-        # app just handed them -- hence logging both sides to compare.
-        logger.warning("avatar 404: requested key is not this founder's current avatar",
-                       extra={"stage": "avatar_serve", "reason": "key_mismatch",
-                              "founder_id": founder_id, "requested_key": key,
-                              "stored_key": founder.avatar_storage_path})
-        raise HTTPException(status_code=404, detail="Avatar not found")
 
     storage = build_object_storage()
     if storage is None:
