@@ -119,10 +119,11 @@ def upgrade() -> None:
                 f"INSERT INTO {_TABLE} "
                 "(dimension_code, stage_group, arc_position, format, "
                 " question_text, options, is_closing, is_active) "
-                "SELECT :dim, :stage, :arc, 'forced_choice', :q, "
-                "       CAST(:opts AS jsonb), false, true "
+                "SELECT CAST(:dim AS varchar), CAST(:stage AS varchar), "
+                "       CAST(:arc AS integer), 'forced_choice', "
                 f"WHERE NOT EXISTS (SELECT 1 FROM {_TABLE} "
-                "  WHERE stage_group = :stage AND question_text = :q)"
+                "  WHERE stage_group = CAST(:stage AS varchar) "
+                "    AND question_text = CAST(:q AS text))"
             ),
             {"dim": dimension, "stage": stage, "arc": arc,
              "q": question, "opts": options},
