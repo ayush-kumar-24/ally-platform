@@ -121,6 +121,7 @@ def upgrade() -> None:
                 " question_text, options, is_closing, is_active) "
                 "SELECT CAST(:dim AS varchar), CAST(:stage AS varchar), "
                 "       CAST(:arc AS integer), 'forced_choice', "
+                "       CAST(:q AS text), CAST(:opts AS jsonb), false, true "
                 f"WHERE NOT EXISTS (SELECT 1 FROM {_TABLE} "
                 "  WHERE stage_group = CAST(:stage AS varchar) "
                 "    AND question_text = CAST(:q AS text))"
