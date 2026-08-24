@@ -20,7 +20,7 @@ export const PATH_2 = 'path2'; // Stage 0->1 or Stage 1->10+
 const BOTH = [PATH_1, PATH_2];
 
 /* ---------------------------------------------------------------------------
- * Stage picker (Section 1, Q3). Unchanged from the prior onboarding build --
+ * Stage picker (Section 1, Q2). Unchanged from the prior onboarding build --
  * founder_stages already contains exactly this 3-group / 8-stage structure
  * (confirmed against the live table before writing this), so nothing here
  * invents a parallel enum. `group` mirrors founder_stages.onboarding_label /
@@ -81,7 +81,7 @@ export const SECTIONS = [
 
 /* ---------------------------------------------------------------------------
  * Question types:
- *   'stage'      two-step group -> stage picker (Section 1 Q3 only)
+ *   'stage'      two-step group -> stage picker (Section 1 Q2 only)
  *   'short'      one-line free text
  *   'long'       multi-line free text
  *   'url'        a single URL, validated + normalised server-side
@@ -113,6 +113,31 @@ export const QUESTIONS = [
     q: 'What would you like Ally to call you?',
     placeholder: 'Your name…',
   },
+  /* Second, ahead of the optional social handle. Two reasons, and the first is
+     not a preference:
+
+     `GoXL_Stage_Adaptive_Diagnosis_Framework_2.docx` s9 asks for the stage
+     "captured in the first 1-2 onboarding questions, since every downstream
+     question bank and root-cause filter branches off it". It does: Founder DNA
+     and Current Problem select their bank by stage group, the recommendation
+     engine filters interventions by stage_id, the report picks its tone
+     (Validator / Compass / Auditor) by stage, and the confidence model reads
+     stage-adjusted root-cause priors. A founder with no stage gets the earliest
+     bank, no tone at all, and no intervention filtering.
+
+     And it is the only answer the rest of this flow branches on -- until it is
+     given, effectiveQuestions() cannot narrow to a path, so asking anything
+     path-specific before it is asking blind. It sits after `name` rather than
+     first so the flow still opens on a person, not a taxonomy. */
+  {
+    key: 'stage',
+    section: 'personal',
+    field: 'stage',
+    label: 'Entrepreneurial Stage',
+    type: 'stage',
+    paths: BOTH,
+    q: 'Where are you in your entrepreneurial journey?',
+  },
   {
     key: 'socialHandle',
     section: 'personal',
@@ -124,15 +149,6 @@ export const QUESTIONS = [
     q: "Where is your Instagram page or LinkedIn profile — whichever you'd like to share with Ally?",
     prompt: 'Optional — skip if you’d rather not share.',
     placeholder: 'instagram.com/you or linkedin.com/in/you',
-  },
-  {
-    key: 'stage',
-    section: 'personal',
-    field: 'stage',
-    label: 'Entrepreneurial Stage',
-    type: 'stage',
-    paths: BOTH,
-    q: 'Where are you in your entrepreneurial journey?',
   },
   {
     key: 'experience',
