@@ -195,8 +195,11 @@ class FounderDnaService:
         """Ask the advisor whether `dimension_code` is resolved now, unless
         it's already resolved, hasn't hit the minimum-questions floor yet, or
         no advisor is wired (deterministic mode -- pool exhaustion is the
-        only stop). Never raises: an advisor failure just leaves the
-        dimension open, same fail-open contract as the diagnosis advisor.
+        only stop). An advisor failure never raises: it just leaves the
+        dimension open, same fail-open contract as the diagnosis advisor. A
+        DATABASE failure while recording a resolution does raise -- that is a
+        lost write, not a lost judgement, and the commit below would fail
+        anyway.
         """
         resolved = self.repository.get_resolved_dimensions(founder)
         if dimension_code in resolved:
@@ -210,7 +213,7 @@ class FounderDnaService:
             # No more questions left for this dimension regardless of what
             # the advisor would say -- mark it resolved so is_phase_complete
             # and select_next_question agree it's done.
-            self.repository.mark_dimension_resolved(founder, dimension_code)
+            self._record_resolution(founder, dimension_code)
             return
 
         if self.advisor is None:
@@ -232,7 +235,43 @@ class FounderDnaService:
             return
 
         if verdict is not None and verdict.resolved:
-            self.repository.mark_dimension_resolved(founder, dimension_code)
+            self._record_resolution(founder, dimension_code)
+
+    def _record_resolution(self, founder: Founders, dimension_code: str) -> None:
+        """Append `dimension_code` to the founder's resolved set, safely.
+
+        mark_dimension_resolved is a read-modify-write over a JSONB array, so
+        two overlapping answers could each read the pre-existing list and the
+        second commit would erase the first's addition -- see
+        FounderDnaRepository.lock_founder_for_update for the full shape. The
+        lock serialises that, and the refresh under it is what makes the lock
+        worth taking: without re-reading, the append would still be built on
+        the list this request loaded before the advisor call, which is exactly
+        the stale copy being guarded against.
+
+        Refreshing is safe here because there is nothing pending to lose: the
+        answer was written and COMMITTED before the advisor ran (see
+        submit_answer's two-commit split), so the session is clean at this
+        point. The lock releases on the commit or rollback that submit_answer
+        performs immediately after.
+        """
+        try:
+            self.repository.lock_founder_for_update(founder.founder_id)
+            self.db.refresh(founder)
+        except SQLAlchemyError as exc:
+            self.db.rollback()
+            logger.error(
+                "Database error locking founder to record a resolved dimension",
+                extra={"founder_id": founder.founder_id, "dimension": dimension_code},
+                exc_info=exc,
+            )
+            raise FounderDnaPersistenceError("Could not save your progress. Please try again.")
+
+        # Re-checked against the freshly-read list, not the one loaded before
+        # the advisor call. mark_dimension_resolved's own membership test does
+        # this, so a dimension a concurrent request already recorded is a
+        # no-op rather than a duplicate entry.
+        self.repository.mark_dimension_resolved(founder, dimension_code)
 
     def _complete(self, founder: Founders) -> None:
         self.repository.mark_phase_complete(founder, _utcnow())

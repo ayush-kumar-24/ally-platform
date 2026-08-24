@@ -9,6 +9,7 @@ from __future__ import annotations
 from collections import Counter
 
 from sqlalchemy import select
+from sqlalchemy import text as _text
 from sqlalchemy.orm import Session
 
 from app.models.schema import FounderDnaAnswers, FounderDnaQuestions, Founders
@@ -17,6 +18,35 @@ from app.models.schema import FounderDnaAnswers, FounderDnaQuestions, Founders
 class FounderDnaRepository:
     def __init__(self, db: Session):
         self.db = db
+
+    # --- Locks ---
+
+    def lock_founder_for_update(self, founder_id: int) -> None:
+        """Row-level lock on one founder, held for the rest of this transaction.
+
+        Mirrors DiagnosisRepository.lock_session_for_update, and exists for the
+        same class of bug. `founder_dna_resolved_dimensions` is a JSONB array
+        updated by read-modify-write (see mark_dimension_resolved): the whole
+        list is read into Python, appended to, and written back. Two overlapping
+        answers -- a double-click, or a client retry that overlapped the
+        original -- each read the list BEFORE either had committed, so the
+        second commit wrote its own one-element addition over the first's. One
+        dimension's resolution was silently lost, which makes the phase re-ask a
+        dimension the advisor had already closed and run longer than its budget
+        intends.
+
+        Deliberately taken immediately before that write rather than at the top
+        of the request: everything above it is the resolution advisor's LLM
+        call, and holding a transaction open across it is the exact failure the
+        two-commit split in FounderDnaService.submit_answer exists to avoid
+        (Supabase's pooler closes a connection left idle-in-transaction for tens
+        of seconds). Scoped to one founder's row -- does not serialize unrelated
+        founders against each other.
+        """
+        self.db.execute(
+            _text("select founder_id from founders where founder_id = :f for update"),
+            {"f": founder_id},
+        )
 
     # --- Questions ---
 
