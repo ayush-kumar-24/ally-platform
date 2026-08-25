@@ -115,6 +115,7 @@ class ReasoningService:
         distress_detector=None,
         memory=None,
         archetype_engine=None,
+        action_plan_balancer=None,
     ):
         self.db = db
         self.repository = repository
@@ -123,6 +124,10 @@ class ReasoningService:
         self.root_cause_engine = root_cause_engine
         self.confidence_model = confidence_model
         self.recommendation_engine = recommendation_engine
+        #: Fills the empty half of the free report's 3+3 plan, or None (off) to
+        #: ship whatever the intervention library produced. See
+        #: engines/action_plan_llm.py.
+        self.action_plan_balancer = action_plan_balancer
         self.report_generator = report_generator or ReportGenerator()
         self.retrieval_enabled = retrieval_enabled
         # Founder memory (M6), optional -- when supplied, a completed diagnosis is
@@ -712,6 +717,12 @@ class ReasoningService:
                     extra={"session_id": session.session_id},
                 )
 
+            confirm_dicts = self._action_dicts(recommendations, RecommendationType.CONFIRM)
+            solve_dicts = self._action_dicts(recommendations, RecommendationType.SOLVE)
+            confirm_dicts, solve_dicts = self._balanced_action_plan(
+                confirm_dicts, solve_dicts, founder_report, scored,
+            )
+
             report = FounderReport(
                 founder_id=founder.founder_id,
                 session_id=session.session_id,
@@ -720,8 +731,8 @@ class ReasoningService:
                 summary=founder_report.executive_summary,
                 top_root_cause_ids=[s.root_cause_id for s in scored if s.is_top_finding],
                 recommended_intervention_ids=list(recommendations.intervention_ids),
-                confirm_actions=self._action_dicts(recommendations, RecommendationType.CONFIRM),
-                solve_actions=self._action_dicts(recommendations, RecommendationType.SOLVE),
+                confirm_actions=confirm_dicts,
+                solve_actions=solve_dicts,
                 distress_acknowledged_first=distress_mode,
                 session_state_at_generation=session.session_state,
                 # Founder report -> insights (its founder-facing slot).
@@ -939,6 +950,68 @@ class ReasoningService:
                 for p in business_health.pillars
             ],
         }
+
+    def _balanced_action_plan(self, confirm: list[dict], solve: list[dict],
+                              founder_report, scored) -> tuple[list[dict], list[dict]]:
+        """Both halves of the doc's 3+3 plan, filled.
+
+        StandardRecommendationEngine types every recommendation from its lead
+        supporting cause, so a report diagnosing ONE cause gets all CONFIRM or
+        all SOLVE and never both -- see engines/action_plan_llm.py. That leaves
+        the founder reading half a plan with nothing on the page saying so.
+
+        No balancer wired (the default) returns the two lists untouched, which
+        is exactly today's behaviour. Never raises: a report with a lopsided
+        plan is worth far more than no report.
+        """
+        if self.action_plan_balancer is None:
+            return confirm, solve
+
+        def _lines(items: list[dict]) -> list[str]:
+            return [str(a) for item in items for a in (item.get("next_actions") or [])]
+
+        try:
+            top = next((s for s in scored if getattr(s, "is_top_finding", False)), None)
+            new_confirm, new_solve = self.action_plan_balancer.balance(
+                _lines(confirm),
+                _lines(solve),
+                root_cause=getattr(top, "root_cause_name", None),
+                stage_name=getattr(founder_report, "stage_name", None),
+                evidence=getattr(founder_report, "key_symptoms", ()) or (),
+            )
+        except Exception:  # noqa: BLE001 -- cosmetic completion, never blocks the report
+            logger.warning("Action-plan balancing raised; keeping the library's plan",
+                           exc_info=True)
+            return confirm, solve
+
+        return (
+            self._plan_side(confirm, new_confirm),
+            self._plan_side(solve, new_solve),
+        )
+
+    @staticmethod
+    def _plan_side(original: list[dict], lines: list[str]) -> list[dict]:
+        """Rebuild one half, keeping the curated entries' provenance.
+
+        Lines the library supplied stay attached to the intervention they came
+        from -- intervention_id and rationale intact -- so nothing generated can
+        be mistaken for reviewed content later. Only genuinely new lines land in
+        a separate entry with intervention_id None, which is what marks them as
+        authored rather than curated.
+        """
+        if not lines:
+            return original
+        curated = {a for item in original for a in (item.get("next_actions") or [])}
+        added = [line for line in lines if line not in curated]
+        if not added:
+            return original
+        return original + [{
+            "intervention_id": None,
+            "priority": (max((i.get("priority") or 0) for i in original) + 1) if original else 1,
+            "next_actions": added,
+            "rationale": "Written to complete the 3+3 plan; no curated "
+                         "intervention covered this half.",
+        }]
 
     def _action_dicts(self, recommendations, rec_type: RecommendationType) -> list[dict]:
         return [

@@ -75,10 +75,14 @@ QUESTIONS: list[tuple] = [
      "When you picture doing this really well, what does 'well' actually mean "
      "to you -- being first, being the best, or being trusted?",
      ["Being first", "Being the best", "Being trusted"], False),
-    (D.CORE_MOTIVATION, S0, 4, SCEN,
-     "Think about the last thing you built or finished that genuinely "
-     "satisfied you -- before this venture, even. What about it landed?",
-     None, False),
+    # The doc's "Trophy or Bridge" (s4 Visual library, placed at s5 Stage 0 Q4),
+    # rendered as text. Both images described in words rather than shown -- v1
+    # stays text-only, so the CHOICE is what carries, not the artwork.
+    (D.CORE_MOTIVATION, S0, 4, CHOICE,
+     "Two futures, and without overthinking it -- which one pulls you more "
+     "right now? One: a single trophy on a pedestal, the thing you made, "
+     "recognised. Two: an unfinished bridge between two cliffs, people you "
+     "will never meet crossing it.", ["The trophy", "The bridge"], False),
     (D.EMOTIONAL_INTELLIGENCE, S0, 5, SCEN,
      "Someone far more experienced than you dismisses your idea in one "
      "sentence. What's your honest first internal reaction -- before you "
@@ -93,10 +97,11 @@ QUESTIONS: list[tuple] = [
      "Tell me about a time before this venture when you walked away from "
      "something because it crossed a line for you. What was the line?",
      None, False),
-    (D.ENERGY_PATTERNS, S0, 9, SCEN,
-     "Think about the last time you finished a day genuinely energised rather "
-     "than drained. What had you been doing, and who was around?",
-     None, False),
+    # The doc's "Quiet Room or Packed Room", rendered as text.
+    (D.ENERGY_PATTERNS, S0, 9, CHOICE,
+     "Which one actually recharges you -- working alone at a desk lamp in a "
+     "silent room, or a loud room full of people and energy?",
+     ["The quiet room", "The packed room"], False),
     (D.DECISION_STYLE, S0, 10, CHOICE,
      "When you face a big unknown, do you decide fast and adjust as you go, "
      "or gather everything you can before you move?",
@@ -131,6 +136,18 @@ QUESTIONS: list[tuple] = [
     (D.ENERGY_PATTERNS, S0, 92, SCEN,
      "Tell me about the last time working on this left you completely "
      "drained. What had you been doing that day?", None, False),
+    # Demoted from the base journey, not dropped: the forced choices now at
+    # arc 4 and 9 are fast and hard to perform but thin, so these richer
+    # scenarios become the clarifying follow-up the doc's s3 describes -- asked
+    # when the binary left the dimension unresolved.
+    (D.CORE_MOTIVATION, S0, 94, SCEN,
+     "Think about the last thing you built or finished that genuinely "
+     "satisfied you -- before this venture, even. What about it landed?",
+     None, False),
+    (D.ENERGY_PATTERNS, S0, 95, SCEN,
+     "Think about the last time you finished a day genuinely energised rather "
+     "than drained. What had you been doing, and who was around?",
+     None, False),
     (D.EMOTIONAL_INTELLIGENCE, S0, 93, SCEN,
      "Tell me about the last time you had to give someone difficult feedback. "
      "How did you handle it?", None, False),
@@ -196,6 +213,18 @@ QUESTIONS: list[tuple] = [
     (D.DECISION_STYLE, S1, 92, SCEN,
      "Tell me about the last decision you made here that you'd now call "
      "rushed. What did you skip?", None, False),
+    # The doc's "The Cliff Edge" (s4 Visual library, placed at s5 Stage 0->1
+    # Q7, labelled Risk Posture). Risk Posture is a journey slot, not one of
+    # the fourteen dimensions -- the doc's own s2 table has no such dimension --
+    # so it sits under decision_style, which is where a founder's behaviour
+    # under uncertainty is read. A follow-up rather than a base question
+    # because decision_style's base slot already carries the doc's own
+    # Blueprint-or-Canvas choice for this stage.
+    (D.DECISION_STYLE, S1, 94, CHOICE,
+     "Your last big call under real uncertainty -- were you the person "
+     "standing at the cliff edge looking out and weighing it, or the one "
+     "already mid-air, having jumped?",
+     ["Standing at the edge, weighing it", "Already mid-air"], False),
     (D.ENERGY_PATTERNS, S1, 93, SCEN,
      "Tell me about the last week that left you wiped out. What was different "
      "about it?", None, False),
@@ -212,9 +241,14 @@ QUESTIONS: list[tuple] = [
     (D.MINDSET_EXCELLENCE, S2, 3, SCEN,
      "Tell me about a standard you refused to lower, even when it cost you "
      "time or money.", None, False),
-    (D.CORE_MOTIVATION, S2, 4, SCEN,
-     "Tell me about the last thing this business achieved that genuinely "
-     "moved you. What was it about that one?", None, False),
+    # "Trophy or Bridge, revisited" (doc s5 Stage 1->10+ Q7), as text. The doc
+    # asks whether the answer has CHANGED, which assumes an earlier pass; a
+    # single-stage journey has none, so it asks for the answer as it stands now.
+    (D.CORE_MOTIVATION, S2, 4, CHOICE,
+     "Two futures, and without overthinking it -- which one pulls you more "
+     "now? One: a single trophy on a pedestal, what you built, recognised. "
+     "Two: an unfinished bridge between two cliffs, people you will never "
+     "meet crossing it.", ["The trophy", "The bridge"], False),
     (D.EMOTIONAL_INTELLIGENCE, S2, 5, SCEN,
      "Tell me about the last time you were wrong about a person on your team. "
      "What did that actually cost you?", None, False),
@@ -263,6 +297,9 @@ QUESTIONS: list[tuple] = [
     (D.ENERGY_PATTERNS, S2, 92, SCEN,
      "Tell me about the last time you felt genuinely in flow running this. "
      "What were you doing?", None, False),
+    (D.CORE_MOTIVATION, S2, 94, SCEN,
+     "Tell me about the last thing this business achieved that genuinely "
+     "moved you. What was it about that one?", None, False),
     (D.CORE_VALUES, S2, 93, SCEN,
      "Tell me about the last time you turned down money or growth because of "
      "something you weren't willing to trade. What was it?", None, False),
