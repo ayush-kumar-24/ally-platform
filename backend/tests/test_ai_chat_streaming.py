@@ -160,11 +160,39 @@ class StreamWorld:
 
 
 def test_chunk_by_sentence():
-    assert chunk_text("A cat sat. A dog ran.", 100) == ["A cat sat.", "A dog ran."]
+    # The space after the full stop belongs to the chunk before it. These used
+    # to come back stripped, which reads tidier in a list and silently deleted
+    # the separator from the stream -- see test_chunks_reassemble_exactly.
+    assert chunk_text("A cat sat. A dog ran.", 100) == ["A cat sat. ", "A dog ran."]
 
 
 def test_chunk_word_fallback():
-    assert chunk_text("alpha beta gamma delta", 11) == ["alpha beta", "gamma delta"]
+    assert chunk_text("alpha beta gamma delta", 11) == ["alpha beta ", "gamma delta"]
+
+
+def test_chunks_reassemble_exactly():
+    """The property that actually matters: a client concatenating the stream
+    must end up with the answer the model wrote.
+
+    Markdown is the real stake. Ally replies in it, so a chunker that drops the
+    whitespace between pieces does not cost the odd space -- it removes every
+    blank line, collapsing headings, paragraphs and bullets into one run.
+    """
+    text = (
+        "## Where the churn is\n\n"
+        "Your 9% monthly churn is concentrated in month two. That is an "
+        "onboarding problem, not a pricing one.\n\n"
+        "- Interview ten churned users this week.\n"
+        "- Watch five new users complete setup unaided.\n\n"
+        "Do the interviews first: they tell you what to look for in the sessions."
+    )
+    for size in (5, 12, 40, 120, 1000):
+        assert "".join(chunk_text(text, size)) == text, f"lossy at max_chunk_size={size}"
+
+
+def test_chunk_preserves_blank_lines():
+    out = chunk_text("First para.\n\nSecond para.", 100)
+    assert "\n\n" in "".join(out)
 
 
 def test_chunk_is_deterministic():
@@ -208,7 +236,12 @@ def test_chunk_ordering_and_reconstruction():
     assert [c.index for c in r.chunks] == list(range(len(r.chunks)))
     assert r.chunks[0].chunk_type == ChunkType.START
     assert r.chunks[-1].chunk_type == ChunkType.COMPLETE
-    assert " ".join(c.content for c in r.token_chunks) == ANSWER
+    # Plain concatenation, not " ".join. Re-inserting a space between chunks was
+    # a workaround for the chunker dropping the separators, and it only ever
+    # worked when the separator happened to be exactly one space -- a newline
+    # came back as a space, so markdown structure was lost either way. The
+    # chunks now carry their own whitespace, so this is what a client does.
+    assert "".join(c.content for c in r.token_chunks) == ANSWER
 
 
 # --- metrics + trace --------------------------------------------------------

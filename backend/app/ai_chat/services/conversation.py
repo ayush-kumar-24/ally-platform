@@ -138,9 +138,19 @@ class ConversationService:
     def get_conversation(self, conversation_id: str) -> Conversation:
         return self._require(conversation_id)
 
-    def get_history(self, conversation_id: str) -> tuple[ConversationMessage, ...]:
+    def get_history(
+        self, conversation_id: str, *, limit: int | None = None, offset: int | None = None,
+    ) -> tuple[ConversationMessage, ...]:
+        """The transcript, newest page first when `limit` is given.
+
+        Default stays unbounded so the summarise/export callers below are
+        unaffected; only the HTTP route asks for a page."""
         self._require(conversation_id)
-        return self.repository.list_messages(conversation_id)
+        return self.repository.list_messages(conversation_id, limit=limit, offset=offset)
+
+    def count_history(self, conversation_id: str) -> int:
+        self._require(conversation_id)
+        return self.repository.count_messages(conversation_id)
 
     def find_turn_by_request_id(
         self, conversation_id: str, request_id: str,
@@ -156,15 +166,27 @@ class ConversationService:
         assistant = next((m for m in found if m.role == MessageRole.ASSISTANT), None)
         return user, assistant
 
-    def list_conversations(
-        self, founder_id: int, *, include_archived: bool = False, include_deleted: bool = False,
-    ) -> tuple[Conversation, ...]:
+    def _statuses(self, include_archived: bool, include_deleted: bool) -> tuple:
         statuses = [_ACTIVE]
         if include_archived:
             statuses.append(_ARCHIVED)
         if include_deleted:
             statuses.append(_DELETED)
-        return self.repository.list_conversations(founder_id, statuses=tuple(statuses))
+        return tuple(statuses)
+
+    def list_conversations(
+        self, founder_id: int, *, include_archived: bool = False, include_deleted: bool = False,
+        limit: int | None = None, offset: int = 0,
+    ) -> tuple[Conversation, ...]:
+        return self.repository.list_conversations(
+            founder_id, statuses=self._statuses(include_archived, include_deleted),
+            limit=limit, offset=offset)
+
+    def count_conversations(
+        self, founder_id: int, *, include_archived: bool = False, include_deleted: bool = False,
+    ) -> int:
+        return self.repository.count_conversations(
+            founder_id, statuses=self._statuses(include_archived, include_deleted))
 
     def mark_read(self, conversation_id: str) -> Conversation:
         conversation = self._require(conversation_id)

@@ -26,6 +26,15 @@ class CreateConversationRequest(BaseModel):
     title: str | None = Field(default=None, max_length=200)
 
 
+class RenameConversationRequest(BaseModel):
+    """A new title, from the founder rather than from the first 60 characters
+    they happened to type. Required and non-empty -- renaming to nothing would
+    leave a row that is clickable but unidentifiable, which is the bug the
+    "Untitled conversation" fallback already exists to paper over."""
+
+    title: str = Field(min_length=1, max_length=200)
+
+
 class FeedbackRequest(BaseModel):
     feedback: Literal["accepted", "dismissed", "ignored"]
     note: str | None = Field(default=None, max_length=1000)

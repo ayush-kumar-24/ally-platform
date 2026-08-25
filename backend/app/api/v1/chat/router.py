@@ -7,7 +7,7 @@ services. Domain errors propagate to the global AppError handler for consistent 
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
 
 from app.ai_chat.schemas.chat import ChatRequest
@@ -40,6 +40,7 @@ from app.api.v1.chat.schemas import (
     CreateConversationRequest,
     FeedbackRequest,
     MessageRequest,
+    RenameConversationRequest,
     StreamRequest,
 )
 
@@ -48,6 +49,14 @@ from app.api.v1.privacy.dependencies import require_ai_processing_allowed_for_id
 from app.middleware.rate_limit import founder_rate_limit
 
 router = APIRouter(prefix="/chat", tags=["chat"])
+
+# Paging ceilings. Defaults are what the chat UI actually shows on open; the
+# maximums exist so a client cannot ask for the unbounded read these endpoints
+# used to perform by default.
+DEFAULT_CONVERSATION_PAGE = 30
+MAX_CONVERSATION_PAGE = 100
+DEFAULT_MESSAGE_PAGE = 50
+MAX_MESSAGE_PAGE = 200
 
 # Named module-level dependency objects, not inline `Depends(founder_rate_limit(...))`
 # calls -- FastAPI's `dependency_overrides` keys by the exact callable object
@@ -167,12 +176,24 @@ def metered_stream(events, gate: ChatGate):
 @router.get("/conversations", response_model=ConversationListResponse, summary="List conversations")
 def list_conversations(
     include_archived: bool = False,
+    limit: int = Query(default=DEFAULT_CONVERSATION_PAGE, ge=1, le=MAX_CONVERSATION_PAGE),
+    offset: int = Query(default=0, ge=0),
     founder_id: int = Depends(get_current_founder_id),
     service=Depends(get_conversation_service),
 ) -> ConversationListResponse:
-    items = service.list_conversations(founder_id, include_archived=include_archived)
+    """One page of the founder's conversations, newest activity first.
+
+    Paged rather than complete: this endpoint had no ceiling, so opening the
+    chat page read every conversation the founder had ever started. `le=` on
+    limit means a client cannot opt back out of the ceiling by asking for a
+    million.
+    """
+    total = service.count_conversations(founder_id, include_archived=include_archived)
+    items = service.list_conversations(
+        founder_id, include_archived=include_archived, limit=limit, offset=offset)
     return ConversationListResponse(
-        conversations=[ConversationResponse.from_domain(c) for c in items], total=len(items))
+        conversations=[ConversationResponse.from_domain(c) for c in items],
+        total=total, has_more=(offset + len(items)) < total)
 
 
 @router.post("/conversations", response_model=ConversationResponse,
@@ -200,6 +221,8 @@ def get_conversation(
             summary="Conversation transcript")
 def get_conversation_messages(
     conversation_id: str,
+    limit: int = Query(default=DEFAULT_MESSAGE_PAGE, ge=1, le=MAX_MESSAGE_PAGE),
+    offset: int | None = Query(default=None, ge=0),
     founder_id: int = Depends(get_current_founder_id),
     service=Depends(get_conversation_service),
 ) -> ConversationMessagesResponse:
@@ -208,24 +231,89 @@ def get_conversation_messages(
     the frontend previously had nowhere to get this from at all, so every
     reopened conversation rendered empty regardless of how many messages it
     really had. ConversationService.get_history already existed and was never
-    wired to a route."""
+    wired to a route.
+
+    Paged from the BOTTOM. Omitting `offset` returns the newest `limit`
+    messages, which is what opening a conversation wants -- reading starts at
+    the latest turn, and a long thread should not make the founder wait for
+    hundreds of messages they will scroll straight past. `has_more` then means
+    "there are older messages above this page"; pass the returned `offset`
+    minus your next page size to walk up.
+    """
     owned_conversation(service, conversation_id, founder_id)
-    messages = service.get_history(conversation_id)
+    total = service.count_history(conversation_id)
+    messages = service.get_history(conversation_id, limit=limit, offset=offset)
+    # Where this page actually starts. With no explicit offset the repository
+    # chose it (total - limit), so it is recomputed the same way rather than
+    # reported as 0 -- a client that trusted 0 would ask for the same newest
+    # page forever instead of walking backwards.
+    start = max(0, total - limit) if offset is None else offset
     return ConversationMessagesResponse(
         conversation_id=conversation_id,
         messages=[MessageResponse.from_domain(m) for m in messages],
+        total=total, offset=start, has_more=start > 0,
     )
 
 
-@router.delete("/conversations/{conversation_id}", response_model=ConversationResponse,
-               summary="Archive a conversation")
-def archive_conversation(
+@router.patch("/conversations/{conversation_id}", response_model=ConversationResponse,
+              summary="Rename a conversation")
+def rename_conversation(
+    conversation_id: str,
+    payload: RenameConversationRequest,
+    founder_id: int = Depends(get_current_founder_id),
+    service=Depends(get_conversation_service),
+) -> ConversationResponse:
+    """Titles are auto-generated from the first 60 characters a founder typed,
+    which is rarely what the conversation turned out to be about. The service
+    could already do this; there was simply no way to ask it to."""
+    owned_conversation(service, conversation_id, founder_id)
+    return ConversationResponse.from_domain(
+        service.rename_conversation(conversation_id, payload.title))
+
+
+@router.post("/conversations/{conversation_id}/read", response_model=ConversationResponse,
+             summary="Mark a conversation read")
+def mark_conversation_read(
     conversation_id: str,
     founder_id: int = Depends(get_current_founder_id),
     service=Depends(get_conversation_service),
 ) -> ConversationResponse:
+    """Clear the unread marker.
+
+    `unread_count` is incremented on every assistant message (see
+    ConversationService.append_message) and, until this route existed, was
+    never cleared by anything -- so it only ever counted up, for every founder,
+    forever. It is meaningful in exactly one situation: a reply that landed
+    while the founder was not looking at it, which is real (a send takes
+    seconds, and tabs get closed). Reading the conversation is what makes it
+    read, so the client calls this on open."""
     owned_conversation(service, conversation_id, founder_id)
-    return ConversationResponse.from_domain(service.archive_conversation(conversation_id))
+    return ConversationResponse.from_domain(service.mark_read(conversation_id))
+
+
+@router.delete("/conversations/{conversation_id}", response_model=ConversationResponse,
+               summary="Archive or delete a conversation")
+def archive_conversation(
+    conversation_id: str,
+    mode: str = Query(default="archive", pattern="^(archive|delete)$"),
+    founder_id: int = Depends(get_current_founder_id),
+    service=Depends(get_conversation_service),
+) -> ConversationResponse:
+    """Archive by default; `?mode=delete` for the founder-facing "Delete".
+
+    A query parameter rather than a second route because both are the same act
+    on the same resource, and because `mode` defaulting to archive keeps every
+    existing caller doing exactly what it did before.
+
+    Both are recoverable server-side -- delete sets status=DELETED, it does not
+    drop rows (purge is a separate repository call nothing here exposes). From
+    the founder's side delete is still final: nothing in the UI restores a
+    deleted conversation, and that is the promise the word makes.
+    """
+    owned_conversation(service, conversation_id, founder_id)
+    conversation = (service.delete_conversation(conversation_id) if mode == "delete"
+                    else service.archive_conversation(conversation_id))
+    return ConversationResponse.from_domain(conversation)
 
 
 @router.post("/conversations/{conversation_id}/restore", response_model=ConversationResponse,

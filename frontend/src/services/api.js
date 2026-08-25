@@ -276,6 +276,117 @@ export const put   = (url, body, config) => api.put(url, body, config).then(r =>
 export const patch = (url, body, config) => api.patch(url, body, config).then(r => r.data);
 export const del   = (url, config)       => api.delete(url, config).then(r => r.data);
 
+// ── Server-Sent Events ───────────────────────────────────────────────────────
+//
+// axios cannot do this: it buffers the whole response before resolving, which
+// is the opposite of what a stream is for. So this is the one place in the app
+// that touches fetch directly -- and it lives HERE, next to everything else,
+// rather than in a page, so the rules the rest of the app relies on (bearer
+// token, single-flight 401 refresh, ApiError normalization) still apply.
+//
+// EventSource, the browser's built-in SSE client, is not an option either: it
+// is GET-only and cannot set an Authorization header. A chat send is a POST
+// carrying a message body, and every endpoint here needs the bearer.
+
+/** One `event:`/`data:` frame off the wire. */
+function parseSseFrame(raw) {
+  let event = 'message';
+  const dataLines = [];
+  for (const line of raw.split('\n')) {
+    if (line.startsWith('event:')) event = line.slice(6).trim();
+    // Not trimStart on the whole value: SSE strips exactly one leading space
+    // after the colon, and content tokens can legitimately begin with spaces.
+    // Trimming them all would silently glue words together mid-sentence.
+    else if (line.startsWith('data:')) dataLines.push(line.slice(5).replace(/^ /, ''));
+  }
+  if (!dataLines.length) return null;
+  try {
+    return { event, data: JSON.parse(dataLines.join('\n')) };
+  } catch {
+    return { event, data: null };
+  }
+}
+
+/**
+ * POST a body and consume the Server-Sent Events response.
+ *
+ * @param {string}   url       path relative to BASE_URL, e.g. '/chat/stream'
+ * @param {object}   body      JSON request body
+ * @param {object}   opts
+ * @param {function} opts.onEvent  called as (eventName, data) per frame
+ * @param {AbortSignal} opts.signal
+ * @returns {Promise<void>} resolves when the stream ends, rejects with ApiError
+ */
+export async function stream(url, body, { onEvent, signal } = {}) {
+  const run = async (token) => fetch(`${BASE_URL}${url}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'text/event-stream',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(body),
+    credentials: 'include',
+    signal,
+  });
+
+  let response;
+  try {
+    response = await run(getAccessToken());
+    // Same single-flight refresh the axios interceptor uses, and deliberately
+    // the SAME promise: a stream starting at the moment a normal request 401s
+    // must not burn a second rotating refresh token.
+    if (response.status === 401) {
+      refreshFlight ??= refreshTokens().finally(() => { refreshFlight = null; });
+      response = await run(await refreshFlight);
+    }
+  } catch (err) {
+    if (err?.name === 'AbortError') return;         // caller cancelled; not a failure
+    if (err instanceof ApiError) throw err;          // refresh already normalized it
+    throw new ApiError(null, 'Network error — is the server reachable?');
+  }
+
+  if (!response.ok) {
+    // Error responses are still JSON, not SSE -- the plan gate and rate limiter
+    // reject before a single frame is written. Read them the same way the axios
+    // path does so explainLimit() can recognise a 403/402/429 here too.
+    let data = null;
+    try { data = await response.json(); } catch { /* non-JSON error body */ }
+    const detail =
+      (typeof data?.message === 'string' && data.message) ||
+      (typeof data?.detail === 'string' && data.detail) ||
+      `Request failed with status ${response.status}`;
+    throw new ApiError(response.status, detail, data);
+  }
+  if (!response.body) throw new ApiError(null, 'Streaming is not supported here.');
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      // stream: true so a multi-byte character split across two network chunks
+      // is held back rather than decoded into a replacement character.
+      buffer += decoder.decode(value, { stream: true });
+      // Frames are separated by a blank line. Anything after the last separator
+      // is a partial frame and stays in the buffer for the next read.
+      let sep;
+      while ((sep = buffer.indexOf('\n\n')) !== -1) {
+        const frame = parseSseFrame(buffer.slice(0, sep));
+        buffer = buffer.slice(sep + 2);
+        if (frame) onEvent?.(frame.event, frame.data);
+      }
+    }
+  } catch (err) {
+    if (err?.name === 'AbortError') return;
+    throw new ApiError(null, 'The connection dropped mid-reply — please try again.');
+  } finally {
+    reader.releaseLock?.();
+  }
+}
+
 /**
  * Drop undefined/null keys from a request body.
  *

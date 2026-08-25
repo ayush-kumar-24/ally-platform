@@ -2132,6 +2132,59 @@ body.lp-done #landing-page { display:none; }
 .msg.me .msg-attachments{justify-content:flex-end}
 .ac-chip.is-sent{background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.14);color:#a7c0b4}
 
+/* ---- Conversation row controls (history panel) -------------------------
+   The row was a single button and nothing else, so a conversation could be
+   opened and never renamed or removed -- history only ever grew. The menu
+   button sits inside the row rather than after it so the two read as one
+   object, and only surfaces on hover/focus so the panel stays a list of
+   conversations rather than a list of controls. */
+.ac-row{position:relative;display:flex;align-items:center}
+.ac-row .ac-item{flex:1;min-width:0;padding-right:30px}
+.ac-more{position:absolute;right:4px;display:grid;place-items:center;width:24px;height:24px;border:none;border-radius:6px;background:transparent;color:#7d9488;cursor:pointer;opacity:0;transition:opacity .18s,background .18s,color .18s}
+.ac-row:hover .ac-more,.ac-more:focus-visible,.ac-more[aria-expanded="true"]{opacity:1}
+.ac-more:hover,.ac-more[aria-expanded="true"]{background:rgba(255,255,255,.09);color:#eaf3ee}
+.ac-more svg{width:15px;height:15px;fill:currentColor}
+/* Touch has no hover, so the control would be permanently invisible there. */
+@media (hover:none){.ac-more{opacity:1}}
+
+.ac-rowmenu{position:absolute;right:4px;top:calc(100% - 4px);z-index:5;min-width:132px;padding:5px;display:flex;flex-direction:column;border-radius:10px;background:#0d2419;border:1px solid rgba(255,255,255,.14);box-shadow:0 12px 28px rgba(0,0,0,.45)}
+.ac-rowmenu button{text-align:left;padding:7px 10px;border:none;border-radius:7px;background:transparent;color:#eaf3ee;font-size:12.5px;font-weight:600;cursor:pointer}
+.ac-rowmenu button:hover{background:rgba(255,255,255,.08)}
+.ac-rowmenu button.danger{color:#fca5a5}
+.ac-rowmenu button.danger:hover{background:rgba(239,68,68,.16)}
+
+.ac-rename{flex:1;min-width:0;margin:2px 0;padding:9px 11px;border-radius:11px;background:rgba(255,255,255,.07);border:1px solid rgba(16,185,129,.45);color:#fff;font:inherit;font-size:13px;font-weight:600}
+.ac-rename:focus{outline:none;border-color:#34d399}
+
+/* Unread marker. A dot rather than a count -- see the comment where it is
+   rendered: nothing cleared unread_count until now, so existing rows carry
+   totals that are real numbers of a meaningless thing. */
+.ac-unread{flex-shrink:0;align-self:center;width:7px;height:7px;border-radius:50%;background:#34d399;box-shadow:0 0 0 3px rgba(16,185,129,.18)}
+
+/* ---- "Load older" (both the history panel and the transcript) ----------
+   Both lists are paged now, so both need a way up. One style for both: it is
+   the same affordance doing the same job at two scales. */
+.ac-loadmore{align-self:center;margin:2px auto;padding:7px 14px;border-radius:99px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);color:#a7c0b4;font-size:12px;font-weight:600;cursor:pointer;transition:background .18s,color .18s}
+.ac-loadmore:hover:not(:disabled){background:rgba(255,255,255,.11);color:#eaf3ee}
+.ac-loadmore:disabled{opacity:.6;cursor:default}
+
+/* ---- Suggested next steps ---------------------------------------------
+   Generated server-side with every turn and, until now, never shown to
+   anyone. Rendered under the last answer as actions rather than advice: each
+   chip does something when clicked, which is why suggestions with no action
+   are filtered out in the page rather than styled to look clickable here. */
+.ac-suggestions{display:flex;flex-wrap:wrap;gap:8px;max-width:800px;width:100%;margin:2px auto 0;padding-left:46px}
+.ac-sugg{display:inline-flex;align-items:stretch;border-radius:10px;background:rgba(16,185,129,.09);border:1px solid rgba(16,185,129,.26);overflow:hidden;transition:background .18s,border-color .18s}
+.ac-sugg:hover{background:rgba(16,185,129,.16);border-color:rgba(16,185,129,.42)}
+.ac-sugg-go{display:inline-flex;align-items:baseline;gap:7px;padding:7px 4px 7px 11px;border:none;background:transparent;color:#6ee7b7;font-size:12.5px;font-weight:650;cursor:pointer;text-align:left}
+/* The suggestion's own title, quieter than the verb -- the action is what the
+   founder is choosing, the title is why it is being offered. */
+.ac-sugg-go em{font-style:normal;font-weight:500;color:#a7c0b4;font-size:12px}
+.ac-sugg-x{display:grid;place-items:center;width:26px;flex-shrink:0;border:none;background:transparent;color:#7d9488;cursor:pointer;opacity:.75}
+.ac-sugg-x:hover{opacity:1;color:#fca5a5;background:rgba(239,68,68,.14)}
+.ac-sugg-x svg{width:11px;height:11px;fill:none;stroke:currentColor;stroke-width:2.4}
+@media (max-width:640px){.ac-suggestions{padding-left:0}}
+
 /* ---- Markdown in Ally's replies ---------------------------------------
    The model has always written markdown; until now the bubble printed it
    raw, so every answer arrived as one unbroken block with literal ** and ##

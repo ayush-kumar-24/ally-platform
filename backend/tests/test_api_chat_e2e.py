@@ -422,7 +422,11 @@ def test_openapi_documents_every_chat_endpoint(world):
     # transcript, so reopening a past conversation always rendered empty.
     # 13, not 12: /attachments/{id}/link was added -- an upload happens before
     # the message exists, so the two can only be associated afterwards.
-    assert len(paths) == 13
+    # 14, not 13: /conversations/{id}/read was added -- unread_count is bumped by
+    # every assistant message and nothing ever cleared it, so it only counted up.
+    # (Rename and delete added no path: rename is PATCH on the conversation, and
+    # delete is DELETE with ?mode=delete rather than a second endpoint.)
+    assert len(paths) == 14
     # every operation documents a response model (no undocumented responses)
     for path, ops in schema["paths"].items():
         if path.startswith("/api/v1/chat/"):

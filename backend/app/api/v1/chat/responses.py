@@ -117,7 +117,11 @@ class ConversationResponse(BaseModel):
 
 class ConversationListResponse(BaseModel):
     conversations: list[ConversationResponse]
+    # How many the founder has in total, NOT how many this page returned --
+    # `len(conversations)` already says the latter, and a client cannot tell
+    # "you have exactly 30" from "here are the first 30 of 400" without this.
     total: int
+    has_more: bool = False
 
 
 class MessageResponse(BaseModel):
@@ -140,6 +144,12 @@ class MessageResponse(BaseModel):
 class ConversationMessagesResponse(BaseModel):
     conversation_id: str
     messages: list[MessageResponse]
+    # A paged transcript returns its NEWEST slice, so "more" always means older
+    # messages above the ones sent. `offset` is where this page starts in the
+    # whole conversation, which is what a client passes back to walk further up.
+    total: int = 0
+    offset: int = 0
+    has_more: bool = False
 
 
 # --- attachments ------------------------------------------------------------

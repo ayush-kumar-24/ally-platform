@@ -42,7 +42,7 @@ from __future__ import annotations
 import threading
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.ai_chat.repositories.conversation import ConversationRepository
@@ -133,22 +133,42 @@ class SqlConversationRepository(ConversationRepository):
         row.updated_at = conversation.updated_at
         self._persist()
 
-    def list_conversations(
-        self, founder_id: int, *, statuses: tuple[ConversationStatus, ...]
-    ) -> tuple[Conversation, ...]:
-        status_values = [s.value for s in statuses]
-        stmt = (
-            select(ConversationRow)
-            .where(
-                ConversationRow.founder_id == founder_id,
-                ConversationRow.conversation_type == _CONVERSATION_TYPE,
-                ConversationRow.status.in_(status_values),
-            )
+    def _conversation_scope(self, founder_id: int, statuses: tuple[ConversationStatus, ...]):
+        return (
+            ConversationRow.founder_id == founder_id,
+            ConversationRow.conversation_type == _CONVERSATION_TYPE,
+            ConversationRow.status.in_([s.value for s in statuses]),
         )
+
+    def list_conversations(
+        self, founder_id: int, *, statuses: tuple[ConversationStatus, ...],
+        limit: int | None = None, offset: int = 0,
+    ) -> tuple[Conversation, ...]:
+        stmt = select(ConversationRow).where(*self._conversation_scope(founder_id, statuses))
+        # Ordering moved into SQL. It used to be a Python sort over every row the
+        # founder had, which is only correct without paging -- a LIMIT applied
+        # before the sort would page over an arbitrary order. Same key as before:
+        # newest activity first, conversation_id as the stable tiebreak.
+        #
+        # COALESCE, not `or`: last_message_at is NULL for a conversation created
+        # but never sent to, and NULL sorts unpredictably across backends.
+        stmt = stmt.order_by(
+            func.coalesce(ConversationRow.last_message_at, ConversationRow.created_at).desc(),
+            ConversationRow.conversation_id.desc(),
+        )
+        if offset:
+            stmt = stmt.offset(max(0, offset))
+        if limit is not None:
+            stmt = stmt.limit(limit)
         rows = self.db.execute(stmt).scalars().all()
-        found = [self._to_domain(r) for r in rows]
-        found.sort(key=lambda c: (c.last_message_at or c.created_at, c.conversation_id), reverse=True)
-        return tuple(found)
+        return tuple(self._to_domain(r) for r in rows)
+
+    def count_conversations(
+        self, founder_id: int, *, statuses: tuple[ConversationStatus, ...]
+    ) -> int:
+        stmt = select(func.count()).select_from(ConversationRow).where(
+            *self._conversation_scope(founder_id, statuses))
+        return int(self.db.execute(stmt).scalar_one())
 
     def purge_conversation(self, conversation_id: str) -> bool:
         row = self._get_row(conversation_id)
@@ -193,7 +213,9 @@ class SqlConversationRepository(ConversationRepository):
         # the message they were sent with).
         return str(row.message_id)
 
-    def list_messages(self, conversation_id: str) -> tuple[ConversationMessage, ...]:
+    def list_messages(
+        self, conversation_id: str, *, limit: int | None = None, offset: int | None = None,
+    ) -> tuple[ConversationMessage, ...]:
         conv_row = self._get_row(conversation_id)
         if conv_row is None:
             return ()
@@ -202,11 +224,39 @@ class SqlConversationRepository(ConversationRepository):
             .where(MessageRow.conversation_id == conv_row.conversation_id)
             .order_by(MessageRow.message_id.asc())
         )
+
+        # `sequence` is position-in-conversation and is derived from position in
+        # this result set, so paging has to know where the page actually starts
+        # in the whole transcript -- otherwise message 400 comes back claiming to
+        # be message 0, and anything correlating on sequence lands on the wrong
+        # turn. `start` below is that absolute position, and it is what the
+        # enumerate is offset by.
+        start = 0
+        if limit is not None:
+            if offset is None:
+                # No offset means the newest page: count first, then walk back.
+                total = self.count_messages(conversation_id)
+                start = max(0, total - limit)
+            else:
+                start = max(0, offset)
+            stmt = stmt.offset(start).limit(limit)
+        elif offset:
+            start = max(0, offset)
+            stmt = stmt.offset(start)
+
         rows = self.db.execute(stmt).scalars().all()
         return tuple(
-            self._message_to_domain(r, conversation_id, sequence)
-            for sequence, r in enumerate(rows)
+            self._message_to_domain(r, conversation_id, start + position)
+            for position, r in enumerate(rows)
         )
+
+    def count_messages(self, conversation_id: str) -> int:
+        conv_row = self._get_row(conversation_id)
+        if conv_row is None:
+            return 0
+        stmt = select(func.count()).select_from(MessageRow).where(
+            MessageRow.conversation_id == conv_row.conversation_id)
+        return int(self.db.execute(stmt).scalar_one())
 
     def find_messages_by_request_id(
         self, conversation_id: str, request_id: str,

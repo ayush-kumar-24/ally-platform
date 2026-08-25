@@ -32,8 +32,28 @@ class ConversationRepository(abc.ABC):
 
     @abc.abstractmethod
     def list_conversations(
+        self, founder_id: int, *, statuses: tuple[ConversationStatus, ...],
+        limit: int | None = None, offset: int = 0,
+    ) -> tuple[Conversation, ...]:
+        """Newest activity first. `limit=None` means every match, which is the
+        historical behaviour and what the summarise/export paths still want.
+
+        Paging is opt-in rather than a default because this used to have no
+        ceiling at all: opening the chat page read every conversation a founder
+        had ever started, and the transcript read every message in it. That is
+        fine at twenty and not at two thousand, and the cost lands on the
+        founders who use Ally most."""
+
+    def count_conversations(
         self, founder_id: int, *, statuses: tuple[ConversationStatus, ...]
-    ) -> tuple[Conversation, ...]: ...
+    ) -> int:
+        """How many match, ignoring paging -- so a caller can say "12 of 340".
+
+        Concrete, not abstract: the generic answer below is correct for any
+        implementation, and a store that can count more cheaply than it can
+        materialise (SQL can) overrides it. Making it abstract would break
+        every existing implementation for no gain."""
+        return len(self.list_conversations(founder_id, statuses=statuses))
 
     @abc.abstractmethod
     def purge_conversation(self, conversation_id: str) -> bool:
@@ -52,7 +72,25 @@ class ConversationRepository(abc.ABC):
         ...
 
     @abc.abstractmethod
-    def list_messages(self, conversation_id: str) -> tuple[ConversationMessage, ...]: ...
+    def list_messages(
+        self, conversation_id: str, *, limit: int | None = None, offset: int | None = None,
+    ) -> tuple[ConversationMessage, ...]:
+        """Oldest first. `limit=None` returns the whole transcript.
+
+        With `limit` set and no `offset`, the window is the LAST `limit`
+        messages, not the first -- a transcript is read from the bottom, so the
+        newest page is the one worth loading. Pass `offset` explicitly to walk
+        backwards from there.
+
+        `sequence` on every returned message stays position-in-conversation,
+        never position-in-page. Anything keyed to it (attachments, retry
+        matching) would otherwise silently point at the wrong turn once a
+        conversation grew past one page."""
+
+    def count_messages(self, conversation_id: str) -> int:
+        """Total messages, ignoring paging. Concrete for the same reason as
+        `count_conversations` above."""
+        return len(self.list_messages(conversation_id))
 
     @abc.abstractmethod
     def find_messages_by_request_id(
@@ -96,7 +134,8 @@ class InMemoryConversationRepository(ConversationRepository):
             self._conversations[conversation.conversation_id] = conversation
 
     def list_conversations(
-        self, founder_id: int, *, statuses: tuple[ConversationStatus, ...]
+        self, founder_id: int, *, statuses: tuple[ConversationStatus, ...],
+        limit: int | None = None, offset: int = 0,
     ) -> tuple[Conversation, ...]:
         with self._lock:
             found = [
@@ -105,7 +144,20 @@ class InMemoryConversationRepository(ConversationRepository):
             ]
         # Deterministic: newest activity first, then id as a stable tiebreak.
         found.sort(key=lambda c: (c.last_message_at or c.created_at, c.conversation_id), reverse=True)
-        return tuple(found)
+        # Slicing AFTER the sort, so a page is a window on the same order the
+        # unpaged call returns -- paging that reordered its own results would
+        # let a conversation appear on two pages and never on a third.
+        start = max(0, offset)
+        return tuple(found[start:] if limit is None else found[start:start + limit])
+
+    def count_conversations(
+        self, founder_id: int, *, statuses: tuple[ConversationStatus, ...]
+    ) -> int:
+        with self._lock:
+            return sum(
+                1 for c in self._conversations.values()
+                if c.founder_id == founder_id and c.status in statuses
+            )
 
     def purge_conversation(self, conversation_id: str) -> bool:
         with self._lock:
@@ -121,11 +173,21 @@ class InMemoryConversationRepository(ConversationRepository):
             self._messages.setdefault(message.conversation_id, []).append(message)
         return None  # in-memory keeps the minted id verbatim
 
-    def list_messages(self, conversation_id: str) -> tuple[ConversationMessage, ...]:
+    def list_messages(
+        self, conversation_id: str, *, limit: int | None = None, offset: int | None = None,
+    ) -> tuple[ConversationMessage, ...]:
         with self._lock:
             msgs = list(self._messages.get(conversation_id, ()))
         msgs.sort(key=lambda m: m.sequence)
-        return tuple(msgs)
+        if limit is None:
+            return tuple(msgs) if offset is None else tuple(msgs[max(0, offset):])
+        # No offset means "the newest page", so start `limit` from the end.
+        start = max(0, len(msgs) - limit) if offset is None else max(0, offset)
+        return tuple(msgs[start:start + limit])
+
+    def count_messages(self, conversation_id: str) -> int:
+        with self._lock:
+            return len(self._messages.get(conversation_id, ()))
 
     def find_messages_by_request_id(
         self, conversation_id: str, request_id: str,

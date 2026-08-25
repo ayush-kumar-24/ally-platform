@@ -6,10 +6,25 @@
  * the server list is the truth.
  */
 
-import { get, post, del, prune } from './api';
+import { get, patch, post, del, prune, stream } from './api';
 
-export function listConversations(includeArchived = false) {
-  return get('/chat/conversations', { params: { include_archived: includeArchived } });
+/** How many conversations the history panel loads at a time. */
+export const CONVERSATION_PAGE = 30;
+/** How many messages a conversation opens with. Older ones load on request. */
+export const MESSAGE_PAGE = 50;
+
+/**
+ * One page of conversations, newest activity first.
+ *
+ * Paged rather than complete: this used to fetch every conversation the founder
+ * had ever started on every visit to the chat page. Returns
+ * `{ conversations, total, has_more }` -- `total` is how many exist, not how
+ * many came back.
+ */
+export function listConversations(includeArchived = false, { limit = CONVERSATION_PAGE, offset = 0 } = {}) {
+  return get('/chat/conversations', {
+    params: { include_archived: includeArchived, limit, offset },
+  });
 }
 
 export function createConversation(title) {
@@ -26,17 +41,42 @@ export function getConversation(conversationId) {
  * own endpoint. Previously there was nowhere to get them from at all, so
  * reopening a past conversation always rendered empty regardless of how many
  * messages it really had.
+ *
+ * Paged from the bottom: omitting `offset` returns the newest `limit` messages,
+ * because that is where reading starts. Returns `{ messages, total, offset,
+ * has_more }`, where `has_more` means "there are OLDER messages above these"
+ * and `offset` is where this page begins in the whole transcript.
  */
-export function getConversationMessages(conversationId) {
-  return get(`/chat/conversations/${conversationId}/messages`);
+export function getConversationMessages(conversationId, { limit = MESSAGE_PAGE, offset } = {}) {
+  return get(`/chat/conversations/${conversationId}/messages`,
+             { params: prune({ limit, offset }) });
+}
+
+/** Give a conversation a title the founder chose, replacing the one derived
+ *  from the first 60 characters they happened to type. */
+export function renameConversation(conversationId, title) {
+  return patch(`/chat/conversations/${conversationId}`, { title });
 }
 
 export function archiveConversation(conversationId) {
   return del(`/chat/conversations/${conversationId}`);
 }
 
+/** Remove a conversation from the founder's history for good.
+ *  Soft-deleted server-side, but nothing in the UI brings it back -- which is
+ *  the promise the word "delete" makes to the person clicking it. */
+export function deleteConversation(conversationId) {
+  return del(`/chat/conversations/${conversationId}`, { params: { mode: 'delete' } });
+}
+
 export function restoreConversation(conversationId) {
   return post(`/chat/conversations/${conversationId}/restore`, {});
+}
+
+/** Clear the unread marker. Called when a conversation is opened, which is what
+ *  actually makes it read. Until this existed the count only ever went up. */
+export function markConversationRead(conversationId) {
+  return post(`/chat/conversations/${conversationId}/read`, {});
 }
 
 /**
@@ -55,6 +95,50 @@ export function sendMessage({ message, conversationId, sessionId, language, requ
     language,
     request_id: requestId,
   }));
+}
+
+/**
+ * Send a message and receive Ally's reply as it is written.
+ *
+ * Same request as sendMessage(), same plan gate, same rate limit -- the only
+ * difference is that the answer arrives in pieces instead of after a wait. That
+ * wait is not small: a measured reply took 13.9 seconds, all of it spent
+ * staring at a typing indicator with no evidence anything was happening.
+ *
+ * Handlers, all optional:
+ *   onStart()            the request was accepted and the model is working
+ *   onToken(text)        one more piece of the answer
+ *   onDone(summary)      { conversation_id, assistant_message_id, ok, error }
+ *   onError(message)     the server reported a failure mid-stream
+ *
+ * Resolves when the stream closes. Rejects with ApiError for transport and
+ * gate failures (401/403/429/network) so callers can branch exactly as they
+ * already do for sendMessage.
+ */
+export function streamMessage(
+  { message, conversationId, sessionId, language, requestId },
+  { onStart, onToken, onDone, onError, signal } = {},
+) {
+  return stream('/chat/stream', prune({
+    message,
+    conversation_id: conversationId,
+    session_id: sessionId,
+    language,
+    request_id: requestId,
+  }), {
+    signal,
+    onEvent: (event, data) => {
+      // Only the events a client can act on. The backend also emits the finer
+      // lifecycle markers (message_received, context_ready, prompt_ready,
+      // ai_finished, message_persisted); they are useful in a log and would be
+      // noise here, so they are deliberately ignored rather than forwarded.
+      if (event === 'ai_started') onStart?.();
+      else if (event === 'token') onToken?.(data?.content ?? '');
+      else if (event === 'summary') onDone?.(data ?? {});
+      else if (event === 'error') onError?.(data?.content || '');
+      else if (event === 'cancelled') onError?.('');
+    },
+  });
 }
 
 /* --- attachments ---------------------------------------------------------
@@ -81,6 +165,17 @@ export function linkAttachmentToMessage(attachmentId, messageId) {
  *  the audit trail survives. */
 export function removeAttachment(attachmentId) {
   return del(`/chat/attachments/${attachmentId}`);
+}
+
+/** Undo an archive.
+ *
+ *  Used on the rollback path in the composer: removing a chip is optimistic, so
+ *  a failed remove puts it back on screen. Putting it back on screen is not
+ *  enough on its own -- if the archive actually landed and only the response
+ *  was lost, the chip would be visible to the founder and invisible to the
+ *  LLM. This makes the rollback real on both sides. */
+export function restoreAttachment(attachmentId) {
+  return post(`/chat/attachments/${attachmentId}/restore`, {});
 }
 
 export function getSuggestions(conversationId) {

@@ -33,33 +33,62 @@ from app.ai_chat.streaming.schemas import (
 )
 
 _SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+")
+# One word plus whatever whitespace trails it, so a word-level split keeps the
+# separators instead of discarding them -- see chunk_text.
+_WORD_WITH_TRAILING_SPACE = re.compile(r"\S+\s*")
 
 
 # --- deterministic chunking -------------------------------------------------
 
 
 def _split_sentences(text: str) -> list[str]:
-    return [s for s in (p.strip() for p in _SENTENCE_SPLIT.split(text.strip())) if s]
+    """Sentences, each carrying the whitespace that FOLLOWED it.
+
+    Slices the original string rather than splitting into stripped pieces,
+    because the separators are content: a client's only way to rebuild the
+    answer is to concatenate what it receives. See chunk_text below.
+    """
+    pieces: list[str] = []
+    pos = 0
+    for match in _SENTENCE_SPLIT.finditer(text):
+        pieces.append(text[pos:match.end()])
+        pos = match.end()
+    if pos < len(text):
+        pieces.append(text[pos:])
+    return [p for p in pieces if p]
 
 
-def _split_words(sentence: str, max_chunk_size: int) -> list[str]:
+def _split_words(segment: str, max_chunk_size: int) -> list[str]:
     chunks: list[str] = []
     current = ""
-    for word in sentence.split():
-        candidate = f"{current} {word}" if current else word
-        if len(candidate) <= max_chunk_size:
-            current = candidate
-        else:
-            if current:
-                chunks.append(current)
+    # Each word together with the whitespace after it, so nothing is dropped at
+    # a word boundary either.
+    for word in _WORD_WITH_TRAILING_SPACE.findall(segment):
+        if current and len(current) + len(word) > max_chunk_size:
+            chunks.append(current)
             current = word            # an indivisible word longer than max stands alone
+        else:
+            current += word
     if current:
         chunks.append(current)
     return chunks
 
 
 def chunk_text(text: str, max_chunk_size: int) -> list[str]:
-    """Deterministic sentence-then-word chunking."""
+    """Deterministic sentence-then-word chunking.
+
+    Guarantees `"".join(chunk_text(t, n)) == t.strip()` -- the chunks are a
+    partition of the answer, not a tidied-up version of it.
+
+    That guarantee is the whole point and it was missing. Every piece used to be
+    `.strip()`ed and every word `.split()`, so all whitespace BETWEEN chunks was
+    silently discarded: a client concatenating the stream got sentences run
+    together with no space, and -- far worse for this product -- every blank
+    line gone. Ally answers in markdown, so losing the blank lines does not cost
+    a space here and there, it collapses headings, paragraphs and list items
+    into one unreadable run. Measured on a real reply: 451 characters in, 445
+    out, one lost at each of the six chunk boundaries.
+    """
     text = (text or "").strip()
     if not text:
         return []
