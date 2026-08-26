@@ -103,22 +103,40 @@ def diagnosis_block(ctx: AllyContext | None) -> str:
 _MAX_ATTACHMENT_TEXT = 6000
 
 
-def attachments_block(entries: tuple[tuple[str, str, int, str | None], ...]) -> str:
+def attachments_block(entries: tuple[tuple[str, str, int, str | None, object], ...]) -> str:
     """Format uploaded-file entries (filename, attachment_type, size_bytes,
-    text_content_or_None) into a readable block. Files with extracted/decoded
-    text (txt, csv, pdf, docx -- see ContextWindowBuilder._extract_text) get
-    their content inlined and clamped; everything else (images; scanned PDFs
-    with no text layer; extraction failures) is listed by name only, so the
-    model is told a file exists without fabricating what's in it."""
+    text_content_or_None, media_block_or_None) into a readable block.
+
+    Three outcomes, and the wording has to match which one actually happened,
+    because this text is the model's only account of what it was given:
+
+    * text extracted (txt, csv, born-digital pdf, docx) -- inlined and clamped.
+    * sent as media (screenshot, scanned pdf) -- named and pointed AT the
+      attached image, which arrives beside this prompt as its own content
+      block. Saying "cannot be read" here would make the model apologise for
+      not seeing a picture it is looking at, which is the exact failure this
+      path exists to end.
+    * neither -- named only, so the model knows a file exists without
+      fabricating what is in it.
+    """
     if not entries:
         return ""
     lines: list[str] = []
-    for filename, attachment_type, size_bytes, text in entries:
+    for entry in entries:
+        filename, attachment_type, size_bytes, text = entry[:4]
+        media = entry[4] if len(entry) > 4 else None
         kb = max(1, size_bytes // 1024)
         if text:
             lines.append(
                 f"- {filename} ({attachment_type}, {kb} KB):\n"
                 f"{_clamp(text, _MAX_ATTACHMENT_TEXT)}"
+            )
+        elif media is not None:
+            lines.append(
+                f"- {filename} ({attachment_type}, {kb} KB) -- attached to this "
+                f"message for you to look at{_pages_note(media)}. Read it "
+                "yourself and answer from what you actually see; do not ask the "
+                "founder to retype it."
             )
         else:
             lines.append(
@@ -126,6 +144,18 @@ def attachments_block(entries: tuple[tuple[str, str, int, str | None], ...]) -> 
                 "contents cannot be read yet; you only know it exists."
             )
     return "\n".join(lines)
+
+
+def _pages_note(media) -> str:
+    """Say so when a document was truncated. Without this the model answers as
+    though it saw the whole file -- the founder asks what is on page 12 of a
+    40-page scan and gets a confident answer drawn from page 3."""
+    if not getattr(media, "truncated", False):
+        return ""
+    return (
+        f" (only the first {media.pages_sent} of {media.pages_total} pages were "
+        "attached -- say so if the answer needs the rest)"
+    )
 
 
 def tasks_block(entries: tuple[tuple[str, str, str, object], ...]) -> str:
