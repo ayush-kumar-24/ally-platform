@@ -1571,35 +1571,59 @@ img,svg,video,canvas{max-width:100%}
     gap: 16px;
   }
 
+  /* These rules used to STACK everything, which is what made the banner 373px
+     tall on a 390x844 phone -- 44% of the screen, on every page, before a
+     founder had seen anything. The icon sat on its own row above the title,
+     and Reject/Accept/Customize became three full-width buttons.
+     Keeping the icon inline and the two choices side by side gets the same
+     content to roughly a quarter of the screen. */
   .cookie-banner-header {
-    flex-direction: column;
     gap: 12px;
+    align-items: center;
   }
 
   .cookie-banner-icon-wrapper {
-    width: 40px;
-    height: 40px;
+    width: 36px;
+    height: 36px;
   }
 
   .cookie-banner-actions {
     flex-direction: column-reverse;
     align-items: stretch;
-    gap: 16px;
+    gap: 12px;
+    padding-top: 12px;
   }
 
+  /* Equal width, side by side. Reject must stay exactly as easy to reach as
+     Accept -- stacking it above a full-width Accept made the accept button the
+     obvious one, which is the pattern consent rules exist to prevent. */
   .cookie-banner-right-actions {
-    flex-direction: column;
     gap: 8px;
   }
 
-  .cookie-btn {
-    width: 100%;
+  .cookie-banner-right-actions .cookie-btn {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 11px 10px;
   }
 
   .cookie-banner-left-actions {
     justify-content: center;
   }
 }
+
+/* Below this the description is the only thing left worth trimming, and it is
+   consent text, so it stays -- the padding and title go instead. */
+@media (max-width: 400px) {
+  .cookie-banner-card { padding: 16px; gap: 12px; }
+  .cookie-banner-title-area h3 { font-size: 18px; }
+  .cookie-banner-desc { font-size: 13px; line-height: 1.5; }
+}
+
+/* At 320px "Reject Non-Essential" wraps onto a second line and both buttons
+   become ~60px tall. Left alone deliberately: shrinking the type to fit bought
+   about 5px and made a consent control harder to read, and stacking the pair
+   costs more height than the wrap does. */
 
 
 
