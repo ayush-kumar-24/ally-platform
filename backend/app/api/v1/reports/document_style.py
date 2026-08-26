@@ -188,6 +188,11 @@ STYLE = """
 .rp .quote-a{font-family:var(--display);font-style:italic;font-size:18px;line-height:1.45;
   color:var(--forest-800);max-width:54ch;}
 .rp .quote-read{font-size:14px;color:var(--ink-soft);max-width:58ch;}
+/* Which dimension the quote counted toward. The line under it is catalogue
+   text about that dimension's pattern, not a reading of this one answer, so
+   naming the dimension is what makes the pairing legible. */
+.rp .quote-cat{font-size:10.5px;font-weight:700;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--signal);}
 
 .rp .action{display:grid;grid-template-columns:34px minmax(0,1fr);gap:18px;align-items:start;
   padding:22px 26px;border-radius:14px;background:var(--paper-card);
@@ -249,6 +254,17 @@ STYLE = """
 .rp .action-group{font-size:12px;font-weight:700;letter-spacing:.1em;
   text-transform:uppercase;color:var(--signal);margin:22px 0 14px;}
 .rp .action-group:first-child{margin-top:0;}
+
+/* The lines that did not make the three numbered steps. Visually secondary on
+   purpose -- the approved structure puts three steps in front of the founder,
+   and these wait behind them without being dropped. */
+.rp .then{margin-top:26px;border-radius:14px;padding:24px 28px;
+  background:linear-gradient(135deg,#EDF6F0 0%,#E6F1EA 100%);
+  border:1px solid #CFE3D6;}
+.rp .then .action-group{margin:0 0 12px;color:var(--forest-700);}
+.rp .then-list{margin:0;padding-left:1.3em;display:flex;flex-direction:column;gap:9px;
+  font-size:14.5px;color:#38493E;}
+.rp .then-list li::marker{color:var(--forest-500);font-weight:700;}
 
 /* The DISTRESS hero: no ring, so it is one column rather than two. */
 .rp .hero-quiet{grid-template-columns:1fr;}
