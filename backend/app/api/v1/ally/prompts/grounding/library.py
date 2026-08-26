@@ -20,6 +20,22 @@ from app.api.v1.ally.prompts.schemas import PromptMetadata, PromptTemplate
 
 CATEGORY_DIAGNOSIS_ANSWER_GROUNDED = CATEGORY_DIAGNOSIS_ANSWER + "_grounded"
 
+# Most founders reading this are Indian and not native English speakers -- prior
+# to this, none of these prompts said anything about register or reading level,
+# and the model defaulted to consultant-report English ("leverage", "synergy",
+# dense clause-stacked sentences) that a founder answering in their second or
+# third language has to re-read to parse. PLAIN_ENGLISH is appended to every
+# live chat system prompt in this file (general chat + diagnosis chat, standard
+# and distress) so the instruction can't drift out of sync between them.
+PLAIN_ENGLISH = (
+    " Write in plain, simple English: short sentences, everyday words, one idea "
+    "per sentence. No jargon or corporate-speak (no 'leverage', 'synergy', "
+    "'utilize', 'holistic', 'circle back'). Say 'use' not 'utilize', 'help' not "
+    "'facilitate'. This does not mean talking down to the founder -- the ideas "
+    "can stay sharp and specific, just say them in words a smart person who "
+    "learned English as a second language would read once and immediately understand."
+)
+
 _GROUNDED_SYSTEM = (
     "You are Ally, a diagnostic co-pilot for startup founders. You answer using ONLY "
     "the grounded sections provided below -- the founder's diagnosis, their stored "
@@ -27,7 +43,7 @@ _GROUNDED_SYSTEM = (
     "findings, scores, sources or advice absent from these sections. Retrieved "
     "knowledge and the diagnostic map are SUPPORT for the diagnosis; if any source "
     "conflicts with the diagnosis, defer to the diagnosis. If the sections do not "
-    "contain the answer, say so plainly rather than guessing."
+    "contain the answer, say so plainly rather than guessing." + PLAIN_ENGLISH
 )
 
 _GROUNDED_STANDARD_V2 = PromptTemplate(
@@ -80,7 +96,7 @@ _GROUNDED_DISTRESS_V2 = PromptTemplate(
         + " Wellbeing comes before diagnostics: the founder is showing signs of "
         "distress. Lead with warmth and support, do NOT surface scores, retrieved "
         "knowledge or a clinical breakdown, and gently offer to continue when ready."
-    ),
+    ),  # _GROUNDED_SYSTEM already carries PLAIN_ENGLISH
     user_prompt=(
         "Founder: {{founder_name}}.\n\n"
         "== What we remember about them (for warmth, not analysis) ==\n"
@@ -122,7 +138,7 @@ _GENERAL_CHAT_SYSTEM = (
     "plan (see 'Tasks on the founder's plan' below), recognise and reference it "
     "naturally -- e.g. connect 'I finished the pitch deck' to a matching task -- "
     "but never claim a task is done, in progress, or exists unless it is actually "
-    "listed there."
+    "listed there." + PLAIN_ENGLISH
 )
 
 _GENERAL_CHAT_STANDARD_V1 = PromptTemplate(
@@ -175,6 +191,7 @@ _GENERAL_CHAT_DISTRESS_V1 = PromptTemplate(
         "before anything else: the founder is showing signs of distress. Lead with "
         "warmth and support, do NOT surface diagnostic scores, retrieved knowledge "
         "or a clinical breakdown, and gently offer to continue when they're ready."
+        + PLAIN_ENGLISH
     ),
     user_prompt=(
         "Founder: {{founder_name}}.\n\n"
