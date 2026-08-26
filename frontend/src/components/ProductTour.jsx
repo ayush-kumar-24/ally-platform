@@ -1,20 +1,53 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
-import { markTourSeen } from '../services/dashboard';
+import { getOverview, markTourSeen } from '../services/dashboard';
 import { useCallAccess } from '../hooks/useCallAccess';
 
-/* Steps are filtered per founder before use -- see `steps` below. A step whose
+/* The tour runs once the diagnosis is done, so it is the first time a founder
+   sees the whole product rather than the one screen they were sent to. It now
+   walks every section the sidebar offers, in the order the work actually flows
+   after a diagnosis -- what Ally found, what to do about it, the tools for
+   doing it, then the account -- rather than the order the nav happens to list
+   them in.
+
+   Steps are filtered per founder before use -- see `steps` below. A step whose
    sidebar item is hidden has nothing to spotlight: position() looks up
    [data-nav="..."] and would find nothing, leaving the highlight stranded over
-   a tour stop the founder cannot visit anyway. */
+   a tour stop the founder cannot visit anyway.
+
+   `needsReport` and `comingSoon` mirror the same flags in PlatformLayout's
+   NAV_GROUPS. They are repeated rather than imported because the two lists
+   answer different questions -- the nav asks what to LOCK, the tour asks what
+   is worth INTRODUCING -- and a locked item is a worse tour stop than no stop
+   at all: it advertises a door that does not open yet. */
 const TOUR_STEPS = [
-  { nav: '/app/ally-chat', emoji: '💬', title: 'Chat with Ally', text: 'Ask questions, brainstorm ideas and make better decisions with Ally anytime.' },
-  { nav: '/app/plan', emoji: '📅', title: 'Plan Your Day', text: 'Create your daily goals manually or with Ally — with reminders and preparation support.' },
-  { nav: '/app/founder-dna', emoji: '🧠', title: 'Founder DNA', text: 'Understand your decision-making patterns and leadership style.' },
-  { nav: '/app/business-dna', emoji: '🏢', title: 'Business DNA', text: 'See how Ally understands your business and identifies patterns.' },
-  { nav: '/app/report', emoji: '📄', title: 'Reports', text: 'Access all your previous Founder Clarity Reports anytime.' },
-  { nav: '/app/discovery-call', emoji: '📞', title: 'Discovery Call', text: 'When you’re ready, connect with a GoXL advisor.' },
+  // Where the diagnosis lands.
+  { nav: '/app', emoji: '🧭', title: 'Your dashboard', text: 'Where you land each time — your current read, what changed, and what Ally suggests next.' },
+  { nav: '/app/report', emoji: '📄', title: 'Your Clarity Report', text: 'The full diagnosis: your root cause, the evidence behind it, and your three steps. Every report you ever run is kept here.', needsReport: true },
+
+  // What it found.
+  { nav: '/app/founder-dna', emoji: '🧠', title: 'Founder DNA', text: 'How you decide, what drives you, and where your blind spots sit — read from your own answers, not a quiz.', needsReport: true },
+  { nav: '/app/business-dna', emoji: '🏢', title: 'Business DNA', text: 'Where the business stands across the six pillars, and which one is deciding your next few months.', needsReport: true },
+
+  // What to do about it.
+  { nav: '/app/recommendations', emoji: '💡', title: 'Recommendations', text: 'The specific moves Ally suggests for your diagnosis, with the reasoning attached.', needsReport: true },
+  { nav: '/app/next-steps', emoji: '➡️', title: 'Next steps', text: 'Your plan in order — what to confirm first, what to fix after, and why that sequence.', needsReport: true },
+
+  // The tools for doing it.
+  { nav: '/app/ally-chat', emoji: '💬', title: 'Chat with Ally', text: 'Think out loud any time. Ally already knows your diagnosis, so you never start from scratch.' },
+  { nav: '/app/plan', emoji: '📅', title: 'Plan Your Day', text: 'Set today’s priorities yourself or let Ally draft them, then get reminders to stay on them.' },
+  { nav: '/app/goals', emoji: '🎯', title: 'Goals', text: 'The bigger arcs you are working toward, tracked beyond a single day.' },
+  { nav: '/app/vision', emoji: '👁️', title: 'Your Vision', text: 'Where you want this to end up, in your words. Ally reads it when it advises you.' },
+  { nav: '/app/frameworks', emoji: '📚', title: 'Frameworks', text: 'Practical models to reach for when you are stuck on a decision.' },
+  { nav: '/app/founder-dna-journey', emoji: '🔄', title: 'Run it again', text: 'Come back and re-run the diagnosis once your steps are done — that is when the picture actually moves.' },
+  { nav: '/app/discovery-call', emoji: '📞', title: 'Discovery call', text: 'When you want a person in the room, book a short call with a GoXL advisor.' },
+
+  // Housekeeping.
+  { nav: '/app/profile', emoji: '⚙️', title: 'Your profile', text: 'Your details and stage. Keeping the stage current is what keeps Ally’s advice aimed at where you actually are.' },
+  { nav: '/app/help', emoji: '❓', title: 'Help & Support', text: 'Answers to the common questions — and you can replay this tour from here whenever you like.' },
+  { nav: '/app/feedback', emoji: '📣', title: 'Tell us what is missing', text: 'Ally is early and we read every note. If something is wrong or absent, say so here.' },
+
   { final: true, emoji: '✨', title: 'You’re all set.', text: 'Ally is now your daily strategic partner.' },
 ];
 
@@ -22,9 +55,31 @@ export default function ProductTour() {
   const navigate = useNavigate();
   const { tourOpen, endTour, sidebarCollapsed, toggleSidebar, sidebarOpen, openSidebar, closeSidebar } = useApp();
   const { canBook: canBookCall } = useCallAccess();
+
+  /* Same signal PlatformLayout locks the nav on, read the same way. The tour
+     normally opens straight after a diagnosis, so a report exists and none of
+     these are skipped -- but it can also be replayed later from Help, and a
+     founder whose report has not landed would otherwise be walked past four
+     doors that do not open. Defaults to true so a slow or failed lookup shows
+     the full tour rather than silently hiding half the product. */
+  const [hasReport, setHasReport] = useState(true);
+  useEffect(() => {
+    if (!tourOpen) return;
+    let cancelled = false;
+    getOverview()
+      .then((o) => { if (!cancelled && o) setHasReport(Boolean(o.latest_diagnosis?.available)); })
+      .catch(() => { /* keep the default: show everything */ });
+    return () => { cancelled = true; };
+  }, [tourOpen]);
+
   const steps = useMemo(
-    () => TOUR_STEPS.filter((s) => s.nav !== '/app/discovery-call' || canBookCall),
-    [canBookCall],
+    () => TOUR_STEPS.filter((s) => {
+      if (s.comingSoon) return false;
+      if (s.needsReport && !hasReport) return false;
+      if (s.nav === '/app/discovery-call' && !canBookCall) return false;
+      return true;
+    }),
+    [canBookCall, hasReport],
   );
   const [stepIndex, setStepIndex] = useState(0);
   const [spotStyle, setSpotStyle] = useState({ opacity: 0 });
@@ -98,9 +153,25 @@ export default function ProductTour() {
       else requestAnimationFrame(() => setPopShow(true));
       return;
     }
-    position();
-    if (reduceRef.current) setPopShow(true);
-    else requestAnimationFrame(() => setPopShow(true));
+    /* Bring the target into view before measuring it. The sidebar is a
+       scrolling column, and on a phone it is a 288px drawer -- the items near
+       the bottom (Profile, Help, Send feedback) sit below the fold, so
+       position() measured a rect outside the viewport and left the spotlight
+       off-screen with the popover clamped to the edge, pointing at nothing.
+       Measuring after the scroll settles rather than before is the whole fix;
+       position() itself still just reads getBoundingClientRect(). */
+    const target = document.querySelector(`[data-nav="${step.nav}"]`);
+    if (target?.scrollIntoView) {
+      target.scrollIntoView({
+        block: 'center',
+        behavior: reduceRef.current ? 'auto' : 'smooth',
+      });
+    }
+    const settle = window.setTimeout(() => {
+      position();
+      setPopShow(true);
+    }, reduceRef.current ? 0 : 260);
+    return () => window.clearTimeout(settle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tourOpen, stepIndex]);
 

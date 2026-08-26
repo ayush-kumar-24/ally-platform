@@ -1086,7 +1086,7 @@ export default function FounderProfile() {
         <div className="pr-settings-row">
           <div className="pr-settings-info">
             <span className="pr-settings-title">Product tour</span>
-            <span className="pr-settings-desc">Replay the 60-second guided walkthrough of Ally</span>
+            <span className="pr-settings-desc">Replay the guided walkthrough of every section in Ally</span>
           </div>
           <button
             className="pr-row-btn"

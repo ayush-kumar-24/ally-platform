@@ -322,6 +322,31 @@
 }
 
 /* ---- Responsive adjustments ---- */
+/* A `1fr` track is `minmax(auto, 1fr)`, and the `auto` floor is the item's
+   min-content width -- so a card can never be narrower than its widest
+   unbreakable line. .fd-card-title is white-space:nowrap, which made
+   "You say what you think is wrong" a hard 380px floor: the track blew past
+   the 326px content box and the cards ran 22px off a 390px screen, clipped by
+   .main's overflow-x:hidden rather than scrollable. The hero beside them, with
+   no nowrap child, sat correctly at 326px -- which is why only half the page
+   looked wrong.
+
+   min-width:0 removes the floor so the track follows the container. The title
+   then has to be allowed to wrap, or it would simply overflow its own card
+   instead; these are headings a founder is meant to read, so wrapping beats
+   the ellipsis used on the subtitle. */
+@media (max-width: 640px) {
+  .fd-card { min-width: 0; }
+  .fd-card-top { flex-wrap: wrap; }
+  .fd-card-title { white-space: normal; }
+  /* Give the title the whole row so the step label drops beneath it. Left
+     sharing the row, the label kept its nowrap+ellipsis and rendered as
+     "Then &middot; ~5..." -- the duration, which is the only reason it is
+     there, was the part being cut. */
+  .fd-card-info { flex: 1 1 100%; }
+  .fd-card-subtitle { flex: 0 0 auto; white-space: normal; overflow: visible; }
+}
+
 @media (max-width: 900px) {
   .fd-grid {
     grid-template-columns: 1fr;

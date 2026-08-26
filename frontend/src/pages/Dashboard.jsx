@@ -238,7 +238,12 @@ export default function Dashboard() {
                   }}
                 >
                   <IconArrowRight />
-                  Take a 60-second Product Tour
+                  {/* No duration in the label any more: the tour now covers
+                      every section rather than six, and its length varies with
+                      what the founder has unlocked (11 stops without a report,
+                      16 with one). A fixed "60-second" claim would be wrong
+                      for everybody. */}
+                  Take the product tour
                 </button>
                 {/* Declining has to be recorded too, or the banner returns on
                     the next reload having just been told "maybe later". */}
