@@ -43,10 +43,17 @@ const TOUR_STEPS = [
   { nav: '/app/founder-dna-journey', emoji: '🔄', title: 'Run it again', text: 'Come back and re-run the diagnosis once your steps are done — that is when the picture actually moves.' },
   { nav: '/app/discovery-call', emoji: '📞', title: 'Discovery call', text: 'When you want a person in the room, book a short call with a GoXL advisor.' },
 
-  // Housekeeping.
-  { nav: '/app/profile', emoji: '⚙️', title: 'Your profile', text: 'Your details and stage. Keeping the stage current is what keeps Ally’s advice aimed at where you actually are.' },
-  { nav: '/app/help', emoji: '❓', title: 'Help & Support', text: 'Answers to the common questions — and you can replay this tour from here whenever you like.' },
-  { nav: '/app/feedback', emoji: '📣', title: 'Tell us what is missing', text: 'Ally is early and we read every note. If something is wrong or absent, say so here.' },
+  /* One stop, three items. Profile, Help and Send feedback each took their own
+     step, which pushed a founder with a report to sixteen -- long enough that
+     the last few stops are skipped rather than read. They sit next to each
+     other at the bottom of the nav and none of them needs its own explanation,
+     so `navs` highlights all three at once and one sentence covers them. */
+  {
+    navs: ['/app/feedback', '/app/profile', '/app/help'],
+    emoji: '⚙️',
+    title: 'Your account',
+    text: 'Down here: your profile — keep the stage current and Ally’s advice stays aimed at where you actually are — plus Help & Support, where you can replay this tour, and Send feedback, which we read.',
+  },
 
   { final: true, emoji: '✨', title: 'You’re all set.', text: 'Ally is now your daily strategic partner.' },
 ];
@@ -108,16 +115,33 @@ export default function ProductTour() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tourOpen]);
 
+  /* Every element a step points at. A step normally names one, but the account
+     stop covers three adjacent nav items and highlighting all of them together
+     is what makes it a real introduction rather than a single spotlight with a
+     list read out beside it. */
+  const targetsFor = (step) => (step?.navs || (step?.nav ? [step.nav] : []))
+    .map((n) => document.querySelector(`[data-nav="${n}"]`))
+    .filter(Boolean);
+
   const position = () => {
     const step = steps[stepIndex];
     if (!step || step.final) return;
-    const target = document.querySelector(`[data-nav="${step.nav}"]`);
+    const targets = targetsFor(step);
     const pop = document.getElementById('tourPop');
-    if (!target) {
+    if (!targets.length) {
       setSpotStyle((s) => ({ ...s, opacity: 0 }));
       return;
     }
-    const r = target.getBoundingClientRect();
+    // Union of every target, so a multi-item stop gets one box around the lot.
+    const boxes = targets.map((t) => t.getBoundingClientRect());
+    const r = {
+      left: Math.min(...boxes.map((b) => b.left)),
+      top: Math.min(...boxes.map((b) => b.top)),
+      right: Math.max(...boxes.map((b) => b.right)),
+      bottom: Math.max(...boxes.map((b) => b.bottom)),
+    };
+    r.width = r.right - r.left;
+    r.height = r.bottom - r.top;
     const pd = 8;
     setSpotStyle({
       opacity: 1,
@@ -160,7 +184,7 @@ export default function ProductTour() {
        off-screen with the popover clamped to the edge, pointing at nothing.
        Measuring after the scroll settles rather than before is the whole fix;
        position() itself still just reads getBoundingClientRect(). */
-    const target = document.querySelector(`[data-nav="${step.nav}"]`);
+    const [target] = targetsFor(step);
     if (target?.scrollIntoView) {
       target.scrollIntoView({
         block: 'center',
