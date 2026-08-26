@@ -799,6 +799,14 @@
   .plan-grid { grid-template-columns: minmax(0, 1fr); }
 }
 
+/* The two mode cards are `flex:1` siblings, so on a phone they split the row
+   into ~150px each and their labels wrapped mid-phrase ("Plan / manually").
+   Stacking gives each one a full-width tap target. */
+@media (max-width: 560px) {
+  .pl-tabs { flex-direction: column; gap: 10px; }
+  .pl-tab { width: 100%; }
+}
+
 /* ── Month calendar + Google Calendar connection ───────────────────────────
    Uses the page's existing tokens (--bd, --ink, --muted-2, --emerald) rather
    than a second palette, so this reads as part of Plan Your Day. */
