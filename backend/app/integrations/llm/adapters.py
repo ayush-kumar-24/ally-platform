@@ -12,7 +12,8 @@ import abc
 from dataclasses import dataclass
 from typing import Any
 
-from app.api.v1.ally.execution.schemas import ProviderRequest, TokenUsage
+from app.api.v1.ally.execution.schemas import MediaKind, ProviderRequest, TokenUsage
+from app.core.logger import logger
 
 
 @dataclass(frozen=True)
@@ -32,6 +33,21 @@ DEFAULT_OPTIONS = GenerationOptions()
 class RequestAdapter(abc.ABC):
     provider_name: str = "base"
     default_model: str = ""
+    #: Whether this vendor's wire format can carry ProviderRequest.media.
+    #: False is not a failure -- the text prompt still names every attached
+    #: file, so the turn degrades to describing the file instead of reading it,
+    #: which is what every turn did before media existed. It is logged rather
+    #: than silent so a routing change that quietly stops founders' screenshots
+    #: from being read shows up as a signal instead of a mystery.
+    supports_media: bool = False
+
+    def _warn_dropped_media(self, request: ProviderRequest) -> None:
+        if request.media and not self.supports_media:
+            logger.warning(
+                "llm: provider cannot carry attachments; sending text only",
+                extra={"stage": "build_payload", "provider": self.provider_name,
+                       "dropped": len(request.media)},
+            )
 
     @abc.abstractmethod
     def endpoint(self, base_url: str, model: str, api_key: str) -> str: ...
@@ -57,6 +73,7 @@ class OpenAIAdapter(RequestAdapter):
         return {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
 
     def build_payload(self, request, model, options):
+        self._warn_dropped_media(request)
         payload: dict = {
             "model": model,
             "messages": [
@@ -104,6 +121,7 @@ class ClaudeAdapter(RequestAdapter):
     # a second stale copy around is how this drifted in the first place.
     default_model = "claude-sonnet-5"
     _API_VERSION = "2023-06-01"
+    supports_media = True
 
     def endpoint(self, base_url, model, api_key):
         return f"{base_url}/v1/messages"
@@ -116,7 +134,7 @@ class ClaudeAdapter(RequestAdapter):
             "model": model,
             "max_tokens": request.max_tokens,
             "system": request.system,          # system is a top-level field for Claude
-            "messages": [{"role": "user", "content": request.user}],
+            "messages": [{"role": "user", "content": self._content(request)}],
             # `temperature` deliberately omitted: the Claude 5 family (sonnet-5,
             # opus-5 -- confirmed empirically; haiku-4-5 still accepts it)
             # rejects it outright with HTTP 400 "`temperature` is deprecated
@@ -128,6 +146,28 @@ class ClaudeAdapter(RequestAdapter):
         if options.tools:
             payload["tools"] = list(options.tools)
         return payload
+
+    @staticmethod
+    def _content(request):
+        """Text alone when nothing is attached -- a plain string, byte-identical
+        to what this adapter has always sent, so a text-only turn is not
+        reshaped by a feature it does not use.
+
+        With media, images and documents lead and the prompt follows. That order
+        is Anthropic's own guidance and it matches how the prompt reads: the
+        text refers to "the screenshot" as something already in view.
+        """
+        if not request.media:
+            return request.user
+        blocks: list[dict] = []
+        for item in request.media:
+            source = {"type": "base64", "media_type": item.mime_type, "data": item.data_base64}
+            if item.kind is MediaKind.IMAGE:
+                blocks.append({"type": "image", "source": source})
+            else:
+                blocks.append({"type": "document", "source": source})
+        blocks.append({"type": "text", "text": request.user})
+        return blocks
 
     def parse(self, data):
         blocks = data.get("content", [])
@@ -148,6 +188,7 @@ class GeminiAdapter(RequestAdapter):
         return {"Content-Type": "application/json"}
 
     def build_payload(self, request, model, options):
+        self._warn_dropped_media(request)
         gen: dict = {"temperature": float(request.temperature), "maxOutputTokens": request.max_tokens}
         if options.response_format == "json":
             gen["responseMimeType"] = "application/json"

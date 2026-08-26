@@ -153,7 +153,15 @@ class ChatExecutionService:
         # reasoning_classifier.needs_reasoning and AIRouter.route.
         reasoning_required = needs_reasoning(request.message, ally_context, window)
         ai_started = time.perf_counter()
-        ai = self.execution.execute(AIRequest(prompt=rendered, reasoning_required=reasoning_required))
+        ai = self.execution.execute(AIRequest(
+            prompt=rendered, reasoning_required=reasoning_required,
+            # Files the model looks at rather than reads about. getattr, not
+            # attribute access: ConversationContextWindow is one of several
+            # GroundingSource shapes this path accepts, and the others predate
+            # media -- a test double built from the older shape must still run a
+            # turn rather than AttributeError on a field it never had.
+            media=getattr(window, "media", ()),
+        ))
         ai_latency_ms = int(round((time.perf_counter() - ai_started) * 1000))
         completed.append(EXECUTE_AI)
 

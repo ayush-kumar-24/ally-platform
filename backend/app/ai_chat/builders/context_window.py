@@ -19,6 +19,7 @@ Deterministic: no token counting, no summarization LLM, stable formatting/orderi
 from __future__ import annotations
 
 from app.ai_chat.attachments.extraction import extract_docx_text, extract_pdf_text
+from app.ai_chat.attachments.media import build_media, is_viewable
 from app.ai_chat.attachments.schemas import AttachmentType, SupportedMimeType
 from app.ai_chat.schemas.chat import ConversationContextWindow, GroundingRequest
 from app.ai_chat.schemas.conversation import Conversation, ConversationContext, MessageRole
@@ -41,11 +42,20 @@ _EXTRACTABLE_MIME = {
 
 _DEFAULT_ATTACHMENT_BYTE_BUDGET = 5_000_000  # total bytes READ+extracted per turn
 
+# How many files per turn may be sent as pictures for the model to look at.
+# Separate from attachment_limit, and much smaller, because the costs are not
+# comparable: a named-only file is a dozen tokens, an image is ~1,500 -- more
+# than a third of a free founder's daily chat allowance (plans/catalog.py). Two
+# is enough for "here is the error and here is my config" and bounded enough
+# that a turn cannot quietly cost a whole day.
+_DEFAULT_MEDIA_LIMIT = 2
+
 
 class ContextWindowConfig:
     def __init__(self, *, max_history_messages: int = 20, memory_limit: int = 5,
                  attachment_limit: int = 5,
                  attachment_byte_budget: int = _DEFAULT_ATTACHMENT_BYTE_BUDGET,
+                 media_limit: int = _DEFAULT_MEDIA_LIMIT,
                  task_limit: int = 10):
         self.max_history_messages = max_history_messages
         self.memory_limit = memory_limit
@@ -57,6 +67,10 @@ class ContextWindowConfig:
         # name-only (same as an unreadable format), never fail the turn.
         self.attachment_limit = attachment_limit
         self.attachment_byte_budget = attachment_byte_budget
+        # 0 disables vision entirely, returning the naming-only behaviour that
+        # predates it -- the switch to reach for if image cost ever needs to be
+        # turned off in a hurry, without a deploy that removes the feature.
+        self.media_limit = media_limit
         # Not-done tasks only (see _safe_tasks) -- a founder with months of
         # completed history shouldn't push their live plan out of the prompt.
         self.task_limit = task_limit
@@ -106,8 +120,10 @@ class ContextWindowBuilder:
         graph, graph_ok = self._safe_graph(ally_context)
 
         # 7b. Inject uploaded-file context (Milestone 4) -- fail closed. Text-
-        # readable files are decoded and inlined; other types are named only.
-        attachments_text, attachments_ok = self._safe_attachments(conversation.conversation_id)
+        # readable files are decoded and inlined; images and scanned PDFs, which
+        # have no text to decode, come back as media for the model to look at;
+        # anything neither readable nor viewable is still named only.
+        attachments_text, attachments_ok, media = self._safe_attachments(conversation.conversation_id)
 
         # 7c. Inject the founder's active plan/tasks (Plan Your Day) -- fail
         # closed. Not-done tasks only, so Ally can reference them mid-conversation
@@ -135,6 +151,7 @@ class ContextWindowBuilder:
             attachments_text=attachments_text,
             tasks_injected=tasks_ok,
             tasks_text=tasks_text,
+            media=media,
         )
 
     # --- fail-closed source injection ------------------------------------
@@ -166,23 +183,85 @@ class ContextWindowBuilder:
                            extra={"stage": "inject_graph", "error": str(exc)})
             return None, False
 
-    def _safe_attachments(self, conversation_id: str) -> tuple[str, bool]:
+    def _safe_attachments(self, conversation_id: str) -> tuple[str, bool, tuple]:
         if self.attachments is None:
-            return "", False
+            return "", False, ()
+        # Per-turn memo. Deciding whether a PDF needs vision means asking
+        # whether text extraction finds anything, and the text block then wants
+        # that same text -- without this, a 200-page PDF is parsed twice and its
+        # bytes fetched three times on every single turn it stays attached.
+        # Scoped to one call, so nothing is cached across turns and a replaced
+        # file is never read from a stale entry.
+        self._text_memo: dict = {}
+        self._content_memo: dict = {}
         try:
             items = self.attachments.list_attachments(conversation_id)
             recent = items[-self.config.attachment_limit:]
             entries = []
+            media: list = []
             spent = 0
+            # Newest first for the media pass: when more files qualify than
+            # there are slots, the one the founder just uploaded is the one they
+            # are asking about. The text block keeps upload order, which is the
+            # order the conversation refers to them in.
+            viewable = self._pick_media(reversed(recent))
             for a in recent:
                 within_budget = spent < self.config.attachment_byte_budget
-                entries.append(self._read_entry(a, extract=within_budget))
+                block = viewable.get(a.attachment_id)
+                if block is not None:
+                    media.append(block)
+                entries.append(self._read_entry(a, extract=within_budget, media=block))
                 spent += a.metadata.size_bytes
-            return attachments_block(tuple(entries)), True
+            return attachments_block(tuple(entries)), True, tuple(media)
         except Exception as exc:  # noqa: BLE001 -- degrade, never fail the turn
             logger.warning("ai_chat: attachment injection failed; continuing",
                            extra={"stage": "inject_attachments", "error": str(exc)})
-            return "", False
+            return "", False, ()
+
+    def _pick_media(self, attachments) -> dict:
+        """Build media for the files text cannot reach, newest first, up to the
+        per-turn limit.
+
+        Text wins wherever it exists. A PDF with a real text layer costs a few
+        hundred tokens read as text and several thousand looked at as pictures
+        of itself, for the same words -- so vision is the fallback for a scan,
+        not the default for a document. Whether text exists is settled by
+        actually trying to extract it, because nothing in a file's name or mime
+        type distinguishes a born-digital PDF from a scan.
+        """
+        picked: dict = {}
+        if self.config.media_limit <= 0:
+            return picked
+        for a in attachments:
+            if len(picked) >= self.config.media_limit:
+                break
+            meta = a.metadata
+            if not is_viewable(meta.mime_type):
+                continue
+            if self._extract_text(a):
+                continue                      # readable as text; far cheaper
+            content = self._safe_content(a)
+            if content is None:
+                continue
+            block = build_media(content, meta.mime_type, meta.filename)
+            if block is not None:
+                picked[a.attachment_id] = block
+        return picked
+
+    def _safe_content(self, attachment) -> bytes | None:
+        memo = getattr(self, "_content_memo", None)
+        if memo is not None and attachment.attachment_id in memo:
+            return memo[attachment.attachment_id]
+        try:
+            content = self.attachments.get_content(attachment.attachment_id)
+            if memo is not None:
+                memo[attachment.attachment_id] = content
+            return content
+        except Exception as exc:  # noqa: BLE001 -- one bad file must not sink the turn
+            logger.warning("ai_chat: attachment content read failed",
+                           extra={"stage": "read_attachment_content",
+                                  "attachment_id": attachment.attachment_id, "error": str(exc)})
+            return None
 
     def _safe_tasks(self, founder_id: int) -> tuple[str, bool]:
         if self.planning is None:
@@ -210,10 +289,10 @@ class ContextWindowBuilder:
                            extra={"stage": "inject_tasks", "error": str(exc)})
             return "", False
 
-    def _read_entry(self, attachment, *, extract: bool) -> tuple[str, str, int, str | None]:
+    def _read_entry(self, attachment, *, extract: bool, media=None):
         meta = attachment.metadata
         text = self._extract_text(attachment) if extract else None
-        return meta.filename, meta.attachment_type.value, meta.size_bytes, text
+        return meta.filename, meta.attachment_type.value, meta.size_bytes, text, media
 
     def _extract_text(self, attachment) -> str | None:
         """Best-effort text for one attachment. Isolated per-attachment: a failure
@@ -224,13 +303,18 @@ class ContextWindowBuilder:
         is_text_readable = meta.attachment_type in _TEXT_READABLE
         if extractor is None and not is_text_readable:
             return None
+        memo = getattr(self, "_text_memo", None)
+        if memo is not None and attachment.attachment_id in memo:
+            return memo[attachment.attachment_id]
         try:
-            content = self.attachments.get_content(attachment.attachment_id)
+            content = self._safe_content(attachment)
             if content is None:
                 return None
-            if extractor is not None:
-                return extractor(content)
-            return content.decode("utf-8", errors="replace")
+            text = extractor(content) if extractor is not None \
+                else content.decode("utf-8", errors="replace")
+            if memo is not None:
+                memo[attachment.attachment_id] = text
+            return text
         except Exception as exc:  # noqa: BLE001 -- one bad file must not sink the turn
             logger.warning("ai_chat: attachment text extraction failed; naming only",
                             extra={"stage": "extract_attachment_text",

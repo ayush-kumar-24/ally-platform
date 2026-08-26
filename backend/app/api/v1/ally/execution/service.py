@@ -57,6 +57,7 @@ class AIExecutionService:
             model=decision.model,
             temperature=decision.temperature,
             max_tokens=decision.max_tokens,
+            media=request.media,
         )
 
         attempts = 0

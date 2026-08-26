@@ -34,6 +34,44 @@ class TokenUsage:
         return cls(prompt, completion, prompt + completion)
 
 
+class MediaKind(str, Enum):
+    IMAGE = "image"
+    DOCUMENT = "document"
+
+
+@dataclass(frozen=True)
+class MediaBlock:
+    """One piece of non-text content for the model to look at, alongside the
+    prompt -- a screenshot, or the pages of a scanned PDF.
+
+    Lives here rather than with the attachment code that builds it because it is
+    a transport type: it is what a provider is handed, in the same
+    vendor-neutral terms as ProviderRequest itself. An adapter whose vendor
+    takes no media simply ignores it, and the turn degrades to the text prompt
+    describing the file by name -- never to a lost question.
+
+    `pages_sent` / `pages_total` differ only when a document was truncated to
+    keep one upload from spending a founder's whole daily token allowance. The
+    prompt states that out loud; a model handed 5 pages of 40 with no note will
+    answer as though it saw all 40.
+    """
+
+    kind: MediaKind
+    mime_type: str
+    data_base64: str
+    filename: str
+    pages_sent: int | None = None
+    pages_total: int | None = None
+
+    @property
+    def truncated(self) -> bool:
+        return (
+            self.pages_sent is not None
+            and self.pages_total is not None
+            and self.pages_sent < self.pages_total
+        )
+
+
 # --- Provider-facing (vendor-neutral) --------------------------------------
 
 
@@ -44,6 +82,10 @@ class ProviderRequest:
     model: str
     temperature: Decimal
     max_tokens: int
+    #: Files for the model to look at this turn. Empty for every text-only turn,
+    #: which is nearly all of them, so an adapter that ignores this field behaves
+    #: exactly as it did before media existed.
+    media: tuple[MediaBlock, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -94,6 +136,11 @@ class AIRequest:
     temperature: Decimal | None = None
     max_tokens: int | None = None
     reasoning_required: bool = False
+    #: Set by chat execution from the conversation's attachments, not read off
+    #: the prompt -- RenderedPrompt is text and its content fingerprint is over
+    #: text, and widening it to cover bytes would change what two prompts being
+    #: "equal" means for every caller that has nothing to do with files.
+    media: tuple[MediaBlock, ...] = ()
 
 
 @dataclass(frozen=True)

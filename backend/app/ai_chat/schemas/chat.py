@@ -16,7 +16,7 @@ from decimal import Decimal
 
 from app.ai_chat.schemas.conversation import Conversation, ConversationContext
 from app.api.v1.ally.context.schemas import AllyContext
-from app.api.v1.ally.execution.schemas import TokenUsage
+from app.api.v1.ally.execution.schemas import MediaBlock, TokenUsage
 from app.api.v1.ally.kg.schemas import GraphView
 from app.api.v1.ally.memory.schemas import MemoryItem
 from app.api.v1.ally.rag.schemas import RetrievalResult
@@ -71,6 +71,12 @@ class ConversationContextWindow:
     tasks_injected: bool = False
     # pre-formatted tasks block, same getattr convention as attachments_text.
     tasks_text: str = ""
+    # Attachments the model will SEE rather than read about -- screenshots and
+    # scanned PDFs, which have no text to extract. Carried separately from
+    # attachments_text because it travels a different road: text becomes part of
+    # the prompt string, media rides beside it as its own content blocks (see
+    # AIRequest.media). Empty on every text-only turn.
+    media: tuple[MediaBlock, ...] = ()
 
     @property
     def conversation(self) -> Conversation:
