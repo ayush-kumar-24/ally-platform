@@ -252,22 +252,45 @@ def _high_low(categories: Sequence[Mapping[str, Any]]) -> str:
     scored = [(str(c.get("category") or "Dimension"), 100 - _pct(c.get("risk")))
               for c in categories]
     scored.sort(key=lambda pair: pair[1], reverse=True)
-    strengths = [p for p in scored if p[1] >= 50][:4] or scored[:3]
-    gaps = [p for p in reversed(scored) if p[1] < 50][:6] or scored[-3:]
 
-    left = "".join(_chip(n, s) for n, s in strengths)
-    right = "".join(_chip(n, s) for n, s in gaps)
+    # Split on the SAME boundary the band words use, not on a separate cut.
+    # This used to filter at 50, which is not a band edge (_tone breaks at 35
+    # and 60), so the two disagreed: a dimension scoring 62 reads "Strong" and
+    # was still eligible for the gap column, and when nothing scored under 50
+    # the `or scored[-3:]` fallback filled "Fix this first" with the bottom
+    # three whatever their band. Live report, 25 Aug: "Fix this first --
+    # Team & Leadership: Strong".
+    strengths = [p for p in scored if p[1] >= _WATCH_MAX][:4]
+    gaps = [p for p in reversed(scored) if p[1] < _WATCH_MAX][:6]
+
+    # Nothing genuinely weak is a real result, and saying so is better than
+    # promoting three healthy dimensions into a column headed "Fix this first".
+    if not gaps:
+        right_body = (
+            '<p class="panel-note">Nothing scored below the line this time. The '
+            'weakest of the above is where any attention should go, but none of '
+            'them is currently a gap.</p>')
+    else:
+        right_body = (f'<div class="chip-list">{"".join(_chip(n, s) for n, s in gaps)}</div>'
+                      '<p class="panel-note">This is where the next two weeks should go.</p>')
+
+    if not strengths:
+        left_body = (
+            '<p class="panel-note">Nothing has cleared the line yet. That is normal '
+            'this early, and it means the column on the right is the whole plan.</p>')
+    else:
+        left_body = (f'<div class="chip-list">{"".join(_chip(n, s) for n, s in strengths)}</div>'
+                     '<p class="panel-note">These are working. They are the machinery you '
+                     'will use to fix the column on the right.</p>')
+
     return (
         "<p>Every business dimension we scanned, ranked. The left column is what you can "
         "lean on right now; the right is what will decide the next few months.</p>"
         '<div class="split">'
         '<div class="panel panel-strength"><div class="panel-title"><span class="dot"></span>'
-        f'Lean on this</div><div class="chip-list">{left}</div>'
-        '<p class="panel-note">These are working. They are the machinery you will use to '
-        'fix the column on the right.</p></div>'
+        f'Lean on this</div>{left_body}</div>'
         '<div class="panel panel-gap"><div class="panel-title"><span class="dot"></span>'
-        f'Fix this first</div><div class="chip-list">{right}</div>'
-        '<p class="panel-note">This is where the next two weeks should go.</p></div></div>')
+        f'Fix this first</div>{right_body}</div></div>')
 
 
 def _root_cause(narrative, causes: Sequence[Mapping[str, Any]],
@@ -360,17 +383,29 @@ def _heard(symptoms: Sequence[Mapping[str, Any]]) -> str:
     quotes: list[str] = []
     for entry in symptoms:
         evidence = entry.get("evidence") or []
-        reading = (entry.get("symptoms") or [None])[0]
-        if not evidence or not reading:
+        pattern = str((entry.get("symptoms") or [""])[0] or "").strip()
+        category = str(entry.get("category") or "").strip()
+        if not evidence or not pattern:
             continue
         pair = evidence[0]
         if not isinstance(pair, (list, tuple)) or len(pair) < 2:
             continue
         question, answer = pair[0], pair[1]
+
+        # `symptoms` is generic catalogue text describing the PATTERN for this
+        # CATEGORY -- schemas.SymptomHighlight says so itself: "written before
+        # this founder existed". It is not a reading of the single answer above
+        # it, and presenting it as one produced visible non-sequiturs in the
+        # live PDF: "unresolved tension among team members? / yes / What this
+        # tells us: No board, advisory board, or formal mentorship structure in
+        # place." Label it for what it is -- the pattern this answer counted
+        # toward -- so the page stops asserting a link it cannot support.
+        cat_html = (f'<span class="quote-cat">{e(category)}</span>' if category else "")
         quotes.append(
-            f'<div class="quote"><div class="quote-q">{e(question)}</div>'
+            f'<div class="quote">{cat_html}<div class="quote-q">{e(question)}</div>'
             f'<div class="quote-a">&ldquo;{e(answer)}&rdquo;</div>'
-            f'<div class="quote-read"><b>What this tells us:</b> {e(reading)}</div></div>')
+            f'<div class="quote-read"><b>The pattern this counted toward:</b> '
+            f'{e(pattern)}</div></div>')
         if len(quotes) == 3:
             break
     if not quotes:
@@ -416,6 +451,56 @@ def _action_rows(items: Sequence[str], start: int, impact: str, tag_class: str) 
     )
 
 
+#: How many lines get the numbered, full-weight treatment.
+STEPS_SHOWN = 3
+
+#: Of those, how many are drawn from the confirm half. The remainder comes from
+#: the solve half, so a founder always leaves with at least one line that
+#: CHANGES something rather than three that only measure. When one half is
+#: empty this degrades to taking all three from whichever half has lines --
+#: which is today's reality while ACTION_PLAN_BALANCE_LLM is off and the
+#: library produces confirm lines only.
+_CONFIRM_IN_STEPS = 2
+
+
+def _three_steps(
+    confirm: Sequence[str], solve: Sequence[str]
+) -> tuple[list[tuple[str, str]], list[tuple[str, str]]]:
+    """Split the plan into the three numbered steps and the follow-on lines.
+
+    Viraj's 26 Aug review of the report structure asked for "3 clear steps,
+    1 2 3". The framework doc's s6 still defines the free tier as 3 confirm +
+    3 solve, so both hold: three steps carry the page, and the rest become the
+    "once those come back" list underneath rather than being dropped.
+
+    Returns (headline, rest) as (line, kind) pairs where kind is Confirm/Solve.
+    """
+    tagged = [(line, "Confirm") for line in confirm] + [(line, "Solve") for line in solve]
+    if not tagged:
+        return [], []
+
+    picked: list[tuple[str, str]] = []
+    picked += [(line, "Confirm") for line in confirm[:_CONFIRM_IN_STEPS]]
+    picked += [(line, "Solve") for line in solve[:STEPS_SHOWN - len(picked)]]
+    # One half empty -- top up from whatever is left rather than showing two.
+    if len(picked) < STEPS_SHOWN:
+        picked += [p for p in tagged if p not in picked][:STEPS_SHOWN - len(picked)]
+
+    rest = [p for p in tagged if p not in picked]
+    return picked[:STEPS_SHOWN], rest
+
+
+def _step_rows(steps: Sequence[tuple[str, str]]) -> str:
+    return "".join(
+        f'<div class="action"><span class="action-num">{i}</span>'
+        f'<div class="action-body"><div class="action-text">{e(text)}</div>'
+        f'<div class="action-meta"><span class="tag '
+        f'{"tag-high" if kind == "Confirm" else "tag-med"}">{e(kind)}</span>'
+        f'</div></div></div>'
+        for i, (text, kind) in enumerate(steps, start=1)
+    )
+
+
 def _actions(narrative, actions: Sequence[Mapping[str, Any]]) -> str:
     """Priority actions, preferring the narrative's capped 3+3 plan.
 
@@ -426,13 +511,13 @@ def _actions(narrative, actions: Sequence[Mapping[str, Any]]) -> str:
     """
     confirm, solve = _plan_lines(narrative)
     if confirm or solve:
-        parts: list[str] = []
-        if confirm:
-            parts.append('<p class="action-group">First, confirm what is actually true:</p>'
-                         + _action_rows(confirm, 1, "Confirm", "tag-high"))
-        if solve:
-            parts.append('<p class="action-group">Then act on it:</p>'
-                         + _action_rows(solve, len(confirm) + 1, "Solve", "tag-med"))
+        headline, rest = _three_steps(confirm, solve)
+        parts = [_step_rows(headline)]
+        if rest:
+            rows = "".join(f"<li>{e(line)}</li>" for line, _kind in rest)
+            parts.append(
+                '<div class="then"><p class="action-group">Once those come back:</p>'
+                f'<ol class="then-list">{rows}</ol></div>')
         return "".join(parts)
 
     if not actions:
@@ -525,6 +610,13 @@ def _facts_html(facts: Mapping[str, Any], skip: Sequence[str] = ()) -> str:
     upstream by generator._founder_facts; this only shapes what is left."""
     rows: list[str] = []
     for key, value in (facts or {}).items():
+        # A bool is an internal switch, never founder-facing prose. Without this
+        # the CTA section's own flag rendered as a labelled row reading
+        # "Cta / True" on the last page of the live PDF -- `True` is not caught
+        # by the empty-value check below, and bool is a subclass of int so it
+        # would otherwise fall through to the number formatting.
+        if isinstance(value, bool):
+            continue
         if key in skip or value in (None, "", [], {}):
             continue
         rendered = _fact_value(value)
@@ -556,8 +648,18 @@ def _callout(narrative, key: str) -> str:
 
 #: Sections rendered as un-numbered callouts ABOVE the numbered body, in the
 #: order the narrative put them. Everything else becomes a numbered block.
-_LEAD_SECTIONS = ("acknowledgement", "support_recommendation", "hedge",
-                  "psychological_note")
+#:
+#: psychological_note deliberately is NOT here. The approved report structure
+#: (Viraj, 26 Aug) numbers it and places it after Founder DNA, so it reads as
+#: part of the report rather than as a preamble. It keeps its early position
+#: because the narrative's own section order puts it there -- this module does
+#: not reorder sections, it only decides numbered vs callout.
+#:
+#: The DISTRESS lead-ins stay callouts: acknowledgement and
+#: support_recommendation exist precisely to reach a founder BEFORE any
+#: business content or numbering, and `wellbeing_first` still drops the health
+#: ring for them.
+_LEAD_SECTIONS = ("acknowledgement", "support_recommendation", "hedge")
 
 #: Blocks whose CONTENT comes from `insights` rather than from narrator prose,
 #: paired with the heading to use when the narrative has no section to host
@@ -608,6 +710,13 @@ def _section_body(key: str, narrative, ctx: Mapping[str, Any]) -> str:
     facts = (sec.facts or {}) if sec is not None else {}
     extra = ""
 
+    if key == "psychological_note":
+        # Numbered now (see _LEAD_SECTIONS) but it keeps the `care` treatment:
+        # this is the one section that must not read like another business
+        # block, and test_wellbeing_note_precedes_every_score pins that it
+        # still lands ahead of any score. The heading is drawn by _block, so
+        # only the prose is wrapped here.
+        return f'<div class="care">{prose}</div>' if prose else ""
     if key == "business_dna":
         extra = _standing(ctx["pillars"], ctx["bands"]) + _high_low(ctx["categories"])
     elif key == "problem_path":
