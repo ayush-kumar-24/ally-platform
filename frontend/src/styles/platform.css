@@ -1403,17 +1403,36 @@ body.auth-active .rz-modal p{color:var(--auth-muted)}
    ============================================================ */
 
 /* Landing overlay covers the full viewport, scrollable */
+/* This is a position:fixed full-viewport scroll container -- the document body
+   never scrolls, everything happens inside here. Two things that a desktop
+   browser tolerates break one-finger scrolling on iOS Safari:
+
+   -webkit-overflow-scrolling:touch was missing. .view.active, the equivalent
+   scroller inside /app, has always carried it; this one did not.
+
+   will-change:opacity,transform was set permanently rather than for the
+   duration of the exit transition, which keeps the element on its own
+   compositor layer for the entire visit. On iOS a fixed, always-composited
+   overflow container can hand a single-finger drag to the layer instead of
+   scrolling it, while a two-finger gesture still pans the visual viewport --
+   which is exactly the "only two fingers scroll" symptom reported from a real
+   phone. will-change now applies only while .lp-exit is animating.
+
+   touch-action:pan-y states the intent outright: vertical drags scroll. */
 #landing-page {
   position:fixed;inset:0;z-index:4800;
   background:var(--ivory);
   overflow-y:auto;overflow-x:hidden;
+  -webkit-overflow-scrolling:touch;
+  touch-action:pan-y;
+  overscroll-behavior-y:contain;
   display:block;
   transition:opacity .55s var(--ease),transform .55s var(--ease);
-  will-change:opacity,transform;
   scroll-behavior:smooth;
 }
 #landing-page.lp-exit {
   opacity:0;transform:scale(.97) translateY(-12px);pointer-events:none;
+  will-change:opacity,transform;
 }
 body.lp-done #landing-page { display:none; }
 
