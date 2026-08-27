@@ -190,6 +190,34 @@ export function factList(facts) {
 }
 
 /**
+ * Business DNA pillars as structured rows, not the flattened strings factList()
+ * produces.
+ *
+ * The generic flattener joins a pillar's fields into one line -- "Retention ·
+ * Critical Gap · <description>" -- which is all a text card ever needed. A card
+ * that colours itself by band, or fills a bar from it, has to read the band as
+ * its own value, so it gets its own reader rather than parsing that string back
+ * apart.
+ *
+ * Returns [] when the section carries no pillars, which is the honest answer
+ * for a report that predates them or for a variant that omits Business DNA --
+ * the caller falls back to the generic fact grid rather than showing an empty
+ * scaffold.
+ */
+export function pillarList(facts) {
+  const raw = facts?.pillars;
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((p) => p && typeof p === 'object' && p.pillar_name)
+    .map((p) => ({
+      name: String(p.pillar_name),
+      band: p.band ? String(p.band) : null,
+      description: p.band_description ? String(p.band_description) : '',
+      redFlag: Boolean(p.red_flag_triggered),
+    }));
+}
+
+/**
  * A public link to this report. The shared view is a strict subset — headings
  * and prose only, no scores, facts or reasoning — so sharing one cannot leak
  * the engine's internals to whoever the founder sends it to.

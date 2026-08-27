@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { factList, loadDna } from '../services/reports';
 import { DnaError, DnaLoading, DnaNoReport, DnaNoSection } from '../components/DnaState';
 import { IconArrowRight, IconChat } from '../utils/icons';
+import { accentFor, iconFor } from '../utils/dnaVisuals';
 
 const TABS = [
   { key: 'operate', label: 'How you operate' },
@@ -116,10 +117,21 @@ function FounderDNAView({ section, report }) {
             <p className="fd-card-desc">Your latest report didn't produce any operating-pattern facts.</p>
           ) : (
             <div className="fd-grid stagger d3">
-              {operateFacts.map((f) => (
-                <div key={f.label} className="fd-card">
+              {/* Icon and accent, but deliberately NO bar and no number. There
+                  is no score and no band behind a founder dimension -- the
+                  engine stores the founder's own answers as text and nothing
+                  else -- so a bar here would be drawing a grade for someone's
+                  psychology out of thin air. Colour separates one dimension
+                  from the next; it does not rate them. */}
+              {operateFacts.map((f, i) => (
+                <div key={f.label} className={`fd-card ${accentFor(i)}`}>
                   <div className="fd-card-top">
                     <div className="fd-card-info">
+                      <div className="fd-card-icon">
+                        <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
+                          {iconFor(f.label)}
+                        </svg>
+                      </div>
                       <div className="fd-card-title-wrap"><h4 className="fd-card-title">{f.label}</h4></div>
                     </div>
                   </div>

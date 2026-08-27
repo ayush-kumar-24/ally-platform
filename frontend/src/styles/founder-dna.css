@@ -84,8 +84,8 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  width: 90px;
-  height: 90px;
+  min-width: 90px;
+  min-height: 90px;
   border-left: 1px solid rgba(255, 255, 255, 0.15);
   padding-left: 28px;
 }
@@ -97,6 +97,19 @@
   line-height: 0.9;
   color: #ffffff;
   letter-spacing: -0.03em;
+}
+
+/* The overall band in the hero, where the demo puts its headline number. Sized
+   to carry the same weight without pretending to be a figure -- it is a phrase,
+   so it wraps and is centred rather than set as one huge numeral. */
+.fd-hero-band {
+  font-family: var(--display);
+  font-size: clamp(18px, 2.4vw, 26px);
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  color: #ffffff;
+  text-align: center;
 }
 
 .fd-hero-label {
@@ -287,39 +300,83 @@
   margin: 2px 0 0;
 }
 
-/* ---- Dynamic category colors ---- */
+/* ---- Band colours (Business DNA) ----
+   A gradient rather than a flat fill: the bar is three steps wide at most, and
+   a solid block at 33% reads as a broken bar where a gradient reads as a level.
+   The band word beside it carries the actual meaning; colour is the fast
+   version of the same thing. */
 .fd-cat-green .fd-card-icon {
   background: rgba(16, 185, 129, 0.1);
   color: var(--emerald-dark, #0c7a54);
 }
-.fd-cat-green .fd-card-score {
+.fd-cat-green .fd-card-score,
+.fd-cat-green .fd-card-band {
   color: var(--emerald-dark, #0c7a54);
 }
 .fd-cat-green .fd-progress-bar {
-  background: var(--emerald, #10B981);
+  background: linear-gradient(90deg, #34d399, var(--emerald, #10B981));
 }
 
 .fd-cat-orange .fd-card-icon {
   background: rgba(245, 158, 11, 0.08);
   color: #b45309;
 }
-.fd-cat-orange .fd-card-score {
+.fd-cat-orange .fd-card-score,
+.fd-cat-orange .fd-card-band {
   color: #b45309;
 }
 .fd-cat-orange .fd-progress-bar {
-  background: #f59e0b;
+  background: linear-gradient(90deg, #fbbf24, #f59e0b);
 }
 
 .fd-cat-red .fd-card-icon {
   background: rgba(239, 68, 68, 0.08);
   color: #b91c1c;
 }
-.fd-cat-red .fd-card-score {
+.fd-cat-red .fd-card-score,
+.fd-cat-red .fd-card-band {
   color: #b91c1c;
 }
 .fd-cat-red .fd-progress-bar {
-  background: var(--color-danger, #ef4444);
+  background: linear-gradient(90deg, #f87171, var(--color-danger, #ef4444));
 }
+
+/* The band, printed as the word the engine actually produced. Sized well below
+   the title: it is a label, not the headline the demo's big numeral was. */
+.fd-card-band {
+  font-family: var(--display);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.fd-card-flag {
+  font-family: var(--display);
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #b91c1c;
+  background: rgba(239, 68, 68, 0.1);
+  border-radius: 99px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+
+/* ---- Founder DNA accents ----
+   Identity, not judgement. These cards have no score and no band behind them,
+   so the colour tells one dimension apart from the next and claims nothing
+   about how the founder is doing. Deliberately drawn from the product's own
+   greens and warm neutrals rather than a red-amber-green scale, so a founder
+   cannot read a rating into a hue that was never meant as one. */
+.fd-accent-1 .fd-card-icon { background: rgba(16,185,129,.10);  color: #0c7a54; }
+.fd-accent-2 .fd-card-icon { background: rgba(27,67,50,.09);    color: #1B4332; }
+.fd-accent-3 .fd-card-icon { background: rgba(183,137,95,.14);  color: #8a5f33; }
+.fd-accent-4 .fd-card-icon { background: rgba(94,234,212,.16);  color: #0f766e; }
+.fd-accent-5 .fd-card-icon { background: rgba(168,217,74,.18);  color: #4d7c0f; }
 
 /* ---- Responsive adjustments ---- */
 /* A `1fr` track is `minmax(auto, 1fr)`, and the `auto` floor is the item's
