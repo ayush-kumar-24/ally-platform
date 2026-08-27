@@ -298,7 +298,38 @@
   line-height: 1.55;
   color: var(--muted, #556458);
   margin: 2px 0 0;
+  /* A founder's own answer, so it arrives as one unbroken run of prose with no
+     paragraph breaks of its own. Left to itself a long one sets the height of
+     its whole grid row. */
+  white-space: pre-line;
+  overflow-wrap: anywhere;
 }
+
+/* -webkit-line-clamp is the only cross-browser way to clamp by LINES rather
+   than by pixels, and it still needs the -webkit- box model to work. It is
+   supported everywhere this app runs, including Firefox since 68. The line
+   count itself is set inline by ClampedText, so one component decides it
+   rather than a value duplicated here. */
+.fd-card-desc.is-clamped {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.fd-more {
+  align-self: flex-start;
+  margin-top: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-family: var(--display);
+  font-size: 12px;
+  font-weight: 750;
+  color: var(--emerald-dark, #0c7a54);
+  cursor: pointer;
+  transition: color 0.2s var(--ease);
+}
+.fd-more:hover { color: var(--emerald, #10B981); }
 
 /* ---- Band colours (Business DNA) ----
    A gradient rather than a flat fill: the bar is three steps wide at most, and

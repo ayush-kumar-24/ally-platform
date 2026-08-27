@@ -4,6 +4,7 @@ import { factList, loadDna } from '../services/reports';
 import { DnaError, DnaLoading, DnaNoReport, DnaNoSection } from '../components/DnaState';
 import { IconArrowRight, IconChat } from '../utils/icons';
 import { accentFor, iconFor } from '../utils/dnaVisuals';
+import ClampedText from '../components/ClampedText';
 
 const TABS = [
   { key: 'operate', label: 'How you operate' },
@@ -135,7 +136,11 @@ function FounderDNAView({ section, report }) {
                       <div className="fd-card-title-wrap"><h4 className="fd-card-title">{f.label}</h4></div>
                     </div>
                   </div>
-                  <p className="fd-card-desc">{f.value}</p>
+                  {/* These are the founder's own answers, verbatim and of wildly
+                      uneven length -- two words in one dimension, three hundred
+                      in the next. Clamped so the grid stays readable, with the
+                      whole answer one click away; nothing is cut in storage. */}
+                  <ClampedText text={f.value} lines={4} />
                 </div>
               ))}
             </div>
