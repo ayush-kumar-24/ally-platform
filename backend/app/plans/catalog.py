@@ -13,21 +13,30 @@ own daily ceiling -- 30 days x daily_tokens / TOKENS_PER_CREDIT. A plan that gra
 more credits than its daily limit allows anyone to spend would strand the remainder
 every month, which is a refund request waiting to happen.
 
-    Free     1,431 credits (once)   4,000 chat + 7,700 planning tokens/day
+    Free     1,431 credits (once)   8,000 chat + 7,700 planning tokens/day
     Starter    180 credits/month    6,000 tokens/day -> 180,000, all reachable
     Pro        240 credits/month    8,000 tokens/day -> 240,000, all reachable
 
 Free grants credits **once**, not monthly: a renewing free tier is an unbounded
 recurring cost per signup. It is a one-month trial that ends in a top-up decision.
 
-Free's chat ceiling is deliberately tight (4,000 tokens/day, ~16 messages).
-`daily_token_limit` below now matches that figure -- it previously still read
-40,000 (a leftover testing-phase value the docstring had already moved past
-without the field following), which is not exactly reachable under the signup
-credit grant below; the daily ceiling is the binding constraint on chat, not
-the credit balance, and credits simply drain far slower than the math below
-implies. Left as-is rather than re-derived, since shrinking the credit grant
-to match is a separate pricing decision this change does not make.
+Free's chat ceiling is 8,000 tokens/day (~32 messages), raised from 4,000 on
+2026-08-25 for the team testing phase. 4,000 was ~16 messages, which testers
+were exhausting inside a single sitting and reading as "Ally stopped
+responding" -- a 429 mid-flow is indistinguishable from a fault when you are
+trying to evaluate the product.
+
+Note this deliberately puts Free ABOVE Starter (6,000) and level with Pro
+(8,000), which is not a shippable ladder. It is a testing-phase value and has
+to come back down when Free is resized for a public launch -- the same moment
+the credit grant below is restored (see the PLANS.FREE comment on
+PLAN_YOUR_DAY, which has to move at the same time).
+
+The daily ceiling is the binding constraint on chat, not the credit balance:
+credits drain far slower than the math below implies, so raising the ceiling
+does not strand or overspend the grant. Once the daily limit stops binding,
+the NEXT wall a tester hits is the credit balance, which surfaces as a 402
+rather than a 429.
 
 Free is currently sized for the TESTING PHASE, not for a public free tier. The
 measured per-operation costs it is built from:
@@ -172,7 +181,7 @@ PLANS: dict[PlanTier, Plan] = {
         price_inr=0,
         monthly_credits=0,          # one-time grant instead -- see signup_credits
         signup_credits=1_431,       # 1,200 chat + 231 planning; see module docstring
-        daily_token_limit=4_000,    # ~16 chat messages/day, matches this file's own docstring
+        daily_token_limit=8_000,    # ~32 chat messages/day; testing-phase value, see docstring
         planning_daily_token_limit=7_700,   # 7 planning actions/day at 1,100 each
         free_calls_per_month=0,
         # Plan Your Day is normally paid, but the testing phase includes it: the

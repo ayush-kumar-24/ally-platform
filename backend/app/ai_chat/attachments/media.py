@@ -12,7 +12,7 @@ error returns None and the caller lists the file by name only, exactly as
 before this module existed. A founder's turn never breaks because a file was
 odd.
 
-Cost is the reason for every cap below. A free founder has 4,000 chat tokens a
+Cost is the reason for every cap below. A free founder has 8,000 chat tokens a
 day (plans/catalog.py); an image costs roughly (width x height) / 750 of them,
 so an unbounded upload could spend a whole day's allowance in one turn. Images
 are downscaled to a pixel ceiling and PDFs truncated to a page ceiling so the
