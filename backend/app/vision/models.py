@@ -34,6 +34,10 @@ class VisionTerritory:
     tag1: str
     tag2: str
     updated_at: datetime
+    #: Defaulted so every existing construction site keeps compiling and a
+    #: territory built from text alone is explicitly image-less rather than
+    #: accidentally so.
+    image_url: str | None = None
 
 
 @dataclass(frozen=True)

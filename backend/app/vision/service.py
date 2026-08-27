@@ -75,6 +75,26 @@ class VisionService:
         )
         return self.repository.upsert_territory(vt)
 
+    def set_territory_image(
+        self, founder_id: int, territory_key: str, *, image_url: str | None, storage_path: str | None,
+    ) -> VisionTerritory | None:
+        """Attach or clear the picture on one territory.
+
+        None back means the founder has not written that territory yet. The
+        router turns that into a 404 rather than creating a blank statement row
+        to hang the image on -- a card with a picture and no vision is not a
+        thing this page has a place for.
+        """
+        if territory_key not in TERRITORY_KEYS:
+            raise InvalidVisionTerritoryError(territory_key)
+        return self.repository.set_territory_image(
+            founder_id, territory_key, image_url=image_url, storage_path=storage_path)
+
+    def get_territory_storage_path(self, founder_id: int, territory_key: str) -> str | None:
+        if territory_key not in TERRITORY_KEYS:
+            raise InvalidVisionTerritoryError(territory_key)
+        return self.repository.get_territory_storage_path(founder_id, territory_key)
+
     def get_summary(self, founder_id: int) -> VisionSummary | None:
         """None when the founder hasn't written a summary yet -- the API
         layer turns that into empty fields, same convention as territories."""

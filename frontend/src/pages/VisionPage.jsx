@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
-import { computeGap, loadVision, saveSummary, saveTerritory, TERRITORIES } from '../services/vision';
+import {
+  computeGap, imageProblem, IMAGE_TYPES, loadVision, removeTerritoryImage,
+  saveSummary, saveTerritory, TERRITORIES, uploadTerritoryImage,
+} from '../services/vision';
 import { DnaError, DnaLoading } from '../components/DnaState';
 import Modal from '../components/Modal';
 import { IconAnchor, IconAward, IconChat, IconClock, IconDollar, IconEdit, IconPlus, IconTrendingUp, IconUsers } from '../utils/icons';
@@ -41,6 +44,15 @@ function TerritoryCard({ territory, data, onEdit, onTalk }) {
           </>
         ) : (
           <>
+            {/* Above the sentence, not below it: the picture is what the
+                founder is aiming at and the words are the caption. Only ever
+                on a written vision -- there is no image without a statement
+                to hang it on. */}
+            {data.imageUrl && (
+              <div className="vt-image">
+                <img src={data.imageUrl} alt="" loading="lazy" />
+              </div>
+            )}
             <p className="vt-statement">{data.statement}</p>
             <div className="vt-tags">
               {data.tag1 && <span className="vt-tag">{data.tag1}</span>}
@@ -56,11 +68,37 @@ function TerritoryCard({ territory, data, onEdit, onTalk }) {
   );
 }
 
-function TerritoryEditor({ territory, data, onSave, onClose }) {
+function TerritoryEditor({ territory, data, onSave, onUploadImage, onRemoveImage, onClose }) {
   const [statement, setStatement] = useState(data.statement);
   const [tag1, setTag1] = useState(data.tag1);
   const [tag2, setTag2] = useState(data.tag2);
   const [saving, setSaving] = useState(false);
+  const [busyImage, setBusyImage] = useState(false);
+  const [imageError, setImageError] = useState(null);
+  const fileRef = useRef(null);
+
+  // The endpoint refuses to hang a picture on a vision that does not exist, so
+  // a founder writing this territory for the first time has nothing to attach
+  // to yet. Said plainly rather than by a control that 404s when pressed.
+  const written = Boolean(data.statement.trim());
+
+  const pick = async (file) => {
+    setImageError(null);
+    const problem = imageProblem(file);
+    if (problem) { setImageError(problem); return; }
+    setBusyImage(true);
+    try {
+      await onUploadImage(file);
+    } catch {
+      setImageError("Couldn't upload that. Try again.");
+    } finally {
+      setBusyImage(false);
+      // Cleared so picking the SAME file again still fires onChange -- the
+      // input holds its value otherwise and a retry after an error does
+      // nothing at all.
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  };
 
   return (
     <Modal open onClose={onClose} title={territory.label}>
@@ -88,6 +126,52 @@ function TerritoryEditor({ territory, data, onSave, onClose }) {
                    placeholder="e.g. Mar 2027" />
           </label>
         </div>
+        {/* Optional throughout: a vision is words first, and a founder who
+            wants no picture should never be made to feel the card is
+            unfinished without one. */}
+        <div className="vt-image-field">
+          <span className="vt-field-label">Picture (optional)</span>
+          {data.imageUrl ? (
+            <div className="vt-image-preview">
+              <img src={data.imageUrl} alt="" />
+              <div className="vt-image-buttons">
+                <button type="button" className="btn btn-ghost btn-sm"
+                        onClick={() => fileRef.current?.click()} disabled={busyImage}>
+                  {busyImage ? 'Uploading…' : 'Replace'}
+                </button>
+                <button type="button" className="btn btn-ghost btn-sm vt-image-remove"
+                        onClick={async () => {
+                          setImageError(null);
+                          setBusyImage(true);
+                          try { await onRemoveImage(); }
+                          catch { setImageError("Couldn't remove that. Try again."); }
+                          finally { setBusyImage(false); }
+                        }}
+                        disabled={busyImage}>
+                  Remove
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button type="button" className="vt-image-drop"
+                    onClick={() => fileRef.current?.click()}
+                    disabled={!written || busyImage}>
+              <IconPlus />
+              {!written
+                ? 'Save this vision first, then add a picture'
+                : busyImage ? 'Uploading…' : 'Add a picture'}
+            </button>
+          )}
+          <input
+            ref={fileRef}
+            type="file"
+            accept={IMAGE_TYPES.join(',')}
+            hidden
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) pick(f); }}
+          />
+          {imageError && <p className="vt-image-error">{imageError}</p>}
+        </div>
+
         <div className="vt-editor-actions">
           <button type="button" className="btn btn-ghost" onClick={onClose} disabled={saving}>Cancel</button>
           <button
@@ -129,6 +213,15 @@ export default function VisionPage() {
   };
 
   useEffect(load, []);
+
+  /* The image endpoints return the whole stored territory, so the local copy
+     is replaced outright rather than having a URL merged into it -- the server
+     is the one that knows what the row now says. */
+  const replaceOneTerritory = async (key, promise) => {
+    const saved = await promise;
+    setState((s) => ({ ...s, vision: { ...s.vision, territories: { ...s.vision.territories, [key]: saved } } }));
+    return saved;
+  };
 
   const saveOneTerritory = async (key, value) => {
     try {
@@ -258,6 +351,8 @@ export default function VisionPage() {
           territory={TERRITORIES.find(t => t.key === editingKey)}
           data={vision.territories[editingKey] || EMPTY_TERRITORY}
           onSave={(value) => saveOneTerritory(editingKey, value)}
+          onUploadImage={(file) => replaceOneTerritory(editingKey, uploadTerritoryImage(editingKey, file))}
+          onRemoveImage={() => replaceOneTerritory(editingKey, removeTerritoryImage(editingKey))}
           onClose={() => setEditingKey(null)}
         />
       )}
