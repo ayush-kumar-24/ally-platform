@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { factList, loadDna, pillarList } from '../services/reports';
 import { bandFill, bandTone, iconFor } from '../utils/dnaVisuals';
+import ClampedText from '../components/ClampedText';
 import { DnaError, DnaLoading, DnaNoReport, DnaNoSection } from '../components/DnaState';
 import { useNavigate } from 'react-router-dom';
 
@@ -101,7 +102,7 @@ function BusinessDNAView({ section, report }) {
                 <div className="fd-progress-bar" style={{ width: `${bandFill(p.band)}%` }} />
               </div>
             )}
-            {p.description && <p className="fd-card-desc">{p.description}</p>}
+            {p.description && <ClampedText text={p.description} lines={4} />}
           </div>
         ))}
         {otherFacts.map((f) => (
@@ -118,7 +119,7 @@ function BusinessDNAView({ section, report }) {
                 </div>
               </div>
             </div>
-            <p className="fd-card-desc">{f.value}</p>
+            <ClampedText text={f.value} lines={4} />
           </div>
         ))}
       </div>
