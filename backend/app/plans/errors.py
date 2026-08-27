@@ -63,7 +63,12 @@ class DailyTokenLimitError(PlanError):
     def __init__(self, used: int, limit: int, resets_at):
         super().__init__(
             f"Daily limit reached ({used:,} of {limit:,} tokens). "
-            f"Your allowance resets at {resets_at:%H:%M UTC}.",
+            # %Z, not a hardcoded "UTC": next_daily_reset hands back the moment
+            # already in the founder's reset timezone, so this prints the time a
+            # clock in the room would show ("00:00 IST"). It previously said UTC
+            # unconditionally, which told an Indian founder to wait for midnight
+            # when the allowance actually returned at 05:30 their time.
+            f"Your allowance resets at {resets_at:%H:%M %Z}.",
             status_code=429,
         )
         self.used = used

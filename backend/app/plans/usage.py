@@ -85,14 +85,17 @@ def usage_day(moment: datetime) -> date:
 def next_daily_reset(moment: datetime) -> datetime:
     """When the daily allowance rolls over -- returned to the user in the 429.
 
-    The next LOCAL midnight, expressed in UTC. The founder is told a wall-clock
-    time they recognise; the wire format stays absolute.
+    Returned IN the reset timezone, not converted to UTC. It is the same instant
+    either way (aware datetimes compare by instant), but the tzinfo is what lets
+    the message say "00:00 IST" -- the time the founder would actually look at a
+    clock and see. Handing back the UTC equivalent renders as "18:30", which is
+    a worse answer to "when do I get my tokens back" than the bug it replaced.
     """
     zone = _reset_zone()
     if moment.tzinfo is None:
         moment = moment.replace(tzinfo=timezone.utc)
     tomorrow = moment.astimezone(zone).date() + timedelta(days=1)
-    return datetime.combine(tomorrow, time.min, tzinfo=zone).astimezone(timezone.utc)
+    return datetime.combine(tomorrow, time.min, tzinfo=zone)
 
 
 # Previous name, kept so nothing importing it breaks. It is no longer UTC-bound:
