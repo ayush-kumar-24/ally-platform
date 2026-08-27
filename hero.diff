@@ -1,0 +1,265 @@
+diff --git a/backend/app/api/v1/reports/narrator.py b/backend/app/api/v1/reports/narrator.py
+index 72f45d5..ac9ff91 100644
+--- a/backend/app/api/v1/reports/narrator.py
++++ b/backend/app/api/v1/reports/narrator.py
+@@ -17,6 +17,43 @@ from dataclasses import dataclass
+ from typing import Any, Callable, Protocol
+ 
+ 
++_QUOTE_MAX_CHARS = 160
++
++
++def _shorten(text: str, limit: int = _QUOTE_MAX_CHARS) -> str:
++    """One short line out of a founder's answer.
++
++    Founders type paragraphs into these boxes, and this narrator quotes them
++    verbatim into a lead paragraph -- which is how the hero ends up a wall of
++    text. Prefer the first sentence, because a first sentence is a whole
++    thought and cutting mid-clause reads as a bug; fall back to a word-boundary
++    cut only when that sentence is itself longer than the limit.
++    """
++    text = " ".join((text or "").split())
++    if not text:
++        return ""
++    # Earliest terminator, not the first one in some fixed order: scanning
++    # "." before "!" would return the second sentence of "Ship it! Then rest."
++    ends = [i for stop in (". ", "! ", "? ") if (i := text.find(stop)) != -1]
++    if ends and min(ends) + 2 <= limit:
++        return text[: min(ends) + 1]
++    if len(text) <= limit:
++        return text
++    cut = text[:limit].rsplit(" ", 1)[0].rstrip(" ,;:-")
++    return f"{cut}\u2026"
++
++
++def _is_question(text: str) -> bool:
++    """A stored "answer" that is actually the question it was asked.
++
++    This is live in production data today: some `strengths_blind_spots` rows
++    hold the prompt rather than the reply, and narrating one produces "A
++    pattern worth naming: Tell me about the last time...". Dropping it costs a
++    line; printing it costs the founder's trust in the whole report.
++    """
++    return " ".join((text or "").split()).endswith("?")
++
++
+ @dataclass(frozen=True)
+ class ToneGuidance:
+     persona: str | None                 # Validator / Compass / Auditor
+@@ -56,6 +93,11 @@ class TemplateNarrator:
+         # preference) each add at most one short, fact-only line so the template
+         # fallback stays readable rather than a wall of quoted text -- the full
+         # set is still visible as cards via `facts` regardless of what prose says.
++        #
++        # "Short" is now enforced by _shorten rather than merely intended. It was
++        # intended here from the start and never applied, so founders who wrote
++        # three paragraphs into the vision box got all three quoted back at them
++        # in the report hero. An intention with no code behind it is not a limit.
+         parts = []
+         arch = s.get("archetype")
+         if arch and arch.get("name"):
+@@ -74,10 +116,13 @@ class TemplateNarrator:
+                 )
+         vision = s.get("vision")
+         if vision:
+-            parts.append(f'In your own words, this is what success looks like: "{vision}"')
++            parts.append(
++                "In your own words, this is what success looks like: "
++                f'"{_shorten(vision)}"'
++            )
+         blind_spots = s.get("strengths_blind_spots")
+-        if blind_spots:
+-            parts.append("A pattern worth naming: " + blind_spots[0])
++        if blind_spots and not _is_question(blind_spots[0]):
++            parts.append("A pattern worth naming: " + _shorten(blind_spots[0]))
+         # purpose_mission gets the same one-line treatment as vision (both are
+         # "why this matters" statements); the other 5 phase-2 dimensions stay
+         # card-only here, same as origin/stress_response/communication_
+@@ -85,7 +130,10 @@ class TemplateNarrator:
+         # would be exactly the wall-of-text this fallback is written to avoid.
+         purpose_mission = s.get("purpose_mission")
+         if purpose_mission:
+-            parts.append(f'On why this matters to you: "{purpose_mission[0]}"')
++            parts.append(
++                "On why this matters to you: "
++                f'"{_shorten(purpose_mission[0])}"'
++            )
+         return " ".join(parts)
+ 
+     def _psychological_note(self, s, tone):
+diff --git a/backend/tests/test_report_narrative.py b/backend/tests/test_report_narrative.py
+index ee18d28..350b00b 100644
+--- a/backend/tests/test_report_narrative.py
++++ b/backend/tests/test_report_narrative.py
+@@ -350,3 +350,78 @@ def test_llm_prompt_omits_brief_directive_when_not_flagged():
+     narrator = LLMSectionNarrator(fake_llm)
+     narrator.narrate("business_dna", {"overall_band": "Needs Attention"}, ToneGuidance("Validator"))
+     assert "IMPORTANT: this section must be BRIEF" not in captured["prompt"]
++
++
++# --- the hero paragraph stays a paragraph ----------------------------------
++# The founder-facing report opens with this prose. Founders type essays into
++# the vision box, and every one of those characters used to land in the hero
++# verbatim, quoted whole. These pin the limit that the section's own comment
++# had promised since it was written but never enforced.
++
++_ESSAY = (
++    "I want a business that runs without me being in every single decision, "
++    "where the team knows what good looks like and does not need me to tell "
++    "them, and where I can take three weeks off without anything catching "
++    "fire or anybody calling me about it. That is the whole thing really."
++)
++
++
++def _dna(**over):
++    return next(s for s in _gen(_payload(**over)).sections if s.key == "founder_dna").prose
++
++
++def test_a_long_vision_is_not_quoted_whole_into_the_hero():
++    prose = _dna(founder_vision=_ESSAY)
++    assert _ESSAY not in prose
++    assert "runs without me" in prose            # still the founder's own words
++    assert len(prose) < 500
++
++
++def test_a_long_vision_is_cut_at_a_sentence_when_the_first_one_fits():
++    """A whole first thought, kept whole. _ESSAY does NOT take this path: its
++    own first sentence runs 275 characters, so it falls to the word cut below
++    -- which is the point of having both rules."""
++    essay = "A business that runs without me. " + "There is a lot more I could say about it. " * 6
++    prose = _dna(founder_vision=essay)
++    quoted = prose.split('this is what success looks like: "')[1].split('"')[0]
++    assert quoted == "A business that runs without me."
++
++
++def test_a_short_vision_is_left_exactly_as_written():
++    prose = _dna(founder_vision="Runs without me.")
++    assert '"Runs without me."' in prose
++
++
++def test_a_single_endless_sentence_is_cut_at_a_word_boundary():
++    prose = _dna(founder_vision="I want " + "a much calmer business " * 20)
++    quoted = prose.split('this is what success looks like: "')[1].split('"')[0]
++    assert quoted.endswith("…")
++    assert quoted.rstrip("…").strip() in " ".join(("I want " + "a much calmer business " * 20).split())
++
++
++def test_the_earliest_terminator_wins_not_the_first_one_looked_for():
++    """Scanning "." before "!" would return the second sentence."""
++    prose = _dna(founder_vision="Ship it! Then rest for a while.")
++    assert '"Ship it!"' in prose
++
++
++def test_every_narrated_dimension_is_shortened_not_just_vision():
++    prose = _dna(founder_vision=_ESSAY,
++                 strengths_blind_spots=(_ESSAY,),
++                 phase2_dimensions={"purpose_mission": (_ESSAY,)})
++    assert _ESSAY not in prose
++    assert prose.count(_ESSAY[:40]) <= 3         # each appears once, shortened
++
++
++def test_a_question_stored_as_an_answer_is_never_narrated_back():
++    """Live data defect: some strengths_blind_spots rows hold the QUESTION.
++    Narrating one produces "A pattern worth naming: Tell me about..."."""
++    q = "Tell me about the last time a strength of yours became a problem?"
++    prose = _dna(strengths_blind_spots=(q,))
++    assert "A pattern worth naming" not in prose
++    assert "Tell me about" not in prose
++
++
++def test_a_real_blind_spot_still_gets_narrated():
++    prose = _dna(strengths_blind_spots=("You hold on to decisions too long.",))
++    assert "A pattern worth naming: You hold on to decisions too long." in prose
+diff --git a/frontend/src/components/ClampedText.jsx b/frontend/src/components/ClampedText.jsx
+index ef0a65a..df4b294 100644
+--- a/frontend/src/components/ClampedText.jsx
++++ b/frontend/src/components/ClampedText.jsx
+@@ -17,7 +17,16 @@ import { useCallback, useEffect, useRef, useState } from 'react';
+  * overflows at a narrow one. scrollHeight vs clientHeight asks the browser what
+  * actually happened, at the width it actually happened at.
+  */
+-export default function ClampedText({ text, lines = 4, className = '' }) {
++export default function ClampedText({
++  text,
++  lines = 4,
++  className = '',
++  // The clamp itself is not card-specific -- the report hero has exactly the
++  // same problem (it quotes the founder's own answers) and wants exactly the
++  // same control. `baseClass` keeps each surface's own typography while
++  // sharing the measurement, so a hero does not grow a second copy of this.
++  baseClass = 'fd-card-desc',
++}) {
+   const ref = useRef(null);
+   const [expanded, setExpanded] = useState(false);
+   const [overflows, setOverflows] = useState(false);
+@@ -50,7 +59,7 @@ export default function ClampedText({ text, lines = 4, className = '' }) {
+     <>
+       <p
+         ref={ref}
+-        className={`fd-card-desc${expanded ? ' is-open' : ' is-clamped'}${className ? ` ${className}` : ''}`}
++        className={`${baseClass}${expanded ? ' is-open' : ' is-clamped'}${className ? ` ${className}` : ''}`}
+         style={expanded ? undefined : { WebkitLineClamp: lines }}
+       >
+         {text}
+diff --git a/frontend/src/pages/BusinessDNA.jsx b/frontend/src/pages/BusinessDNA.jsx
+index e9a9188..5a205f9 100644
+--- a/frontend/src/pages/BusinessDNA.jsx
++++ b/frontend/src/pages/BusinessDNA.jsx
+@@ -33,7 +33,10 @@ function BusinessDNAView({ section, report }) {
+           <h2 className="fd-hero-title">
+             {section?.heading || 'Your business profile'}
+           </h2>
+-          <p className="fd-hero-desc">{section?.prose}</p>
++          {/* Clamped, not trimmed: the narrator now keeps this short at the
++              source, but a founder's own words still arrive here and this page
++              must not turn into a wall of text if one of them runs long. */}
++          <ClampedText baseClass="fd-hero-desc" lines={3} text={section?.prose} />
+         </div>
+         {(overallBand || report?.report_id) && (
+           <div className="fd-hero-score-wrap">
+diff --git a/frontend/src/pages/FounderDNA.jsx b/frontend/src/pages/FounderDNA.jsx
+index aec7097..d3f47c8 100644
+--- a/frontend/src/pages/FounderDNA.jsx
++++ b/frontend/src/pages/FounderDNA.jsx
+@@ -84,7 +84,10 @@ function FounderDNAView({ section, report }) {
+         <div className="fd-hero-content">
+           <div className="fd-hero-kicker">Founder First · Your Profile</div>
+           <h2 className="fd-hero-title">{section?.heading || 'Your founder profile'}</h2>
+-          <p className="fd-hero-desc">{section?.prose}</p>
++          {/* Clamped, not trimmed: the narrator now keeps this short at the
++              source, but a founder's own words still arrive here and this page
++              must not turn into a wall of text if one of them runs long. */}
++          <ClampedText baseClass="fd-hero-desc" lines={3} text={section?.prose} />
+         </div>
+         {report?.report_id && (
+           <div className="fd-hero-score-wrap">
+diff --git a/frontend/src/styles/founder-dna.css b/frontend/src/styles/founder-dna.css
+index 60c3540..8ec0e65 100644
+--- a/frontend/src/styles/founder-dna.css
++++ b/frontend/src/styles/founder-dna.css
+@@ -310,12 +310,24 @@
+    supported everywhere this app runs, including Firefox since 68. The line
+    count itself is set inline by ClampedText, so one component decides it
+    rather than a value duplicated here. */
+-.fd-card-desc.is-clamped {
++.fd-card-desc.is-clamped,
++.fd-hero-desc.is-clamped {
+   display: -webkit-box;
+   -webkit-box-orient: vertical;
+   overflow: hidden;
+ }
+ 
++/* The hero sits on the dark header, where the card's emerald "Read more"
++   disappears. Same control, legible ground. */
++.fd-hero-desc.is-clamped + .fd-more,
++.fd-hero-desc.is-open + .fd-more {
++  color: #5eead4;
++}
++.fd-hero-desc.is-clamped + .fd-more:hover,
++.fd-hero-desc.is-open + .fd-more:hover {
++  color: #a7f3d0;
++}
++
+ .fd-more {
+   align-self: flex-start;
+   margin-top: 8px;
