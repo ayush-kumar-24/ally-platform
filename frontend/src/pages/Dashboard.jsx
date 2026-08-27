@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
+import QuoteCard from '../components/QuoteCard';
 import { completionPercent, loadDashboard, markTourSeen, relativeDay } from '../services/dashboard';
 import { loadVision } from '../services/vision';
 import { listGoals } from '../services/goals';
@@ -208,7 +209,7 @@ export default function Dashboard() {
     return (
       <div className="dash-page">
         <div className="dash-inner">
-          <DnaLoading label="Loading your dashboard…" />
+          <DnaLoading label="Loading your Compass…" />
         </div>
       </div>
     );
@@ -270,6 +271,11 @@ export default function Dashboard() {
           <div className="compass-kicker">{greeting}, {firstName} · Founder's Compass</div>
           <h1 className="compass-headline">Your living map of where you've been, where you are, and <em>where you're going.</em></h1>
         </header>
+
+        {/* Under the headline, above the ask bar: read on the way into the
+            page rather than parked at the bottom where a founder who came to
+            do something never scrolls. */}
+        <QuoteCard size="lg" surface="compass" />
 
         <section className="compass-askbar-wrap">
           <form

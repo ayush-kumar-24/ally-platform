@@ -25,12 +25,32 @@ import { getAccessToken, resumeSession } from '../services/api';
  * skip straight to "authed" when a token is already in hand; otherwise try
  * resume once before concluding there's really nothing to restore.
  */
+/**
+ * Local-only escape hatch for reviewing UI without a backend or an account.
+ *
+ * Two locks, both of which must be open, and neither of which can be opened in
+ * production:
+ *
+ *  - `import.meta.env.DEV` is a literal `false` in any built bundle, so Vite
+ *    deletes this branch entirely at build time. It cannot be flipped by an
+ *    env var on a server, because by then it is not a variable any more.
+ *  - the opt-in still has to be passed explicitly, so a normal `npm run dev`
+ *    is unaffected and nobody bypasses auth by accident while working.
+ *
+ * It only skips the ROUTE GUARD. No token is minted and nothing is faked, so
+ * every API call still goes out unauthenticated and pages that need real data
+ * will show their own empty or error states. That is the point: it is for
+ * looking at layout, naming and navigation, not for using the product.
+ */
+const DEV_BYPASS = import.meta.env.DEV && import.meta.env.VITE_DEV_BYPASS_AUTH === '1';
+
 export default function RequireAuth({ children }) {
   const location = useLocation();
-  const [status, setStatus] = useState(() => (getAccessToken() ? 'authed' : 'checking'));
+  const [status, setStatus] = useState(() =>
+    (DEV_BYPASS || getAccessToken() ? 'authed' : 'checking'));
 
   useEffect(() => {
-    if (status !== 'checking') return undefined;
+    if (DEV_BYPASS || status !== 'checking') return undefined;
     let cancelled = false;
     resumeSession().then((founder) => {
       if (!cancelled) setStatus(founder ? 'authed' : 'unauthed');

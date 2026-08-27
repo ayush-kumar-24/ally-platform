@@ -686,11 +686,6 @@
 .pr-hero h1{font-family:var(--serif);font-weight:500;font-size:clamp(26px,4.6vw,42px);line-height:1.1;letter-spacing:-.02em;color:#0E2A1C;margin:0 0 12px}
 .pr-hero h1 em{font-style:italic;color:#10B981}
 .pr-hero p{font-size:clamp(14px,1.7vw,16px);line-height:1.6;color:#556458;margin:0 auto;max-width:52ch}
-.bill-toggle{display:inline-flex;align-items:center;gap:4px;margin:22px auto 4px;padding:5px;border-radius:99px;background:#efe6d9;border:1px solid #e7e0d6;position:relative}
-.bt-opt{position:relative;z-index:2;display:inline-flex;align-items:center;gap:8px;padding:8px 18px;border:none;background:transparent;border-radius:99px;font-family:var(--display-tight);font-size:13px;font-weight:650;color:#556458;cursor:pointer;transition:color .3s;min-height:40px}
-.bt-opt.on{color:#fff}
-.bt-slider{position:absolute;top:5px;bottom:5px;border-radius:99px;background:#1B4332;box-shadow:0 4px 12px -4px rgba(6,20,13,.4);transition:transform .35s cubic-bezier(.34,1.4,.5,1),width .35s cubic-bezier(.34,1.4,.5,1);z-index:1}
-.bt-save{font-size:10px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#10B981;background:rgba(16,185,129,.14);border-radius:99px;padding:2px 7px}
 /* auto-fit, not repeat(4,1fr): the tier count comes from the API now, so a fixed
    four columns left a phantom empty track and crushed three cards to ~130px on a
    phone. minmax(0,…) lets a track shrink below its content's min-content width,
@@ -2289,3 +2284,35 @@ body.lp-done #landing-page { display:none; }
 .md th,.md td{
   border:1px solid rgba(255,255,255,.12);padding:7px 10px;text-align:left}
 .md th{background:rgba(255,255,255,.06);color:#eaf3ee;font-weight:700}
+
+/* ---- quote card (Compass + Plan Your Day) ------------------------------
+   One component at two sizes rather than two components: the pages want the
+   same thing at different weights, and a second copy is how the two quietly
+   drift apart. The rule at the left edge does the work a quotation mark would,
+   without competing with the serif for attention. */
+.qc{margin:0;border:1px solid var(--bd);border-left:3px solid var(--emerald);border-radius:12px;
+  background:var(--ivory-2);display:flex;flex-direction:column;gap:6px}
+.qc-text{margin:0;font-family:var(--serif);font-style:italic;color:var(--forest);line-height:1.5}
+.qc-by{font-family:var(--display);font-weight:700;letter-spacing:.02em;color:var(--muted-2)}
+.qc-by::before{content:"— "}
+
+/* Plan Your Day: a small box beside the day's work, deliberately quiet. */
+.qc-sm{padding:12px 14px}
+.qc-sm .qc-text{font-size:13.5px}
+.qc-sm .qc-by{font-size:10.5px}
+
+/* Compass: a step up, because the page around it is wider and a small box
+   here reads as something left over rather than something placed. */
+.qc-lg{padding:18px 22px;gap:8px}
+.qc-lg .qc-text{font-size:16.5px;line-height:1.55}
+.qc-lg .qc-by{font-size:11.5px}
+
+/* Spacing belongs to the page, not the component -- the card is used in two
+   layouts with different rhythms and should not carry one of them around. */
+.dash-inner > .qc-lg{margin:22px 0 4px}
+.plan-wrap > .qc-sm{margin:20px 0 0}
+
+@media(max-width:640px){
+  .qc-lg{padding:14px 16px}
+  .qc-lg .qc-text{font-size:15px}
+}

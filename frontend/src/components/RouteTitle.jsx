@@ -12,7 +12,11 @@ import { useLocation } from 'react-router-dom';
 
 const SUFFIX = 'Ally · GoXL';
 
-const TITLES = {
+/* Exported because PlatformLayout's topbar needs a name for routes that are
+   not nav items -- Plans & billing, Know my energy, Clarity report. It kept
+   its own list, which simply had no entry for those, so each of them printed
+   the fallback label as its heading. */
+export const TITLES = {
   '/': 'Ally — Founder DNA Platform · GoXL',
   '/terms': 'Terms of Service',
   '/privacy': 'Privacy Policy',
@@ -28,8 +32,8 @@ const TITLES = {
   '/guided/validate': 'A quick check',
   '/guided/problem': 'The perceived problem',
 
-  '/app': 'Dashboard',
-  '/app/ally-chat': 'Chat with Ally',
+  '/app': 'Compass',
+  '/app/ally-chat': 'Talk to Ally',
   '/app/founder-dna-journey': 'Mapping your Founder DNA',
   '/app/current-problem': 'The problem as you see it',
   '/app/diagnosis': 'Your diagnosis',

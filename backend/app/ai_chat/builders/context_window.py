@@ -44,8 +44,9 @@ _DEFAULT_ATTACHMENT_BYTE_BUDGET = 5_000_000  # total bytes READ+extracted per tu
 
 # How many files per turn may be sent as pictures for the model to look at.
 # Separate from attachment_limit, and much smaller, because the costs are not
-# comparable: a named-only file is a dozen tokens, an image is ~1,500 -- more
-# than a third of a free founder's daily chat allowance (plans/catalog.py). Two
+# comparable: a named-only file is a dozen tokens, an image is ~1,500 -- a
+# fifth of a free founder's daily chat allowance, and was over a third of it
+# before that ceiling was raised for testing (plans/catalog.py). Two
 # is enough for "here is the error and here is my config" and bounded enough
 # that a turn cannot quietly cost a whole day.
 _DEFAULT_MEDIA_LIMIT = 2

@@ -13,6 +13,28 @@ export function greetingNow(date = new Date()) {
   return 'Good evening';
 }
 
+/**
+ * Which part of the day it is, for anything that should read differently at
+ * 7am and at midnight. Shares the noon/6pm boundaries with greetingNow above
+ * so a page cannot say "Good evening" beside a quote picked as afternoon;
+ * night splits off at 10pm, which greetingNow has no reason to care about but
+ * a quote does.
+ */
+export function timeSlot(date = new Date()) {
+  const h = date.getHours();
+  if (h < 5) return 'night';
+  if (h < 12) return 'morning';
+  if (h < 18) return 'afternoon';
+  if (h < 22) return 'evening';
+  return 'night';
+}
+
+/** Day of the year, 0-based. Used to rotate a daily pick without storing one. */
+export function dayIndex(date = new Date()) {
+  const start = new Date(date.getFullYear(), 0, 0);
+  return Math.floor((date - start) / 86400000);
+}
+
 export function acEsc(s) {
   const d = document.createElement('div');
   d.textContent = s || '';
