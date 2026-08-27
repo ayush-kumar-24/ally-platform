@@ -15,6 +15,10 @@ class VisionTerritoryResponse(BaseModel):
     tag1: str
     tag2: str
     updated_at: datetime | None
+    #: null when no picture is attached. `image_storage_path` is deliberately
+    #: NOT here -- which backend holds the bytes is an operational detail, and
+    #: publishing the S3 key would hand out a second, unmanaged handle on it.
+    image_url: str | None = None
 
     @classmethod
     def from_domain(cls, territory_key: str, t: VisionTerritory | None) -> "VisionTerritoryResponse":
@@ -22,7 +26,8 @@ class VisionTerritoryResponse(BaseModel):
         rendered as empty fields, never a fabricated statement."""
         if t is None:
             return cls(territory=territory_key, statement="", tag1="", tag2="", updated_at=None)
-        return cls(territory=t.territory, statement=t.statement, tag1=t.tag1, tag2=t.tag2, updated_at=t.updated_at)
+        return cls(territory=t.territory, statement=t.statement, tag1=t.tag1, tag2=t.tag2,
+                   updated_at=t.updated_at, image_url=t.image_url)
 
 
 class VisionSummaryResponse(BaseModel):

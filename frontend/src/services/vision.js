@@ -16,7 +16,7 @@
  * territory starts genuinely empty until the founder writes their own.
  */
 
-import { get, put } from './api';
+import { del, get, post, put } from './api';
 
 /** The six vision territories, in the order they're shown. */
 export const TERRITORIES = [
@@ -29,7 +29,9 @@ export const TERRITORIES = [
 ];
 
 function toTerritory(t) {
-  return { statement: t.statement, tag1: t.tag1, tag2: t.tag2 };
+  // imageUrl is null, never '', when nothing is attached -- the card branches
+  // on it, and an empty string is truthy enough to render a broken <img>.
+  return { statement: t.statement, tag1: t.tag1, tag2: t.tag2, imageUrl: t.image_url ?? null };
 }
 
 function toSummary(s) {
@@ -49,6 +51,36 @@ export async function loadVision() {
 
 export async function saveTerritory(key, { statement, tag1 = '', tag2 = '' }) {
   const t = await put(`/vision/territories/${key}`, { statement, tag1, tag2 });
+  return toTerritory(t);
+}
+
+/** PNG/JPEG/WEBP under 5MB, matching what the endpoint accepts. Checked here
+ *  too so an obviously wrong file is refused instantly instead of after a
+ *  5MB round-trip. */
+export const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
+export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+
+export function imageProblem(file) {
+  if (!file) return 'No file selected.';
+  if (!IMAGE_TYPES.includes((file.type || '').toLowerCase())) return 'Use a PNG, JPEG or WEBP image.';
+  if (file.size > MAX_IMAGE_BYTES) return 'That image is too large — please pick one under 5MB.';
+  return null;
+}
+
+/** Attach a picture to one territory. Returns the whole territory, not just
+ *  the URL: the server sends back the stored row, so the caller replaces its
+ *  copy wholesale rather than merging a URL into possibly-stale text. */
+export async function uploadTerritoryImage(key, file) {
+  const form = new FormData();
+  form.append('file', file);
+  const t = await post(`/vision/territories/${key}/image`, form, {
+    headers: { 'Content-Type': undefined },
+  });
+  return toTerritory(t);
+}
+
+export async function removeTerritoryImage(key) {
+  const t = await del(`/vision/territories/${key}/image`);
   return toTerritory(t);
 }
 

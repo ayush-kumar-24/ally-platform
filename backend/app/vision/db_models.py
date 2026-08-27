@@ -29,6 +29,14 @@ class VisionTerritoryRow(Base):
     statement: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
     tag1: Mapped[str] = mapped_column(String(100), nullable=False, server_default="")
     tag2: Mapped[str] = mapped_column(String(100), nullable=False, server_default="")
+    #: One picture per territory. Nullable with no default, so "no image" is
+    #: genuinely absent rather than an empty string that every reader then has
+    #: to remember to treat as absent. `image_storage_path` records which
+    #: backend holds THIS file ("s3:<key>" / "local:<name>") -- see the
+    #: migration and profile/routes.py, where avatars learned that a single URL
+    #: column orphans everything uploaded before a storage switch.
+    image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    image_storage_path: Mapped[str | None] = mapped_column(Text, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now())
 

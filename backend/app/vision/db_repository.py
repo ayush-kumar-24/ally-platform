@@ -19,6 +19,7 @@ def _territory_to_domain(row: VisionTerritoryRow) -> VisionTerritory:
     return VisionTerritory(
         founder_id=row.founder_id, territory=row.territory, statement=row.statement,
         tag1=row.tag1, tag2=row.tag2, updated_at=row.updated_at,
+        image_url=row.image_url,
     )
 
 
@@ -51,11 +52,42 @@ class SqlAlchemyVisionRepository(VisionRepository):
         if row is None:
             row = VisionTerritoryRow(founder_id=territory.founder_id, territory=territory.territory)
             self.db.add(row)
+        # Text only. The image columns are deliberately NOT assigned here, so
+        # saving a statement never clears a picture the founder attached
+        # earlier -- the two are edited independently and arrive on different
+        # requests.
         row.statement, row.tag1, row.tag2, row.updated_at = (
             territory.statement, territory.tag1, territory.tag2, territory.updated_at,
         )
         self.db.commit()
-        return territory
+        # Read back from the ROW, not the argument. The caller builds its
+        # VisionTerritory from the text fields alone, so returning it would
+        # report image_url=None on every text save and the page would blank the
+        # picture it is still storing.
+        return _territory_to_domain(row)
+
+    def set_territory_image(
+        self, founder_id: int, territory: str, *, image_url: str | None, storage_path: str | None,
+    ) -> VisionTerritory | None:
+        """Attach or clear one territory's picture, leaving its text alone.
+
+        Returns None when the territory row does not exist yet: an image cannot
+        be hung on a vision the founder has not written, and silently creating
+        an empty statement row to hold one would put a blank card on their
+        page.
+        """
+        row = self.db.get(VisionTerritoryRow, {"founder_id": founder_id, "territory": territory})
+        if row is None:
+            return None
+        row.image_url = image_url
+        row.image_storage_path = storage_path
+        self.db.commit()
+        return _territory_to_domain(row)
+
+    def get_territory_storage_path(self, founder_id: int, territory: str) -> str | None:
+        """Where the current picture lives, for deleting it when it is replaced."""
+        row = self.db.get(VisionTerritoryRow, {"founder_id": founder_id, "territory": territory})
+        return row.image_storage_path if row is not None else None
 
     def get_summary(self, founder_id: int) -> VisionSummary | None:
         row = self.db.get(VisionSummaryRow, founder_id)
