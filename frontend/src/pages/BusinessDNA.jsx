@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { factList, loadDna } from '../services/reports';
+import { factList, loadDna, pillarList } from '../services/reports';
+import { bandFill, bandTone, iconFor } from '../utils/dnaVisuals';
 import { DnaError, DnaLoading, DnaNoReport, DnaNoSection } from '../components/DnaState';
 import { useNavigate } from 'react-router-dom';
 
@@ -8,6 +9,18 @@ import { useNavigate } from 'react-router-dom';
    business_dna snapshot (per-pillar band + description). */
 function BusinessDNAView({ section, report }) {
   const navigate = useNavigate();
+  const pillars = pillarList(section?.facts);
+  // Whatever the section carries besides the pillars. Excluded by key so a
+  // pillar is never rendered twice -- once as its own card and again as a
+  // flattened "Retention · Strong · ..." string from the generic reader.
+  // `overall_band` gets the hero, where the demo puts its headline figure, and
+  // `red_flag_pillars` is dropped outright -- it is a list of names already
+  // carrying their own "Needs attention" mark on the cards below, so as a card
+  // of its own it says the same thing twice.
+  const overallBand = section?.facts?.overall_band || null;
+  const otherFacts = factList(section?.facts).filter(
+    (f) => !['pillars', 'overall band', 'red flag pillars'].includes(f.label.toLowerCase()),
+  );
 
 
   return (
@@ -21,9 +34,12 @@ function BusinessDNAView({ section, report }) {
           </h2>
           <p className="fd-hero-desc">{section?.prose}</p>
         </div>
-        {report?.report_id && (
+        {(overallBand || report?.report_id) && (
           <div className="fd-hero-score-wrap">
-            <div className="fd-hero-label">From report #{report.report_id}</div>
+            {overallBand && <div className="fd-hero-band">{overallBand}</div>}
+            <div className="fd-hero-label">
+              {overallBand ? 'Overall' : `From report #${report.report_id}`}
+            </div>
           </div>
         )}
       </div>
@@ -53,13 +69,50 @@ function BusinessDNAView({ section, report }) {
         </button>
       </div>
 
-      {/* `facts` is an open object -- rendered generically rather than assuming
-          a fixed set of ten dimensions that this report may not contain. */}
+      {/* Pillars first, as their own structured cards: name, band, a bar
+          coloured and filled from that band, and the band's written
+          description. `facts` stays an open object, so anything that is NOT a
+          pillar still falls through to the generic grid below rather than
+          being dropped -- a report that predates pillars renders exactly as it
+          did before. */}
       <div className="fd-grid stagger d3">
-        {factList(section?.facts).map((f) => (
+        {pillars.map((p) => (
+          <div key={p.name} className={`fd-card ${bandTone(p.band)}`}>
+            <div className="fd-card-top">
+              <div className="fd-card-info">
+                <div className="fd-card-icon">
+                  <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
+                    {iconFor(p.name)}
+                  </svg>
+                </div>
+                <div className="fd-card-title-wrap">
+                  <h4 className="fd-card-title">{p.name}</h4>
+                  {p.redFlag && <span className="fd-card-flag">Needs attention</span>}
+                </div>
+              </div>
+              {/* The band word, not a number. The underlying score is
+                  engine-internal and deliberately not published, so printing
+                  one here would be inventing a precision the page was never
+                  given. */}
+              {p.band && <div className="fd-card-band">{p.band}</div>}
+            </div>
+            {p.band && (
+              <div className="fd-progress-track">
+                <div className="fd-progress-bar" style={{ width: `${bandFill(p.band)}%` }} />
+              </div>
+            )}
+            {p.description && <p className="fd-card-desc">{p.description}</p>}
+          </div>
+        ))}
+        {otherFacts.map((f) => (
           <div key={f.label} className="fd-card">
             <div className="fd-card-top">
               <div className="fd-card-info">
+                <div className="fd-card-icon">
+                  <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
+                    {iconFor(f.label)}
+                  </svg>
+                </div>
                 <div className="fd-card-title-wrap">
                   <h4 className="fd-card-title">{f.label}</h4>
                 </div>
