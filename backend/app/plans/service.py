@@ -39,7 +39,7 @@ from app.plans.errors import (
     NoFreeCallsRemainingError,
     OutOfCreditsError,
 )
-from app.plans.usage import UsageRepository, next_utc_midnight, period_month
+from app.plans.usage import UsageRepository, next_daily_reset, period_month, usage_day
 
 
 @dataclass(frozen=True)
@@ -131,9 +131,9 @@ class EntitlementService:
 
         now = self._now()
         limit = plan.daily_limit_for(source)
-        used = self.usage.get_daily(founder_id, now.date(), source=source).tokens_used
+        used = self.usage.get_daily(founder_id, usage_day(now), source=source).tokens_used
         if used >= limit:
-            raise DailyTokenLimitError(used, limit, next_utc_midnight(now))
+            raise DailyTokenLimitError(used, limit, next_daily_reset(now))
 
         if self.credits is not None:
             try:
@@ -161,7 +161,7 @@ class EntitlementService:
         system) but charges no credits.
         """
         now = self._now()
-        daily = self.usage.add_tokens(founder_id, now.date(), tokens, at=now, source=source)
+        daily = self.usage.add_tokens(founder_id, usage_day(now), tokens, at=now, source=source)
 
         charged = 0
         if not is_first_diagnosis and self.credits is not None and tokens > 0:
@@ -221,7 +221,7 @@ class EntitlementService:
     def entitlements(self, founder_id: int, tier: PlanTier | str | None) -> Entitlements:
         plan = self.plan_for(tier)
         now = self._now()
-        daily = self.usage.get_daily(founder_id, now.date())
+        daily = self.usage.get_daily(founder_id, usage_day(now))
         calls = self.usage.get_calls(founder_id, period_month(now))
         balance = 0
         if self.credits is not None:

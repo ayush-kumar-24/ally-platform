@@ -2,7 +2,7 @@
 
 Two counters, both keyed by a *period* rather than reset by a job:
 
-* tokens  -> keyed by (founder_id, UTC date)
+* tokens  -> keyed by (founder_id, LOCAL date -- see usage_day)
 * calls   -> keyed by (founder_id, UTC year-month)
 
 Nothing "resets at midnight". A new day is simply a new key, so yesterday's row is
@@ -10,6 +10,16 @@ untouched and today's starts at zero the first time it is read. Same reasoning a
 credit settlement: a counter that depends on a scheduled reset is wrong whenever
 the scheduler misses, runs twice, or runs late -- and a rate limit that silently
 stops limiting is worse than none.
+
+This is also why the allowance never accumulates: tomorrow reads a different key
+that has no row yet, so it starts at the full limit whether yesterday was spent
+to the last token or barely touched. Unused tokens do not roll forward, by
+construction rather than by a sweep that zeroes them.
+
+The daily key is the LOCAL date (USAGE_RESET_TIMEZONE, IST by default), not the
+UTC one. Founders here are in India, and a UTC day hands the allowance back at
+05:30 local -- so someone who ran out at 9pm was told "midnight" and found
+nothing there. The stored timestamps stay UTC; only the day BOUNDARY is local.
 
 Keeping the history also means "how many tokens did this founder use last Tuesday"
 is answerable, which a reset-in-place counter throws away.
@@ -22,9 +32,13 @@ import threading
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 
+from zoneinfo import ZoneInfo
+
 from sqlalchemy import Date, DateTime, ForeignKey, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
+from app.core.config import settings
+from app.core.logger import logger
 from app.db.session import Base
 
 
@@ -33,10 +47,57 @@ def period_month(moment: datetime) -> str:
     return f"{moment.year:04d}-{moment.month:02d}"
 
 
-def next_utc_midnight(moment: datetime) -> datetime:
-    """When the daily allowance rolls over -- returned to the user in the 429."""
-    tomorrow = moment.astimezone(timezone.utc).date() + timedelta(days=1)
-    return datetime.combine(tomorrow, time.min, tzinfo=timezone.utc)
+def _reset_zone() -> ZoneInfo:
+    """The timezone whose midnight ends the metered day.
+
+    Resolved per call rather than at import so a settings change (or a test
+    overriding it) takes effect without reimporting the module. Falls back to
+    UTC on an unknown zone name: a typo in an env var must not take metering
+    down, and UTC is the behaviour this replaced.
+    """
+    name = getattr(settings, "USAGE_RESET_TIMEZONE", "") or "UTC"
+    try:
+        return ZoneInfo(name)
+    except Exception:  # noqa: BLE001 -- unknown zone name in config
+        logger.warning("unknown USAGE_RESET_TIMEZONE, metering day falls back to UTC",
+                       extra={"configured": name})
+        return ZoneInfo("UTC")
+
+
+def usage_day(moment: datetime) -> date:
+    """The metered day `moment` belongs to.
+
+    THE key for the daily counter, and the reason it is a function rather than
+    `moment.date()` at each call site: the day boundary is local (see
+    USAGE_RESET_TIMEZONE), while `moment` itself stays UTC because that is what
+    a timestamp should be. Getting these two mixed up is how a founder's
+    allowance silently rolls over at 05:30.
+
+    Naive datetimes are treated as UTC -- the app builds them with
+    `datetime.now(timezone.utc)`, so a naive one is a caller that forgot, and
+    assuming local for it would shift the boundary by the offset.
+    """
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    return moment.astimezone(_reset_zone()).date()
+
+
+def next_daily_reset(moment: datetime) -> datetime:
+    """When the daily allowance rolls over -- returned to the user in the 429.
+
+    The next LOCAL midnight, expressed in UTC. The founder is told a wall-clock
+    time they recognise; the wire format stays absolute.
+    """
+    zone = _reset_zone()
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    tomorrow = moment.astimezone(zone).date() + timedelta(days=1)
+    return datetime.combine(tomorrow, time.min, tzinfo=zone).astimezone(timezone.utc)
+
+
+# Previous name, kept so nothing importing it breaks. It is no longer UTC-bound:
+# the reset follows USAGE_RESET_TIMEZONE. Prefer next_daily_reset.
+next_utc_midnight = next_daily_reset
 
 
 @dataclass(frozen=True)

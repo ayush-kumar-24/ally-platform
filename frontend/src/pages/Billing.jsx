@@ -7,7 +7,9 @@ import { getCatalog, getMyPlan } from '../services/plans';
 /** Keys must match the plan tiers (free / starter / pro) served by GET /plans. */
 const COMPARE_ROWS = [
   { label: 'Credits', free: '120 (once)', starter: '180 / month', pro: '240 / month' },
-  { label: 'Tokens per day', free: '4,000', starter: '6,000', pro: '8,000' },
+  // Free is 8,000 for the testing phase -- deliberately level with Pro. Drops
+  // back down when Free is resized for launch (backend: plans/catalog.py).
+  { label: 'Tokens per day', free: '8,000', starter: '6,000', pro: '8,000' },
   { label: 'First diagnosis', free: 'Free', starter: 'Free', pro: 'Free' },
   { label: 'Founder DNA', free: true, starter: true, pro: true },
   { label: 'Business DNA', free: true, starter: true, pro: true },

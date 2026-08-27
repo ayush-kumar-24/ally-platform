@@ -20,7 +20,9 @@ from app.plans import (
     build_entitlement_service,
     credits_for_tokens,
     get_plan,
+    next_daily_reset,
     period_month,
+    usage_day,
 )
 
 T0 = datetime(2026, 8, 2, 12, 0, tzinfo=timezone.utc)
@@ -80,6 +82,48 @@ def test_daily_limits():
     # Planning meters separately, and only Free is sized for it so far.
     assert free.planning_daily_token_limit == 7_700
     assert starter.planning_daily_token_limit == 0
+
+
+def test_metered_day_boundary_is_local_midnight_not_utc():
+    """The allowance rolls over at midnight where the founder actually is.
+
+    Keyed on UTC, an IST founder's day ended at 05:30 local -- so someone who
+    ran out at 9pm was told to wait for "midnight" and found nothing there for
+    another five and a half hours. These four moments straddle 18:30 UTC, which
+    is 00:00 IST.
+    """
+    just_before = datetime(2026, 8, 25, 18, 25, tzinfo=timezone.utc)   # 23:55 IST
+    just_after = datetime(2026, 8, 25, 18, 35, tzinfo=timezone.utc)    # 00:05 IST
+
+    assert usage_day(just_before) == date(2026, 8, 25)
+    assert usage_day(just_after) == date(2026, 8, 26)
+
+    # 20:00 UTC is 01:30 IST -- already tomorrow locally, still today in UTC.
+    # This is the case the UTC key got wrong every single night.
+    assert usage_day(datetime(2026, 8, 25, 20, 0, tzinfo=timezone.utc)) == date(2026, 8, 26)
+
+    # And the founder is told the local midnight, expressed absolutely.
+    assert next_daily_reset(just_before) == datetime(2026, 8, 25, 18, 30, tzinfo=timezone.utc)
+    assert next_daily_reset(just_after) == datetime(2026, 8, 26, 18, 30, tzinfo=timezone.utc)
+
+
+def test_unused_tokens_do_not_carry_over():
+    """A new day starts at the full limit, not at limit + whatever was spared.
+
+    The allowance is a ceiling per day, not a balance that accrues -- which
+    holds because tomorrow reads a key with no row behind it, so there is
+    nothing to add yesterday's remainder to.
+    """
+    usage = InMemoryUsageRepository()
+    day_one, day_two = date(2026, 8, 25), date(2026, 8, 26)
+    limit = get_plan(PlanTier.FREE).daily_token_limit
+
+    usage.add_tokens(4242, day_one, 6_000, at=datetime(2026, 8, 25, 6, tzinfo=timezone.utc))
+    assert usage.get_daily(4242, day_one).remaining(limit) == limit - 6_000
+
+    # 2,000 went unspent yesterday and must not appear as head-room today.
+    assert usage.get_daily(4242, day_two).tokens_used == 0
+    assert usage.get_daily(4242, day_two).remaining(limit) == limit
 
 
 def test_monthly_credits_are_reachable_under_the_daily_ceiling():

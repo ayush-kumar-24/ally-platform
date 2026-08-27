@@ -256,6 +256,17 @@ class Settings(BaseSettings):
     GOOGLE_CALENDAR_CREDENTIALS_JSON: str = ""
     DISCOVERY_CALL_DURATION_MINUTES: int = 45
     DISCOVERY_TIMEZONE: str = "Asia/Kolkata"
+    # Which midnight ends a founder's metered day (plans/usage.py).
+    #
+    # Its own setting rather than reusing DISCOVERY_TIMEZONE: that one decides
+    # when call slots are offered, and someone changing booking hours must not
+    # silently move every founder's token allowance with it.
+    #
+    # UTC was the previous behaviour and was wrong for this audience -- founders
+    # are in India, so a day that rolls over at 00:00 UTC hands back their
+    # allowance at 05:30 IST. A tester who ran out at 9pm was told to wait for
+    # "midnight" and then found nothing there until dawn.
+    USAGE_RESET_TIMEZONE: str = "Asia/Kolkata"
     # Personal Gmail calendars can't invite attendees via a service account
     # ("forbiddenForServiceAccounts"); only turn this on with a Google Workspace
     # calendar + domain-wide delegation. When off, the booking is created without

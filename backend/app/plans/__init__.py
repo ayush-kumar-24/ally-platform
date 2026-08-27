@@ -45,7 +45,9 @@ from app.plans.usage import (
     InMemoryUsageRepository,
     SqlAlchemyUsageRepository,
     UsageRepository,
+    next_daily_reset,
     next_utc_midnight,
+    usage_day,
     period_month,
 )
 
@@ -76,6 +78,8 @@ __all__ = [
     "build_entitlement_service",
     "credits_for_tokens",
     "get_plan",
+    "next_daily_reset",
     "next_utc_midnight",
+    "usage_day",
     "period_month",
 ]

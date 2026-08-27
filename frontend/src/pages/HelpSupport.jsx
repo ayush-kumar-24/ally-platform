@@ -19,7 +19,7 @@ const FAQS = [
   },
   {
     q: 'How do plans work?',
-    a: 'There are three: Free (₹0), Starter (₹450/month) and Pro (₹999/month). All three include the diagnosis, Founder DNA, Business DNA, reports and next steps. What changes is daily chat allowance (Free 4,000 tokens, Starter 6,000, Pro 8,000), free discovery calls per month (Free none, Starter 1, Pro 2), and voice inside Ally Chat plus Plan Your Day, which are paid features.'
+    a: 'There are three: Free (₹0), Starter (₹450/month) and Pro (₹999/month). All three include the diagnosis, Founder DNA, Business DNA, reports and next steps. What changes is daily chat allowance (Free 8,000 tokens during the testing phase, Starter 6,000, Pro 8,000), free discovery calls per month (Free none, Starter 1, Pro 2), and voice inside Ally Chat plus Plan Your Day, which are paid features.'
   },
   {
     q: 'How many diagnoses do I get?',
