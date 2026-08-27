@@ -33,7 +33,10 @@ function BusinessDNAView({ section, report }) {
           <h2 className="fd-hero-title">
             {section?.heading || 'Your business profile'}
           </h2>
-          <p className="fd-hero-desc">{section?.prose}</p>
+          {/* Clamped, not trimmed: the narrator now keeps this short at the
+              source, but a founder's own words still arrive here and this page
+              must not turn into a wall of text if one of them runs long. */}
+          <ClampedText baseClass="fd-hero-desc" lines={3} text={section?.prose} />
         </div>
         {(overallBand || report?.report_id) && (
           <div className="fd-hero-score-wrap">

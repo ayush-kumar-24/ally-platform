@@ -350,3 +350,78 @@ def test_llm_prompt_omits_brief_directive_when_not_flagged():
     narrator = LLMSectionNarrator(fake_llm)
     narrator.narrate("business_dna", {"overall_band": "Needs Attention"}, ToneGuidance("Validator"))
     assert "IMPORTANT: this section must be BRIEF" not in captured["prompt"]
+
+
+# --- the hero paragraph stays a paragraph ----------------------------------
+# The founder-facing report opens with this prose. Founders type essays into
+# the vision box, and every one of those characters used to land in the hero
+# verbatim, quoted whole. These pin the limit that the section's own comment
+# had promised since it was written but never enforced.
+
+_ESSAY = (
+    "I want a business that runs without me being in every single decision, "
+    "where the team knows what good looks like and does not need me to tell "
+    "them, and where I can take three weeks off without anything catching "
+    "fire or anybody calling me about it. That is the whole thing really."
+)
+
+
+def _dna(**over):
+    return next(s for s in _gen(_payload(**over)).sections if s.key == "founder_dna").prose
+
+
+def test_a_long_vision_is_not_quoted_whole_into_the_hero():
+    prose = _dna(founder_vision=_ESSAY)
+    assert _ESSAY not in prose
+    assert "runs without me" in prose            # still the founder's own words
+    assert len(prose) < 500
+
+
+def test_a_long_vision_is_cut_at_a_sentence_when_the_first_one_fits():
+    """A whole first thought, kept whole. _ESSAY does NOT take this path: its
+    own first sentence runs 275 characters, so it falls to the word cut below
+    -- which is the point of having both rules."""
+    essay = "A business that runs without me. " + "There is a lot more I could say about it. " * 6
+    prose = _dna(founder_vision=essay)
+    quoted = prose.split('this is what success looks like: "')[1].split('"')[0]
+    assert quoted == "A business that runs without me."
+
+
+def test_a_short_vision_is_left_exactly_as_written():
+    prose = _dna(founder_vision="Runs without me.")
+    assert '"Runs without me."' in prose
+
+
+def test_a_single_endless_sentence_is_cut_at_a_word_boundary():
+    prose = _dna(founder_vision="I want " + "a much calmer business " * 20)
+    quoted = prose.split('this is what success looks like: "')[1].split('"')[0]
+    assert quoted.endswith("…")
+    assert quoted.rstrip("…").strip() in " ".join(("I want " + "a much calmer business " * 20).split())
+
+
+def test_the_earliest_terminator_wins_not_the_first_one_looked_for():
+    """Scanning "." before "!" would return the second sentence."""
+    prose = _dna(founder_vision="Ship it! Then rest for a while.")
+    assert '"Ship it!"' in prose
+
+
+def test_every_narrated_dimension_is_shortened_not_just_vision():
+    prose = _dna(founder_vision=_ESSAY,
+                 strengths_blind_spots=(_ESSAY,),
+                 phase2_dimensions={"purpose_mission": (_ESSAY,)})
+    assert _ESSAY not in prose
+    assert prose.count(_ESSAY[:40]) <= 3         # each appears once, shortened
+
+
+def test_a_question_stored_as_an_answer_is_never_narrated_back():
+    """Live data defect: some strengths_blind_spots rows hold the QUESTION.
+    Narrating one produces "A pattern worth naming: Tell me about..."."""
+    q = "Tell me about the last time a strength of yours became a problem?"
+    prose = _dna(strengths_blind_spots=(q,))
+    assert "A pattern worth naming" not in prose
+    assert "Tell me about" not in prose
+
+
+def test_a_real_blind_spot_still_gets_narrated():
+    prose = _dna(strengths_blind_spots=("You hold on to decisions too long.",))
+    assert "A pattern worth naming: You hold on to decisions too long." in prose

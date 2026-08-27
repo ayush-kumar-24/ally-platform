@@ -17,6 +17,43 @@ from dataclasses import dataclass
 from typing import Any, Callable, Protocol
 
 
+_QUOTE_MAX_CHARS = 160
+
+
+def _shorten(text: str, limit: int = _QUOTE_MAX_CHARS) -> str:
+    """One short line out of a founder's answer.
+
+    Founders type paragraphs into these boxes, and this narrator quotes them
+    verbatim into a lead paragraph -- which is how the hero ends up a wall of
+    text. Prefer the first sentence, because a first sentence is a whole
+    thought and cutting mid-clause reads as a bug; fall back to a word-boundary
+    cut only when that sentence is itself longer than the limit.
+    """
+    text = " ".join((text or "").split())
+    if not text:
+        return ""
+    # Earliest terminator, not the first one in some fixed order: scanning
+    # "." before "!" would return the second sentence of "Ship it! Then rest."
+    ends = [i for stop in (". ", "! ", "? ") if (i := text.find(stop)) != -1]
+    if ends and min(ends) + 2 <= limit:
+        return text[: min(ends) + 1]
+    if len(text) <= limit:
+        return text
+    cut = text[:limit].rsplit(" ", 1)[0].rstrip(" ,;:-")
+    return f"{cut}\u2026"
+
+
+def _is_question(text: str) -> bool:
+    """A stored "answer" that is actually the question it was asked.
+
+    This is live in production data today: some `strengths_blind_spots` rows
+    hold the prompt rather than the reply, and narrating one produces "A
+    pattern worth naming: Tell me about the last time...". Dropping it costs a
+    line; printing it costs the founder's trust in the whole report.
+    """
+    return " ".join((text or "").split()).endswith("?")
+
+
 @dataclass(frozen=True)
 class ToneGuidance:
     persona: str | None                 # Validator / Compass / Auditor
@@ -56,6 +93,11 @@ class TemplateNarrator:
         # preference) each add at most one short, fact-only line so the template
         # fallback stays readable rather than a wall of quoted text -- the full
         # set is still visible as cards via `facts` regardless of what prose says.
+        #
+        # "Short" is now enforced by _shorten rather than merely intended. It was
+        # intended here from the start and never applied, so founders who wrote
+        # three paragraphs into the vision box got all three quoted back at them
+        # in the report hero. An intention with no code behind it is not a limit.
         parts = []
         arch = s.get("archetype")
         if arch and arch.get("name"):
@@ -74,10 +116,13 @@ class TemplateNarrator:
                 )
         vision = s.get("vision")
         if vision:
-            parts.append(f'In your own words, this is what success looks like: "{vision}"')
+            parts.append(
+                "In your own words, this is what success looks like: "
+                f'"{_shorten(vision)}"'
+            )
         blind_spots = s.get("strengths_blind_spots")
-        if blind_spots:
-            parts.append("A pattern worth naming: " + blind_spots[0])
+        if blind_spots and not _is_question(blind_spots[0]):
+            parts.append("A pattern worth naming: " + _shorten(blind_spots[0]))
         # purpose_mission gets the same one-line treatment as vision (both are
         # "why this matters" statements); the other 5 phase-2 dimensions stay
         # card-only here, same as origin/stress_response/communication_
@@ -85,7 +130,10 @@ class TemplateNarrator:
         # would be exactly the wall-of-text this fallback is written to avoid.
         purpose_mission = s.get("purpose_mission")
         if purpose_mission:
-            parts.append(f'On why this matters to you: "{purpose_mission[0]}"')
+            parts.append(
+                "On why this matters to you: "
+                f'"{_shorten(purpose_mission[0])}"'
+            )
         return " ".join(parts)
 
     def _psychological_note(self, s, tone):

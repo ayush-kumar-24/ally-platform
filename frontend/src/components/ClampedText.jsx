@@ -17,7 +17,16 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  * overflows at a narrow one. scrollHeight vs clientHeight asks the browser what
  * actually happened, at the width it actually happened at.
  */
-export default function ClampedText({ text, lines = 4, className = '' }) {
+export default function ClampedText({
+  text,
+  lines = 4,
+  className = '',
+  // The clamp itself is not card-specific -- the report hero has exactly the
+  // same problem (it quotes the founder's own answers) and wants exactly the
+  // same control. `baseClass` keeps each surface's own typography while
+  // sharing the measurement, so a hero does not grow a second copy of this.
+  baseClass = 'fd-card-desc',
+}) {
   const ref = useRef(null);
   const [expanded, setExpanded] = useState(false);
   const [overflows, setOverflows] = useState(false);
@@ -50,7 +59,7 @@ export default function ClampedText({ text, lines = 4, className = '' }) {
     <>
       <p
         ref={ref}
-        className={`fd-card-desc${expanded ? ' is-open' : ' is-clamped'}${className ? ` ${className}` : ''}`}
+        className={`${baseClass}${expanded ? ' is-open' : ' is-clamped'}${className ? ` ${className}` : ''}`}
         style={expanded ? undefined : { WebkitLineClamp: lines }}
       >
         {text}

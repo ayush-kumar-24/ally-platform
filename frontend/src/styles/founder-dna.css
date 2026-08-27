@@ -310,10 +310,22 @@
    supported everywhere this app runs, including Firefox since 68. The line
    count itself is set inline by ClampedText, so one component decides it
    rather than a value duplicated here. */
-.fd-card-desc.is-clamped {
+.fd-card-desc.is-clamped,
+.fd-hero-desc.is-clamped {
   display: -webkit-box;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+/* The hero sits on the dark header, where the card's emerald "Read more"
+   disappears. Same control, legible ground. */
+.fd-hero-desc.is-clamped + .fd-more,
+.fd-hero-desc.is-open + .fd-more {
+  color: #5eead4;
+}
+.fd-hero-desc.is-clamped + .fd-more:hover,
+.fd-hero-desc.is-open + .fd-more:hover {
+  color: #a7f3d0;
 }
 
 .fd-more {
