@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import LiveClock from '../components/LiveClock';
+import QuoteCard from '../components/QuoteCard';
 import { useApp } from '../context/AppContext';
 import PlanGate from '../components/PlanGate';
 import { FEATURES } from '../services/plans';
@@ -442,6 +444,7 @@ function PlanYourDayInner() {
             Set today's priorities. Ally will keep you accountable and remind you to stay on track.
           </p>
         </div>
+        <div className="plan-head-chips">
         <div
           className="plan-date"
           style={{
@@ -478,7 +481,13 @@ function PlanYourDayInner() {
               calendar look like it did nothing. */}
           {headerDateLabel}
         </div>
+          <LiveClock />
+        </div>
       </div>
+
+      {/* Small and directly under the header, where it reads as a note beside
+          the day's work rather than a card competing with it. */}
+      <QuoteCard size="sm" surface="plan" className="stagger d2" />
 
       {/* Mode selection tabs.
 

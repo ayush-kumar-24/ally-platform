@@ -1063,3 +1063,15 @@
 
 .pl-showall:hover { border-color: var(--emerald, #10B981); color: var(--emerald, #10B981); }
 .pl-showall:focus-visible { outline: 2px solid var(--emerald, #10B981); outline-offset: 1px; }
+
+/* ---- header chips: the day being planned, and the actual time -------------
+   Grouped so they stay together at the header's right edge, and wrap as a pair
+   on a phone instead of one dropping under the title on its own. */
+.plan-head-chips{display:flex;align-items:center;gap:10px;flex-wrap:wrap;height:fit-content}
+.plan-clock{display:inline-flex;align-items:center;gap:8px;background:#fff;
+  border:1px solid var(--bd,#e7e0d6);border-radius:10px;padding:8px 14px;
+  font-size:12.5px;font-weight:700;color:var(--forest,#1B4332);height:fit-content}
+.plan-clock svg{width:14px;height:14px;flex-shrink:0}
+/* Tabular figures so the digits keep their columns -- proportional numerals
+   make the whole clock twitch sideways every second as the widths change. */
+.plan-clock time{font-variant-numeric:tabular-nums}

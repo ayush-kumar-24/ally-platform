@@ -23,7 +23,7 @@ import { useCallAccess } from '../hooks/useCallAccess';
    at all: it advertises a door that does not open yet. */
 const TOUR_STEPS = [
   // Where the diagnosis lands.
-  { nav: '/app', emoji: '🧭', title: 'Your dashboard', text: 'Where you land each time — your current read, what changed, and what Ally suggests next.' },
+  { nav: '/app', emoji: '🧭', title: 'Your Compass', text: 'Where you land each time — your current read, what changed, and what Ally suggests next.' },
   { nav: '/app/report', emoji: '📄', title: 'Your Clarity Report', text: 'The full diagnosis: your root cause, the evidence behind it, and your three steps. Every report you ever run is kept here.', needsReport: true },
 
   // What it found.
@@ -35,7 +35,7 @@ const TOUR_STEPS = [
   { nav: '/app/next-steps', emoji: '➡️', title: 'Next steps', text: 'Your plan in order — what to confirm first, what to fix after, and why that sequence.', needsReport: true },
 
   // The tools for doing it.
-  { nav: '/app/ally-chat', emoji: '💬', title: 'Chat with Ally', text: 'Think out loud any time. Ally already knows your diagnosis, so you never start from scratch.' },
+  { nav: '/app/ally-chat', emoji: '💬', title: 'Talk to Ally', text: 'Think out loud any time. Ally already knows your diagnosis, so you never start from scratch.' },
   { nav: '/app/plan', emoji: '📅', title: 'Plan Your Day', text: 'Set today’s priorities yourself or let Ally draft them, then get reminders to stay on them.' },
   { nav: '/app/goals', emoji: '🎯', title: 'Goals', text: 'The bigger arcs you are working toward, tracked beyond a single day.' },
   { nav: '/app/vision', emoji: '👁️', title: 'Your Vision', text: 'Where you want this to end up, in your words. Ally reads it when it advises you.' },
@@ -268,10 +268,28 @@ export default function ProductTour() {
         <div className="tp-t">{step.title}</div>
         <div className="tp-x">{step.text}</div>
         <div className="tp-foot">
-          <div className="tp-dots">
-            {steps.map((_, i) => (
-              <i key={i} className={i === stepIndex ? 'on' : ''} />
-            ))}
+          {/* A bar rather than one dot per step. The dot rail was fixed-width
+              per step -- 6px each plus a 5px gap -- so it grew with the tour
+              and, once the tour covered the whole product, pushed Skip and
+              Next past the popup's right edge (measured: 16px over at 14
+              steps, 38px at 16). A bar is the same width at any step count, so
+              the footer cannot be broken by adding a stop, and fourteen
+              identical dots were never readable as progress anyway. */}
+          <div
+            className="tp-prog"
+            role="progressbar"
+            aria-valuenow={stepIndex + 1}
+            aria-valuemin={1}
+            aria-valuemax={steps.length}
+            aria-label="Tour progress"
+          >
+            <span className="tp-prog-track">
+              <span
+                className="tp-prog-fill"
+                style={{ width: `${((stepIndex + 1) / steps.length) * 100}%` }}
+              />
+            </span>
+            <span className="tp-prog-num">{stepIndex + 1}/{steps.length}</span>
           </div>
           <div className="tp-btns">
             {!step.final && (

@@ -15,7 +15,7 @@ import { ApiError } from '../services/api';
 const FAQS = [
   {
     q: 'How do I start a diagnosis?',
-    a: 'Click "New diagnosis" at the top right of any page — or "Start Founder Diagnosis" on your dashboard. Ally begins with Founder DNA (how you decide and work), then moves to your current problem, then the business itself.'
+    a: 'Open "Adaptive diagnosis" in the sidebar — or "Start Founder Diagnosis" on your Compass. Ally begins with Founder DNA (how you decide and work), then moves to your current problem, then the business itself.'
   },
   {
     q: 'How do plans work?',
@@ -365,7 +365,7 @@ export default function HelpSupport() {
             <svg viewBox="0 0 24 24">
               <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
             </svg>
-            Chat with Ally
+            Talk to Ally
           </button>
         </div>
       </div>

@@ -110,7 +110,7 @@ function useCatalog() {
   return { plans, live };
 }
 
-function PlansView({ annual, setAnnual, onSelectPlan, currentPlan }) {
+function PlansView({ onSelectPlan, currentPlan }) {
   const { plans: PLANS } = useCatalog();
   return (
     <>
@@ -125,24 +125,10 @@ function PlansView({ annual, setAnnual, onSelectPlan, currentPlan }) {
         <p>Start free. Upgrade when you need more diagnoses, deeper insights, or team features.</p>
       </div>
 
-      {/* Toggle */}
-      <div style={{ textAlign: 'center' }}>
-        <div className="bill-toggle stagger d1">
-          <button className={`bt-opt${!annual ? ' on' : ''}`} onClick={() => setAnnual(false)}>Monthly</button>
-          <button className={`bt-opt${annual ? ' on' : ''}`} onClick={() => setAnnual(true)}>
-            Annual <span className="bt-save">Save 20%</span>
-          </button>
-          <div className="bt-slider" style={{
-            left: annual ? 'calc(50% + 2px)' : '4px',
-            width: annual ? 'calc(50% - 6px)' : 'calc(50% - 6px)',
-          }} />
-        </div>
-      </div>
-
       {/* Plan cards */}
       <div className="plans stagger d2">
         {PLANS.map(plan => {
-          const price = annual ? Math.floor(plan.price * 0.8) : plan.price;
+          const price = plan.price;
           const isCurrent = currentPlan === plan.id;
           return (
             <div key={plan.id} className={`plan-card${plan.popular ? ' popular' : ''}`}>
@@ -160,13 +146,13 @@ function PlansView({ annual, setAnnual, onSelectPlan, currentPlan }) {
                   </>
                 )}
               </div>
-              {plan.price > 0 && <div className="pc-sub">{annual ? 'billed annually' : 'billed monthly'}</div>}
+              {plan.price > 0 && <div className="pc-sub">billed monthly</div>}
               <button
                 id={`plan-cta-${plan.id}`}
                 className={`pc-cta${isCurrent ? '' : ' primary'}`}
                 onClick={() => {
                   if (!isCurrent && plan.id !== 'max') {
-                    onSelectPlan({ ...plan, displayPrice: price, annual });
+                    onSelectPlan({ ...plan, displayPrice: price });
                   }
                 }}
                 disabled={isCurrent}
@@ -222,7 +208,7 @@ function PlansView({ annual, setAnnual, onSelectPlan, currentPlan }) {
               {PLANS.map(p => (
                 <th scope="col" key={p.id} className={p.popular ? 'cmp-col-pop' : ''}>
                   <div className="cmp-pn">{p.name}</div>
-                  <div className="cmp-pp">{p.price === 0 ? 'Free' : `₹${(annual ? Math.floor(p.price * 0.8) : p.price).toLocaleString()}/mo`}</div>
+                  <div className="cmp-pp">{p.price === 0 ? 'Free' : `₹${p.price.toLocaleString()}/mo`}</div>
                 </th>
               ))}
             </tr>
@@ -257,7 +243,7 @@ const PAYMENT_METHODS = [
   { id: 'netbanking', label: 'Net Banking' },
 ];
 
-function CheckoutView({ plan, annual, onBack, onSuccess }) {
+function CheckoutView({ plan, onBack, onSuccess }) {
   const [method, setMethod] = useState('card');
   const [form, setForm] = useState({
     name: '',
@@ -292,10 +278,9 @@ function CheckoutView({ plan, annual, onBack, onSuccess }) {
   const [errors, setErrors] = useState({});
   const [processing, setProcessing] = useState(false);
 
-  const price = annual ? Math.floor(plan.price * 0.8) : plan.price;
+  const price = plan.price;
   const gst = Math.round(price * 0.18);
   const total = price + gst;
-  const annualTotal = annual ? total * 12 : null;
 
   const formatCard = v => v.replace(/\D/g, '').replace(/(.{4})/g, '$1 ').trim().slice(0, 19);
   const formatExpiry = v => {
@@ -477,7 +462,7 @@ function CheckoutView({ plan, annual, onBack, onSuccess }) {
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
                     <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
                   </svg>
-                  Pay ₹{total.toLocaleString()} {annual ? '/ year (×12)' : '/ month'}
+                  Pay ₹{total.toLocaleString()} / month
                 </>
               )}
             </button>
@@ -494,7 +479,7 @@ function CheckoutView({ plan, annual, onBack, onSuccess }) {
           <div className="bl-os-plan-badge">
             <div className="bl-os-plan-name">{plan.name} Plan</div>
             <div className="bl-os-plan-tag">{plan.tag}</div>
-            <div className="bl-os-plan-cycle">{annual ? 'Billed Annually' : 'Billed Monthly'}</div>
+            <div className="bl-os-plan-cycle">Billed Monthly</div>
           </div>
 
           <ul className="bl-os-feats">
@@ -508,22 +493,16 @@ function CheckoutView({ plan, annual, onBack, onSuccess }) {
 
           <div className="bl-os-breakdown">
             <div className="bl-os-line">
-              <span>{plan.name} ({annual ? 'Annual' : 'Monthly'})</span>
+              <span>{plan.name} (Monthly)</span>
               <span>₹{price.toLocaleString()}</span>
             </div>
             <div className="bl-os-line">
               <span>GST (18%)</span>
               <span>₹{gst.toLocaleString()}</span>
             </div>
-            {annual && (
-              <div className="bl-os-line bl-os-saving">
-                <span>Annual savings (20% off)</span>
-                <span>–₹{Math.round(plan.price * 0.2 * 12).toLocaleString()}</span>
-              </div>
-            )}
             <div className="bl-os-total">
-              <span>Total {annual ? '/ year' : '/ month'}</span>
-              <span>₹{(annual ? annualTotal : total).toLocaleString()}</span>
+              <span>Total / month</span>
+              <span>₹{total.toLocaleString()}</span>
             </div>
           </div>
 
@@ -559,8 +538,8 @@ function SuccessView({ plan, onViewStatus }) {
       <div className="bl-success-details">
         <div className="bl-sd-row"><span>Plan</span><strong>{plan.name}</strong></div>
         <div className="bl-sd-row"><span>Amount charged</span><strong>₹{plan.displayPrice?.toLocaleString()}/mo + GST</strong></div>
-        <div className="bl-sd-row"><span>Billing cycle</span><strong>{plan.annual ? 'Annual' : 'Monthly'}</strong></div>
-        <div className="bl-sd-row"><span>Next renewal</span><strong>{plan.annual ? 'Jul 2027' : 'Aug 2026'}</strong></div>
+        <div className="bl-sd-row"><span>Billing cycle</span><strong>Monthly</strong></div>
+        <div className="bl-sd-row"><span>Next renewal</span><strong>Aug 2026</strong></div>
         <div className="bl-sd-row"><span>Status</span><strong className="bl-status-badge active">Active</strong></div>
       </div>
       <button id="view-subscription-btn" className="bl-pay-btn" onClick={onViewStatus}>
@@ -683,7 +662,6 @@ function StatusView({ onUpgrade, currentPlan }) {
 ═══════════════════════════════════════════ */
 export default function Billing() {
   const [view, setView] = useState('plans'); // 'plans' | 'checkout' | 'success' | 'status'
-  const [annual, setAnnual] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState(null);
   // Was hardcoded to 'starter' -- every founder, on any plan, saw Starter marked
   // "Current Plan" here regardless of what they actually pay for.
@@ -731,8 +709,6 @@ export default function Billing() {
 
       {view === 'plans' && (
         <PlansView
-          annual={annual}
-          setAnnual={setAnnual}
           onSelectPlan={handleSelectPlan}
           currentPlan={currentPlan}
         />
@@ -741,7 +717,6 @@ export default function Billing() {
       {view === 'checkout' && selectedPlan && (
         <CheckoutView
           plan={selectedPlan}
-          annual={annual}
           onBack={() => setView('plans')}
           onSuccess={handlePaySuccess}
         />

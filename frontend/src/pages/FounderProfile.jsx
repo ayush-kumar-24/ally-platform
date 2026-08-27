@@ -922,7 +922,7 @@ export default function FounderProfile() {
                 <svg viewBox="0 0 24 24">
                   <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
                 </svg>
-                AI Chat with Ally
+                Talk to Ally
               </div>
               <span className="pr-usage-val">
                 {plan ? `${plan.daily_tokens_used ?? 0} / ${plan.daily_token_limit ?? 0} today` : '— / —'}

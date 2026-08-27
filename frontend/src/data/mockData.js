@@ -144,7 +144,7 @@ export const MOCK_PLANS = [
     popular: false, cta: 'Current',
     features: [
       '1 month free · 120 credits',
-      '4,000 tokens per day',
+      '8,000 tokens per day',
       'Full diagnosis — free, uses no credits',
       'Voice in Diagnosis',
       'Founder & Business DNA, Reports',

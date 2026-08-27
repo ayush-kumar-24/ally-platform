@@ -3,6 +3,7 @@ import DeletionPendingGate from '../components/DeletionPendingGate';
 import { useApp } from '../context/AppContext';
 import { useState, useRef, useEffect } from 'react';
 import ProductTour from '../components/ProductTour';
+import { TITLES as ROUTE_TITLES } from '../components/RouteTitle';
 import { greetingNow } from '../utils/helpers';
 import { getOverview } from '../services/dashboard';
 import { firstSafe } from '../utils/looksLikeToken';
@@ -19,7 +20,6 @@ import {
   IconHelpCircle,
   IconSettings,
   IconBell,
-  IconPlus,
   IconEye,
   IconMapPin,
   IconAward,
@@ -64,8 +64,8 @@ const NAV_GROUPS = [
   {
     label: 'HOME',
     items: [
-      { path: '/app', tip: 'Dashboard', icon: IconDashboard, label: 'Dashboard', badge: null },
-      { path: '/app/ally-chat', tip: 'Chat with Ally', icon: IconMessageSquare, label: 'Chat with Ally', badge: null },
+      { path: '/app', tip: 'Compass', icon: IconDashboard, label: 'Compass', badge: null },
+      { path: '/app/ally-chat', tip: 'Talk to Ally', icon: IconMessageSquare, label: 'Talk to Ally', badge: null },
     ],
   },
   {
@@ -100,9 +100,6 @@ const NAV_GROUPS = [
       /* Real diagnosis output, same as Founder DNA/Business DNA/Report above --
          gated the same way, not founder-authored like Vision/Goals. */
       { path: '/app/recommendations', tip: 'Recommendations', icon: IconLightbulb, label: 'Recommendations', badge: null, needsReport: true },
-      /* Static reference content (see data/frameworks.js) -- no diagnosis
-         needed, available from the start like Goals. */
-      { path: '/app/frameworks', tip: 'Frameworks', icon: IconBook, label: 'Frameworks', badge: null },
       { path: '/app/report', tip: 'Report', icon: IconDocument, label: 'Report', badge: null, needsReport: true },
       { path: '/app/next-steps', tip: 'Next steps', icon: IconArrowRight, label: 'Next steps', badge: null, needsReport: true },
       /* badge was hardcoded to 3 — every founder saw "3 tasks due" forever,
@@ -114,6 +111,19 @@ const NAV_GROUPS = [
          take discovery calls out of the free-tier UI, and a founder who cannot
          book one has nothing to unlock by clicking. */
       { path: '/app/discovery-call', tip: 'Discovery call', icon: IconCalendar, label: 'Discovery call', badge: null, needsCallAccess: true },
+    ],
+  },
+  {
+    /* Knowledge is the major heading; Frameworks is one part of it. Moved out
+       of FOUNDER DIAGNOSIS because it never belonged there: everything else
+       under that heading is either a diagnosis step or written from a
+       diagnosis, while this is static reference content (data/frameworks.js)
+       available from the moment a founder lands. Its own section leaves room
+       for the other reference material to join it under one heading rather
+       than accumulating at the bottom of a list about something else. */
+    label: 'KNOWLEDGE',
+    items: [
+      { path: '/app/frameworks', tip: 'Frameworks', icon: IconBook, label: 'Frameworks', badge: null },
     ],
   },
   {
@@ -206,7 +216,18 @@ export default function PlatformLayout() {
     return location.pathname.startsWith(path);
   };
 
-  const currentLabel = NAV_GROUPS.flatMap(g => g.items).find(i => isActive(i.path))?.label || 'Dashboard';
+  /* Nav label first, then the route-title map, and only then a fallback.
+     The map is the reason: several real routes -- Plans & billing, Know my
+     energy, Clarity report -- are not nav items at all, so the nav lookup
+     misses and every one of them used to print the fallback as its heading.
+     That was already wrong when the fallback read "Dashboard"; renaming it
+     made the billing page announce itself as "Compass", which is how it got
+     noticed. ROUTE_TITLES already names every route, so it is the answer
+     rather than a second copy of it kept in sync by hand. */
+  const currentLabel =
+    NAV_GROUPS.flatMap(g => g.items).find(i => isActive(i.path))?.label
+    || ROUTE_TITLES[location.pathname.replace(/\/$/, '')]
+    || 'Compass';
   const isDashboard = location.pathname === '/app' || location.pathname === '/app/';
   // founder_name (this component's own fetch) first, user?.name (AppContext)
   // as a fallback for the brief window before that fetch resolves -- see the
@@ -415,10 +436,6 @@ export default function PlatformLayout() {
                 </div>
               </div>
             </div>
-            <button className="btn btn-primary tb-cta" onClick={() => handleNav('/app/founder-dna-journey')} type="button">
-              <IconPlus />
-              New diagnosis
-            </button>
           </div>
         </div>
 
