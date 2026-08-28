@@ -38,3 +38,10 @@ google-credentials.json
 *service-account*.json
 *-credentials.json
 ally-platform-*.json
+
+# Reticle agent skills (installed per-developer via `npx skills add reticlehq/reticle`).
+# Not committed: they are a local tool, not project source, and .claude/skills/ holds
+# symlinks that would not resolve on another machine.
+.agents/
+.claude/skills/
+skills-lock.json
