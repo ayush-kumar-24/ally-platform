@@ -71,18 +71,25 @@ const NAV_GROUPS = [
   {
     label: 'FOUNDER DIAGNOSIS',
     items: [
-      { path: '/app/founder-dna-journey', tip: 'Adaptive diagnosis', icon: IconPulse, label: 'Adaptive diagnosis', badge: null },
-      /* These four are written *from* a finished diagnosis, so before one
-         exists they can only render an empty state -- which reads as a broken
-         page rather than "not yet". The journey is onboarding -> diagnosis ->
-         report -> tour, and until the report lands there is nothing here to
-         open. Locked, with a reason, instead of silently empty. */
+      /* Ordered to read as the journey itself: Founder DNA, then Business DNA,
+         then the diagnosis that uses both. That is the sequence a founder is
+         actually taken through, and the nav is the only place it is visible.
+         (2026-08-27 product decision.)
+
+         Worth knowing when reading this list: the first two are the RESULT
+         pages, written *from* a finished diagnosis, while "Adaptive diagnosis"
+         below is the entry point that runs all three phases. So for a founder
+         with no report yet, the two items above the entry point are locked --
+         the order tells them what they are working toward, not what to click
+         first. If that ever reads as friction rather than a map, the fix is to
+         surface the entry point separately, not to reshuffle these again. */
       { path: '/app/founder-dna', tip: 'Founder DNA', icon: IconUser, label: 'Founder DNA', badge: null, needsReport: true },
-      /* Unlike the four above, this isn't derived from a diagnosis report --
-         it's the founder's own long-term vision, written whenever they like.
+      { path: '/app/business-dna', tip: 'Business DNA', icon: IconTrendingUp, label: 'Business DNA', badge: null, needsReport: true },
+      { path: '/app/founder-dna-journey', tip: 'Adaptive diagnosis', icon: IconPulse, label: 'Adaptive diagnosis', badge: null },
+      /* Unlike the DNA pages above, this isn't derived from a diagnosis report
+         -- it's the founder's own long-term vision, written whenever they like.
          No needsReport gate: nothing here depends on one existing. */
       { path: '/app/vision', tip: 'Your Vision', icon: IconEye, label: 'Your Vision', badge: null },
-      { path: '/app/business-dna', tip: 'Business DNA', icon: IconTrendingUp, label: 'Business DNA', badge: null, needsReport: true },
       /* Not built yet -- comingSoon shows the same lock treatment as a
          needsReport item but opens its own honest "coming soon" page
          instead of redirecting into the diagnosis flow. */

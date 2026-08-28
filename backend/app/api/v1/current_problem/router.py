@@ -7,7 +7,7 @@ app/api/v1/founder_dna/router.py.
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_founder_record as get_current_founder
+from app.api.deps import get_founder_record as get_current_founder, require_profile_complete
 from app.api.v1.current_problem.repository import CurrentProblemRepository
 from app.api.v1.current_problem.schemas import (
     CurrentCurrentProblemResponse,
@@ -53,7 +53,7 @@ def _progress(
     "/start",
     response_model=StartCurrentProblemResponse,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(start_rate_limit)],
+    dependencies=[Depends(start_rate_limit), Depends(require_profile_complete)],
 )
 def start(
     db: Session = Depends(get_db),

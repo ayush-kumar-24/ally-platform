@@ -10,7 +10,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, status
 from sqlalchemy.orm import Session
 
 # Phase 3's get_founder_record resolves the AuthUser token to the Founders row.
-from app.api.deps import get_founder_record as get_current_founder
+from app.api.deps import get_founder_record as get_current_founder, require_profile_complete
 from app.api.v1.diagnosis.schemas import (
     AnsweredQA,
     CurrentQuestionResponse,
@@ -53,7 +53,7 @@ answer_rate_limit = founder_rate_limit(
     response_model=StartSessionResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Start (or resume) a diagnosis session",
-    dependencies=[Depends(start_rate_limit), Depends(require_ai_processing_allowed)],
+    dependencies=[Depends(start_rate_limit), Depends(require_ai_processing_allowed), Depends(require_profile_complete)],
 )
 def start_session(
     db: Session = Depends(get_db),

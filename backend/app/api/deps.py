@@ -8,6 +8,7 @@ from app.db.session import get_db, set_founder_rls_context
 from app.middleware.error_handler import AppError
 from app.models import Founder
 from app.repositories import founder_repository
+from app.services.profile_progress import validate_profile
 
 
 class FounderNotFoundError(AppError):
@@ -54,4 +55,54 @@ def get_founder_record(
     if founder is None:
         raise FounderNotFoundError()
 
+    return founder
+
+
+class ProfileIncompleteError(AppError):
+    """Onboarding is not finished, so the journey cannot start.
+
+    Onboarding is where Ally learns who someone is -- their stage, what they
+    are building, their revenue, the problem they arrived with. Every phase
+    after it consumes that: stage selects which question bank the diagnosis
+    draws from, and the rest is the founder context the advisor reads before
+    choosing each question (see diagnosis/founder_brief.py).
+
+    Starting without it does not produce a slightly worse diagnosis, it
+    produces a different one -- generic questions with no stage and no
+    situation behind them. Refusing is the honest outcome, and it is
+    recoverable in one place: finish the profile.
+
+    Carries `missing` so the client can send the founder straight to the
+    fields that are actually blocking them rather than to the top of a form
+    they mostly filled in already.
+    """
+
+    def __init__(self, missing: list[dict] | None = None):
+        fields = missing or []
+        names = ", ".join(str(m.get("label") or m.get("field")) for m in fields[:4])
+        detail = f" Still needed: {names}." if names else ""
+        super().__init__(
+            "Finish setting up your profile before starting -- Ally uses it to "
+            "choose the right questions for you." + detail,
+            status_code=status.HTTP_409_CONFLICT,
+        )
+        self.missing = fields
+
+
+def require_profile_complete(
+    founder: Founder = Depends(get_founder_record),
+) -> Founder:
+    """Refuse the request until onboarding is done.
+
+    Recomputes completeness rather than reading `founders.profile_completed`.
+    The column is kept truthful on every profile write (see
+    FounderRepository.update), but it is a cache, and a founder whose required
+    fields changed by any other route -- an admin edit, a data import, a new
+    required field added to onboarding -- would otherwise be let through on a
+    stale true. The check is a handful of attribute reads on a row already
+    loaded, so there is no reason to trust the cache over the source.
+    """
+    result = validate_profile(founder)
+    if not result["valid"]:
+        raise ProfileIncompleteError(result["missing"])
     return founder
