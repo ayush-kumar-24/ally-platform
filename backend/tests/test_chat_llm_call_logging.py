@@ -320,3 +320,28 @@ def test_memory_persisted_even_when_ai_execution_fails():
     found = memory.search(MemorySearchRequest(founder_id=1, limit=10)).items
     assert len(found) == 1
     assert found[0].content == "This will fail"
+
+
+def test_chat_telemetry_applies_founder_rls_context():
+    class RlsFakeSession(FakeSession):
+        def __init__(self):
+            super().__init__()
+            self.info = {}
+
+        def in_transaction(self):
+            return False
+
+    session = RlsFakeSession()
+    founder_uuid = "22222222-2222-2222-2222-222222222222"
+
+    record_chat_llm_call(
+        _ok_response(),
+        founder_id=7,
+        founder_uuid=founder_uuid,
+        session_id=42,
+        latency_ms=123,
+        session_factory=lambda: session,
+    )
+
+    assert session.info["current_founder_uuid"] == founder_uuid
+    assert session.added[0].founder_id == 7
