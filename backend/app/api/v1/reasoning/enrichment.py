@@ -80,17 +80,21 @@ class RetrievalRootCauseEnricher:
             if not query:
                 enriched.append(detection)
                 continue
-            enriched.append(self._enrich_one(detection, query, context))
+            enriched.append(self._enrich_one(detection, root_cause, query, context))
         return enriched
 
     # --- Internals --------------------------------------------------------
 
     def _enrich_one(
-        self, detection: RootCauseDetection, query: str, context: ReasoningContext
+        self,
+        detection: RootCauseDetection,
+        root_cause,
+        query: str,
+        context: ReasoningContext,
     ) -> RootCauseDetection:
         # Pre-scope the supporting-evidence search to the cause's own category so
         # we corroborate within the relevant slice instead of the whole corpus.
-        filters = self._filters_for(detection, context)
+        filters = self._filters_for(detection, root_cause, context)
         try:
             evidence = self.retrieval.search(
                 query,
@@ -120,7 +124,10 @@ class RetrievalRootCauseEnricher:
         )
 
     def _filters_for(
-        self, detection: RootCauseDetection, context: ReasoningContext
+        self,
+        detection: RootCauseDetection,
+        root_cause,
+        context: ReasoningContext,
     ) -> dict[str, object]:
         """Build the pre-filter for this detection. Category scopes the supporting
         sources (problems, agent_interpretations) to the same diagnostic area;
@@ -129,6 +136,15 @@ class RetrievalRootCauseEnricher:
         category = getattr(detection, "category", None)
         if category and category != "Uncategorised":
             filters["category"] = category
+
+        # RAG knowledge is curated with explicit root-cause mappings in
+        # metadata_tags.maps_to_root_causes. RetrievalEngine ignores this filter
+        # for sources that do not support it, while RAG_CHUNKS applies it before
+        # vector top-k selection.
+        root_cause_code = getattr(root_cause, "root_cause_code", None)
+        if root_cause_code:
+            filters["root_cause_code"] = root_cause_code
+
         return filters
 
     def _query_text(self, root_cause) -> str:
