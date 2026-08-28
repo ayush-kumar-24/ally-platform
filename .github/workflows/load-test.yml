@@ -1,0 +1,63 @@
+name: Load Test
+
+# Manual only — this fires real traffic at a deployed backend and must never
+# run on a push/PR trigger. Requires the "load-test" GitHub Environment
+# (Settings -> Environments -> load-test) with LOAD_TEST_BASE_URL set, and
+# optionally LOAD_TEST_AUTH_TOKEN. If that environment has required
+# reviewers configured, this run waits for approval before it starts.
+on:
+  workflow_dispatch:
+    inputs:
+      peak_vus:
+        description: "Peak virtual users (start small — a GitHub-hosted runner has 2 vCPU/7GB RAM and shares its own network egress, so it bottlenecks well before 10k realistic users; distribute across multiple runs/runners to go higher)"
+        required: true
+        default: "50"
+      ramp_duration:
+        description: "Ramp-up duration to reach peak_vus (e.g. 1m, 5m)"
+        required: true
+        default: "1m"
+      hold_duration:
+        description: "Duration to hold at peak_vus (e.g. 3m, 10m)"
+        required: true
+        default: "3m"
+
+permissions:
+  contents: read
+
+jobs:
+  k6-load-test:
+    name: k6 load test
+    runs-on: ubuntu-latest
+    environment: load-test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install k6
+        run: |
+          sudo gpg -k
+          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install -y k6
+
+      - name: Run k6 against ${{ vars.LOAD_TEST_BASE_URL || 'LOAD_TEST_BASE_URL secret' }}
+        env:
+          BASE_URL: ${{ secrets.LOAD_TEST_BASE_URL }}
+          AUTH_TOKEN: ${{ secrets.LOAD_TEST_AUTH_TOKEN }}
+          PEAK_VUS: ${{ inputs.peak_vus }}
+          RAMP_DURATION: ${{ inputs.ramp_duration }}
+          HOLD_DURATION: ${{ inputs.hold_duration }}
+        run: |
+          if [ -z "$BASE_URL" ]; then
+            echo "::error::LOAD_TEST_BASE_URL secret is not set on the 'load-test' environment. Refusing to run against an undefined target."
+            exit 1
+          fi
+          k6 run scripts/load-test/k6-script.js
+
+      - name: Upload k6 summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k6-summary
+          path: summary.json
+          if-no-files-found: ignore
