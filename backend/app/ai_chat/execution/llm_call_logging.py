@@ -34,6 +34,7 @@ def record_chat_llm_call(
     ai: AIResponse,
     *,
     founder_id: int,
+    founder_uuid: str | None = None,
     session_id: int | None,
     latency_ms: int,
     task: str = CHAT_TASK,
@@ -74,6 +75,9 @@ def record_chat_llm_call(
     try:
         session = factory()
         try:
+            if founder_uuid:
+                from app.db.session import set_founder_rls_context
+                set_founder_rls_context(session, founder_uuid)
             session.add(row)
             session.commit()
         finally:
