@@ -145,9 +145,41 @@ class ReasoningRepository:
 
     # --- Overall-confidence inputs ----------------------------------------
 
+    def get_question_budget(self, stage_id: int | None) -> int | None:
+        """founder_stages.question_budget for one stage -- the coverage
+        denominator, and the diagnosis's own completion ceiling.
+
+        None means the stage has no budget set, and the caller falls back to
+        `settings.MAX_DIAGNOSIS_QUESTIONS`. That is the shipped state: migration
+        c6a4e83f19d7 adds the column NULL everywhere on purpose, so reading it
+        changes nothing until a number is decided per stage.
+
+        Also None for an unknown stage, which is the same answer for the same
+        reason -- there is no stage-specific number to use, so use the global
+        one. Never 0: a zero would divide by zero in the coverage signal, and a
+        CHECK constraint plus the caller's own guard both refuse it.
+        """
+        if stage_id is None:
+            return None
+        row = self.db.execute(
+            select(FounderStage.question_budget).where(FounderStage.stage_id == stage_id)
+        ).scalar_one_or_none()
+        return int(row) if row else None
+
     def get_in_scope_question_count(self, stage_id: int | None) -> int:
-        """Count of questions in scope for the founder's stage group -- the
-        denominator of the confidence EVIDENCE COVERAGE signal.
+        """Count of questions in scope for the founder's stage group.
+
+        NOT the coverage denominator any more, whatever this docstring used to
+        claim. It was, and that was the bug: a Stage 0->1 founder has 569 in-scope
+        questions, so thirty answers scored 30/569 = 0.05 on a 25%-weight signal
+        and capped the achievable confidence at 76 against a threshold of 80 --
+        no founder could ever finish. The denominator moved to the question
+        budget; see `get_question_budget` above.
+
+        Nothing in the application calls this today (only test fakes stub it).
+        It is kept because "how many questions could this founder be asked" is a
+        genuine question the budget work will want answered, and re-deriving the
+        stage-group join is the part worth not losing.
 
         A question is in scope when its `primary_stage_group` matches the founder's
         stage group, i.e. the `onboarding_label` of the founder's stage

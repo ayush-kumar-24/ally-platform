@@ -129,6 +129,12 @@ class FounderStages(Base):
     top_psychological_challenges: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
     criteria_version: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text('1'))
     onboarding_label: Mapped[Optional[str]] = mapped_column(String(100))
+    #: How many questions a diagnosis may ask a founder at this stage.
+    #: NULL means "not decided for this stage" and falls back to
+    #: settings.MAX_DIAGNOSIS_QUESTIONS -- see migration c6a4e83f19d7. It is a
+    #: CEILING, not a target: a session still ends the moment confidence crosses
+    #: the report threshold, which is usually earlier.
+    question_budget: Mapped[Optional[int]] = mapped_column(Integer)
     created_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True), server_default=text('now()'))
     updated_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True), server_default=text('now()'))
 

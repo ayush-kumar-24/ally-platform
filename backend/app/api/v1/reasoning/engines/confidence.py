@@ -233,6 +233,32 @@ class WeightedConfidenceModel(ConfidenceModel):
 
     # --- Outer layer: assemble confidence inputs --------------------------
 
+    def _question_budget(self, context) -> int:
+        """Questions this founder's diagnosis is allowed to ask -- the coverage
+        denominator, and the same number `DiagnosisService` uses as its ceiling.
+
+        The two MUST agree. If the ceiling were larger than the denominator a
+        founder could answer past 100% coverage; if it were smaller they could
+        never reach it. Both resolve through the founder's stage with the same
+        fallback, which is why this is a lookup rather than a passed-in value --
+        a parameter is a place for the two to drift apart.
+
+        The fallback rule itself lives in `settings.question_budget` -- an unset
+        stage, an unknown stage and an unusable number all resolve there, and it
+        guarantees a positive result so this division is always safe.
+        """
+        stage_budget = None
+        try:
+            stage_budget = self.repository.get_question_budget(context.stage_id)
+        except Exception:                                   # noqa: BLE001
+            # Confidence must not fail on an optional lookup: an unreadable
+            # budget is a reason to use the default, not to lose the diagnosis.
+            logger.warning(
+                "Stage question budget unavailable; using the global default",
+                extra={"stage_id": getattr(context, "stage_id", None)},
+            )
+        return settings.question_budget(stage_budget)
+
     def build_confidence_inputs(
         self,
         *,
@@ -269,7 +295,17 @@ class WeightedConfidenceModel(ConfidenceModel):
         # "Coverage" now means what the diagnosis actually measures. A founder
         # answering strongly crosses 80 around question 10-15 and finishes early;
         # a weaker run continues toward the cap.
-        budget = max(1, settings.MAX_DIAGNOSIS_QUESTIONS)
+        #
+        # And the cap is now the STAGE's, not one global number, because a global
+        # one reintroduces the same defect at a smaller scale. An idea-stage
+        # founder for whom twelve questions is genuinely enough scored 12/30 =
+        # 0.40 on a 25%-weight signal, which held their achievable total under the
+        # report threshold -- so they never finished early either, they just ran
+        # to 30. The denominator has to be what "enough" means for THIS founder.
+        #
+        # `_question_budget` falls back to the global constant, so with the column
+        # unset (its shipped state) this line behaves exactly as it did before.
+        budget = self._question_budget(context)
         coverage = min(_ONE, Decimal(questions_answered) / Decimal(budget))
 
         # (c) ANSWER CONSISTENCY -- measured by the semantic contradiction detector

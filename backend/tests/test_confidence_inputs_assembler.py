@@ -24,13 +24,23 @@ MULTIPLIERS = ConfirmationMultipliers(confirmed=D("1.5"), unconfirmed=D("1.0"), 
 
 
 class FakeRepo:
-    def __init__(self, *, in_scope=40, reliability=D("0.95"), stage_orders=None):
+    def __init__(self, *, in_scope=40, reliability=D("0.95"), stage_orders=None,
+                 question_budget=None, budget_raises=False):
         self._in_scope = in_scope
         self._reliability = reliability
         self._stage_orders = stage_orders or {}
+        self._question_budget = question_budget
+        self._budget_raises = budget_raises
 
     def get_in_scope_question_count(self, stage_id):
         return self._in_scope
+
+    def get_question_budget(self, stage_id):
+        # None is the shipped state: the column exists and no stage has a number
+        # yet, so every caller falls back to MAX_DIAGNOSIS_QUESTIONS.
+        if self._budget_raises:
+            raise RuntimeError("budget lookup exploded")
+        return self._question_budget
 
     def get_reliability_factor(self, distress_score):
         return self._reliability
@@ -288,3 +298,61 @@ def test_flagged_category_count():
     )
     assert got.flagged_category_count == 3
     assert got.any_category_flagged is True
+
+
+# --- The stage's own budget ------------------------------------------------
+# Coverage is answered / budget, and the budget is the STAGE's. A global 30 for
+# everyone is the same defect the 569-question bank was, one scale down: a
+# founder for whom twelve questions is enough scores 0.40 on a 25%-weight
+# signal, cannot reach the report threshold, and so never finishes early.
+
+
+def _coverage(repo, answered):
+    got = WeightedConfidenceModel(repo).build_confidence_inputs(
+        diagnosis=make_diagnosis(category_risks=[make_category("0.5", True)]),
+        scored=[make_scored(1, "1")],
+        questions_answered=answered,
+        context=make_context(),
+    )
+    return got.evidence_coverage
+
+
+def test_an_unset_stage_budget_falls_back_to_the_global_constant():
+    """The shipped state: the column exists and no stage has a number yet, so
+    nothing about any diagnosis changes until one is set."""
+    assert _coverage(FakeRepo(question_budget=None), 20) == D(20) / D(
+        settings.MAX_DIAGNOSIS_QUESTIONS
+    )
+
+
+def test_a_stage_budget_replaces_the_global_constant():
+    assert _coverage(FakeRepo(question_budget=12), 6) == D("0.5")
+
+
+def test_a_short_stage_reaches_full_coverage_where_the_global_budget_would_not():
+    """The whole point. Twelve answers is 40% of 30 but 100% of 12 -- and 40%
+    on a quarter of the score is what kept an idea-stage founder below the
+    report threshold no matter how well they answered."""
+    assert _coverage(FakeRepo(question_budget=12), 12) == D("1")
+    assert _coverage(FakeRepo(question_budget=None), 12) < D("1")
+
+
+def test_coverage_never_exceeds_one_even_past_the_stage_budget():
+    assert _coverage(FakeRepo(question_budget=12), 40) == D("1")
+
+
+def test_a_zero_budget_does_not_divide_by_zero():
+    """A CHECK constraint refuses a 0 at the database. This refuses one that
+    arrives anyway -- a ZeroDivisionError here would take out the confidence
+    score and the whole report with it."""
+    assert _coverage(FakeRepo(question_budget=0), 20) == D(20) / D(
+        settings.MAX_DIAGNOSIS_QUESTIONS
+    )
+
+
+def test_an_unreadable_budget_falls_back_instead_of_failing():
+    """Confidence must never fail on an optional lookup: losing the budget is a
+    reason to use the default, not to lose the founder's diagnosis."""
+    assert _coverage(FakeRepo(budget_raises=True), 20) == D(20) / D(
+        settings.MAX_DIAGNOSIS_QUESTIONS
+    )

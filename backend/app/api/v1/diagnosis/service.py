@@ -257,7 +257,7 @@ class DiagnosisService:
             self.repository.add_session(session)
 
             first_question = self.engine.select_next_question(session, founder)
-            self._attach_question(session, first_question)
+            self._attach_question(session, first_question, founder)
 
             self.db.commit()
         except IntegrityError as exc:
@@ -676,7 +676,7 @@ class DiagnosisService:
             # question is on its second attempt" and must not survive the move to
             # the next one.
             session.reprompted_question_id = None
-            self._attach_question(session, next_question)
+            self._attach_question(session, next_question, founder)
             self.db.commit()
         except IntegrityError as exc:
             self.db.rollback()
@@ -790,6 +790,7 @@ class DiagnosisService:
         self,
         session: DiagnosisSession,
         question: Question | None,
+        founder: Founder | None = None,
     ) -> None:
         """Point the session at `question`, or complete it when None.
 
@@ -808,7 +809,17 @@ class DiagnosisService:
         # questions and exhaustion (3) is not a stopping point any real founder
         # reaches -- before the cap, every session simply ran until abandoned,
         # which is why no diagnosis had ever completed.
-        budget_spent = (session.questions_answered_count or 0) >= settings.MAX_DIAGNOSIS_QUESTIONS
+        # The founder's STAGE decides the ceiling, not one number for everyone --
+        # and it must be the same number the confidence coverage signal divides
+        # by, or the two disagree about what "fully covered" means. One rule,
+        # defined once, in settings.question_budget.
+        #
+        # `founder` is optional only so this stays callable from a path that has
+        # not loaded one; that falls back to the global constant, which is the
+        # pre-change behaviour rather than a wrong stage's number.
+        stage = getattr(founder, "stage", None) if founder is not None else None
+        budget = settings.question_budget(getattr(stage, "question_budget", None))
+        budget_spent = (session.questions_answered_count or 0) >= budget
         confident = session.routing_state == RoutingState.GENERATE_REPORT.value
 
         if question is None or budget_spent or confident:
@@ -849,7 +860,7 @@ class DiagnosisService:
             return None
 
         question = self.engine.select_next_question(session, founder)
-        self._attach_question(session, question)
+        self._attach_question(session, question, founder)
 
         try:
             self.db.commit()

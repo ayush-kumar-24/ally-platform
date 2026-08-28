@@ -462,5 +462,42 @@ class Settings(BaseSettings):
         """
         return self.ADAPTIVE_QUESTIONS or self.ANSWER_CLASSIFIER == "llm"
 
+    def question_budget(self, stage_budget: int | None) -> int:
+        """How many questions a diagnosis may ask, given the founder's stage.
+
+        MAX_DIAGNOSIS_QUESTIONS is the fallback, not the answer: the real number
+        lives on founder_stages.question_budget so it can differ per stage (an
+        idea-stage founder needs far fewer than a scaling one). NULL there means
+        "not decided for this stage", which is how the column ships.
+
+        This lives here, beside the setting it falls back to, because TWO
+        callers need the identical number and must never disagree:
+
+          * DiagnosisService._attach_question -- the completion CEILING.
+          * WeightedConfidenceModel -- the coverage DENOMINATOR, 25% of the
+            confidence score.
+
+        If the ceiling exceeded the denominator a founder could answer past 100%
+        coverage; if it fell short they could never reach it and would never
+        finish early. Two copies of `max(1, x or DEFAULT)` in two packages is
+        exactly how those drift, so there is one copy and it is here.
+
+        A non-positive stage budget is treated as UNSET, not clamped. Clamping
+        was the first cut and it was worse than the bug it guarded: `max(1, -1)`
+        is 1, so a stage that somehow held -1 would end every diagnosis after a
+        single question. Falling back to the global default is the only safe
+        reading of a number that cannot mean what it says.
+
+        A CHECK constraint refuses a non-positive value at the database. This
+        refuses one that arrives anyway, because the column is edited by hand in
+        production and 0 is what a half-finished edit leaves behind. The final
+        max() covers a misconfigured constant, so the return can never be 0 --
+        it is a divisor, and a ZeroDivisionError here would take out the
+        confidence score and the whole report with it.
+        """
+        if stage_budget is not None and stage_budget > 0:
+            return stage_budget
+        return max(1, self.MAX_DIAGNOSIS_QUESTIONS)
+
 
 settings = Settings()
