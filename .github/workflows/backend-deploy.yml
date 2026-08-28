@@ -187,6 +187,10 @@ jobs:
             .containerDefinitions |= map(
               if .name == $CONTAINER
               then .image = $IMAGE
+                | .environment = (
+                    ((.environment // []) | map(select(.name != "ARCHETYPE_LLM")))
+                    + [{"name": "ARCHETYPE_LLM", "value": "true"}]
+                  )
               else .
               end
             )
