@@ -5,6 +5,7 @@ on:
     paths:
       - "backend/**"
       - ".github/workflows/backend-ci.yml"
+      - ".github/workflows/backend-deploy.yml"
 
   push:
     branches:
@@ -12,6 +13,7 @@ on:
     paths:
       - "backend/**"
       - ".github/workflows/backend-ci.yml"
+      - ".github/workflows/backend-deploy.yml"
 
   workflow_dispatch:
 
