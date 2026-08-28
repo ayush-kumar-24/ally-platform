@@ -69,6 +69,7 @@ def test_every_task_is_registered_in_the_enum():
         "answer_interpretation", "next_question_selection", "distress_detection",
         "diagnosis_reasoning", "answer_consistency", "archetype_assignment",
         "report_narrative", "first_impression",
+        "founder_dna_dimension_resolution",
     }
 
 
@@ -114,3 +115,81 @@ def test_logging_failure_never_breaks_the_call():
                        usage=LLMUsage(input_tokens=1, output_tokens=1))
     out = asyncio.run(_wrap(_FakeProvider(resp=resp), _BadDB(None)).generate(REQ))
     assert out.text == "ok"  # telemetry failure swallowed
+
+
+def test_reasoning_telemetry_applies_founder_rls_context():
+    class _RlsDB(_FakeDB):
+        def __init__(self):
+            super().__init__(None)
+            self.info = {}
+
+        def in_transaction(self):
+            return False
+
+    db = _RlsDB()
+    founder_uuid = "11111111-1111-1111-1111-111111111111"
+
+    resp = LLMResponse(
+        text="ok",
+        model="claude-sonnet-5",
+        provider="anthropic",
+        usage=LLMUsage(input_tokens=10, output_tokens=5),
+    )
+
+    wrapped = LoggingLLMProvider(
+        _FakeProvider(resp=resp),
+        task="archetype_assignment",
+        provider="anthropic",
+        model_id="claude-sonnet-5",
+        founder_id=42,
+        founder_uuid=founder_uuid,
+        session_id=7,
+        session_factory=lambda: db,
+    )
+
+    asyncio.run(wrapped.generate(REQ))
+
+    assert db.info["current_founder_uuid"] == founder_uuid
+    assert db.added[0].founder_id == 42
+
+
+def test_provider_for_task_propagates_founder_identity(monkeypatch):
+    from app.services.llm import tasks as tasks_module
+    from app.services.llm.router import TaskModel
+
+    founder_uuid = "33333333-3333-3333-3333-333333333333"
+
+    class FounderResult:
+        def scalar_one_or_none(self):
+            return 42
+
+    class FounderDB:
+        info = {"current_founder_uuid": founder_uuid}
+
+        def execute(self, stmt):
+            return FounderResult()
+
+    base = _FakeProvider()
+
+    monkeypatch.setattr(
+        tasks_module,
+        "resolve_task_model",
+        lambda db, task: TaskModel(
+            task=task,
+            provider="anthropic",
+            model_id="claude-sonnet-5",
+        ),
+    )
+    monkeypatch.setattr(
+        tasks_module,
+        "get_provider",
+        lambda provider: base,
+    )
+
+    wrapped = tasks_module.provider_for_task(
+        FounderDB(),
+        LLMTask.ARCHETYPE_ASSIGNMENT,
+    )
+
+    assert wrapped._founder_id == 42
+    assert wrapped._founder_uuid == founder_uuid

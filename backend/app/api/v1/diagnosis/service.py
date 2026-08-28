@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from app.api.v1.diagnosis.advisor import AnswerInsight, NextQuestionAdvisor, resolve_next
 from app.api.v1.diagnosis import incremental_confidence
 from app.api.v1.diagnosis.engine import QuestionSelectionEngine
+from app.api.v1.diagnosis.founder_brief import build_founder_brief
 from app.api.v1.diagnosis.repository import DiagnosisRepository
 from app.core.config import settings
 from app.core.logger import logger
@@ -46,6 +47,33 @@ class FounderDnaNotCompleteError(AppError):
         message: str = (
             "Complete the Founder DNA phase (POST /founder-dna/start) before "
             "starting a diagnosis."
+        ),
+    ):
+        super().__init__(message, status_code=status.HTTP_409_CONFLICT)
+
+
+class StageNotRecordedError(AppError):
+    """No lifecycle stage on the founder, so there is no question bank to draw from.
+
+    Stage decides WHICH questions exist for someone: Stage 0 has 227, Stage 0->1
+    has 1,041, Stage 1->10+ has 859. With no stage the engine used to fall open
+    to all 2,127 -- an undifferentiated interview that looks identical to a real
+    one and quietly ignores the product's central idea, that a founder is asked
+    about where they actually are.
+
+    Onboarding records this reliably (verified 2026-08-27: every founder who
+    completed onboarding has a stage). This guard is therefore about the paths
+    that BYPASS onboarding -- a profile populated by script or admin, an
+    imported account -- where failing open is the wrong answer and failing loud
+    with a route to fix it is the right one.
+    """
+
+    def __init__(
+        self,
+        message: str = (
+            "Tell us what stage you're at before starting a diagnosis -- the "
+            "questions you'll be asked depend on it. You can set this in your "
+            "profile."
         ),
     ):
         super().__init__(message, status_code=status.HTTP_409_CONFLICT)
@@ -235,6 +263,13 @@ class DiagnosisService:
             raise FounderDnaNotCompleteError()
         if founder.current_problem_completed_at is None:
             raise CurrentProblemNotCompleteError()
+        # Stage is what selects the question bank, so starting without one is
+        # not a degraded diagnosis, it is a different product: every stage's
+        # questions at once. Checked HERE with the other phase gates, and only
+        # for a NEW diagnosis, so an in-progress session can still be finished
+        # by someone whose stage was cleared after they began.
+        if getattr(founder, "stage_id", None) is None:
+            raise StageNotRecordedError()
 
         # Only a NEW diagnosis is bounded. The resume path above has already
         # returned, so an in-progress assessment can always be continued -- the
@@ -737,6 +772,14 @@ class DiagnosisService:
                 answer_text=answer.answer_text,
                 shortlist=shortlist,
                 history=history,
+                # Everything onboarding, Founder DNA and Current Problem already
+                # established. Without it the advisor sees only the last five
+                # turns, so two founders in the same stage group are asked the
+                # same questions in the same order -- which is exactly what was
+                # reported. Built per turn rather than cached on the service:
+                # this service is request-scoped, so there is no turn to cache
+                # across, and the founder's answers change as the phase runs.
+                founder_brief=self._founder_brief(founder),
             )
         except Exception as exc:  # advisor must never break the flow
             logger.warning(
@@ -751,6 +794,29 @@ class DiagnosisService:
         # third state -- kept but unscored -- for every answer accepted by the
         # one-reprompt bound. See submit_answer for what that cost.
         return resolve_next(ordered, shortlist, insight), insight
+
+    def _founder_brief(self, founder: Founder) -> str:
+        """Who this founder is, for the advisor prompt. Never raises.
+
+        A brief that cannot be built must not stop the interview -- the advisor
+        simply falls back to choosing on the answer alone, which is what it did
+        before this existed. Logged, because a run where every brief is empty is
+        a silently unpersonalised diagnosis that looks identical to a healthy
+        one from the outside.
+        """
+        try:
+            brief = build_founder_brief(self.db, founder)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("founder brief unavailable; advisor picks on the answer alone",
+                           extra={"stage": "adaptive_questions",
+                                  "founder_id": getattr(founder, "founder_id", None)},
+                           exc_info=exc)
+            return ""
+        if not brief:
+            logger.info("founder brief is empty -- onboarding data missing",
+                        extra={"stage": "adaptive_questions",
+                               "founder_id": getattr(founder, "founder_id", None)})
+        return brief
 
     def _apply_fallback_score(self, answer: Answer) -> None:
         """Score a kept answer the advisor could not assess.

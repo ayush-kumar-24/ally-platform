@@ -137,6 +137,15 @@ class Settings(BaseSettings):
     # of 45 founders, so this is the majority path, not an edge case.
     #
     # A declared stage is never overridden -- see stage_detection_llm.py.
+    #
+    # CORRECTION (2026-08-27): the "27 of 45" above counted raw NULLs and was
+    # misleading. 26 of those 27 rows are empty test accounts that never began
+    # onboarding -- no industry, no problem, no goal, nothing. Every founder who
+    # actually completed onboarding has a stage, and the values vary properly
+    # (Ideation 11, Validation 2, Prototype 2, Early Traction 1, Growth 2).
+    # So this is the EXCEPTION path, not the majority one: it earns its keep for
+    # founders whose profile was populated outside onboarding, not as a routine
+    # substitute for a stage nobody recorded.
     STAGE_INFERENCE_LLM: bool = False
 
     # Write a recommendation when the curated intervention library covers none of

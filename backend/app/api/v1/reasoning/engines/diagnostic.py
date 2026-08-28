@@ -20,6 +20,7 @@ from collections import defaultdict
 from collections.abc import Sequence
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
+from app.api.v1.diagnosis.founder_brief import build_founder_brief
 from app.api.v1.reasoning.errors import DiagnosisDataError, LLMClassificationError
 from app.api.v1.reasoning.interfaces import (
     AnswerClassifier,
@@ -264,11 +265,18 @@ class LLMAnswerClassifier(AnswerClassifier):
             f"- Green (score {bands.green}): concrete evidence, specificity, ownership.\n"
             f"- Amber (score {bands.amber}): partial evidence, vague or incomplete.\n"
             f"- Red (score {bands.red}): no real evidence, assumption or avoidance.\n"
+            "FOUNDER CONTEXT, when given, is who this founder is -- their stage, "
+            "what they are building, their revenue and team. Judge the answer "
+            "against THEIR situation, not a generic one: 'we have not measured "
+            "retention yet' is reasonable at idea stage and a red flag at scale, "
+            "and the same sentence is concrete evidence from a solo founder and "
+            "vague from one with a data team.\n"
             "Respond with a single JSON object and nothing else, with keys: "
             '"score_label" (one of "green","amber","red"), "confidence" (0.0-1.0), '
             '"explanation" (one sentence), "reasoning_steps" (array of short strings).'
         )
-        user = self._user_prompt(answer, question, previous_conversation)
+        user = self._user_prompt(answer, question, previous_conversation,
+                                 self._brief(context))
         return LLMRequest(
             messages=(
                 LLMMessage(role=LLMRole.SYSTEM, content=system),
@@ -282,8 +290,29 @@ class LLMAnswerClassifier(AnswerClassifier):
             },
         )
 
-    def _user_prompt(self, answer, question, previous_conversation) -> str:
+    def _brief(self, context) -> str:
+        """Who this founder is, for grading their answer.
+
+        Profile fields only -- no db here, and deliberately not the Founder DNA
+        or Current Problem excerpts the question-selection advisor gets. This
+        runs once per answer across a whole session, so the cheap half is the
+        half worth paying for; what changes a Green/Amber/Red call is their
+        stage and scale, not the wording of a DNA answer.
+
+        Never raises: a missing brief costs context, an exception costs the
+        report.
+        """
+        try:
+            return build_founder_brief(None, getattr(context, "founder", None),
+                                       include_dna=False, include_problem=False)
+        except Exception:  # noqa: BLE001
+            return ""
+
+    def _user_prompt(self, answer, question, previous_conversation,
+                     founder_brief: str = "") -> str:
         parts: list[str] = []
+        if founder_brief:
+            parts.append(f"{founder_brief}\n")
         if previous_conversation:
             history = "\n".join(
                 f"- Q: {t.question_text}\n  A: {t.answer_text}"

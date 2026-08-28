@@ -234,7 +234,11 @@ class Container:
             prompt_manager=self._grounded_prompt_manager,
             execution=self._execution_service,
             suggestion_service=self.suggestion_service(db),
-            call_logger=record_chat_llm_call,
+            call_logger=lambda ai, **kw: record_chat_llm_call(
+                ai,
+                founder_uuid=db.info.get("current_founder_uuid"),
+                **kw,
+            ),
             memory=self.memory(db),
         )
 

@@ -114,3 +114,17 @@ def test_sales_collateral_excluded_from_default_search_live(db):
         vec, sources=(RetrievalSource.RAG_CHUNKS,), k=10, include_restricted=True)]
     assert cid not in default_ids          # gated out despite being its own vector
     assert cid in privileged_ids           # visible only to a deliberate recommendation
+
+
+def test_rag_root_cause_filter_is_applied_before_vector_top_k():
+    """RAG root-cause linkage must constrain candidates inside the inner SQL."""
+    from app.services.retrieval.engine import SOURCE_SPECS
+
+    eng = RetrievalEngine(None, embedder=None)
+    spec = SOURCE_SPECS[RetrievalSource.RAG_CHUNKS]
+
+    sql = eng._build_sql(spec, ("root_cause_code",))
+
+    assert "jsonb_exists(metadata_tags->'maps_to_root_causes'" in sql
+    assert ":flt_root_cause_code" in sql
+    assert sql.index("jsonb_exists") < sql.index("ORDER BY")

@@ -34,12 +34,15 @@ def founder_id():
     # race, and start_session refuses to create a session at all until Founder
     # DNA and Current Problem are done. Without these the race never runs --
     # both threads just raise the phase error and the assertion reads as a
-    # locking failure when nothing was ever locked.
+    # locking failure when nothing was ever locked. stage_id is here for the
+    # same reason: start_session now also refuses without a stage, since stage
+    # is what selects the question bank.
     fid = db.execute(text(
         "insert into founders "
         "(user_id,full_name,email,plan_type,founder_dna_completed_at,"
-        " current_problem_completed_at) "
-        "values (:u,:n,:e,'free',now(),now()) "
+        " current_problem_completed_at,stage_id) "
+        "values (:u,:n,:e,'free',now(),now(),"
+        " (select stage_id from founder_stages order by stage_order limit 1)) "
         "returning founder_id"
     ), {"u": str(uid), "n": "Diag Race Test", "e": email}).scalar()
     db.commit()

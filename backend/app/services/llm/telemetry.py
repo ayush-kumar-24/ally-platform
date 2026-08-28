@@ -53,6 +53,7 @@ class LoggingLLMProvider(LLMProvider):
         provider: str,
         model_id: str,
         founder_id: int | None = None,
+        founder_uuid: str | None = None,
         session_id: int | None = None,
         session_factory=None,
     ):
@@ -61,6 +62,7 @@ class LoggingLLMProvider(LLMProvider):
         self._provider = provider
         self._model_id = model_id
         self._founder_id = founder_id
+        self._founder_uuid = founder_uuid
         self._session_id = session_id
         self._session_factory = session_factory
 
@@ -114,6 +116,9 @@ class LoggingLLMProvider(LLMProvider):
         try:
             session = factory()
             try:
+                if self._founder_uuid:
+                    from app.db.session import set_founder_rls_context
+                    set_founder_rls_context(session, self._founder_uuid)
                 session.add(row)
                 session.commit()
             finally:

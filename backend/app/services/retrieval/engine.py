@@ -47,6 +47,9 @@ class SourceSpec:
     # Public filter name -> real column. Only these columns may be pre-filtered on;
     # values are always bound parameters, so the whitelist is the injection guard.
     filter_columns: dict[str, str] = field(default_factory=dict)
+    # Optional trusted SQL predicates for filters that cannot be represented as
+    # simple column equality (for example JSON-array membership).
+    filter_predicates: dict[str, str] = field(default_factory=dict)
     # A CONTENT GATE, not a relevance filter: applied on every search UNLESS the
     # caller is explicitly privileged (`include_restricted=True`). It keeps content
     # that must never surface in the diagnosis / chat path -- e.g. GoXL sales
@@ -94,6 +97,12 @@ SOURCE_SPECS: dict[RetrievalSource, SourceSpec] = {
         {"document_id": "document_id", "metadata_tags": "metadata_tags"},
         extra_where="is_active = TRUE",
         filter_columns={"document_id": "document_id"},
+        filter_predicates={
+            "root_cause_code": (
+                "jsonb_exists(metadata_tags->'maps_to_root_causes', "
+                ":flt_root_cause_code)"
+            ),
+        },
         # `IS DISTINCT FROM` so untagged chunks (NULL key) are KEPT -- only chunks
         # explicitly marked as sales collateral / recommendation-only are dropped.
         restricted_where=(
@@ -185,7 +194,9 @@ class RetrievalEngine:
         return {
             key: value
             for key, value in filters.items()
-            if key in spec.filter_columns and value is not None
+            if (
+                key in spec.filter_columns or key in spec.filter_predicates
+            ) and value is not None
         }
 
     def _search_one(
@@ -229,7 +240,12 @@ class RetrievalEngine:
         # BEFORE the vector top-k. Column names come from filter_columns (trusted);
         # values bind as :flt_<key>.
         filters = "".join(
-            f" AND {spec.filter_columns[key]} = :flt_{key}" for key in filter_keys
+            (
+                f" AND {spec.filter_predicates[key]}"
+                if key in spec.filter_predicates
+                else f" AND {spec.filter_columns[key]} = :flt_{key}"
+            )
+            for key in filter_keys
         )
         # Content gate (sales-collateral). Also in the INNER query so restricted
         # rows are excluded BEFORE the top-k, never just trimmed after. Skipped only

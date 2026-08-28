@@ -98,10 +98,18 @@ def resolve_next(ordered, shortlist, insight: AnswerInsight | None):
 class NextQuestionAdvisor(abc.ABC):
     @abc.abstractmethod
     async def analyze(
-        self, *, answered_question, answer_text: str, shortlist: Sequence, history
+        self, *, answered_question, answer_text: str, shortlist: Sequence, history,
+        founder_brief: str = "",
     ) -> AnswerInsight | None:
         """Read the answer and recommend the next question from `shortlist`.
-        Returns None on any failure (caller falls back to deterministic)."""
+        Returns None on any failure (caller falls back to deterministic).
+
+        `founder_brief` is who this founder is -- stage, industry, revenue, what
+        they are building, the problem they arrived with, how they operate (see
+        founder_brief.py). Optional so a caller with no database handy still
+        works, but without it every founder in a stage group is asked the same
+        questions in the same order, because the last five Q&A pairs are the
+        only thing distinguishing them."""
         raise NotImplementedError
 
 
@@ -117,10 +125,12 @@ class LLMNextQuestionAdvisor(NextQuestionAdvisor):
         self.timeout_seconds = timeout_seconds
         self.max_tokens = max_tokens
 
-    async def analyze(self, *, answered_question, answer_text, shortlist, history):
+    async def analyze(self, *, answered_question, answer_text, shortlist, history,
+                      founder_brief=""):
         if not shortlist:
             return None
-        request = self._build_request(answered_question, answer_text, shortlist, history)
+        request = self._build_request(answered_question, answer_text, shortlist,
+                                      history, founder_brief)
         try:
             response = await asyncio.wait_for(
                 self.provider.generate(request), timeout=self.timeout_seconds
@@ -136,7 +146,8 @@ class LLMNextQuestionAdvisor(NextQuestionAdvisor):
 
     # --- prompt -----------------------------------------------------------
 
-    def _build_request(self, answered_question, answer_text, shortlist, history) -> LLMRequest:
+    def _build_request(self, answered_question, answer_text, shortlist, history,
+                       founder_brief: str = "") -> LLMRequest:
         options = "\n".join(
             f"- id {q.question_id} [{q.category}] {q.question_text}" for q in shortlist
         )
@@ -150,6 +161,11 @@ class LLMNextQuestionAdvisor(NextQuestionAdvisor):
             "avoidance), then choose which of the CANDIDATE questions to ask next -- "
             "the one that will most improve the diagnosis given what they just said "
             "(e.g. probe deeper on a weak/avoidant answer, move on after a strong one). "
+            "FOUNDER CONTEXT, when present, is what onboarding already established "
+            "about them -- their stage, what they are building, the problem they came "
+            "in with, how they operate. Use it: prefer a candidate that fits THIS "
+            "founder's situation, and do not spend a question re-establishing "
+            "something they have already told us. "
             "You MUST pick next_question_id from the candidate ids listed; never invent "
             "one.\n"
             "Also judge whether the answer is RESPONSIVE: whether it is an attempt "
@@ -164,7 +180,12 @@ class LLMNextQuestionAdvisor(NextQuestionAdvisor):
             '"next_question_id":<candidate id>,"rationale":"one sentence",'
             '"responsive":true|false}'
         )
+        # First, so the model reads who it is talking to before it reads what
+        # they just said. Omitted entirely when empty rather than sent as a bare
+        # header, which would read as "we checked and know nothing about them".
+        brief = f"{founder_brief}\n\n" if founder_brief else ""
         user = (
+            f"{brief}"
             f"Recent Q&A:\n{hist}\n\n"
             f"Just asked [{getattr(answered_question, 'category', '')}]: "
             f"{getattr(answered_question, 'question_text', '')}\n"

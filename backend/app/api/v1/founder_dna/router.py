@@ -8,7 +8,7 @@ pattern it already knows for diagnosis.
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_founder_record as get_current_founder
+from app.api.deps import get_founder_record as get_current_founder, require_profile_complete
 from app.api.v1.founder_dna.advisor import DimensionResolutionAdvisor
 from app.api.v1.founder_dna.deps import get_dimension_resolution_advisor
 from app.api.v1.founder_dna.engine import ALL_DIMENSIONS, resolve_founder_dna_stage_group
@@ -59,7 +59,7 @@ def _progress(
     "/start",
     response_model=StartFounderDnaResponse,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(start_rate_limit), Depends(require_ai_processing_allowed)],
+    dependencies=[Depends(start_rate_limit), Depends(require_ai_processing_allowed), Depends(require_profile_complete)],
 )
 def start(
     db: Session = Depends(get_db),
