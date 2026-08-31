@@ -44,6 +44,23 @@ def _load_batch_sql() -> list[str]:
 def upgrade() -> None:
     bind = op.get_bind()
 
+    # Production already uses vector(1536), but these metadata columns
+    # were never added to the three embedded diagnostic tables.
+    # Add them non-destructively before seed SQL references them.
+    for table in ("questions", "problems", "root_causes"):
+        bind.exec_driver_sql(
+            f"ALTER TABLE {table} "
+            "ADD COLUMN IF NOT EXISTS embedding_model varchar"
+        )
+        bind.exec_driver_sql(
+            f"ALTER TABLE {table} "
+            "ADD COLUMN IF NOT EXISTS embedding_version varchar"
+        )
+        bind.exec_driver_sql(
+            f"ALTER TABLE {table} "
+            "ADD COLUMN IF NOT EXISTS embedding_dimension integer"
+        )
+
     max_id = bind.execute(
         sa.text("SELECT MAX(question_id) FROM questions")
     ).scalar()
