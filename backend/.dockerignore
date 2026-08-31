@@ -5,7 +5,6 @@ __pycache__
 .env
 .env.example
 tests
-scripts/embedding_migration
 docs
 *.md
 .git
