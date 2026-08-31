@@ -86,6 +86,14 @@ def upgrade() -> None:
             f"Question ID collision detected in {FIRST_ID}-{LAST_ID}"
         )
 
+    # Production contains existing mapping rows whose backing
+    # sequence may lag behind MAX(mapping_id). Sync it before
+    # inserts that rely on the sequence-generated primary key.
+    bind.exec_driver_sql(
+        "SELECT setval('question_tag_mapping_mapping_id_seq', "
+        "(SELECT MAX(mapping_id) FROM question_tag_mapping))"
+    )
+
     for statement in _load_batch_sql():
         bind.exec_driver_sql(statement)
 
