@@ -27,8 +27,10 @@ os.environ.setdefault("DATABASE_URL", "postgresql+psycopg://u:p@127.0.0.1:5432/n
 os.environ.setdefault("SECRET_KEY", "calibration-only-not-a-real-secret")
 
 from app.api.v1.reasoning.config import (  # noqa: E402
+    DEFAULT_MONITOR_MIN_COVERAGE,
     ConfidenceInputs,
     ConfidenceScoreWeights,
+    monitor_eligible,
 )
 from app.api.v1.reasoning.engines.confidence_score import (  # noqa: E402
     ConfidenceScoreStrategy,
@@ -43,6 +45,7 @@ WEIGHTS = ConfidenceScoreWeights(
 )
 VALIDATE_MIN = D("60")
 GENERATE_REPORT_MIN = D("80")
+MIN_ANSWERS_FLOOR = 12
 
 strategy = ConfidenceScoreStrategy(
     weights=WEIGHTS,
@@ -54,16 +57,25 @@ strategy = ConfidenceScoreStrategy(
 )
 
 
-def route(score):
+def route(score, *, flagged, answered, budget):
+    """Routing as the engine decides it, monitor route included."""
     if score >= GENERATE_REPORT_MIN:
-        return "generate_report  -> can end early"
+        return "generate_report  -> can end"
+    if monitor_eligible(
+        any_category_flagged=flagged > 0,
+        answered=answered,
+        budget=budget,
+        min_coverage=DEFAULT_MONITOR_MIN_COVERAGE,
+        min_answers=MIN_ANSWERS_FLOOR,
+    ):
+        return "monitor          -> can end (all clear)"
     if score >= VALIDATE_MIN:
         return "validate         -> keeps asking"
     return "continue         -> keeps asking"
 
 
 def profile(name, *, category_signal, confirmation, separation, flagged,
-            answered=30, coverage=D("1.0")):
+            answered=30, coverage=D("1.0"), budget=30):
     """Score one founder profile at a fully-spent question budget."""
     score = strategy.compute(ConfidenceInputs(
         category_signal=category_signal,
@@ -79,7 +91,8 @@ def profile(name, *, category_signal, confirmation, separation, flagged,
         distress_override=False,
         stages_away=0,
     ))
-    print(f"  {name:<34} score {str(score):>3}   {route(score)}")
+    outcome = route(score, flagged=flagged, answered=answered, budget=budget)
+    print(f"  {name:<34} score {str(score):>3}   {outcome}")
     return score
 
 
@@ -87,9 +100,9 @@ def run():
     print("=" * 78)
     print("CONFIDENCE BY FOUNDER HEALTH  (budget spent: 30 answers, coverage 1.0)")
     print("=" * 78)
-    print("\n  A session can only END EARLY at a score of "
-          f"{GENERATE_REPORT_MIN}. Below that it keeps")
-    print("  asking until the question budget runs out.\n")
+    print(f"\n  Two ways to end: a score of {GENERATE_REPORT_MIN} (we found the problem), or the")
+    print("  monitor route (we looked hard enough and there isn't one). Anything")
+    print("  in between keeps asking until the question budget runs out.\n")
 
     healthy = profile("Perfectly healthy (all green)",
                       category_signal=D("0"), confirmation=D("0"),
@@ -108,7 +121,7 @@ def run():
                          separation=D("0.90"), flagged=5)
 
     print("\n" + "=" * 78)
-    print("WHY A HEALTHY FOUNDER CANNOT FINISH EARLY")
+    print("WHY THE SCORE ALONE CANNOT END A HEALTHY SESSION")
     print("=" * 78)
     print("""
   A green answer contributes nothing to three of the five signals:
@@ -121,12 +134,40 @@ def run():
   and both cap at 1.0, so the arithmetic ceiling is 0.45 -> 45 / 100.
 """)
     print(f"  Healthy founder ceiling:          {healthy}")
-    print(f"  Needed to end a session:          {GENERATE_REPORT_MIN}")
+    print(f"  Needed to generate a report:      {GENERATE_REPORT_MIN}")
     print(f"  Badly struggling founder scores:  {struggling}")
-    print("""
-  So session length is already variable -- but inverted. A struggling founder
-  reaches the threshold and can stop; a healthy one never can, and is asked the
-  maximum number of questions the budget allows.
+    print(f"""
+  The number can never say "this founder is fine" -- and rule 4 caps an
+  unflagged session at 59, so `validate` is unreachable too. Before the monitor
+  route these founders answered every question in their budget and completed
+  carrying `continue`, the state meaning KEEP ASKING, while a report was written
+  off their highest sub-threshold category anyway.
+
+  The monitor route reads the fact the score cannot carry: nothing was flagged.
+  With coverage at {DEFAULT_MONITOR_MIN_COVERAGE} of the stage budget and no category above its
+  risk threshold, the session ends as an all-clear instead of running out.
+""")
+
+    print("=" * 78)
+    print("HOW EARLY A CLEAN SESSION CAN NOW STOP")
+    print("=" * 78)
+    print()
+    for stage, budget in (("Ideation", 14), ("Validation", 20),
+                          ("Prototype / MVP", 24), ("Growth / Scaling", 30)):
+        needed = next(
+            (n for n in range(1, budget + 1)
+             if monitor_eligible(any_category_flagged=False, answered=n,
+                                 budget=budget, min_coverage=DEFAULT_MONITOR_MIN_COVERAGE,
+                                 min_answers=MIN_ANSWERS_FLOOR)),
+            None,
+        )
+        saved = budget - needed if needed else 0
+        print(f"  {stage:<20} budget {budget:>2}   all-clear at {needed:>2} "
+              f"({saved} question{'' if saved == 1 else 's'} saved)")
+    print(f"""
+  Ideation is bound by the {MIN_ANSWERS_FLOOR}-answer floor rather than by coverage: below
+  that the confidence score sits on too few signals to mean anything, and a
+  clean answer does not change that.
 """)
 
 

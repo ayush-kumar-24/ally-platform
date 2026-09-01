@@ -73,6 +73,7 @@ from app.api.v1.reasoning.schemas import (
     ReasoningResult,
     RecommendationType,
     ScoredRootCause,
+    SessionAssessment,
 )
 from app.core.config import settings
 from app.core.logger import logger
@@ -81,6 +82,7 @@ from app.models import (
     FounderReport,
     InternalIntelligenceReport,
     ReportType,
+    RoutingState,
     SessionStatus,
 )
 from app.models.diagnosis import Founder
@@ -89,7 +91,11 @@ from app.models.diagnosis import Founder
 # Routing state for a session that leaves the diagnostic loop for wellbeing
 # support (CONFIDENCE_HARD_RULES rule 1). Distinct from the confidence-driven
 # states so the app can divert to a support flow instead of asking more questions.
-DISTRESS_SUPPORT_ROUTE = "distress_support"
+#
+# Now an alias for the enum member rather than a second definition of the string.
+# It predates RoutingState carrying this value, and two spellings of one state is
+# how the DB CHECK and the enum drifted apart in the first place.
+DISTRESS_SUPPORT_ROUTE = RoutingState.DISTRESS_SUPPORT.value
 
 
 def _utcnow() -> datetime:
@@ -196,8 +202,47 @@ class ReasoningService:
 
     # --- Pipeline ---------------------------------------------------------
 
-    async def score_only(self, session, founder: Founder) -> Decimal | None:
-        """Confidence for a session AS IT STANDS, without producing a report.
+    def _monitor_eligible(self, confidence_inputs, context, answered: int) -> bool:
+        """Whether this finished session is an all-clear rather than an unfinished one.
+
+        Delegates the condition to `config.monitor_eligible`, the same function
+        the in-loop scorer uses, so the decision that ended the session and the
+        decision recorded on the report cannot disagree.
+
+        Never raises: a report is worth far more than a perfectly labelled
+        routing state, and the fallback is the pre-existing behaviour.
+        """
+        from app.api.v1.reasoning.config import (
+            DEFAULT_MONITOR_MIN_COVERAGE,
+            RuleCode,
+            monitor_eligible,
+        )
+
+        try:
+            budget = settings.question_budget(
+                self.repository.get_question_budget(context.stage_id)
+            )
+            values = self.repository.get_active_rule_values()
+            return monitor_eligible(
+                any_category_flagged=confidence_inputs.any_category_flagged,
+                answered=answered,
+                budget=budget,
+                min_coverage=values.get(
+                    RuleCode.MONITOR_MIN_COVERAGE.value, DEFAULT_MONITOR_MIN_COVERAGE
+                ),
+                min_answers=int(
+                    values.get(RuleCode.CONFIDENCE_MIN_QUESTIONS_FLOOR.value, 0)
+                ),
+            )
+        except Exception as exc:                              # noqa: BLE001
+            logger.warning(
+                "Monitor eligibility could not be resolved; leaving routing as scored",
+                extra={"session_id": context.session.session_id, "error": str(exc)},
+            )
+            return False
+
+    async def assess_only(self, session, founder: Founder) -> SessionAssessment | None:
+        """Confidence for a session AS IT STANDS, plus whether anything is wrong.
 
         The minimum needed to answer "how sure are we now": diagnosis (category /
         stage / symptom) -> root-cause detection and ranking -> confidence. It
@@ -210,6 +255,12 @@ class ReasoningService:
         this read-only means it cannot half-update a session if it throws.
 
         Returns None when the session has no answers yet.
+
+        The score alone cannot drive routing. Three of its five signals measure
+        pathology, so "we found nothing" and "we have not looked hard enough"
+        both come back as a low number, and rule 4 caps an unflagged session at
+        59 on top of that. `any_category_flagged` is what separates them, so it
+        travels with the score rather than being re-derived by the caller.
         """
         context = self._build_context(session, founder)
         answers = self.repository.get_answers_for_session(session.session_id)
@@ -236,7 +287,19 @@ class ReasoningService:
             context=context,
             consistency=None,
         )
-        return self.confidence_model.overall_confidence(inputs, context)
+        score = self.confidence_model.overall_confidence(inputs, context)
+        if score is None:
+            return None
+        return SessionAssessment(
+            score=score,
+            any_category_flagged=inputs.any_category_flagged,
+            questions_answered=len(answers),
+        )
+
+    async def score_only(self, session, founder: Founder) -> Decimal | None:
+        """Just the confidence number, for callers that do not route on it."""
+        assessment = await self.assess_only(session, founder)
+        return assessment.score if assessment is not None else None
 
     async def _run_pipeline(
         self, session, founder: Founder, *, force: bool = False
@@ -373,9 +436,19 @@ class ReasoningService:
             confidence_inputs, context
         )
         routing_state = self.config.confidence.routing_state_for(overall_confidence)
+        # A clean session that was asked enough ends on `monitor`, not `continue`.
+        # routing_state_for reads the score alone, and a healthy founder's score
+        # is low for the opposite of the usual reason -- nothing was found, rather
+        # than nothing has been found YET. Without this the in-loop decision that
+        # completed the session is silently relabelled here, moments later, by
+        # this pipeline recomputing from the same low number.
+        if self._monitor_eligible(confidence_inputs, context, len(answers)):
+            routing_state = RoutingState.MONITOR.value
         # Distress overrides routing entirely: wellbeing before diagnostic
         # completeness. The session leaves the confidence loop for a support path
-        # rather than being told to keep answering questions.
+        # rather than being told to keep answering questions. Last because it
+        # outranks every other outcome, monitor included -- a founder in distress
+        # is not "all clear" however clean their business answers were.
         if confidence_inputs.distress_override or distress.distress_override:
             routing_state = DISTRESS_SUPPORT_ROUTE
         self._log_stage(

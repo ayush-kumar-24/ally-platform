@@ -39,11 +39,28 @@ class SessionState(StrEnum):
 
 
 class RoutingState(StrEnum):
-    """sessions_routing_state_check"""
+    """sessions_routing_state_check
+
+    DISTRESS_SUPPORT and MONITOR are both terminal, and neither means the
+    diagnosis failed. DISTRESS_SUPPORT leaves the diagnostic loop for wellbeing
+    support (CONFIDENCE_HARD_RULES rule 1). MONITOR is the healthy outcome: the
+    founder was asked enough and nothing crossed its risk threshold.
+    """
 
     CONTINUE = "continue"
     VALIDATE = "validate"
     GENERATE_REPORT = "generate_report"
+    DISTRESS_SUPPORT = "distress_support"
+
+    #: Enough evidence gathered, no category flagged -- NO_CATEGORY_ABOVE_
+    #: THRESHOLD_ACTION. Without this the confidence score has no way to say
+    #: "this founder is fine": three of its five signals measure pathology, so a
+    #: healthy founder tops out at 45 against a report threshold of 80 and can
+    #: only ever finish by exhausting the question budget. Rule 4 then caps them
+    #: at 59, so `validate` is unreachable too and the session grinds to the end
+    #: of its budget before completing as `continue` -- a state that tells the
+    #: report layer nothing was concluded, while the report gets written anyway.
+    MONITOR = "monitor"
 
 
 class QuestionType(StrEnum):
