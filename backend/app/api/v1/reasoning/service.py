@@ -106,6 +106,19 @@ def _elapsed_ms(start: float) -> float:
     return round((time.perf_counter() - start) * 1000, 2)
 
 
+def category_risk_map(category_risks: Sequence) -> dict[str, str]:
+    """`sessions.category_risk_scores` -- {category: normalised_risk}, 0..1.
+
+    The shape `ReportPayload` reads: `any_category_flagged` compares each value
+    against CAT_RISK_THRESHOLD and `top_sub_threshold_categories` ranks them.
+
+    str(), not float(). These are Decimals, the payload's `_to_float` parses
+    either, and a threshold comparison is exactly where binary-float drift on a
+    boundary value would silently flip which report variant a founder gets.
+    """
+    return {c.category: str(c.normalised_risk) for c in category_risks}
+
+
 class ReasoningService:
     def __init__(
         self,
@@ -580,6 +593,7 @@ class ReasoningService:
             session=session,
             founder=founder,
             scored=scored,
+            category_risks=diagnosis.category_risks,
             overall_confidence=overall_confidence,
             routing_state=routing_state,
             distress_mode=distress_mode,
@@ -730,6 +744,7 @@ class ReasoningService:
         session,
         founder: Founder,
         scored: list[ScoredRootCause],
+        category_risks: Sequence = (),
         overall_confidence: Decimal,
         routing_state: str,
         distress_mode: bool,
@@ -762,6 +777,17 @@ class ReasoningService:
             session.routing_state = routing_state
             session.distress_mode_triggered = distress_mode
             session.session_state = self._session_state(session, distress_mode)
+            # Category risk, persisted for the report layer. This column had
+            # readers and no writer: `ReportPayload.any_category_flagged` and
+            # `top_sub_threshold_categories` both read it, and `select_variant`
+            # gates NO_CLEAR_DIAGNOSIS on `payload.category_risk_scores and not
+            # payload.any_category_flagged`. An empty dict is falsy, so with
+            # nothing ever written the variant was unreachable and every clean
+            # session fell through to LOW_CONFIDENCE -- the "areas to monitor"
+            # section, its copy and its template all existed and could never be
+            # selected.
+            #
+            session.category_risk_scores = category_risk_map(category_risks)
             session.last_activity_at = _utcnow()
 
             superseded = self.repository.deactivate_existing_reports(session.session_id)
