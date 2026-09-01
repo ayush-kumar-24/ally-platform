@@ -1047,10 +1047,26 @@ class ReasoningService:
         report aggregation and the dashboard display layer read."""
         if business_health is None:
             return None
+        # How much of the model this score was actually built on.
+        #
+        # PILLAR_SCORE_FROM_ANSWERS excludes an unanswered pillar and renormalises
+        # the rest to 100, so a partial assessment produces a number that LOOKS
+        # like a whole-business score. Stage scoping makes that routine rather than
+        # rare: a Validation founder is diagnosed on 3 of 6 pillars (60% of the
+        # weight) and a Prototype founder on 4 (80%). Ideation emits nothing at all.
+        #
+        # The renormalisation itself is right -- scoring an unasked pillar 0 would
+        # be worse. What was missing is any way for the reader to know. These three
+        # numbers travel with the score so the report can say what it is based on
+        # instead of implying all six were looked at.
+        assessed = [p for p in business_health.pillars if p.score is not None]
         return {
             "overall_score": int(business_health.overall_score),
             "band": business_health.band,
             "red_flags": list(business_health.red_flags),
+            "pillars_assessed": len(assessed),
+            "pillars_total": len(business_health.pillars),
+            "assessed_weight_pct": float(sum(p.weight for p in assessed)),
             "pillars": [
                 {
                     "pillar_id": p.pillar_id,
