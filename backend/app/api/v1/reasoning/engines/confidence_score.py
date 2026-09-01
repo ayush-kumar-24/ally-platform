@@ -80,9 +80,15 @@ class ConfidenceScoreStrategy:
         multi_category_flag_threshold: int,
         continue_max: Decimal,
         generate_report_min: Decimal,
+        min_measurable_inputs: int = 3,
     ):
         weights.validate()  # fail closed if the five weights do not sum to 1.0
         self.weights = weights
+        #: CONFIDENCE_UNAVAILABLE_INPUT_HANDLING's rule_value -- the minimum number
+        #: of the five signals that must be measurable for the score to mean
+        #: anything. Defaulted rather than required so an unseeded database still
+        #: builds a strategy; the DB row is the authority.
+        self.min_measurable_inputs = min_measurable_inputs
         self.stage_coherence_factor = stage_coherence_factor
         self.min_questions_floor = min_questions_floor
         self.multi_category_flag_threshold = multi_category_flag_threshold
@@ -100,16 +106,34 @@ class ConfidenceScoreStrategy:
         # neutral -- it neither rewards nor penalises the founder for missing
         # functionality; when the detector lands, the signal simply rejoins the sum
         # at its full weight and no renormalisation occurs.
-        contributions: list[tuple[Decimal, Decimal]] = [
-            (self.weights.category_signal, _clamp01(inputs.category_signal)),
-            (self.weights.coverage, _clamp01(inputs.evidence_coverage)),
-            (self.weights.confirmation, _clamp01(inputs.confirmation_ratio)),
-            (self.weights.separation, _clamp01(inputs.separation)),
-        ]
+        #
+        # Every signal is gated on its own availability, not just consistency. The
+        # rule says so in as many words: it "applies to all five inputs, not only
+        # Answer Consistency". Confirmation and separation used to be included
+        # unconditionally, which meant a session with NO ranked root cause scored
+        # them 0 -- the one thing the rule forbids outright ("never defaulted to
+        # 1.0 and never defaulted to 0"). Nothing had been checked and found
+        # clean; there had been nothing to check. A healthy founder therefore
+        # carried two zeroes worth 25% of their score for having no problems.
+        #
+        # Coverage is not gated: answered-over-budget is always computable.
+        contributions: list[tuple[Decimal, Decimal]] = []
+        if inputs.category_signal_available:
+            contributions.append(
+                (self.weights.category_signal, _clamp01(inputs.category_signal))
+            )
+        contributions.append((self.weights.coverage, _clamp01(inputs.evidence_coverage)))
+        if inputs.confirmation_available:
+            contributions.append(
+                (self.weights.confirmation, _clamp01(inputs.confirmation_ratio))
+            )
+        if inputs.separation_available:
+            contributions.append((self.weights.separation, _clamp01(inputs.separation)))
         if inputs.consistency_available and inputs.consistency_score is not None:
             contributions.append(
                 (self.weights.consistency, _clamp01(inputs.consistency_score))
             )
+        measured_inputs = len(contributions)
 
         total_weight = sum((w for w, _ in contributions), _ZERO)
         if total_weight <= _ZERO:
@@ -127,7 +151,7 @@ class ConfidenceScoreStrategy:
 
         score = _round_int(base * reliability * self.stage_coherence_factor * _HUNDRED)
         pre_rules = score
-        score = self._apply_hard_rules(score, inputs)
+        score = self._apply_hard_rules(score, inputs, measured_inputs)
 
         # Why this is logged: a founder's report showed "0/100 confidence" after
         # 30 answered questions and 8 ranked root causes, and nothing in the
@@ -144,6 +168,7 @@ class ConfidenceScoreStrategy:
                 "confirmation_ratio": str(_clamp01(inputs.confirmation_ratio)),
                 "separation": str(_clamp01(inputs.separation)),
                 "consistency_available": inputs.consistency_available,
+                "measured_inputs": measured_inputs,
                 "consistency_score": str(inputs.consistency_score),
                 "base": str(base),
                 "reliability_factor": str(reliability),
@@ -158,7 +183,9 @@ class ConfidenceScoreStrategy:
         )
         return max(_MIN, min(_MAX, score))
 
-    def _apply_hard_rules(self, score: Decimal, inputs: ConfidenceInputs) -> Decimal:
+    def _apply_hard_rules(
+        self, score: Decimal, inputs: ConfidenceInputs, measured_inputs: int = 5
+    ) -> Decimal:
         """CONFIDENCE_HARD_RULES, evaluated in order. Each only lowers the score.
 
         The order is preserved for faithfulness to the spec; because every rule is
@@ -194,6 +221,17 @@ class ConfidenceScoreStrategy:
 
         # 4. NO CATEGORY ABOVE THRESHOLD -- do not force a diagnosis; monitor only.
         if not inputs.any_category_flagged:
+            score = min(score, self._floor_cap)
+
+        # 4b. TOO FEW MEASURED INPUTS -- CONFIDENCE_UNAVAILABLE_INPUT_HANDLING's
+        #     own guard, whose rule_value IS this minimum count. Excluding an
+        #     unmeasured signal and renormalising is right, but it has a floor:
+        #     renormalising onto one or two signals does not produce a confidence
+        #     measure, it produces a number that looks like one. Below the floor
+        #     the score is capped so routing stays on `continue` and the diagnosis
+        #     keeps gathering, which is the honest outcome when most of the model
+        #     could not be evaluated.
+        if measured_inputs < self.min_measurable_inputs:
             score = min(score, self._floor_cap)
 
         # 5. MULTI-CATEGORY CROSS-CHECK -- ADVISORY, not blocking. When many

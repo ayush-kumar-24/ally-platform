@@ -52,6 +52,8 @@ strategy = ConfidenceScoreStrategy(
     stage_coherence_factor=D("1.0"),   # evidence agrees with the self-reported stage
     min_questions_floor=12,
     multi_category_flag_threshold=3,
+    # CONFIDENCE_UNAVAILABLE_INPUT_HANDLING's rule_value.
+    min_measurable_inputs=3,
     continue_max=D("60"),
     generate_report_min=GENERATE_REPORT_MIN,
 )
@@ -84,6 +86,11 @@ def profile(name, *, category_signal, confirmation, separation, flagged,
         separation=separation,
         consistency_available=True,
         consistency_score=D("1.0"),      # no contradictions in any profile
+        # A profile with no flagged category has no detected root cause either,
+        # so confirmation and separation are not measurable for it. Scoring them
+        # 0 was the bug fixed on 2026-09-01.
+        confirmation_available=flagged > 0,
+        separation_available=flagged > 0,
         reliability_factor=D("1.0"),
         questions_answered=answered,
         flagged_category_count=flagged,
@@ -124,14 +131,22 @@ def run():
     print("WHY THE SCORE ALONE CANNOT END A HEALTHY SESSION")
     print("=" * 78)
     print("""
-  A green answer contributes nothing to three of the five signals:
+  Three of the five signals measure pathology, so a green answer moves none of
+  them:
 
     category_signal (0.30)  measures RISK     -> 0 when nothing is wrong
-    confirmation    (0.15)  confirms a CAUSE  -> 0 when none was detected
-    separation      (0.10)  ranks CAUSES      -> 0 when there are none
+    confirmation    (0.15)  confirms a CAUSE  -> UNMEASURABLE with no cause
+    separation      (0.10)  ranks CAUSES      -> UNMEASURABLE with no cause
 
-  Only coverage (0.25) and consistency (0.20) can rise for a healthy founder,
-  and both cap at 1.0, so the arithmetic ceiling is 0.45 -> 45 / 100.
+  Confirmation and separation are not low for a healthy founder, they are
+  unmeasurable: there is no detected cause to confirm or to separate. So they
+  are excluded and the 0.75 of weight that WAS measured renormalises onto 1.0,
+  per CONFIDENCE_UNAVAILABLE_INPUT_HANDLING. Scoring them 0 instead -- the bug
+  fixed on 2026-09-01 -- charged a healthy founder 15 points for having no
+  problem, putting their ceiling at 45 rather than 60.
+
+  Hard rule 4 then caps any unflagged session at 59, so even the corrected
+  number cannot reach the report threshold.
 """)
     print(f"  Healthy founder ceiling:          {healthy}")
     print(f"  Needed to generate a report:      {GENERATE_REPORT_MIN}")

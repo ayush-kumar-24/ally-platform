@@ -85,6 +85,11 @@ class RuleCode(str, Enum):
     # monitor" instead of a diagnosis (NO_CATEGORY_ABOVE_THRESHOLD_ACTION).
     MONITOR_MIN_COVERAGE = "MONITOR_MIN_COVERAGE"
 
+    # Minimum number of the five confidence signals that must be measurable for
+    # the score to mean anything. The rule text describes the exclude-and-
+    # renormalise contract; its rule_value is this floor.
+    CONFIDENCE_UNAVAILABLE_INPUT_HANDLING = "CONFIDENCE_UNAVAILABLE_INPUT_HANDLING"
+
 
 # ---------------------------------------------------------------------------
 # Typed value objects loaded from scoring_rules
@@ -299,6 +304,7 @@ class ConfidenceInputs:
     consistency_available: bool
     consistency_score: Decimal | None
 
+
     # --- Reliability modifier (from session_state_bands); None = High Distress ---
     reliability_factor: Decimal | None
 
@@ -308,6 +314,24 @@ class ConfidenceInputs:
     any_category_flagged: bool      # rule 4: no category above threshold
     distress_override: bool         # rule 1: distress path
     stages_away: int | None         # rule 2: severe stage mismatch (>= 2)
+
+    # Availability for the other four signals, same contract as consistency above
+    # and required by the same rule -- CONFIDENCE_UNAVAILABLE_INPUT_HANDLING says
+    # explicitly that it "applies to all five inputs, not only Answer Consistency".
+    #
+    # These default True so every existing caller keeps today's behaviour; only a
+    # signal the assembler positively knows it could not measure sets one False.
+    #
+    # The rule names three states and they are NOT the same. An input that RAN and
+    # found nothing wrong is a genuine measurement and keeps its value. An input
+    # whose calculation had no data to run on, or that errored, is UNAVAILABLE and
+    # must be excluded so the remaining weights renormalise -- never scored 0.
+    # Confirmation and separation both used to return 0 with no ranked cause,
+    # which is the forbidden case: it reads as "we checked and found nothing to
+    # confirm" when the truth is that there was nothing to check.
+    category_signal_available: bool = True
+    confirmation_available: bool = True
+    separation_available: bool = True
 
 
 @runtime_checkable

@@ -108,9 +108,16 @@ def test_confirmation_ratio(statuses, expected):
     assert model._confirmation_ratio(top, MULTIPLIERS) == expected
 
 
-def test_confirmation_ratio_empty_is_zero():
+def test_confirmation_ratio_empty_is_unmeasurable_not_zero():
+    """None, not 0. With no top finding there is no cause whose confirmation
+    could be assessed, so CONFIDENCE_UNAVAILABLE_INPUT_HANDLING requires the
+    signal to be EXCLUDED and the remaining weights renormalised -- it is
+    "never defaulted to 1.0 and never defaulted to 0".
+
+    This asserted 0 until 2026-09-01, which is what charged a founder with no
+    detected problem 15% of their confidence score for not having one."""
     model = WeightedConfidenceModel(FakeRepo())
-    assert model._confirmation_ratio([], MULTIPLIERS) == D("0")
+    assert model._confirmation_ratio([], MULTIPLIERS) is None
 
 
 # --- Separation ------------------------------------------------------------
@@ -139,9 +146,21 @@ def test_separation_single_cause_is_fully_separated():
     assert model._separation([make_scored(1, "0.9")]) == D("1.0000")  # (0.9-0)/0.9
 
 
-def test_separation_empty_is_zero():
+def test_separation_empty_is_unmeasurable_not_zero():
+    """None, not 0 -- same rule as the confirmation ratio above. Nothing ranked
+    means there are no causes to separate, which is not the same as measuring
+    two causes and finding them inseparable."""
     model = WeightedConfidenceModel(FakeRepo())
-    assert model._separation([]) == D("0")
+    assert model._separation([]) is None
+
+
+def test_a_tie_is_still_a_measured_zero():
+    """The distinction the rule turns on. A genuine near-tie between two ranked
+    causes IS a measurement of "not separated", so it keeps its 0 and keeps
+    pulling the score down; only absent data drops out."""
+    model = WeightedConfidenceModel(FakeRepo())
+    tied = [make_scored(1, "0.5"), make_scored(2, "0.5")]
+    assert model._separation(tied) == D("0")
 
 
 # --- Stage distance --------------------------------------------------------

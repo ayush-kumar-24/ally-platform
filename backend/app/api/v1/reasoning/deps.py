@@ -89,6 +89,12 @@ def build_confidence_strategy(
         multi_category_flag_threshold=int(
             require_rule_value(rule_values, RuleCode.MULTI_CATEGORY_FLAG_THRESHOLD)
         ),
+        # Optional, not required: this row may be absent on an older database, and
+        # the strategy's own default (3) is the documented value. A missing rule
+        # must not stop every diagnosis from scoring.
+        min_measurable_inputs=int(
+            rule_values.get(RuleCode.CONFIDENCE_UNAVAILABLE_INPUT_HANDLING.value, 3)
+        ),
         continue_max=require_rule_value(rule_values, RuleCode.CONFIDENCE_CONTINUE_MAX),
         generate_report_min=require_rule_value(
             rule_values, RuleCode.CONFIDENCE_GENERATE_REPORT_MIN
