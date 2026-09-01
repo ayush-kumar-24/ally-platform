@@ -34,6 +34,7 @@ os.environ.setdefault("DATABASE_URL", "postgresql+psycopg://u:p@127.0.0.1:5432/n
 os.environ.setdefault("SECRET_KEY", "calibration-only-not-a-real-secret")
 
 from app.api.v1.diagnosis.engine import QuestionSelectionEngine  # noqa: E402
+from app.api.v1.diagnosis.stage_scope import SCOPE_BY_STAGE_ORDER  # noqa: E402
 
 BANK = json.loads((HERE / "bank_stage0.json").read_text())
 PILLARS = {p: pid for p, pid in json.loads((HERE / "pillar_map.json").read_text())}
@@ -43,11 +44,9 @@ PILLAR_NAMES = {
     4: "Product & Execution", 5: "Team & Leadership", 6: "Strategic Clarity",
 }
 
-#: Pillars an ideation-stage founder should be asked about. Founder Readiness is
-#: the Founder DNA layer; Market Clarity carries Idea & Validation, Target
-#: Customer & ICP and Competitive Awareness. The other four are Business DNA and
-#: have no meaning before there is a product, revenue or a team.
-STAGE_0_IN_SCOPE = {"Founder Readiness", "Market Clarity"}
+#: Read from the shipped scope table rather than restated here, so this script
+#: cannot drift from what the engine actually enforces.
+STAGE_0_IN_SCOPE = {PILLAR_NAMES[p] for p in SCOPE_BY_STAGE_ORDER[1].pillars}
 
 
 class Q:
@@ -109,7 +108,13 @@ class StubRepo:
             self.per_pillar_category[(pillar, q.category)] += 1
 
 
-def run(budget=30):
+#: Ideation's seeded `founder_stages.question_budget` (migration 8f3a1c92d7b4).
+#: Hardcoded rather than read from the DB so this runs without one; keep the two
+#: in step.
+IDEATION_BUDGET = 14
+
+
+def run(budget=IDEATION_BUDGET):
     questions = [Q(*row) for row in BANK["rows"]]
     repo = StubRepo(questions)
     engine = QuestionSelectionEngine(repo)

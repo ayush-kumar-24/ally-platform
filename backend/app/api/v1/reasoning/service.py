@@ -34,6 +34,7 @@ from sqlalchemy.orm import Session
 from app.api.v1.ally.memory.schemas import MemoryType
 from app.api.v1.reasoning.config import ReasoningConfig
 from app.api.v1.reasoning.engines.archetype import ArchetypeEngine
+from app.api.v1.diagnosis.stage_scope import resolve_scope
 from app.api.v1.reasoning.engines.business_health import BusinessHealthScorer
 from app.api.v1.reasoning.engines.founder_dna_extras import (
     origin_and_vision,
@@ -399,22 +400,37 @@ class ReasoningService:
         # Fail-closed: if the pillar scoring formula is not configured, omit the
         # score from the report rather than failing the whole pipeline.
         start = time.perf_counter()
-        try:
-            business_health = self.business_health_scorer.compute(
-                list(diagnosis.classifications), questions, context
-            )
-            self._log_stage(
-                "business_health", session_id, start,
-                overall=str(business_health.overall_score),
-                red_flags=len(business_health.red_flags),
-            )
-        except FeatureDisabledError as exc:
+        scope = resolve_scope(context.founder)
+        if scope is not None and not scope.emits_business_health:
+            # An ideation founder is diagnosed on two pillars. Scoring them would
+            # renormalise 45% of the model up to 100 and present it as a verdict
+            # on a business that does not exist yet -- see StageScope.
+            # emits_business_health. Their report is the Founder DNA Snapshot and
+            # the Idea Validation read; `business_dna` stays null, which the
+            # report and dashboard already handle.
             business_health = None
             logger.info(
-                "business health score disabled; omitting from report",
+                "business health omitted for this stage",
                 extra={"session_id": session_id, "stage": "business_health",
-                       "reason": str(exc)},
+                       "stage_scope": scope.label},
             )
+        else:
+            try:
+                business_health = self.business_health_scorer.compute(
+                    list(diagnosis.classifications), questions, context
+                )
+                self._log_stage(
+                    "business_health", session_id, start,
+                    overall=str(business_health.overall_score),
+                    red_flags=len(business_health.red_flags),
+                )
+            except FeatureDisabledError as exc:
+                business_health = None
+                logger.info(
+                    "business health score disabled; omitting from report",
+                    extra={"session_id": session_id, "stage": "business_health",
+                           "reason": str(exc)},
+                )
 
         # --- Founder archetype / pattern (deterministic lexical match; LLM seam) ---
         start = time.perf_counter()
