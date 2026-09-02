@@ -55,6 +55,35 @@ def upgrade() -> None:
     op.execute(f"ALTER TABLE public.sessions DROP CONSTRAINT IF EXISTS {_CHECK}")
     op.create_check_constraint(_CHECK, "sessions", _states_check(_STATES_AFTER))
 
+    # Repair the sequence BEFORE the insert below, or the insert fails.
+    #
+    # The INSERT omits rule_id and relies on the sequence, but scoring_rules was
+    # seeded with explicit ids -- and an explicit id does not advance the
+    # sequence. On a database seeded that way, nextval() returns an id that
+    # already exists and the insert dies on the primary key. That is what failed
+    # this migration on production RDS (verified via ECS Exec: the DB rolled
+    # back cleanly to ba7ca1acfa53).
+    #
+    # Not reproducible everywhere, which is what makes it worth a comment rather
+    # than a silent fix: on Supabase the same sequence reads last_value=45,
+    # is_called=true against MAX(rule_id)=45, so nextval() returns 46 and the
+    # insert succeeds. A migration that passes on one database and dies on the
+    # other is exactly the shape this repair exists to remove.
+    #
+    # The third setval argument is `is_called`: true when rows exist, so the
+    # next id is MAX+1; false on an empty table, so the next id is 1 rather than
+    # 2. Idempotent -- running it again on a repaired sequence is a no-op.
+    op.execute(
+        """
+        SELECT setval(
+            pg_get_serial_sequence('public.scoring_rules', 'rule_id')::regclass,
+            COALESCE(MAX(rule_id), 1),
+            MAX(rule_id) IS NOT NULL
+        )
+        FROM public.scoring_rules
+        """
+    )
+
     # Externalised like every other threshold in this pipeline. The reading code
     # carries a 0.75 fallback so an unseeded database still routes correctly,
     # which is why this is an INSERT rather than a hard requirement.
