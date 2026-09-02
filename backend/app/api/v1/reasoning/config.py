@@ -15,6 +15,7 @@ in Postgres; this module only gives them names and types.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from decimal import Decimal
 from enum import Enum
@@ -78,6 +79,16 @@ class RuleCode(str, Enum):
     CONFIDENCE_INTEGRITY_WEIGHTS_SUM = "CONFIDENCE_INTEGRITY_WEIGHTS_SUM"
     CONFIDENCE_STAGE_COHERENCE_FACTOR = "CONFIDENCE_STAGE_COHERENCE_FACTOR"
     CONFIDENCE_MIN_QUESTIONS_FLOOR = "CONFIDENCE_MIN_QUESTIONS_FLOOR"
+
+    # Fraction of the stage's question budget that must be answered, with no
+    # category flagged, before the diagnosis may stop and report "areas to
+    # monitor" instead of a diagnosis (NO_CATEGORY_ABOVE_THRESHOLD_ACTION).
+    MONITOR_MIN_COVERAGE = "MONITOR_MIN_COVERAGE"
+
+    # Minimum number of the five confidence signals that must be measurable for
+    # the score to mean anything. The rule text describes the exclude-and-
+    # renormalise contract; its rule_value is this floor.
+    CONFIDENCE_UNAVAILABLE_INPUT_HANDLING = "CONFIDENCE_UNAVAILABLE_INPUT_HANDLING"
 
 
 # ---------------------------------------------------------------------------
@@ -216,6 +227,54 @@ class ConfidenceThresholds:
         return "continue"
 
 
+#: Coverage required for the monitor route when MONITOR_MIN_COVERAGE is not
+#: seeded. Three quarters of the stage budget. The DB row overrides it; this is
+#: the empty-database fallback, not the business rule -- the `_optional`
+#: convention used for every other provisional threshold here.
+DEFAULT_MONITOR_MIN_COVERAGE = Decimal("0.75")
+
+
+def monitor_eligible(
+    *,
+    any_category_flagged: bool,
+    answered: int,
+    budget: int,
+    min_coverage: Decimal,
+    min_answers: int,
+) -> bool:
+    """May this session stop and report "areas to monitor" instead of a diagnosis?
+
+    The second half of NO_CATEGORY_ABOVE_THRESHOLD_ACTION. That rule says not to
+    force a diagnosis when nothing is flagged; it never said when to stop asking,
+    so a healthy founder ran to the end of their budget and completed carrying
+    `continue`.
+
+    Pure arithmetic on values the caller resolves, because TWO callers decide
+    this and must never disagree:
+
+      * `incremental_confidence.recompute` -- the in-loop decision, after each
+        answer, that ends the session.
+      * `ReasoningService._run_pipeline` -- the final pass, which recomputes
+        routing from the full signal set and would otherwise overwrite the
+        session's `monitor` with `continue` off the same low score.
+
+    Two copies of this condition in two packages is exactly how they drift, and
+    the drift would be invisible: the session would stop correctly and then be
+    silently relabelled by the pipeline that runs a moment later.
+
+    `min_coverage` is deliberately a high fraction, not the report floor. An
+    all-clear is a stronger claim than a diagnosis -- nothing downstream reopens
+    it -- so it takes more evidence, not less. `min_answers` still applies on top;
+    whichever binds harder wins.
+    """
+    if any_category_flagged:
+        return False
+    if answered < min_answers:
+        return False
+    required = math.ceil(Decimal(budget) * min_coverage)
+    return answered >= required
+
+
 # ---------------------------------------------------------------------------
 # Strategy contracts for business rules NOT yet in the database
 # ---------------------------------------------------------------------------
@@ -245,6 +304,7 @@ class ConfidenceInputs:
     consistency_available: bool
     consistency_score: Decimal | None
 
+
     # --- Reliability modifier (from session_state_bands); None = High Distress ---
     reliability_factor: Decimal | None
 
@@ -254,6 +314,24 @@ class ConfidenceInputs:
     any_category_flagged: bool      # rule 4: no category above threshold
     distress_override: bool         # rule 1: distress path
     stages_away: int | None         # rule 2: severe stage mismatch (>= 2)
+
+    # Availability for the other four signals, same contract as consistency above
+    # and required by the same rule -- CONFIDENCE_UNAVAILABLE_INPUT_HANDLING says
+    # explicitly that it "applies to all five inputs, not only Answer Consistency".
+    #
+    # These default True so every existing caller keeps today's behaviour; only a
+    # signal the assembler positively knows it could not measure sets one False.
+    #
+    # The rule names three states and they are NOT the same. An input that RAN and
+    # found nothing wrong is a genuine measurement and keeps its value. An input
+    # whose calculation had no data to run on, or that errored, is UNAVAILABLE and
+    # must be excluded so the remaining weights renormalise -- never scored 0.
+    # Confirmation and separation both used to return 0 with no ranked cause,
+    # which is the forbidden case: it reads as "we checked and found nothing to
+    # confirm" when the truth is that there was nothing to check.
+    category_signal_available: bool = True
+    confirmation_available: bool = True
+    separation_available: bool = True
 
 
 @runtime_checkable

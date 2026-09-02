@@ -66,6 +66,11 @@ class SectionNarrator(Protocol):
     def narrate(self, section_key: str, slots: dict[str, Any], tone: ToneGuidance) -> str: ...
 
 
+#: Spelled out so the prose reads as prose. Falls back to the digit for
+#: anything outside the range, which cannot happen with six pillars.
+_WORDS = {1: "one", 2: "two", 3: "three", 4: "four", 5: "five", 6: "six"}
+
+
 class TemplateNarrator:
     """Deterministic prose from slots only. Every number it emits comes verbatim
     from a slot value; it never computes or invents."""
@@ -163,10 +168,23 @@ class TemplateNarrator:
                     "There is more detail when you are ready for it -- it can wait.")
         parts = []
         if band:
-            lead = {"Auditor": "Across the six readiness pillars, business health reads as",
-                    "Validator": "Across the six readiness pillars, where you stand reads as"
-                    }.get(tone.persona, "Across the six readiness pillars, your business health reads as")
-            parts.append(f'{lead} "{band}".')
+            # NOT hardcoded "six". Stage scoping means an early-stage founder is
+            # assessed on fewer -- 3 pillars at Validation, 4 at Prototype -- and
+            # the score renormalises onto those, so a fixed "across the six
+            # readiness pillars" told the founder we had looked at three pillars
+            # we never asked them about.
+            total = s.get("pillars_total") or 6
+            assessed = s.get("pillars_assessed") or total
+            scope = (
+                f"Across all {_WORDS.get(total, total)} readiness pillars"
+                if assessed >= total
+                else f"Across the {_WORDS.get(assessed, assessed)} readiness "
+                     f"pillars that apply at your stage"
+            )
+            subject = {"Auditor": "business health reads as",
+                       "Validator": "where you stand reads as"
+                       }.get(tone.persona, "your business health reads as")
+            parts.append(f'{scope}, {subject} "{band}".')
         pillars = s.get("pillars", [])
         strong = [p for p in pillars if p.get("band") == "Strong"]
         if strong:

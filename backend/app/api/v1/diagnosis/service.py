@@ -863,14 +863,24 @@ class DiagnosisService:
         Completion lives here rather than in the engine so that "no questions
         left" has exactly one meaning across every entry point.
         """
-        # Completion has three triggers, and only the first is a success:
+        # Completion has four triggers, and the first two are successes:
         #
         #   1. confidence >= CONFIDENCE_GENERATE_REPORT_MIN -- enough is known
-        #   2. the question budget is spent (MAX_DIAGNOSIS_QUESTIONS)
-        #   3. no eligible question is left in the bank
+        #   2. routing_state == monitor -- enough is known, and it is all fine
+        #   3. the question budget is spent (MAX_DIAGNOSIS_QUESTIONS)
+        #   4. no eligible question is left in the bank
         #
-        # (1) is set by the incremental scorer, which flips routing_state to
-        # generate_report; this reads that decision rather than re-deriving it.
+        # (1) and (2) are both set by the incremental scorer; this reads its
+        # decision rather than re-deriving it.
+        #
+        # (2) exists because (1) is unreachable for a healthy founder. Three of
+        # the five confidence signals measure pathology, so a founder with
+        # nothing wrong tops out around 45 against a threshold of 80, and
+        # CONFIDENCE_HARD_RULES rule 4 caps them at 59 on top of that. Before
+        # this they answered every question in their budget and completed as
+        # `continue` -- the state meaning "keep asking" -- which is not a
+        # conclusion the report layer can read anything from. Rule 4 already said
+        # not to force a diagnosis on them; it never said when to stop.
         # (2) is why the budget exists at all: the Stage 0->1 bank holds 569
         # questions and exhaustion (3) is not a stopping point any real founder
         # reaches -- before the cap, every session simply ran until abandoned,
@@ -887,8 +897,9 @@ class DiagnosisService:
         budget = settings.question_budget(getattr(stage, "question_budget", None))
         budget_spent = (session.questions_answered_count or 0) >= budget
         confident = session.routing_state == RoutingState.GENERATE_REPORT.value
+        all_clear = session.routing_state == RoutingState.MONITOR.value
 
-        if question is None or budget_spent or confident:
+        if question is None or budget_spent or confident or all_clear:
             session.current_question_id = None
             session.current_category = None
             session.status = SessionStatus.COMPLETED.value

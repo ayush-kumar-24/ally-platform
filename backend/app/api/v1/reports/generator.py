@@ -387,7 +387,19 @@ class ReportNarrativeGenerator:
                             else pf.band_description),
                         "red_flag_triggered": pf.red_flag_triggered,
                         "red_flag_note": pf.red_flag_note} for pf in p.pillars]
-            slots = {"overall_band": p.business_health_band, "pillars": pillars}
+            # Only pillars that were actually assessed. Stage scoping leaves the
+            # rest with no score and no band, and a bandless row on a founder's
+            # Business DNA page reads as a pillar that failed rather than one that
+            # was never in scope for their stage.
+            pillars = [pf for pf in pillars if pf.get("band")]
+            slots = {
+                "overall_band": p.business_health_band,
+                "pillars": pillars,
+                # Lets the narrator say what the reading covers instead of
+                # claiming all six every time -- see narrator._business_dna.
+                "pillars_assessed": p.pillars_assessed or len(pillars),
+                "pillars_total": p.pillars_total or 6,
+            }
             # `slots` is narrator input; `facts` is rendered to the founder. They
             # must not be the same list. `red_flag_note` is the SCORING RULE for
             # a pillar -- operator text, written for whoever tunes the engine --

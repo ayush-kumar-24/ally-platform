@@ -106,6 +106,13 @@ class ReportPayload:
     # Sources for the variant decision (engine-owned).
     category_risk_scores: dict[str, Any] = field(default_factory=dict)
     cat_risk_threshold: float = 0.30
+
+    # How much of the six-pillar model the score above was actually built on.
+    # Stage scoping means a partial assessment is routine, not exceptional: a
+    # Validation founder is diagnosed on 3 pillars and a Prototype founder on 4,
+    # and the renormalisation makes that invisible in the number itself.
+    pillars_assessed: int | None = None
+    pillars_total: int | None = None
     generate_report_min: float = 80.0
 
     # Chronic-state adjustment (chronic_state_inference). The engine detects the
@@ -338,6 +345,8 @@ def build_report_payload(db: Session, report) -> ReportPayload:
             if sess.get("overall_confidence_score") is not None else None
         ),
         business_health_overall=bd.get("overall_score"),
+        pillars_assessed=bd.get("pillars_assessed"),
+        pillars_total=bd.get("pillars_total"),
         business_health_band=bd.get("band"),
         pillars=pillars, red_flag_pillars=red_flag_pillars,
         archetype=archetype,

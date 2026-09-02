@@ -219,6 +219,23 @@ class RecommendationResult:
 
 
 @dataclass(frozen=True)
+class SessionAssessment:
+    """Where a session stands after one answer -- what the in-loop scorer returns.
+
+    Deliberately more than a number. The confidence score cannot distinguish
+    "nothing is wrong with this founder" from "we have not found it yet": three
+    of its five signals measure pathology and read 0 either way, and
+    CONFIDENCE_HARD_RULES rule 4 caps an unflagged session below the validate
+    threshold on top of that. Routing needs both facts, so both travel together.
+    """
+
+    score: Decimal
+    #: True when at least one category is at or above CAT_RISK_THRESHOLD.
+    any_category_flagged: bool
+    questions_answered: int
+
+
+@dataclass(frozen=True)
 class ReasoningResult:
     """The full result of analysing one session -- what ReasoningService returns
     to its caller after the pipeline (and persistence) completes."""
