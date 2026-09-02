@@ -14,13 +14,14 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
-import { supabaseConfigured } from './supabaseConfig';
+import { supabaseConfigured, supabaseEnvPresent } from './supabaseConfig';
 
 export { supabaseConfigured };
 
-// Only construct the client when configured; callers must check
-// `supabaseConfigured` first (auth.js does this for every export).
-export const supabase = supabaseConfigured
+// Only construct the client when real credentials exist; callers check
+// `supabaseConfigured` first (auth.js does this for every export), and the
+// dev mock never reaches this module at all.
+export const supabase = supabaseEnvPresent
   ? createClient(
       import.meta.env.VITE_SUPABASE_URL,
       import.meta.env.VITE_SUPABASE_ANON_KEY,

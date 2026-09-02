@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { useApp } from './context/AppContext';
-import { clearTokens, onAuthFailure } from './services/api';
+import { clearTokens, getAccessToken, onAuthFailure } from './services/api';
 import { startDevSession } from './services/auth';
 import { supabaseConfigured } from './services/supabaseConfig';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -92,6 +92,15 @@ function RouteFallback() {
   return <div style={{ minHeight: '100dvh', background: 'var(--color-forest-night, #06140d)' }} />;
 }
 
+/* The platform's own landing page is for founders who are already in. The
+   public face of Ally -- and the only way to get an account -- is the waitlist
+   at join.goxlally.ai, so anyone arriving here without a session goes straight
+   to sign-in, which links to the waitlist for everyone else. Decided at render,
+   not at module load: the answer changes the moment they sign in or out. */
+function HomeGate() {
+  return getAccessToken() ? <LandingPage /> : <Navigate to="/guided/login" replace />;
+}
+
 export default function App() {
   const { toast } = useApp();
   const [showSplash, setShowSplash] = useState(!splashAlreadyShown());
@@ -144,7 +153,7 @@ export default function App() {
               <LandingLayout />
             </ErrorBoundary>
           }>
-            <Route path="/" element={<LandingPage />} />
+            <Route path="/" element={<HomeGate />} />
           </Route>
 
           {/* ── Legal pages ── */}

@@ -27,7 +27,24 @@
  */
 
 import { clearTokens, post, setTokens } from './api';
-import { supabaseConfigured } from './supabaseConfig';
+import { DEV_MOCK_CODE, devMockAuth, supabaseConfigured, WAITLIST_URL } from './supabaseConfig';
+
+/**
+ * Local development only: a placeholder session so the login flow can be
+ * walked with no Supabase and no backend. Compiled out of production builds
+ * with `devMockAuth` (see supabaseConfig.js). The token satisfies the route
+ * guards; every API call still fails, which is the point -- this is for
+ * checking the flow, not for using the product.
+ */
+function mockSession(email) {
+  clearTokens();
+  setTokens({ access_token: 'dev-mock-access-token' });
+  return { id: 'dev-mock-founder', email: email.trim().toLowerCase(), provider: 'mock' };
+}
+
+const WAITLIST_HOST = (() => {
+  try { return new URL(WAITLIST_URL).host; } catch { return WAITLIST_URL; }
+})();
 
 /**
  * The Supabase SDK is ~40 kB gzipped and is needed only while signing in, so it
@@ -76,8 +93,13 @@ function translate(error, fallback) {
   if (raw.includes('rate limit') || raw.includes('too many') || error?.status === 429) {
     return new AuthStepError('Too many attempts. Please wait a minute and try again.');
   }
+  // Sign-ups are closed at the Supabase project level and this client never
+  // asks to create a user (see sendEmailOtp), so this is exactly one case: an
+  // address the waitlist has not approved. Saying so does reveal that the
+  // address is not approved -- accepted, because a founder who typed their
+  // email and got a vague error would have no idea what to do next.
   if (raw.includes('not authorized') || raw.includes('signups not allowed')) {
-    return new AuthStepError('This email is not able to sign up right now.');
+    return new AuthStepError(`This email hasn't been approved for Ally yet. Join the waitlist at ${WAITLIST_HOST}.`);
   }
   return new AuthStepError(fallback);
 }
@@ -109,23 +131,31 @@ async function exchangeForBackendSession(supabaseToken) {
 }
 
 /**
- * Mail a 6-digit code to `email`.
+ * Mail a sign-in code to `email`.
  *
- * `shouldCreateUser: true` covers both journeys with one call: a first-time
- * founder gets an account created on verification, and an existing one who has
- * forgotten their password simply gets a code. Splitting it into signup and
- * reset variants would leak which emails already have accounts -- the response
- * is deliberately identical either way.
+ * `shouldCreateUser: false`: this call never creates an account. Access to
+ * Ally is granted by the waitlist -- approving a registration on
+ * join.goxlally.ai creates the founder's auth user (server-side, with the
+ * service role), and only then will Supabase mail this address a code. An
+ * unapproved address gets "Signups not allowed", which translate() turns into
+ * a pointer at the waitlist. The flag is client-side courtesy; the actual
+ * gate is the project's "Allow new users to sign up" switch being OFF, which
+ * no client code can override.
+ *
+ * Both journeys still share this one call: a first-time (approved) founder
+ * sets their password after verifying, and an existing founder who has
+ * forgotten theirs simply gets a code.
  *
  * `emailRedirectTo` is not set: we want a code, not a magic link. The Supabase
  * email template must use {{ .Token }} for this to arrive as digits.
  */
 export async function sendEmailOtp(email) {
   if (!supabaseConfigured) throw new AuthNotConfiguredError();
+  if (devMockAuth) return;
   const supabase = await getSupabase();
   const { error } = await supabase.auth.signInWithOtp({
     email: email.trim().toLowerCase(),
-    options: { shouldCreateUser: true },
+    options: { shouldCreateUser: false },
   });
   if (error) throw translate(error, "We couldn't send that code. Please try again.");
 }
@@ -158,6 +188,12 @@ export async function sendEmailOtp(email) {
  */
 export async function verifyOtpAndSetPassword(email, code, password, fullName = '') {
   if (!supabaseConfigured) throw new AuthNotConfiguredError();
+  if (devMockAuth) {
+    if (code.trim() !== DEV_MOCK_CODE) {
+      throw new AuthStepError(`Dev mock: the code is ${DEV_MOCK_CODE}.`);
+    }
+    return mockSession(email);
+  }
   const supabase = await getSupabase();
 
   const { data, error } = await supabase.auth.verifyOtp({
@@ -196,6 +232,7 @@ export async function verifyOtpAndSetPassword(email, code, password, fullName = 
 /** Returning founder: email + the password they set. Returns their identity. */
 export async function signInWithPassword(email, password) {
   if (!supabaseConfigured) throw new AuthNotConfiguredError();
+  if (devMockAuth) return mockSession(email);
   const supabase = await getSupabase();
 
   const { data, error } = await supabase.auth.signInWithPassword({
@@ -233,7 +270,7 @@ export async function logout() {
   } finally {
     clearTokens();
     localStorage.removeItem('ally_founder');
-    if (supabaseConfigured) {
+    if (supabaseConfigured && !devMockAuth) {
       try { await (await getSupabase()).auth.signOut(); } catch { /* nothing left to do */ }
     }
   }

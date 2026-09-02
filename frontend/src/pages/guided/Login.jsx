@@ -21,8 +21,10 @@ import AuthTransition from '../../components/AuthTransition';
 import { CURRENT_VERSIONS, flushPendingConsent, recordConsent, savePendingConsent } from '../../services/consents';
 import { sendEmailOtp, signInWithPassword, startDevSession, verifyOtpAndSetPassword } from '../../services/auth';
 import { get } from '../../services/api';
-import { supabaseConfigured } from '../../services/supabaseConfig';
+import { DEV_MOCK_CODE, devMockAuth, supabaseConfigured, WAITLIST_URL } from '../../services/supabaseConfig';
 import { firstSafe } from '../../utils/looksLikeToken';
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** Keep in step with the minimum length configured in the Supabase dashboard.
  *  Checking here too means a too-short password is caught before the round trip,
@@ -86,6 +88,30 @@ export default function Login() {
     const timer = setTimeout(() => setCooldown((s) => s - 1), 1000);
     return () => clearTimeout(timer);
   }, [cooldown]);
+
+  /* Arriving from the approval email: its link is /guided/login#email=<addr>.
+     A fragment, not a query string -- it never reaches any server, so the
+     address is in no access log along the way. Read once, then removed from
+     the address bar so it does not linger in history or get re-applied on a
+     refresh. The founder still presses "Send me a code" themselves: nothing
+     in a URL may trigger an email, or a crafted link could spam any inbox. */
+  useEffect(() => {
+    const applyEmailFromHash = () => {
+      const match = /(?:^#|&)email=([^&]+)/.exec(window.location.hash);
+      if (!match) return;
+      let candidate = '';
+      try { candidate = decodeURIComponent(match[1]).trim(); } catch { /* not ours */ }
+      window.history.replaceState(null, '', window.location.pathname + window.location.search);
+      if (!EMAIL_RE.test(candidate)) return;
+      setEmail(candidate);
+      setStep('email');
+    };
+    applyEmailFromHash();
+    // Also when the link is followed while this page is already open: a
+    // fragment-only navigation does not remount the component.
+    window.addEventListener('hashchange', applyEmailFromHash);
+    return () => window.removeEventListener('hashchange', applyEmailFromHash);
+  }, []);
 
   const release = () => {
     inFlight.current = false;
@@ -189,7 +215,9 @@ export default function Login() {
     try {
       await sendEmailOtp(email);
       setCooldown(RESEND_COOLDOWN_SECONDS);
-      setNotice(`We sent a ${OTP_DISPLAY_LENGTH}-digit code to ${email.trim()}. It expires in a few minutes.`);
+      setNotice(devMockAuth
+        ? `Dev mock: no email is sent. The code is ${DEV_MOCK_CODE}.`
+        : `We sent a ${OTP_DISPLAY_LENGTH}-digit code to ${email.trim()}. It expires in a few minutes.`);
       if (!isResend) setStep('code');
       return true;
     } catch (err) {
@@ -415,6 +443,10 @@ export default function Login() {
                 Email me a code
               </button>
             </p>
+            <p className="auth-alt">
+              Don&rsquo;t have access yet?{' '}
+              <a className="auth-link-btn" href={WAITLIST_URL}>Join the waitlist</a>
+            </p>
           </form>
         ) : step === 'email' ? (
           <form className="auth-form" onSubmit={handleSendCode} noValidate>
@@ -438,6 +470,10 @@ export default function Login() {
                       onClick={() => goToStep('password')}>
                 Sign in instead
               </button>
+            </p>
+            <p className="auth-alt">
+              Don&rsquo;t have access yet?{' '}
+              <a className="auth-link-btn" href={WAITLIST_URL}>Join the waitlist</a>
             </p>
           </form>
         ) : (
@@ -502,6 +538,9 @@ export default function Login() {
           Private &amp; encrypted &middot; we never share your business.{' '}
           {!supabaseConfigured && (
             <span style={{ opacity: 0.7 }}>(Demo — Supabase not configured)</span>
+          )}
+          {devMockAuth && (
+            <span style={{ opacity: 0.7 }}>(Dev mock — the code is {DEV_MOCK_CODE})</span>
           )}
         </p>
       </div>
