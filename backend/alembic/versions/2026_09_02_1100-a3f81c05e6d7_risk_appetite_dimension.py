@@ -60,6 +60,10 @@ _CONSTRAINT = "founder_dna_questions_dimension_code_check"
 _NEW_DIMENSION = "risk_appetite"
 _FIRST_ID, _LAST_ID = 159, 164
 
+#: The SQL file holds exactly two executable statements: the INSERT and the
+#: sequence setval. Asserted rather than assumed -- see _load_sql.
+_EXPECTED_STATEMENTS = 2
+
 #: The fourteen that existed before this migration, in the enum's own order,
 #: plus the new one. Spelled out rather than read from the enum: a migration
 #: must describe the database at ITS point in history, and an enum that gains a
@@ -95,7 +99,33 @@ def _load_sql() -> list[str]:
     # Alembic already owns the transaction.
     sql = re.sub(r"(?im)^\s*BEGIN\s*;\s*$", "", sql)
     sql = re.sub(r"(?im)^\s*COMMIT\s*;\s*$", "", sql)
-    return [s.strip() for s in sql.split(";") if s.strip()]
+
+    # Strip full-line SQL comments BEFORE splitting on ";".
+    #
+    # Splitting a file on ";" treats a semicolon inside a comment as a
+    # statement boundary. This file's own prose contained one -- "...warns
+    # against; asking which feeling actually shows up..." -- which cut the
+    # header comment in two and handed Postgres a fragment beginning "asking
+    # which feeling actually shows up, or". It failed the production migration
+    # with `syntax error at or near "asking"`.
+    #
+    # Fixing the punctuation in that one sentence would have unblocked the
+    # deploy and left the trap armed for the next person who writes a
+    # semicolon in a comment. Removing the comments is the fix; the count
+    # assertion below is what makes a future recurrence fail here, loudly and
+    # locally, instead of on a production migration task.
+    sql = re.sub(r"(?m)^\s*--.*$", "", sql)
+
+    statements = [s.strip() for s in sql.split(";") if s.strip()]
+
+    if len(statements) != _EXPECTED_STATEMENTS:
+        raise RuntimeError(
+            f"Expected exactly {_EXPECTED_STATEMENTS} Risk Appetite SQL "
+            f"statements, found {len(statements)}. The file is malformed, or a "
+            "semicolon appears somewhere the splitter treats as a boundary."
+        )
+
+    return statements
 
 
 def _dimension_check(dimensions: Sequence[str]) -> str:
