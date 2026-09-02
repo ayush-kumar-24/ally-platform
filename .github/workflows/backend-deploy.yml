@@ -438,6 +438,43 @@ jobs:
               --tasks "${{ steps.migrate.outputs.task_arn }}" \
               --query 'tasks[0].{stoppedReason:stoppedReason,containers:containers[*].{name:name,reason:reason,exitCode:exitCode}}'
 
+            # The container's own output, not just its exit code.
+            #
+            # Without this the log says "Essential container in task exited"
+            # and nothing else -- which names the symptom and hides the cause,
+            # so every failed migration costs a round trip to someone with AWS
+            # access before anyone can even start diagnosing. Two failures in a
+            # row were debugged by guessing because of this.
+            #
+            # Read from the task definition rather than hardcoded: the log group
+            # and stream prefix belong to the container definition, and a
+            # hardcoded guess here would silently print nothing the day either
+            # changes.
+            echo "--- migration container log ---"
+            LOG_GROUP=$(aws ecs describe-task-definition \
+              --task-definition "${{ steps.migration-taskdef.outputs.arn }}" \
+              --query "taskDefinition.containerDefinitions[?name=='$CONTAINER_NAME']|[0].logConfiguration.options.\"awslogs-group\"" \
+              --output text 2>/dev/null)
+            LOG_PREFIX=$(aws ecs describe-task-definition \
+              --task-definition "${{ steps.migration-taskdef.outputs.arn }}" \
+              --query "taskDefinition.containerDefinitions[?name=='$CONTAINER_NAME']|[0].logConfiguration.options.\"awslogs-stream-prefix\"" \
+              --output text 2>/dev/null)
+            FAILED_TASK_ARN="${{ steps.migrate.outputs.task_arn }}"
+            TASK_ID="${FAILED_TASK_ARN##*/}"
+
+            if [ -n "$LOG_GROUP" ] && [ "$LOG_GROUP" != "None" ]; then
+              aws logs get-log-events \
+                --log-group-name "$LOG_GROUP" \
+                --log-stream-name "$LOG_PREFIX/$CONTAINER_NAME/$TASK_ID" \
+                --limit 100 \
+                --query 'events[*].message' \
+                --output text 2>/dev/null \
+                || echo "(could not read $LOG_GROUP -- check the task role has logs:GetLogEvents)"
+            else
+              echo "(no awslogs configuration on $CONTAINER_NAME; cannot fetch the error)"
+            fi
+            echo "--- end migration container log ---"
+
             echo "ECS service will NOT be updated."
             exit 1
           fi
