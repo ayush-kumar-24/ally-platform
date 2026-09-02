@@ -55,6 +55,27 @@ def upgrade() -> None:
     op.execute(f"ALTER TABLE public.sessions DROP CONSTRAINT IF EXISTS {_CHECK}")
     op.create_check_constraint(_CHECK, "sessions", _states_check(_STATES_AFTER))
 
+    # Repair the rule_id sequence before the INSERT below. This is the first
+    # Alembic migration ever to insert into scoring_rules -- every existing row
+    # was seeded by something outside Alembic that specified rule_id explicitly,
+    # which never advances the sequence. nextval() was therefore still sitting
+    # at its untouched default, and calling it here collided with a rule_id the
+    # table already had (observed in production: it returned 1, which existed).
+    # setval() to the current MAX(rule_id) makes the sequence agree with the
+    # table before anything asks it for the next value. Safe to run every time
+    # this migration applies -- it only ever advances the sequence forward, and
+    # an empty table (MAX is NULL) leaves it untouched via the `is_called` arg.
+    op.execute(
+        """
+        SELECT setval(
+            pg_get_serial_sequence('public.scoring_rules', 'rule_id')::regclass,
+            COALESCE(MAX(rule_id), 1),
+            MAX(rule_id) IS NOT NULL
+        )
+        FROM public.scoring_rules
+        """
+    )
+
     # Externalised like every other threshold in this pipeline. The reading code
     # carries a 0.75 fallback so an unseeded database still routes correctly,
     # which is why this is an INSERT rather than a hard requirement.
