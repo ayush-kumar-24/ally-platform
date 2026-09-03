@@ -2,7 +2,6 @@ from fastapi import APIRouter, Response, status
 from sqlalchemy import text
 
 from app.api.v1.chat.router import router as chat_api_router
-from app.api.v1.admin.router import router as admin_router
 from app.api.v1.calendar.router import router as calendar_router
 from app.api.v1.planning.router import router as planning_router
 from app.api.v1.founder_goals.router import router as founder_goals_router
@@ -58,7 +57,6 @@ api_router.include_router(reference_router)
 api_router.include_router(dashboard_router)
 api_router.include_router(reports_router)
 api_router.include_router(chat_api_router)
-api_router.include_router(admin_router)
 api_router.include_router(planning_router)
 api_router.include_router(calendar_router)
 api_router.include_router(founder_goals_router)
@@ -69,8 +67,12 @@ api_router.include_router(consents_router)
 api_router.include_router(privacy_router)
 api_router.include_router(voice_router)
 api_router.include_router(plans_router)
-# Registered after the Phase 12 admin router; paths are distinct (/admin/users,
-# /admin/credits, /admin/audit vs /admin/founders, /admin/announcements).
+# The Phase 12 admin router (/admin/founders, /admin/dashboard, /admin/audit,
+# /admin/announcements -- all backed by in-memory, non-persistent repositories)
+# used to register here too. Removed: the frontend never called any of its
+# endpoints (confirmed against frontend/src/services/admin.js before deleting),
+# and every capability it had was already superseded by the panel below --
+# see app/admin/__init__.py.
 api_router.include_router(admin_panel_router)
 api_router.include_router(admin_panel_router_v2)
 api_router.include_router(webhooks_supabase_router)

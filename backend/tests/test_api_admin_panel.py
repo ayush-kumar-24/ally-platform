@@ -92,41 +92,13 @@ def test_whoami_reports_capabilities(client):
     assert "transfer_credits" not in body["capabilities"]
 
 
-# --- dashboard metrics (Phase 2: Live now / Today / 7 days) -----------------
-
-def test_dashboard_metrics_route_does_not_collide_with_the_legacy_admin_router(client):
-    """Named /dashboard-metrics specifically to avoid the /dashboard the Phase
-    12 router already owns -- this is what proves the route this test file's
-    `client` service actually reaches is this one, not silently shadowed."""
-    r = client.http.get(f"{BASE}/dashboard-metrics")
-    # This fixture's AdminPanelService has no insights collaborator wired --
-    # "reachable but not configured" (422), never "not found" (404, which is
-    # what hitting the wrong/shadowed router's /dashboard would look like for
-    # this fixture's setup).
-    assert r.status_code == 422
-
-
-def test_dashboard_metrics_returns_the_configured_cards(client):
-    from app.admin.insights import Metric
-
-    metrics = [
-        Metric(key="live_now", label="Live now", value=2),
-        Metric(key="active_today", label="Active today", value=5),
-        Metric(key="active_7d", label="Active last 7 days", value=9),
-    ]
-    client.service.insights = SimpleNamespace(dashboard_metrics=lambda: metrics)
-
-    r = client.http.get(f"{BASE}/dashboard-metrics")
-    assert r.status_code == 200
-    keys = {m["key"]: m["value"] for m in r.json()["items"]}
-    assert keys == {"live_now": 2, "active_today": 5, "active_7d": 9}
-
-
-def test_dashboard_metrics_reachable_by_support(client):
-    """Aggregate counts, not per-founder PII -- same read tier as /users."""
-    as_role(client, PanelRole.SUPPORT)
-    client.service.insights = SimpleNamespace(dashboard_metrics=lambda: [])
-    assert client.http.get(f"{BASE}/dashboard-metrics").status_code == 200
+# Dashboard metrics (Phase 2: Live now / Today / 7 days) are served by
+# GET /admin/metrics (panel_router_v2.py) -- this router used to carry a
+# duplicate /admin/dashboard-metrics reaching the exact same cards through
+# AdminPanelService, which nothing ever called (confirmed against
+# frontend/src/services/admin.js, which only calls /admin/metrics). Removed
+# as part of the Admin Panel Proposal's Phase 5; the new windows themselves
+# are still covered in test_admin_insights.py.
 
 
 # --- health page (Phase 3) ---------------------------------------------------

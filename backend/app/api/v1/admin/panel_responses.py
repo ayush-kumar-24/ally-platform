@@ -8,7 +8,6 @@ from typing import Any
 from pydantic import BaseModel
 
 from app.admin.health import ComponentHealth, HealthReport
-from app.admin.insights import Metric
 from app.admin.panel_audit import PanelAuditEvent
 from app.admin.users_models import UserDetail, UserPage, UserSummary
 from app.credits.models import CreditTransaction
@@ -175,31 +174,6 @@ class WhoAmIResponse(BaseModel):
     email: str
     role: str
     capabilities: list[str]
-
-
-class MetricResponse(BaseModel):
-    """One dashboard card. `available=False` means "could not be measured" --
-    see `Metric`'s own docstring on why that is shown as "--", not a false 0."""
-
-    key: str
-    label: str
-    value: float | int | None
-    unit: str = ""
-    available: bool
-    unavailable_reason: str | None = None
-
-    @classmethod
-    def from_domain(cls, m: Metric) -> "MetricResponse":
-        return cls(key=m.key, label=m.label, value=m.value, unit=m.unit,
-                   available=m.available, unavailable_reason=m.unavailable_reason)
-
-
-class DashboardMetricsResponse(BaseModel):
-    items: list[MetricResponse]
-
-    @classmethod
-    def from_domain(cls, metrics: list[Metric]) -> "DashboardMetricsResponse":
-        return cls(items=[MetricResponse.from_domain(m) for m in metrics])
 
 
 class ComponentHealthResponse(BaseModel):
