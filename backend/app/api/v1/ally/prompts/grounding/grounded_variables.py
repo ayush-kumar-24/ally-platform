@@ -30,6 +30,10 @@ _GRAPH_NONE = "No related diagnostic map available."
 _DIAGNOSIS_NONE = "No diagnosis completed yet."
 _ATTACHMENTS_NONE = "No files uploaded in this conversation."
 _TASKS_NONE = "No active tasks on the founder's plan."
+#: Said plainly so the model does not invent a profile to fill the gap -- and
+#: so it can tell the founder to complete onboarding rather than denying the
+#: data exists.
+_PROFILE_NONE = "Onboarding profile not completed."
 _FOUNDER_NAME_FALLBACK = "the founder"
 _STAGE_NAME_FALLBACK = "not set yet"
 
@@ -55,4 +59,11 @@ def grounded_variables(source: GroundingSource) -> dict[str, str]:
     # Same optional/additive convention as attachments_text -- only the ai_chat
     # GroundingSource carries tasks_text.
     variables["tasks_block"] = getattr(source, "tasks_text", "") or _TASKS_NONE
+    # Same optional/additive convention again. This one is what onboarding
+    # collected -- stage, industry, revenue, what they are building, the problem
+    # they arrived with -- which chat never had, so Ally denied having details
+    # the founder had already given it.
+    variables["founder_profile_block"] = (
+        getattr(source, "profile_text", "") or _PROFILE_NONE
+    )
     return variables

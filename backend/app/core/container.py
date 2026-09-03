@@ -215,7 +215,26 @@ class Container:
             knowledge_graph=self.knowledge_graph(db),
             attachments=self.attachment_service(db),
             planning=self.planning_service(db),
+            founder_profile=lambda founder_id: self._founder_profile_text(db, founder_id),
         )
+
+    @staticmethod
+    def _founder_profile_text(db: Session, founder_id: int) -> str:
+        """What onboarding established about this founder, for the chat prompt.
+
+        Reuses the diagnosis advisor's brief so the two surfaces cannot describe
+        the same founder differently -- one renderer, one truth. Chat asks for
+        the profile half only: the Founder DNA and Current Problem excerpts are
+        sized for choosing the next diagnostic question, and chat already
+        receives the finished diagnosis separately.
+        """
+        from app.api.v1.diagnosis.founder_brief import build_founder_brief
+        from app.models import Founder
+
+        founder = db.get(Founder, founder_id)
+        if founder is None:
+            return ""
+        return build_founder_brief(db, founder, include_dna=False, include_problem=False)
 
     def grounded_prompt_manager(self):
         return self._grounded_prompt_manager

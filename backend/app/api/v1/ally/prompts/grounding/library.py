@@ -150,6 +150,7 @@ _GENERAL_CHAT_STANDARD_V1 = PromptTemplate(
     system_prompt=_GENERAL_CHAT_SYSTEM,
     user_prompt=(
         "Founder: {{founder_name}} (stage: {{stage_name}}).\n\n"
+        "== Who this founder is (from onboarding) ==\n{{founder_profile_block}}\n\n"
         "== Founder's diagnosis (if completed) ==\n{{diagnosis_block}}\n\n"
         "== Founder memory (prior context) ==\n{{memory_summary}}\n\n"
         "== Retrieved knowledge (support) ==\n{{retrieved_knowledge}}\n\n"
@@ -165,6 +166,7 @@ _GENERAL_CHAT_STANDARD_V1 = PromptTemplate(
     required_variables=(
         "founder_name",
         "stage_name",
+        "founder_profile_block",
         "diagnosis_block",
         "memory_summary",
         "retrieved_knowledge",

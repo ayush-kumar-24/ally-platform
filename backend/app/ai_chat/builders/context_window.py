@@ -87,6 +87,7 @@ class ContextWindowBuilder:
         knowledge_graph,
         attachments=None,
         planning=None,
+        founder_profile=None,
         config: ContextWindowConfig | None = None,
     ):
         self.conversation_service = conversation_service
@@ -95,6 +96,10 @@ class ContextWindowBuilder:
         self.knowledge_graph = knowledge_graph
         self.attachments = attachments
         self.planning = planning
+        # Callable(founder_id) -> str. A callable rather than a service object
+        # because there is nothing to configure: the caller already has the db
+        # session and decides how to load the founder.
+        self.founder_profile = founder_profile
         self.config = config or ContextWindowConfig()
 
     def build(
@@ -132,6 +137,12 @@ class ContextWindowBuilder:
         # accumulating months of completed history.
         tasks_text, tasks_ok = self._safe_tasks(conversation.founder_id)
 
+        # 7d. Inject what onboarding established about this founder -- fail
+        # closed. Without it Ally has the diagnosis but not the person: it told
+        # a founder mid-conversation that it had no problem statement, target
+        # customer or product details, all of which onboarding had captured.
+        profile_text, profile_ok = self._safe_profile(conversation.founder_id)
+
         # 8. Include the current message, folding recent history into the text.
         founder_message = self._compose_message(conv_ctx, current_message)
 
@@ -152,10 +163,27 @@ class ContextWindowBuilder:
             attachments_text=attachments_text,
             tasks_injected=tasks_ok,
             tasks_text=tasks_text,
+            profile_injected=profile_ok,
+            profile_text=profile_text,
             media=media,
         )
 
     # --- fail-closed source injection ------------------------------------
+
+    def _safe_profile(self, founder_id: int) -> tuple[str, bool]:
+        """Who this founder is, from onboarding. Never raises.
+
+        Degrades to "" like every other source here: a missing profile costs
+        Ally context, and must never cost the founder their turn.
+        """
+        if self.founder_profile is None:
+            return "", False
+        try:
+            return (self.founder_profile(founder_id) or ""), True
+        except Exception as exc:  # noqa: BLE001 -- degrade, never fail the turn
+            logger.warning("ai_chat: founder profile injection failed; continuing",
+                           extra={"stage": "inject_profile", "error": str(exc)})
+            return "", False
 
     def _safe_memory(self, founder_id: int):
         try:
