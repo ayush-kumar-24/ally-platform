@@ -128,6 +128,26 @@ class Container:
         self._admin_registry = AdminRegistry()
         # Admin Panel allowlist -- built lazily so tests can set the env var first.
         self._panel_registry = None
+        # Admin Panel Phase 3 (Health page): process-level singleton so its
+        # green->red edge-trigger state (see HealthAlertService's own
+        # docstring) survives across requests within one process.
+        self._health_alert_service = self._build_health_alert_service()
+
+    def _build_health_alert_service(self):
+        """WhatsApp is not wired: the proposal asked for it alongside email,
+        but there is no WhatsApp-sending integration anywhere in this
+        codebase (checked -- no Twilio/Meta Cloud API client, no credentials
+        settings) and picking a provider is a decision this module does not
+        make unilaterally, same principle session_store.py's docstring gives
+        for a database change. `AlertChannel` is deliberately a protocol, so
+        a WhatsAppAlertChannel is a channel this list gains later, not a
+        redesign. Email ships now because app/services/email.py already
+        exists and works."""
+        from app.admin.health import EmailAlertChannel, HealthAlertService
+        channels = []
+        if settings.health_alert_emails:
+            channels.append(EmailAlertChannel(settings.health_alert_emails))
+        return HealthAlertService(channels)
 
     # --- Provider registry ------------------------------------------------
 
@@ -410,11 +430,52 @@ class Container:
             privacy=SqlAlchemyPrivacyRepository(db),
             feedback=SqlAlchemyFeedbackReadRepository(db),
             insights=self.insights_service(db),
+            health=self.health_checker(db),
         )
 
     def insights_service(self, db: Session):
         from app.admin.insights import InsightsService, SqlAlchemyInsightsRepository
         return InsightsService(SqlAlchemyInsightsRepository(db))
+
+    def health_checker(self, db: Session):
+        """Request-scoped (needs the request's DB session for the database
+        and error-rate checks); the AI provider, report engine and storage
+        checks read process-level state/config, wired here as closures over
+        `self` rather than methods on SystemHealthChecker so that class stays
+        testable without a live provider, sidecar or bucket."""
+        from app.admin.health import SystemHealthChecker
+        from app.api.v1.reports.gotenberg import is_available as gotenberg_available
+        from app.services.object_storage import ObjectStorageError, build_object_storage
+
+        def ai_provider_health():
+            provider = self.execution().providers.get("auto")
+            if provider is None:
+                return False, "no provider registered"
+            h = provider.health()
+            return h.healthy, h.detail
+
+        def report_engine_available():
+            return gotenberg_available(base_url=settings.GOTENBERG_URL)
+
+        def storage_ping():
+            store = build_object_storage()
+            if store is None:
+                return None, "no S3 bucket configured (local storage in use)"
+            try:
+                store.ping()
+                return True, f"s3://{store.bucket} reachable"
+            except ObjectStorageError as exc:
+                return False, str(exc)
+
+        return SystemHealthChecker(
+            db,
+            ai_provider_health=ai_provider_health,
+            report_engine_available=report_engine_available,
+            storage_ping=storage_ping,
+        )
+
+    def health_alert_service(self):
+        return self._health_alert_service
 
     def feature_flag_service(self, db: Session):
         from app.admin.feature_flags import (

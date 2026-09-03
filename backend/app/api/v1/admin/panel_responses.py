@@ -7,6 +7,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from app.admin.health import ComponentHealth, HealthReport
 from app.admin.insights import Metric
 from app.admin.panel_audit import PanelAuditEvent
 from app.admin.users_models import UserDetail, UserPage, UserSummary
@@ -199,3 +200,29 @@ class DashboardMetricsResponse(BaseModel):
     @classmethod
     def from_domain(cls, metrics: list[Metric]) -> "DashboardMetricsResponse":
         return cls(items=[MetricResponse.from_domain(m) for m in metrics])
+
+
+class ComponentHealthResponse(BaseModel):
+    key: str
+    label: str
+    status: str
+    detail: str = ""
+
+    @classmethod
+    def from_domain(cls, c: ComponentHealth) -> "ComponentHealthResponse":
+        return cls(key=c.key, label=c.label, status=c.status.value, detail=c.detail)
+
+
+class HealthReportResponse(BaseModel):
+    """`status` is green/amber/red -- worst of every component below, not an
+    average (see HealthReport.status's own docstring)."""
+
+    status: str
+    components: list[ComponentHealthResponse]
+    checked_at: datetime
+
+    @classmethod
+    def from_domain(cls, r: HealthReport) -> "HealthReportResponse":
+        return cls(status=r.status.value,
+                   components=[ComponentHealthResponse.from_domain(c) for c in r.components],
+                   checked_at=r.checked_at)

@@ -329,6 +329,16 @@ class Settings(BaseSettings):
     def email_enabled(self) -> bool:
         return bool(self.EMAIL_HOST)
 
+    # Admin Panel Phase 3: who gets paged when the health check turns red.
+    # Comma-separated, same shape as CORS_ORIGINS below -- deliberately not
+    # GOXL_ADMIN_PANEL_USERS (panel *access* and *who gets alerted* are
+    # different questions; an on-call inbox may not be a panel login at all).
+    HEALTH_ALERT_EMAILS: str = ""
+
+    @property
+    def health_alert_emails(self) -> list[str]:
+        return [e.strip() for e in self.HEALTH_ALERT_EMAILS.split(",") if e.strip()]
+
     # --- CORS ---
     CORS_ORIGINS: str = "http://localhost:3000"
 
