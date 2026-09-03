@@ -78,11 +78,18 @@ SOURCE_PLANNING = "planning"
 #: Price of one discovery call once a founder's free allowance is used up.
 CALL_PRICE_INR = 300
 
-#: Length of a paid discovery call. The `discovery_calls.duration_minutes` column
-#: still carries a server_default of 45 from an earlier product decision; this is
-#: the value the booking path writes, so the two disagree only for rows created
-#: before the change.
-CALL_DURATION_MINUTES = 15
+#: How far ahead a founder can see bookable slots, by whether they hold
+#: Feature.PRIORITY_CALL. Pro sees the grid from tomorrow; everyone else waits
+#: two more days, so the Rs 999 tier gets first pick of every slot rather than a
+#: separate pool of them. Expressed as lead time and not as reserved slots on
+#: purpose: reserving would leave the calendar empty when no Pro founder books,
+#: while a lead only ever changes WHO books a slot first.
+PRIORITY_CALL_LEAD_DAYS = 1
+STANDARD_CALL_LEAD_DAYS = 3
+
+#: Call length lives in settings.DISCOVERY_CALL_DURATION_MINUTES, which is what
+#: the calendar service and the booking path both read. Not duplicated here --
+#: two constants for one number is how they end up disagreeing.
 
 #: Price of a credit top-up pack (the Free tier's path once the trial ends).
 TOPUP_PRICE_INR = 300

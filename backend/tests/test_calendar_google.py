@@ -129,3 +129,50 @@ def test_freebusy_failure_falls_back_to_candidates(google, monkeypatch):
     ref = datetime(2026, 7, 24, 12, 0, tzinfo=timezone.utc)
     # a Google outage must not break availability -- we return the candidate grid
     assert cal.available_slots(ref, days=7) == cal._candidate_slots(ref, 7)
+
+
+# --- priority booking lead time -------------------------------------------
+
+
+def test_a_longer_lead_shifts_the_window_rather_than_shrinking_it():
+    """Rs 999 priority booking is a lead-time difference, not a separate pool of
+    slots. A standard founder must still be offered a full `days` worth -- just
+    starting later -- or the perk would quietly become "fewer slots for everyone
+    else", which is a different (and worse) product.
+    """
+    ref = datetime(2026, 7, 24, 12, 0, tzinfo=timezone.utc)   # a Friday
+    priority = cal._candidate_slots(ref, 7, lead_days=1)
+    standard = cal._candidate_slots(ref, 7, lead_days=3)
+
+    assert priority and standard
+    assert len(priority) == len(standard)
+    assert min(standard) > min(priority)
+    # And the standard window is a genuine shift: the earliest days the priority
+    # founder can reach are not offered to the standard one at all.
+    assert not (set(priority) - set(standard)) <= set(standard)
+
+
+def test_lead_days_never_opens_the_window_today():
+    """A slot later today is not bookable at any lead time -- it leaves no room
+    to prepare, and lead_days=0 must not become a same-day booking path."""
+    ref = datetime(2026, 7, 24, 12, 0, tzinfo=timezone.utc)
+    for lead in (0, 1):
+        assert min(cal._candidate_slots(ref, 7, lead_days=lead)).date() > ref.date()
+
+
+def test_freebusy_window_covers_a_shifted_grid(google):
+    """The free/busy query must span the whole shifted grid. Bounded at days+1 it
+    would stop before a long-lead window ended, and the slots past that edge
+    would come back unchecked against the host calendar -- offering times the
+    host is already booked for."""
+    ref = datetime(2026, 7, 24, 12, 0, tzinfo=timezone.utc)
+    grid = cal._candidate_slots(ref, 7, lead_days=3)
+    last = max(grid)
+    google.busy = [{
+        "start": last.isoformat(),
+        "end": (last + timedelta(hours=1)).isoformat(),
+    }]
+
+    slots = cal.available_slots(ref, days=7, lead_days=3)
+    assert last not in slots
+

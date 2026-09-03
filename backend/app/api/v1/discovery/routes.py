@@ -26,7 +26,12 @@ from app.services.calendar import DEFAULT_TIMEZONE, available_slots, create_meet
 from app.services.discovery_notifications import send_booking_confirmation
 from app.api.v1.plans.dependencies import enforcement_enabled
 from app.core.container import container
-from app.plans.catalog import CALL_PRICE_INR
+from app.plans.catalog import (
+    CALL_PRICE_INR,
+    PRIORITY_CALL_LEAD_DAYS,
+    STANDARD_CALL_LEAD_DAYS,
+    Feature,
+)
 from app.plans.errors import NoFreeCallsRemainingError
 from app.plans.usage import period_month
 
@@ -43,12 +48,34 @@ class SlotInPastError(AppError):
         super().__init__("scheduled_at must be in the future", status_code=422)
 
 
+def _has_call_priority(founder: Founder, db: Session) -> bool:
+    """Does this founder hold the Rs 999 call perk?
+
+    Read through the entitlement service rather than comparing plan_type, so the
+    catalog stays the only place that decides which tiers carry it. Unlike the
+    quota gate this is NOT behind enforcement_enabled: a priority lead is a perk
+    being granted, not an allowance being refused, and leaving it dark would give
+    every founder Pro's booking window.
+    """
+    return container.entitlement_service(db).has_feature(
+        getattr(founder, "plan_type", None), Feature.PRIORITY_CALL
+    )
+
+
 @router.get("/slots", response_model=SlotsResponse)
-async def get_slots(days: int = 7, founder: Founder = Depends(get_founder_record)):
-    """Available booking slots. Stubbed; Calendly will own real availability."""
+async def get_slots(days: int = 7, founder: Founder = Depends(get_founder_record),
+                    db: Session = Depends(get_db)):
+    """Available booking slots. Stubbed; Calendly will own real availability.
+
+    Pro's window opens two days earlier than everyone else's, which is what
+    "priority booking" means here: the same slots, reached first.
+    """
     days = max(1, min(days, 30))
     now = datetime.now(timezone.utc)
-    return SlotsResponse(timezone=DEFAULT_TIMEZONE, slots=available_slots(now, days))
+    lead = (PRIORITY_CALL_LEAD_DAYS if _has_call_priority(founder, db)
+            else STANDARD_CALL_LEAD_DAYS)
+    return SlotsResponse(timezone=DEFAULT_TIMEZONE,
+                         slots=available_slots(now, days, lead_days=lead))
 
 
 @router.post("/book", response_model=CallRead, status_code=status.HTTP_201_CREATED)
@@ -108,6 +135,10 @@ async def book_call(
         "goxml_host": meeting["host"],
         "booking_source": meeting["provider"],
         "notes_pre_call": payload.notes_pre_call,
+        # Recorded on the row, not derived at read time: the founder's plan can
+        # change after booking, and what the queue needs to know is whether this
+        # request was priority WHEN IT WAS MADE.
+        "is_priority": _has_call_priority(founder, db),
     }
     if payload.timezone:
         data["timezone"] = payload.timezone
