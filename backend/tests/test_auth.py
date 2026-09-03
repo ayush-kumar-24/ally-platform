@@ -1,7 +1,10 @@
 """Integration tests for the auth flow: issue, validate, refresh, resume, logout.
 
 Each test drives the real API through TestClient. No mocks of our own code, no
-database writes.
+database writes. Every protected call now does one read against `founders`
+(the suspension check -- see test_account_suspension.py), but for the
+random/dev identities these tests use, that read never matches a row, so
+`is_account_active` reports active and behaviour here is unchanged.
 
 Refresh-token transport: the HttpOnly ally_refresh_token cookie, not the JSON
 body (see routes.py's module docstring for why). TestClient auto-persists
