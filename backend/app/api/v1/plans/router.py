@@ -23,6 +23,7 @@ from app.api.v1.diagnosis.repository import DiagnosisRepository
 from app.db.session import get_db
 from app.api.v1.plans.dependencies import _plan_context, get_entitlement_service
 from app.models import Founder
+from app.core.config import settings
 from app.plans.catalog import (
     CALL_PRICE_INR,
     TOKENS_PER_CREDIT,
@@ -42,12 +43,18 @@ def catalog() -> dict:
     return {
         "tokens_per_credit": TOKENS_PER_CREDIT,
         "call_price_inr": CALL_PRICE_INR,
+        "call_duration_minutes": settings.DISCOVERY_CALL_DURATION_MINUTES,
         "topup": {"credits": TOPUP_CREDITS, "price_inr": TOPUP_PRICE_INR},
         "plans": [
             {
                 "tier": p.tier.value,
                 "name": p.name,
                 "price_inr": p.price_inr,
+                # `mrp_inr` is only ever sent when it is a real saving. Sending
+                # it unconditionally would let the pricing page render a
+                # crossed-out number equal to the price -- a false discount
+                # claim, decided here rather than in each surface that renders it.
+                "mrp_inr": p.mrp_inr if p.has_offer else None,
                 "tagline": p.tagline,
                 "monthly_credits": p.monthly_credits,
                 "signup_credits": p.signup_credits,

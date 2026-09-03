@@ -4,22 +4,34 @@ import { getProfile } from '../services/profile';
 import { getCatalog, getMyPlan } from '../services/plans';
 
 /* ─── Static data ─── */
-/** Keys must match the plan tiers (free / starter / pro) served by GET /plans. */
+/** Keys must match the plan tiers (free / basic / starter / pro) served by
+ * GET /plans. EVERY row needs a key for EVERY tier: the table body maps the
+ * live plan list and reads row[tier], so a missing key renders an empty cell
+ * under a heading that is still there -- which is how the Starter column
+ * silently shifted one place left once before. */
 const COMPARE_ROWS = [
-  { label: 'Credits', free: '120 (once)', starter: '180 / month', pro: '240 / month' },
+  { label: 'Credits', free: '120 (once)', basic: '—', starter: '180 / month', pro: '240 / month' },
   // Free is 8,000 for the testing phase -- deliberately level with Pro. Drops
   // back down when Free is resized for launch (backend: plans/catalog.py).
-  { label: 'Tokens per day', free: '8,000', starter: '6,000', pro: '8,000' },
-  { label: 'First diagnosis', free: 'Free', starter: 'Free', pro: 'Free' },
-  { label: 'Founder DNA', free: true, starter: true, pro: true },
-  { label: 'Business DNA', free: true, starter: true, pro: true },
-  { label: 'Clarity Reports', free: true, starter: true, pro: true },
-  { label: 'Voice in Diagnosis', free: true, starter: true, pro: true },
-  { label: 'Voice in Ally Chat', free: false, starter: true, pro: true },
-  { label: 'Plan Your Day', free: false, starter: true, pro: true },
-  { label: 'Know My Energy', free: false, starter: false, pro: true },
-  { label: 'Free calls / month', free: '—', starter: '1', pro: '2' },
-  { label: 'Extra calls', free: '₹300 / 30 min', starter: '₹300 / 30 min', pro: '₹300 / 30 min' },
+  // Basic is a dash, not 0: there is no metered surface on that tier at all.
+  { label: 'Tokens per day', free: '8,000', basic: '—', starter: '6,000', pro: '8,000' },
+  { label: 'First diagnosis', free: 'Free', basic: 'Included', starter: 'Free', pro: 'Free' },
+  { label: 'Founder DNA', free: true, basic: true, starter: true, pro: true },
+  { label: 'Business DNA', free: true, basic: true, starter: true, pro: true },
+  { label: 'Clarity Reports', free: true, basic: true, starter: true, pro: true },
+  { label: 'Next 3 Steps', free: true, basic: true, starter: true, pro: true },
+  { label: 'Goals & daily plans', free: true, basic: true, starter: true, pro: true },
+  { label: 'Voice in Diagnosis', free: true, basic: true, starter: true, pro: true },
+  { label: 'Chat with Ally', free: true, basic: false, starter: true, pro: true },
+  { label: 'Voice in Ally Chat', free: false, basic: false, starter: true, pro: true },
+  { label: 'Vision board', free: true, basic: false, starter: false, pro: true },
+  { label: "Ally's recommendations", free: true, basic: false, starter: false, pro: true },
+  { label: 'Discuss the knowledge base', free: true, basic: false, starter: false, pro: true },
+  { label: 'Email reminders from Ally', free: false, basic: false, starter: false, pro: true },
+  { label: 'Know My Energy', free: false, basic: false, starter: false, pro: true },
+  { label: 'Free calls / month', free: '—', basic: '—', starter: '1', pro: '2' },
+  { label: 'Extra calls', free: '₹300 / 15 min', basic: '₹300 / 15 min', starter: '₹300 / 15 min', pro: '₹300 / 15 min' },
+  { label: 'Priority call booking', free: false, basic: false, starter: false, pro: true },
 ];
 
 /* ─── Helpers ─── */
@@ -79,26 +91,45 @@ function useCatalog() {
     getCatalog()
       .then((catalog) => {
         if (cancelled || !catalog?.plans?.length) return;
+        const callMins = catalog.call_duration_minutes ?? 15;
+        const callPrice = catalog.call_price_inr ?? 300;
         setPlans(catalog.plans.map((p) => ({
           id: p.tier,
           name: p.name,
           price: p.price_inr,
+          // Null unless the backend judged it a real saving — the decision is
+          // made once, server-side, so no surface can render a crossed-out
+          // number that saves the founder nothing.
+          mrp: p.mrp_inr ?? null,
           period: p.price_inr ? '/mo' : '',
           tag: p.tagline,
           popular: p.tier === 'starter',
           cta: p.price_inr ? `Start ${p.name}` : 'Current',
           features: [
-            p.monthly_credits
-              ? `${p.monthly_credits} credits every month`
-              : `1 month free · ${p.signup_credits} credits`,
-            `${p.daily_token_limit.toLocaleString('en-IN')} tokens per day`,
-            'Full diagnosis — free, uses no credits',
+            // Basic has no credits and no metered surface, so the credit and
+            // token lines would both read as a limit of zero. It gets the line
+            // that describes what it actually is instead.
+            ...(p.features.includes('ally_chat')
+              ? [
+                  p.monthly_credits
+                    ? `${p.monthly_credits} credits every month`
+                    : `1 month free · ${p.signup_credits} credits`,
+                  `${p.daily_token_limit.toLocaleString('en-IN')} tokens per day`,
+                  'Chat with Ally',
+                ]
+              : ['One full diagnosis and its report']),
+            ...(p.features.includes('next_steps') ? ['Your next 3 steps'] : []),
+            ...(p.features.includes('goals') ? ['Goals and daily plans'] : []),
             p.features.includes('voice_chat') ? 'Voice in Ally Chat' : 'Voice in Diagnosis',
-            ...(p.features.includes('plan_your_day') ? ['Plan Your Day'] : []),
+            ...(p.features.includes('vision') ? ['Vision board'] : []),
+            ...(p.features.includes('recommendations') ? ["Ally's recommendations"] : []),
+            ...(p.features.includes('knowledge_chat') ? ['Discuss the knowledge base'] : []),
+            ...(p.features.includes('email_notifications') ? ['Email reminders from Ally'] : []),
             ...(p.features.includes('know_my_energy') ? ['Know My Energy'] : []),
             p.free_calls_per_month
-              ? `${p.free_calls_per_month} free call${p.free_calls_per_month > 1 ? 's' : ''} each month, then ₹300`
-              : 'Book a call · ₹300 / 30 min',
+              ? `${p.free_calls_per_month} free call${p.free_calls_per_month > 1 ? 's' : ''} each month, then ₹${callPrice}`
+              : `Book a call · ₹${callPrice} / ${callMins} min`,
+            ...(p.features.includes('priority_call') ? ['Priority call booking'] : []),
           ],
         })));
         setLive(true);
@@ -140,6 +171,11 @@ function PlansView({ onSelectPlan, currentPlan }) {
                   <span className="amt" style={{ fontSize: 36 }}>Free</span>
                 ) : (
                   <>
+                    {plan.mrp && (
+                      <span className="pc-mrp" aria-label={`Was ₹${plan.mrp.toLocaleString()}`}>
+                        ₹{plan.mrp.toLocaleString()}
+                      </span>
+                    )}
                     <span className="cur">₹</span>
                     <span className="amt">{price.toLocaleString()}</span>
                     <span className="per">/mo</span>
