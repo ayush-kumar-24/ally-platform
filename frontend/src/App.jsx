@@ -1,9 +1,9 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { useApp } from './context/AppContext';
-import { clearTokens, getAccessToken, onAuthFailure } from './services/api';
+import { clearTokens, getAccessToken, onAuthFailure, resumeSession } from './services/api';
 import { startDevSession } from './services/auth';
-import { supabaseConfigured } from './services/supabaseConfig';
+import { supabaseConfigured, WAITLIST_URL } from './services/supabaseConfig';
 import ErrorBoundary from './components/ErrorBoundary';
 import RequireAuth from './components/RequireAuth';
 import RouteTitle from './components/RouteTitle';
@@ -93,12 +93,35 @@ function RouteFallback() {
 /* The platform has no public page of its own any more. Its public face -- and
    the only way to get an account -- is the waitlist at join.goxlally.ai, so the
    root sends a founder with a session to their dashboard and everyone else to
-   sign-in, which links to the waitlist. (The marketing landing that used to
-   live here duplicated join.goxlally.ai and every one of its buttons led to
-   sign-in anyway.) Decided at render, not at module load: the answer changes
-   the moment they sign in or out. */
+   the waitlist site. Someone who searched "GoXL Ally" and typed this domain
+   lands where they can actually do something. (The marketing landing that
+   used to live here duplicated join.goxlally.ai, and every one of its buttons
+   led to sign-in anyway.)
+
+   "No access token" is not "no session": the token lives 30 minutes, the
+   refresh cookie 30 days. A founder who was here yesterday and types the
+   domain again must not be bounced to a marketing site, so the cookie is
+   tried first -- the same resume RequireAuth does for /app -- and only a
+   genuine stranger is redirected. Sign-in itself stays at /guided/login,
+   reached from the invite email and the waitlist site's "Log in". */
 function HomeGate() {
-  return <Navigate to={getAccessToken() ? '/app' : '/guided/login'} replace />;
+  const [status, setStatus] = useState(() => (getAccessToken() ? 'in' : 'checking'));
+
+  useEffect(() => {
+    if (status !== 'checking') return undefined;
+    let cancelled = false;
+    resumeSession().then((founder) => {
+      if (cancelled) return;
+      if (founder) setStatus('in');
+      else window.location.replace(WAITLIST_URL);
+    });
+    return () => { cancelled = true; };
+  }, [status]);
+
+  if (status === 'in') return <Navigate to="/app" replace />;
+  // One round-trip, then either the dashboard or another site: a blank frame,
+  // not a spinner, for the same reason RequireAuth gives.
+  return <RouteFallback />;
 }
 
 export default function App() {
