@@ -34,6 +34,11 @@ class ChatRequest:
     response_category: str = "general_chat"
     request_id: str | None = None
     actor: str = "founder"
+    #: Does this founder's plan include discussing the knowledge base with Ally
+    #: (Feature.KNOWLEDGE_CHAT, Rs 999)? Set by the route from the plan gate.
+    #: True by default so a caller that predates plan gating is unchanged; the
+    #: route is what narrows it, and it is never widened here.
+    knowledge_enabled: bool = True
 
 
 @dataclass(frozen=True)

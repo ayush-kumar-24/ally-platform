@@ -102,6 +102,7 @@ def post_message(
         conversation_id=payload.conversation_id,
         session_id=payload.session_id, language=payload.language,
         response_category=payload.response_category, request_id=payload.request_id,
+        knowledge_enabled=gate.knowledge_enabled,
     ))
 
     # Charge for real usage, not an estimate -- the true token count only exists
@@ -134,6 +135,9 @@ def post_stream(
         session_id=payload.session_id, language=payload.language,
         response_category=payload.response_category, request_id=payload.request_id,
         max_chunk_size=payload.max_chunk_size, timeout_seconds=payload.timeout_seconds,
+        # Same entitlement as /message. Omitted here, the knowledge base would
+        # stay open on the streaming path -- which is the path that matters.
+        knowledge_enabled=gate.knowledge_enabled,
     )
     # The generator appends its StreamingResponse here once the stream ends;
     # sse_event_stream turns that into the closing `summary` event, which is how

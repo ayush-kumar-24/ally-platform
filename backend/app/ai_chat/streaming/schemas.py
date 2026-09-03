@@ -42,6 +42,11 @@ class StreamingChatRequest:
     actor: str = "founder"
     max_chunk_size: int = _DEFAULT_MAX_CHUNK
     timeout_seconds: float | None = None
+    #: Mirrors ChatRequest.knowledge_enabled. Carried here rather than defaulted
+    #: in to_chat_request() because /stream is the path the app is moving to --
+    #: a flag that stopped at the streaming boundary would make the Rs 999
+    #: knowledge entitlement apply to almost nobody.
+    knowledge_enabled: bool = True
 
     def to_chat_request(self, request_id: str | None = None) -> ChatRequest:
         return ChatRequest(
@@ -49,6 +54,7 @@ class StreamingChatRequest:
             conversation_id=self.conversation_id, session_id=self.session_id,
             language=self.language, response_category=self.response_category,
             request_id=request_id or self.request_id, actor=self.actor,
+            knowledge_enabled=self.knowledge_enabled,
         )
 
 
