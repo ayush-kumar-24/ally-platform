@@ -7,6 +7,7 @@ from app.api.v1.calendar.router import router as calendar_router
 from app.api.v1.planning.router import router as planning_router
 from app.api.v1.founder_goals.router import router as founder_goals_router
 from app.api.v1.achievements.router import router as achievements_router
+from app.api.v1.vision.router import public_router as vision_public_router
 from app.api.v1.vision.router import router as vision_router
 from app.api.v1.framework_usage.router import router as framework_usage_router
 from app.api.v1.auth.routes import router as auth_router
@@ -64,6 +65,9 @@ api_router.include_router(calendar_router)
 api_router.include_router(founder_goals_router)
 api_router.include_router(achievements_router)
 api_router.include_router(vision_router)
+# Same /vision prefix, no plan gate -- serves <img src> requests that carry
+# no Authorization header. See public_router in vision/router.py.
+api_router.include_router(vision_public_router)
 api_router.include_router(framework_usage_router)
 api_router.include_router(consents_router)
 api_router.include_router(privacy_router)

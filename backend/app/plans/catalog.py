@@ -75,8 +75,14 @@ TOKENS_PER_CREDIT = 1_000
 SOURCE_CHAT = "chat"
 SOURCE_PLANNING = "planning"
 
-#: Price of a 30-minute call once a founder's free allowance is used up.
+#: Price of one discovery call once a founder's free allowance is used up.
 CALL_PRICE_INR = 300
+
+#: Length of a paid discovery call. The `discovery_calls.duration_minutes` column
+#: still carries a server_default of 45 from an earlier product decision; this is
+#: the value the booking path writes, so the two disagree only for rows created
+#: before the change.
+CALL_DURATION_MINUTES = 15
 
 #: Price of a credit top-up pack (the Free tier's path once the trial ends).
 TOPUP_PRICE_INR = 300
@@ -84,7 +90,13 @@ TOPUP_CREDITS = 120
 
 
 class PlanTier(str, Enum):
+    """Internal tier ids. Deliberately NOT the founder-facing names -- those live
+    in `Plan.name` and change with marketing. Renaming a member here means
+    migrating every `founders.plan_type` row and the CHECK constraint on it, for
+    no founder-visible benefit."""
+
     FREE = "free"
+    BASIC = "basic"          # Rs 199 / month
     STARTER = "starter"      # Rs 450 / month
     PRO = "pro"              # Rs 999 / month
 
@@ -103,11 +115,19 @@ class Feature(str, Enum):
     REPORTS = "reports"
     NEXT_STEPS = "next_steps"
     CALL_BOOKING = "call_booking"
+    GOALS = "goals"
+    VISION = "vision"
+    RECOMMENDATIONS = "recommendations"
+    KNOWLEDGE_CHAT = "knowledge_chat"
+    EMAIL_NOTIFICATIONS = "email_notifications"
+    PRIORITY_CALL = "priority_call"
 
 
-#: Available on every tier, including Free.
-_UNIVERSAL = frozenset({
-    Feature.ALLY_CHAT,
+#: What every tier gets, paid or not. This is the Rs 199 plan's whole surface:
+#: run the assessment, read the report, work the next three steps, and keep
+#: daily goals against them. Ally does not talk back and does not suggest --
+#: that starts at Rs 450 (chat) and Rs 999 (recommendations).
+_BASE = frozenset({
     Feature.DIAGNOSIS,
     Feature.VOICE_DIAGNOSIS,     # voice works in diagnosis for everyone
     Feature.FOUNDER_DNA,
@@ -115,12 +135,26 @@ _UNIVERSAL = frozenset({
     Feature.REPORTS,
     Feature.NEXT_STEPS,
     Feature.CALL_BOOKING,        # everyone may book; only the free allowance differs
+    Feature.GOALS,
+    Feature.PLAN_YOUR_DAY,       # daily plans against those goals
 })
 
-#: Added by any paid tier.
-_PAID = frozenset({
-    Feature.VOICE_CHAT,          # voice inside Ally Chat is a paid upgrade
-    Feature.PLAN_YOUR_DAY,
+#: Added at Rs 450: Ally starts answering.
+_CHAT = frozenset({
+    Feature.ALLY_CHAT,
+    Feature.VOICE_CHAT,          # voice inside Ally Chat
+})
+
+#: Added at Rs 999: Ally starts initiating. Everything here is Ally acting on
+#: its own -- proposing next moves, reasoning over the knowledge base, reaching
+#: into the founder's inbox, and jumping the call queue.
+_ADVISOR = frozenset({
+    Feature.VISION,
+    Feature.RECOMMENDATIONS,
+    Feature.KNOWLEDGE_CHAT,
+    Feature.EMAIL_NOTIFICATIONS,
+    Feature.PRIORITY_CALL,
+    Feature.KNOW_MY_ENERGY,
 })
 
 
@@ -128,6 +162,7 @@ _PAID = frozenset({
 class Plan:
     tier: PlanTier
     name: str
+    #: What the founder actually pays.
     price_inr: int
     #: Granted every month and expiring at period end (the `monthly` credit bucket).
     monthly_credits: int
@@ -150,6 +185,15 @@ class Plan:
     #: count against it: an in-progress session a founder resumes is never
     #: blocked, and never counts, until it reaches a report. 0 = unlimited.
     diagnosis_lifetime_limit: int = 1
+    #: List price, shown struck through next to `price_inr` on the pricing page.
+    #: 0 means "no offer, show one price". Never set this equal to `price_inr` --
+    #: a strikethrough that saves nothing is a false claim, and `has_offer` below
+    #: is what the API and the pricing page read, not the raw number.
+    mrp_inr: int = 0
+
+    @property
+    def has_offer(self) -> bool:
+        return self.mrp_inr > self.price_inr > 0
 
     @property
     def is_paid(self) -> bool:
@@ -184,37 +228,64 @@ PLANS: dict[PlanTier, Plan] = {
         daily_token_limit=8_000,    # ~32 chat messages/day; testing-phase value, see docstring
         planning_daily_token_limit=7_700,   # 7 planning actions/day at 1,100 each
         free_calls_per_month=0,
-        # Plan Your Day is normally paid, but the testing phase includes it: the
-        # planning budget above is meaningless without the feature that spends it,
-        # and a tester told they get 7 planning actions a day would otherwise hit
-        # a 403 on the first one. Move it back to _PAID when Free is resized for
-        # a public launch -- the same moment the credit ladder has to be restored.
-        features=_UNIVERSAL | frozenset({Feature.PLAN_YOUR_DAY}),
+        # Free out-grants Rs 450 on three features, and only for the testing
+        # phase: Vision, recommendations and the knowledge base were ungated
+        # before paid tiers existed, so gating them here would take away what
+        # our own testers are currently using. It stops short of voice chat and
+        # Know My Energy (paid on purpose since before this change) and of the
+        # two Rs 999 perks that are scarce rather than merely paid -- an inbox
+        # we send to, and a place ahead of paying founders in the call queue.
+        # Resize this to `_BASE` at public launch, the same moment the credit
+        # ladder in the module docstring has to be restored.
+        features=_BASE | frozenset({
+            Feature.ALLY_CHAT,
+            Feature.VISION,
+            Feature.RECOMMENDATIONS,
+            Feature.KNOWLEDGE_CHAT,
+        }),
         tagline="One month free. See what Ally finds.",
+    ),
+    PlanTier.BASIC: Plan(
+        tier=PlanTier.BASIC,
+        name="Basic",
+        price_inr=199,
+        mrp_inr=300,
+        # No chat, so no chat credits and no chat ceiling. The daily limits are
+        # zero rather than small: a founder on this tier never reaches a metered
+        # surface, and a non-zero budget here would read as an allowance they
+        # could spend somewhere.
+        monthly_credits=0,
+        signup_credits=0,
+        daily_token_limit=0,
+        planning_daily_token_limit=0,
+        free_calls_per_month=0,
+        features=_BASE,
+        tagline="One diagnosis, one report, three clear next steps.",
     ),
     PlanTier.STARTER: Plan(
         tier=PlanTier.STARTER,
         name="Starter",
         price_inr=450,
+        mrp_inr=600,
         monthly_credits=180,
         signup_credits=0,
         daily_token_limit=6_000,
         free_calls_per_month=1,
-        features=_UNIVERSAL | _PAID,
+        features=_BASE | _CHAT,
         tagline="For founders working on the business weekly.",
     ),
     PlanTier.PRO: Plan(
         tier=PlanTier.PRO,
         name="Pro",
         price_inr=999,
+        mrp_inr=1_200,
         monthly_credits=240,
         signup_credits=0,
         daily_token_limit=8_000,
         free_calls_per_month=2,
-        # Know My Energy is Pro-only. The feature is declared here so the gate and
-        # the pricing page are already correct; the founder-facing implementation
-        # is still to be built.
-        features=_UNIVERSAL | _PAID | frozenset({Feature.KNOW_MY_ENERGY}),
+        # Know My Energy is declared here so the gate and the pricing page are
+        # already correct; its founder-facing implementation is still to be built.
+        features=_BASE | _CHAT | _ADVISOR,
         tagline="Ally as your standing advisor.",
     ),
 }
@@ -238,7 +309,8 @@ def get_plan(tier: PlanTier | str | None) -> Plan:
 
 def all_plans() -> list[Plan]:
     """Catalog order: cheapest first, which is also the pricing-page order."""
-    return [PLANS[t] for t in (PlanTier.FREE, PlanTier.STARTER, PlanTier.PRO)]
+    return [PLANS[t] for t in (PlanTier.FREE, PlanTier.BASIC,
+                               PlanTier.STARTER, PlanTier.PRO)]
 
 
 def credits_for_tokens(tokens: int) -> int:

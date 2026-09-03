@@ -39,15 +39,30 @@ def svc(tier=PlanTier.FREE, balance=1000, now=T0):
 # ── catalog ─────────────────────────────────────────────────────────────────
 
 
-def test_three_tiers_in_price_order():
+def test_four_tiers_in_price_order():
     plans = all_plans()
-    assert [p.tier for p in plans] == [PlanTier.FREE, PlanTier.STARTER, PlanTier.PRO]
-    assert [p.price_inr for p in plans] == [0, 450, 999]
+    assert [p.tier for p in plans] == [PlanTier.FREE, PlanTier.BASIC,
+                                       PlanTier.STARTER, PlanTier.PRO]
+    assert [p.price_inr for p in plans] == [0, 199, 450, 999]
+
+
+def test_struck_through_price_is_only_ever_a_real_saving():
+    """`mrp_inr` renders as a strikethrough next to what we charge. A value
+    equal to or below `price_inr` would put a crossed-out number on the pricing
+    page that saves the founder nothing -- a false claim, not a formatting bug."""
+    for plan in all_plans():
+        if plan.mrp_inr:
+            assert plan.mrp_inr > plan.price_inr, plan.name
+            assert plan.has_offer, plan.name
+        else:
+            assert not plan.has_offer, plan.name
+    assert [(p.mrp_inr, p.price_inr) for p in all_plans() if p.has_offer] == [
+        (300, 199), (600, 450), (1_200, 999)]
 
 
 def test_paid_credit_ladder_ascends():
     """Paying more must grant more, or the pricing page contradicts itself."""
-    _, starter, pro = all_plans()
+    _, _, starter, pro = all_plans()
     assert starter.monthly_credits == 180
     assert pro.monthly_credits == 240
     assert starter.monthly_credits < pro.monthly_credits
@@ -67,13 +82,17 @@ def test_free_is_currently_a_testing_allowance_and_outgrants_paid_tiers():
     free tier breaks this test and forces the ladder invariant to be restored,
     instead of the inversion quietly surviving into launch.
     """
-    free, starter, pro = all_plans()
+    free, _, starter, pro = all_plans()
     assert free.signup_credits == 1_431 and free.monthly_credits == 0
     assert free.signup_credits > pro.monthly_credits > starter.monthly_credits
 
 
 def test_daily_limits():
-    free, starter, pro = all_plans()
+    free, basic, starter, pro = all_plans()
+    # Basic has no chat, so it has no chat budget. Zero rather than a small
+    # number on purpose: a non-zero ceiling here would read as an allowance the
+    # founder could spend, and there is no metered surface for them to spend it on.
+    assert (basic.daily_token_limit, basic.planning_daily_token_limit) == (0, 0)
     # Free sits at 8,000 for the testing phase -- deliberately above Starter and
     # level with Pro, which is why this is not asserted as an ascending ladder.
     # When Free is resized for a public launch this becomes ascending again.
@@ -136,9 +155,9 @@ def test_monthly_credits_are_reachable_under_the_daily_ceiling():
 
 
 def test_free_call_allowances():
-    free, starter, pro = all_plans()
-    assert (free.free_calls_per_month, starter.free_calls_per_month,
-            pro.free_calls_per_month) == (0, 1, 2)
+    free, basic, starter, pro = all_plans()
+    assert (free.free_calls_per_month, basic.free_calls_per_month,
+            starter.free_calls_per_month, pro.free_calls_per_month) == (0, 0, 1, 2)
 
 
 def test_unknown_tier_falls_back_to_free():
@@ -158,12 +177,49 @@ def test_credits_round_up(tokens, expected):
 # ── feature gates ───────────────────────────────────────────────────────────
 
 
-def test_everyone_gets_chat_diagnosis_and_voice_in_diagnosis():
+def test_every_tier_gets_the_assessment_and_what_comes_out_of_it():
     s, _ = svc()
     for tier in PlanTier:
-        for feature in (Feature.ALLY_CHAT, Feature.DIAGNOSIS, Feature.VOICE_DIAGNOSIS,
-                        Feature.CALL_BOOKING, Feature.FOUNDER_DNA, Feature.BUSINESS_DNA):
+        for feature in (Feature.DIAGNOSIS, Feature.VOICE_DIAGNOSIS,
+                        Feature.CALL_BOOKING, Feature.FOUNDER_DNA, Feature.BUSINESS_DNA,
+                        Feature.REPORTS, Feature.NEXT_STEPS, Feature.GOALS,
+                        Feature.PLAN_YOUR_DAY):
             assert s.has_feature(tier, feature), (tier, feature)
+
+
+def test_basic_buys_the_assessment_and_nothing_that_talks_back():
+    """Rs 199 is the report tier. Ally answers nothing and suggests nothing on
+    it -- chat starts at Rs 450, and Ally initiating starts at Rs 999. Asserted
+    per feature rather than by counting them so that adding a feature to _BASE
+    has to be a deliberate decision about this tier, not a silent side effect."""
+    s, _ = svc()
+    for feature in (Feature.ALLY_CHAT, Feature.VOICE_CHAT, Feature.VISION,
+                    Feature.RECOMMENDATIONS, Feature.KNOWLEDGE_CHAT,
+                    Feature.EMAIL_NOTIFICATIONS, Feature.PRIORITY_CALL,
+                    Feature.KNOW_MY_ENERGY):
+        assert not s.has_feature(PlanTier.BASIC, feature), feature
+
+
+def test_starter_buys_the_conversation_but_not_ally_initiating():
+    """Rs 450 is where Ally answers; Rs 999 is where Ally starts things. Vision,
+    recommendations, the knowledge base, mail and call priority all sit on the
+    far side of that line -- this is the distinction the two paid tiers sell."""
+    s, _ = svc()
+    assert s.has_feature(PlanTier.STARTER, Feature.ALLY_CHAT)
+    for feature in (Feature.VISION, Feature.RECOMMENDATIONS, Feature.KNOWLEDGE_CHAT,
+                    Feature.EMAIL_NOTIFICATIONS, Feature.PRIORITY_CALL):
+        assert not s.has_feature(PlanTier.STARTER, feature), feature
+        assert s.has_feature(PlanTier.PRO, feature), feature
+
+
+def test_free_never_out_grants_paid_on_the_scarce_perks():
+    """Free deliberately out-grants Rs 450 on features that cost us only tokens
+    (see the catalog comment). It must never do so on the two that cost someone
+    else something real: an inbox we send to, and a place in the call queue
+    ahead of founders who paid for it."""
+    s, _ = svc()
+    assert not s.has_feature(PlanTier.FREE, Feature.EMAIL_NOTIFICATIONS)
+    assert not s.has_feature(PlanTier.FREE, Feature.PRIORITY_CALL)
 
 
 def test_voice_in_chat_is_paid_only():
@@ -228,7 +284,7 @@ def test_free_user_blocked_from_voice_chat_with_403_not_429():
 def test_daily_limit_blocks_before_credits():
     """The rate ceiling must fire ahead of the credit check: a founder who is out
     of tokens for today should be told to come back tomorrow, not told to pay."""
-    free, _, _ = all_plans()
+    free, *_ = all_plans()
     s, usage = svc(PlanTier.FREE, balance=0)
     # Seeded from the catalog, not a literal -- this test previously pinned 4,000
     # and silently stopped testing anything the moment the limit was raised: the
@@ -242,7 +298,7 @@ def test_daily_limit_blocks_before_credits():
 def test_chat_and_planning_meter_separately():
     """Exhausting one feature must not disable the other -- they are different
     features sharing only a founder."""
-    free, _, _ = all_plans()
+    free, *_ = all_plans()
     s, usage = svc(PlanTier.FREE)
     usage.add_tokens(UID, T0.date(), free.daily_token_limit, at=T0, source="chat")
 
