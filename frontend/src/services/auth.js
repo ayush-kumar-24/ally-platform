@@ -27,6 +27,7 @@
  */
 
 import { clearTokens, post, setTokens } from './api';
+import { setPresenceHint } from './presenceHint';
 import { DEV_MOCK_CODE, devMockAuth, supabaseConfigured, WAITLIST_URL } from './supabaseConfig';
 
 /**
@@ -39,6 +40,7 @@ import { DEV_MOCK_CODE, devMockAuth, supabaseConfigured, WAITLIST_URL } from './
 function mockSession(email) {
   clearTokens();
   setTokens({ access_token: 'dev-mock-access-token' });
+  setPresenceHint('in');
   return { id: 'dev-mock-founder', email: email.trim().toLowerCase(), provider: 'mock' };
 }
 
@@ -122,6 +124,7 @@ async function exchangeForBackendSession(supabaseToken) {
     headers: { Authorization: `Bearer ${supabaseToken}` },
   });
   setTokens(result);
+  setPresenceHint('in');
   try {
     await (await getSupabase()).auth.signOut();
   } catch {
@@ -269,6 +272,7 @@ export async function logout() {
     // Offline, or the token was already revoked. Clearing locally still matters.
   } finally {
     clearTokens();
+    setPresenceHint('out');
     localStorage.removeItem('ally_founder');
     if (supabaseConfigured && !devMockAuth) {
       try { await (await getSupabase()).auth.signOut(); } catch { /* nothing left to do */ }
@@ -296,5 +300,6 @@ export async function startDevSession() {
     headers: { Authorization: `Bearer ${token}` },
   });
   setTokens(result);
+  setPresenceHint('in');
   return result.founder;
 }

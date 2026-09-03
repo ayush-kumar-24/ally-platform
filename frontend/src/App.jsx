@@ -3,6 +3,7 @@ import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { useApp } from './context/AppContext';
 import { clearTokens, getAccessToken, onAuthFailure, resumeSession } from './services/api';
 import { startDevSession } from './services/auth';
+import { setPresenceHint } from './services/presenceHint';
 import { supabaseConfigured, WAITLIST_URL } from './services/supabaseConfig';
 import ErrorBoundary from './components/ErrorBoundary';
 import RequireAuth from './components/RequireAuth';
@@ -149,6 +150,7 @@ export default function App() {
         } catch { /* fall through to the real sign-out below */ }
       }
       clearTokens();
+      setPresenceHint('out');
       localStorage.removeItem('ally_founder');
       navigate('/guided/login', { replace: true });
     });
