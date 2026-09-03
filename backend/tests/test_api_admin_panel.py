@@ -129,6 +129,44 @@ def test_dashboard_metrics_reachable_by_support(client):
     assert client.http.get(f"{BASE}/dashboard-metrics").status_code == 200
 
 
+# --- health page (Phase 3) ---------------------------------------------------
+
+def test_health_route_reports_unconfigured_by_default(client):
+    """This fixture's AdminPanelService has no health collaborator wired --
+    reachable (this is the real router), just not configured, so 422 not 404."""
+    assert client.http.get(f"{BASE}/health").status_code == 422
+
+
+def test_health_route_returns_the_report(client):
+    from app.admin.health import ComponentHealth, HealthReport, HealthStatus
+    report = HealthReport(
+        status=HealthStatus.RED, checked_at=T0,
+        components=[
+            ComponentHealth("database", "Database", HealthStatus.GREEN, "connected"),
+            ComponentHealth("ai_provider", "AI provider", HealthStatus.RED, "all providers unhealthy"),
+        ],
+    )
+    client.service.health = SimpleNamespace(check=lambda: report)
+
+    r = client.http.get(f"{BASE}/health")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] == "red"
+    by_key = {c["key"]: c for c in body["components"]}
+    assert by_key["database"]["status"] == "green"
+    assert by_key["ai_provider"]["status"] == "red"
+
+
+def test_health_route_reachable_by_support(client):
+    """Operational status, not founder PII -- if the DB breaks, Support is
+    who's actually talking to the confused customer first."""
+    from app.admin.health import HealthReport, HealthStatus
+    as_role(client, PanelRole.SUPPORT)
+    client.service.health = SimpleNamespace(
+        check=lambda: HealthReport(status=HealthStatus.GREEN, checked_at=T0, components=[]))
+    assert client.http.get(f"{BASE}/health").status_code == 200
+
+
 # --- listing: search / filter / sort / paginate -----------------------------
 
 

@@ -81,6 +81,15 @@ class S3ObjectStorage:
         except Exception as exc:  # noqa: BLE001
             raise ObjectStorageError(f"s3: delete failed for {key!r}: {exc}") from exc
 
+    def ping(self) -> None:
+        """Cheap reachability + auth probe for the Health page -- confirms the
+        bucket is there and the configured credentials can see it, without
+        reading, writing or listing any actual object."""
+        try:
+            self._client.head_bucket(Bucket=self.bucket)
+        except Exception as exc:  # noqa: BLE001 -- boto raises many shapes
+            raise ObjectStorageError(f"s3: head_bucket failed for {self.bucket!r}: {exc}") from exc
+
 
 def build_object_storage() -> ObjectStorage | None:
     """The configured store, or None to mean 'no S3, use the local fallback'.

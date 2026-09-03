@@ -2,6 +2,7 @@
 
     GET    /admin/me                       caller's role + capabilities
     GET    /admin/dashboard-metrics        total users, Live now / Today / 7 days, and the rest
+    GET    /admin/health                   database, AI provider, report engine, storage, error rate
     GET    /admin/users                    search / filter / sort / paginate
     GET    /admin/users/{id}               full detail
     PATCH  /admin/users/{id}               partial update (per-field authorization)
@@ -50,6 +51,7 @@ from app.api.v1.admin.panel_responses import (
     CreditLedgerResponse,
     CreditTransactionResponse,
     DashboardMetricsResponse,
+    HealthReportResponse,
     PrivacyRequestListResponse,
     PrivacyRequestResponse,
     UserDetailResponse,
@@ -90,6 +92,16 @@ def dashboard_metrics(admin: PanelAdmin = Depends(get_panel_admin),
     /dashboard here would be silently shadowed and never reached -- the exact
     collision /audit-log below was already named around."""
     return DashboardMetricsResponse.from_domain(service.dashboard_metrics(admin))
+
+
+@router.get("/health", response_model=HealthReportResponse,
+           summary="Database, AI provider, report engine, storage, error rate -- green/amber/red")
+def system_health(admin: PanelAdmin = Depends(get_panel_admin),
+                  service=Depends(get_panel_service)) -> HealthReportResponse:
+    """Read-only. Alerting on a red result is a separate, scheduled path --
+    see /internal/jobs/check-health -- so loading this page never itself
+    pages anyone."""
+    return HealthReportResponse.from_domain(service.system_health(admin))
 
 
 # --- users ------------------------------------------------------------------

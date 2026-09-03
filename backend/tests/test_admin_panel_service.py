@@ -255,6 +255,52 @@ def test_dashboard_metrics_unconfigured_reports_rather_than_crashes():
         s.dashboard_metrics(SUPER)
 
 
+# --- health page (Phase 3) ---------------------------------------------------
+
+class _FakeHealth:
+    def __init__(self, report):
+        self._report = report
+        self.called = False
+
+    def check(self):
+        self.called = True
+        return self._report
+
+
+def test_system_health_delegates_to_the_checker():
+    from app.admin.panel_service import AdminPanelService
+    fake = _FakeHealth("a-report")
+    repo = InMemoryAdminUserRepository([user(1)])
+    credits = build_credit_service(InMemoryCreditRepository({1: 100}), clock=lambda: T0)
+    s = AdminPanelService(
+        repo, credits=credits,
+        audit=AuditRecorder(InMemoryPanelAuditRepository(), clock=lambda: T0,
+                            id_factory=lambda: "e-1"),
+        clock=lambda: T0, health=fake,
+    )
+    assert s.system_health(SUPER) == "a-report"
+    assert fake.called is True
+
+
+def test_system_health_readable_by_support():
+    from app.admin.panel_service import AdminPanelService
+    repo = InMemoryAdminUserRepository([user(1)])
+    credits = build_credit_service(InMemoryCreditRepository({1: 100}), clock=lambda: T0)
+    s = AdminPanelService(
+        repo, credits=credits,
+        audit=AuditRecorder(InMemoryPanelAuditRepository(), clock=lambda: T0,
+                            id_factory=lambda: "e-1"),
+        clock=lambda: T0, health=_FakeHealth([]),
+    )
+    s.system_health(SUPPORT)  # must not raise
+
+
+def test_system_health_unconfigured_reports_rather_than_crashes():
+    s, _, _ = build()  # no health collaborator
+    with pytest.raises(InvalidSearchError):
+        s.system_health(SUPER)
+
+
 # --- audit ------------------------------------------------------------------
 
 
