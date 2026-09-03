@@ -50,6 +50,7 @@ from app.core.auth import (
     get_upstream_identity,
     identity_from_claims,
     is_account_active,
+    record_last_active,
 )
 from app.core.config import settings
 from app.db.session import get_db
@@ -208,6 +209,7 @@ async def refresh_session(
         raise AuthError("Refresh token has been revoked")
     if not is_account_active(db, claims["sub"]):
         raise AccountSuspendedError()
+    record_last_active(db, claims["sub"])
 
     store.revoke(claims["jti"], expires_at=_claim_expiry(claims))
     pair, new_refresh_token = _token_pair(identity_from_claims(claims))
@@ -244,6 +246,7 @@ async def resume_session(
         raise AuthError("Session has ended; please log in again")
     if not is_account_active(db, claims["sub"]):
         raise AccountSuspendedError()
+    record_last_active(db, claims["sub"])
 
     store.revoke(claims["jti"], expires_at=_claim_expiry(claims))
     identity = identity_from_claims(claims)

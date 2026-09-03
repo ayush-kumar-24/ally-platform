@@ -22,6 +22,12 @@ from typing import Any
 
 from sqlalchemy import text
 
+#: "Online right now" -- how stale a last-seen stamp can be and still count.
+#: Matches the write side's own throttle (app/core/auth/dependencies.py,
+#: `_LAST_ACTIVE_THROTTLE`), so a founder active this instant is never missed
+#: by the read side's window being tighter than the write side's granularity.
+LIVE_WINDOW = timedelta(minutes=5)
+
 
 @dataclass(frozen=True)
 class Metric:
@@ -113,8 +119,19 @@ class SqlAlchemyInsightsRepository(InsightsRepository):
         return [
             self._metric("total_users", "Total users",
                          "select count(*) from founders"),
+            # Admin Panel proposal gap #2 ("no live-user view"): `last_active_at`
+            # is now stamped on every request (app/core/auth/dependencies.py,
+            # `record_last_active`) -- before that write existed, this query ran
+            # fine and always answered 0, which is why the card read as
+            # permanently blank rather than as an honest "unavailable".
+            self._metric("live_now", "Live now",
+                         "select count(*) from founders where last_active_at >= :live_since",
+                         {"live_since": now - LIVE_WINDOW}),
             self._metric("active_today", "Active today",
                          "select count(*) from founders where last_active_at >= :since", p),
+            self._metric("active_7d", "Active last 7 days",
+                         "select count(*) from founders where last_active_at >= :week_since",
+                         {"week_since": now - timedelta(days=7)}),
             self._metric("diagnoses_today", "Diagnoses today",
                          "select count(*) from sessions where started_at >= :since", p),
             self._metric("credits_used_today", "Credits used today",

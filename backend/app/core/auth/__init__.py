@@ -21,6 +21,7 @@ from app.core.auth.dependencies import (
     get_current_founder,
     get_upstream_identity,
     is_account_active,
+    record_last_active,
 )
 from app.core.auth.factory import get_auth_provider
 from app.core.auth.session_store import get_session_store
@@ -43,6 +44,7 @@ __all__ = [
     "get_upstream_identity",
     "get_session_store",
     "is_account_active",
+    "record_last_active",
     "ACCESS",
     "REFRESH",
     "create_access_token",

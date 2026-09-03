@@ -5,7 +5,7 @@ from itertools import count
 
 import pytest
 
-from app.admin.errors import AdminFounderNotFoundError, AdminForbiddenError
+from app.admin.errors import AdminFounderNotFoundError, AdminForbiddenError, InvalidSearchError
 from app.admin.panel_audit import AuditRecorder, InMemoryPanelAuditRepository
 from app.admin.panel_service import AdminPanelService
 from app.admin.rbac import Capability, PanelRole, capabilities_for, has_capability
@@ -41,7 +41,7 @@ def user(fid, name="U", email="u@x.com", status=UserStatus.ACTIVE, plan="free",
         created_at=T0 - timedelta(days=days_ago), last_active_at=T0)
 
 
-def build(users=None, balances=None):
+def build(users=None, balances=None, insights=None):
     repo = InMemoryAdminUserRepository(users or [user(1)])
     credits = build_credit_service(
         InMemoryCreditRepository(balances or {1: 100}), clock=lambda: T0)
@@ -49,7 +49,7 @@ def build(users=None, balances=None):
     c = count(1)
     recorder = AuditRecorder(audit_repo, clock=lambda: T0, id_factory=lambda: f"e-{next(c)}")
     return AdminPanelService(repo, credits=credits, audit=recorder,
-                             clock=lambda: T0), repo, audit_repo
+                             clock=lambda: T0, insights=insights), repo, audit_repo
 
 
 # --- RBAC matrix ------------------------------------------------------------
@@ -222,6 +222,37 @@ def test_page_size_is_capped():
 def test_support_can_list_users():
     s, _, _ = build(_many())
     assert s.list_users(SUPPORT).total == 4
+
+
+# --- dashboard metrics (Phase 2: Live now / Today / 7 days) ------------------
+
+class _FakeInsights:
+    def __init__(self, metrics):
+        self._metrics = metrics
+        self.called = False
+
+    def dashboard_metrics(self):
+        self.called = True
+        return self._metrics
+
+
+def test_dashboard_metrics_delegates_to_insights():
+    fake = _FakeInsights(["m1", "m2"])
+    s, _, _ = build(insights=fake)
+    assert s.dashboard_metrics(SUPER) == ["m1", "m2"]
+    assert fake.called is True
+
+
+def test_dashboard_metrics_readable_by_support():
+    """Same read tier as list_users -- aggregate counts, not per-founder PII."""
+    s, _, _ = build(insights=_FakeInsights([]))
+    s.dashboard_metrics(SUPPORT)  # must not raise
+
+
+def test_dashboard_metrics_unconfigured_reports_rather_than_crashes():
+    s, _, _ = build(insights=None)
+    with pytest.raises(InvalidSearchError):
+        s.dashboard_metrics(SUPER)
 
 
 # --- audit ------------------------------------------------------------------
