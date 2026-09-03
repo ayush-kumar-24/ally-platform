@@ -1,6 +1,7 @@
 """Admin Panel endpoints -- transport only; every rule lives in AdminPanelService.
 
     GET    /admin/me                       caller's role + capabilities
+    GET    /admin/dashboard-metrics        total users, Live now / Today / 7 days, and the rest
     GET    /admin/users                    search / filter / sort / paginate
     GET    /admin/users/{id}               full detail
     PATCH  /admin/users/{id}               partial update (per-field authorization)
@@ -48,6 +49,7 @@ from app.api.v1.admin.panel_responses import (
     CreditAdjustResponse,
     CreditLedgerResponse,
     CreditTransactionResponse,
+    DashboardMetricsResponse,
     PrivacyRequestListResponse,
     PrivacyRequestResponse,
     UserDetailResponse,
@@ -77,6 +79,17 @@ class ConfirmationRequiredError(AppError):
 def whoami(admin: PanelAdmin = Depends(get_panel_admin)) -> WhoAmIResponse:
     return WhoAmIResponse(admin_id=admin.admin_id, email=admin.email,
                           role=admin.role.value, capabilities=capabilities_for(admin.role))
+
+
+@router.get("/dashboard-metrics", response_model=DashboardMetricsResponse,
+           summary="Dashboard cards: total users, Live now / Today / 7 days, and the rest")
+def dashboard_metrics(admin: PanelAdmin = Depends(get_panel_admin),
+                      service=Depends(get_panel_service)) -> DashboardMetricsResponse:
+    """Named /dashboard-metrics, not /dashboard: the Phase 12 admin router
+    already owns GET /admin/dashboard and is registered first, so a second
+    /dashboard here would be silently shadowed and never reached -- the exact
+    collision /audit-log below was already named around."""
+    return DashboardMetricsResponse.from_domain(service.dashboard_metrics(admin))
 
 
 # --- users ------------------------------------------------------------------

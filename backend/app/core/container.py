@@ -409,6 +409,7 @@ class Container:
             report_regenerator=lambda founder_id: regenerate_report_for_founder(db, founder_id),
             privacy=SqlAlchemyPrivacyRepository(db),
             feedback=SqlAlchemyFeedbackReadRepository(db),
+            insights=self.insights_service(db),
         )
 
     def insights_service(self, db: Session):

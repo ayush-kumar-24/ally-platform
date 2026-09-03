@@ -14,6 +14,21 @@ class AuthError(AppError):
         super().__init__(message, status_code=status.HTTP_401_UNAUTHORIZED)
 
 
+class AccountSuspendedError(AppError):
+    """Raised when a cryptographically valid token belongs to a founder whose
+    account is currently suspended or banned.
+
+    Deliberately 403, not 401: the token itself is fine (AuthError is the
+    "who are you" failure) -- this is "we know who you are, and you are not
+    allowed in right now". Distinguishing the two matters to a client: a 401
+    means "log in again", a 403 here means "this won't fix itself with a new
+    token", which is the truth for a suspended account.
+    """
+
+    def __init__(self, message: str = "This account no longer has access"):
+        super().__init__(message, status_code=status.HTTP_403_FORBIDDEN)
+
+
 @dataclass(frozen=True)
 class AuthUser:
     """The identity behind a request, normalised across auth providers.
