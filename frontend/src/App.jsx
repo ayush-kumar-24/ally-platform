@@ -11,14 +11,12 @@ import SplashScreen from './components/SplashScreen';
 import Toast from './components/ui/Toast';
 import CookieBanner from './components/CookieBanner';
 
-/* Landing and Login stay in the main chunk: they are the two entry points, and
-   a lazy boundary on either would trade a 30 kB saving for a blank frame on the
-   very first paint. Everything below is behind a route the visitor navigates to,
-   so its chunk downloads while they are still reading the page before it. This
-   took the initial bundle from 827 kB to a fraction of that -- see the route
-   chunks in `npm run build`. */
-import LandingLayout from './layouts/LandingLayout';
-import LandingPage from './pages/LandingPage';
+/* Login stays in the main chunk: it is the entry point, and a lazy boundary on
+   it would trade a 30 kB saving for a blank frame on the very first paint.
+   Everything below is behind a route the visitor navigates to, so its chunk
+   downloads while they are still reading the page before it. This took the
+   initial bundle from 827 kB to a fraction of that -- see the route chunks in
+   `npm run build`. */
 import GuidedLayout from './layouts/GuidedLayout';
 import Login from './pages/guided/Login';
 import NotFound from './pages/NotFound';
@@ -92,13 +90,15 @@ function RouteFallback() {
   return <div style={{ minHeight: '100dvh', background: 'var(--color-forest-night, #06140d)' }} />;
 }
 
-/* The platform's own landing page is for founders who are already in. The
-   public face of Ally -- and the only way to get an account -- is the waitlist
-   at join.goxlally.ai, so anyone arriving here without a session goes straight
-   to sign-in, which links to the waitlist for everyone else. Decided at render,
-   not at module load: the answer changes the moment they sign in or out. */
+/* The platform has no public page of its own any more. Its public face -- and
+   the only way to get an account -- is the waitlist at join.goxlally.ai, so the
+   root sends a founder with a session to their dashboard and everyone else to
+   sign-in, which links to the waitlist. (The marketing landing that used to
+   live here duplicated join.goxlally.ai and every one of its buttons led to
+   sign-in anyway.) Decided at render, not at module load: the answer changes
+   the moment they sign in or out. */
 function HomeGate() {
-  return getAccessToken() ? <LandingPage /> : <Navigate to="/guided/login" replace />;
+  return <Navigate to={getAccessToken() ? '/app' : '/guided/login'} replace />;
 }
 
 export default function App() {
@@ -147,14 +147,8 @@ export default function App() {
       {showSplash && <SplashScreen onDone={handleSplashDone} />}
       <Suspense fallback={<RouteFallback />}>
         <Routes>
-          {/* ── Landing ── */}
-          <Route element={
-            <ErrorBoundary label="Landing" fallbackPath="/">
-              <LandingLayout />
-            </ErrorBoundary>
-          }>
-            <Route path="/" element={<HomeGate />} />
-          </Route>
+          {/* ── Root: dashboard or sign-in, never a page of its own ── */}
+          <Route path="/" element={<HomeGate />} />
 
           {/* ── Legal pages ── */}
           <Route path="/terms" element={
