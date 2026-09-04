@@ -282,7 +282,7 @@ class Settings(BaseSettings):
     GOOGLE_CALENDAR_ID: str = ""
     GOOGLE_CALENDAR_CREDENTIALS_FILE: str = ""
     GOOGLE_CALENDAR_CREDENTIALS_JSON: str = ""
-    DISCOVERY_CALL_DURATION_MINUTES: int = 45
+    DISCOVERY_CALL_DURATION_MINUTES: int = 30
     DISCOVERY_TIMEZONE: str = "Asia/Kolkata"
     # Which midnight ends a founder's metered day (plans/usage.py).
     #

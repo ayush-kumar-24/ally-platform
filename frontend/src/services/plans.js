@@ -12,7 +12,7 @@
 
 import { get } from './api';
 
-export const TIERS = { FREE: 'free', STARTER: 'starter', PRO: 'pro' };
+export const TIERS = { FREE: 'free', BASIC: 'basic', STARTER: 'starter', PRO: 'pro' };
 
 /** Features the backend knows about — mirrors app/plans/catalog.py:Feature. */
 export const FEATURES = {
@@ -27,6 +27,12 @@ export const FEATURES = {
   REPORTS: 'reports',
   NEXT_STEPS: 'next_steps',
   CALL_BOOKING: 'call_booking',
+  GOALS: 'goals',
+  VISION: 'vision',
+  RECOMMENDATIONS: 'recommendations',
+  KNOWLEDGE_CHAT: 'knowledge_chat',
+  EMAIL_NOTIFICATIONS: 'email_notifications',
+  PRIORITY_CALL: 'priority_call',
 };
 
 /** Public pricing catalog. No auth required — the pricing page needs it logged out. */

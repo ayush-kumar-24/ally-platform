@@ -36,13 +36,19 @@ def svc(balance=1000):
 
 
 def test_release_returns_a_claimed_free_call():
-    """A booking that fails after claiming must not eat the founder's allowance."""
-    s, usage = svc()
-    s.consume_free_call(UID, PlanTier.STARTER)
-    assert s.quote_call(UID, PlanTier.STARTER).is_free is False
+    """A booking that fails after claiming must not eat the founder's allowance.
+
+    Driven at the repository with an explicit allowance: no tier includes a free
+    call today (booking is open to all and every call is paid), so there is no
+    plan to claim one through. The release path is kept and tested because it is
+    what stops a failed booking eating an allowance if one is ever reinstated.
+    """
+    _, usage = svc()
+    assert usage.try_claim_free_call(UID, period_month(T0), 1, at=T0) is not None
+    assert usage.get_calls(UID, period_month(T0)).free_calls_used == 1
 
     usage.release_free_call(UID, period_month(T0), at=T0)
-    assert s.quote_call(UID, PlanTier.STARTER).is_free is True
+    assert usage.get_calls(UID, period_month(T0)).free_calls_used == 0
 
 
 def test_release_floors_at_zero():
@@ -53,20 +59,23 @@ def test_release_floors_at_zero():
     assert usage.get_calls(UID, period_month(T0)).free_calls_used == 0
 
 
-def test_pro_release_restores_only_one():
-    s, usage = svc()
-    s.consume_free_call(UID, PlanTier.PRO)
-    s.consume_free_call(UID, PlanTier.PRO)
-    assert s.quote_call(UID, PlanTier.PRO).is_free is False
+def test_release_restores_exactly_one():
+    _, usage = svc()
+    for _ in range(2):
+        assert usage.try_claim_free_call(UID, period_month(T0), 2, at=T0) is not None
+    assert usage.get_calls(UID, period_month(T0)).free_calls_used == 2
     usage.release_free_call(UID, period_month(T0), at=T0)
-    assert s.quote_call(UID, PlanTier.PRO).free_remaining == 1
+    assert usage.get_calls(UID, period_month(T0)).free_calls_used == 1
 
 
-def test_free_tier_cannot_claim_at_all():
+def test_no_tier_can_claim_a_free_call():
+    """Booking is open to everyone and every call is charged, so a claim must be
+    refused on every tier -- with the price the founder will actually pay."""
     s, _ = svc()
-    with pytest.raises(NoFreeCallsRemainingError) as exc:
-        s.consume_free_call(UID, PlanTier.FREE)
-    assert exc.value.price == 300
+    for tier in PlanTier:
+        with pytest.raises(NoFreeCallsRemainingError) as exc:
+            s.consume_free_call(UID, tier)
+        assert exc.value.price == 300, tier
 
 
 def test_concurrent_bookings_cannot_both_take_the_last_free_call():
@@ -76,11 +85,11 @@ def test_concurrent_bookings_cannot_both_take_the_last_free_call():
 
     def book():
         barrier.wait(timeout=5)
-        try:
-            s.consume_free_call(UID, PlanTier.STARTER)
-            results.append("free")
-        except NoFreeCallsRemainingError:
-            results.append("paid")
+        # An explicit allowance of 1, not a tier: no plan includes a free call
+        # today, and the race being guarded lives in the repository claim.
+        results.append("free"
+                       if usage.try_claim_free_call(UID, period_month(T0), 1, at=T0) is not None
+                       else "paid")
 
     threads = [threading.Thread(target=book) for _ in range(2)]
     for t in threads:

@@ -110,7 +110,15 @@ class ContextWindowBuilder:
         current_message: str,
         language: str = "en",
         response_category: str = "general_chat",
+        knowledge_enabled: bool = True,
     ) -> ConversationContextWindow:
+        """`knowledge_enabled` False means this founder's plan does not include
+        discussing the knowledge base with Ally (Feature.KNOWLEDGE_CHAT, Rs 999).
+        The turn still runs -- their own memory, attachments and plan all stay --
+        it is only the retrieved reference material and the graph expansion that
+        are withheld. Defaults True so a caller that has not been taught about
+        plans behaves exactly as before rather than silently degrading Ally.
+        """
         # 1-4. History + trimming + important preservation (reuse frozen M1).
         conv_ctx = self.conversation_service.build_context(
             conversation.conversation_id, max_messages=self.config.max_history_messages
@@ -120,10 +128,19 @@ class ContextWindowBuilder:
         memory_items, memory_ok = self._safe_memory(conversation.founder_id)
 
         # 6. Inject retrieval (M3), queried by the current message -- fail closed.
-        retrieval, retrieval_ok = self._safe_retrieval(ally_context, current_message)
-
         # 7. Inject graph expansion (M4) -- fail closed.
-        graph, graph_ok = self._safe_graph(ally_context)
+        # Both are the knowledge base, so both answer to the same entitlement:
+        # withholding the retrieved passages while still expanding the graph over
+        # them would leak the same material by a different route.
+        if knowledge_enabled:
+            retrieval, retrieval_ok = self._safe_retrieval(ally_context, current_message)
+            graph, graph_ok = self._safe_graph(ally_context)
+        else:
+            # Not an injection failure -- there was nothing to inject. The *_ok
+            # flags feed telemetry, and reporting these as failures would make a
+            # plan boundary look like a broken retrieval pipeline.
+            retrieval, retrieval_ok = None, False
+            graph, graph_ok = None, False
 
         # 7b. Inject uploaded-file context (Milestone 4) -- fail closed. Text-
         # readable files are decoded and inlined; images and scanned PDFs, which
