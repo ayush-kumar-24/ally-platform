@@ -39,11 +39,28 @@ class SessionState(StrEnum):
 
 
 class RoutingState(StrEnum):
-    """sessions_routing_state_check"""
+    """sessions_routing_state_check
+
+    DISTRESS_SUPPORT and MONITOR are both terminal, and neither means the
+    diagnosis failed. DISTRESS_SUPPORT leaves the diagnostic loop for wellbeing
+    support (CONFIDENCE_HARD_RULES rule 1). MONITOR is the healthy outcome: the
+    founder was asked enough and nothing crossed its risk threshold.
+    """
 
     CONTINUE = "continue"
     VALIDATE = "validate"
     GENERATE_REPORT = "generate_report"
+    DISTRESS_SUPPORT = "distress_support"
+
+    #: Enough evidence gathered, no category flagged -- NO_CATEGORY_ABOVE_
+    #: THRESHOLD_ACTION. Without this the confidence score has no way to say
+    #: "this founder is fine": three of its five signals measure pathology, so a
+    #: healthy founder tops out at 45 against a report threshold of 80 and can
+    #: only ever finish by exhausting the question budget. Rule 4 then caps them
+    #: at 59, so `validate` is unreachable too and the session grinds to the end
+    #: of its budget before completing as `continue` -- a state that tells the
+    #: report layer nothing was concluded, while the report gets written anyway.
+    MONITOR = "monitor"
 
 
 class QuestionType(StrEnum):
@@ -85,9 +102,16 @@ class ScoreLabel(StrEnum):
 class FounderDnaDimension(StrEnum):
     """founder_dna_questions_dimension_code_check
 
-    All fourteen dimensions the Founder DNA phase asks about: the thirteen in
+    All fifteen dimensions the Founder DNA phase asks about: the thirteen in
     `GoXL_Founder_DNA_Decoding_Journey.docx` Section 2, plus EMOTIONAL_
-    INTELLIGENCE, which GoXL added on top of the doc.
+    INTELLIGENCE and RISK_APPETITE, which GoXL added on top of the doc.
+
+    Adding one here is not a one-line change. The count feeds
+    MAX_FOUNDER_DNA_QUESTIONS, whose budget is `base + 2 follow-ups + 1 close`
+    -- so a new dimension needs the ceiling raised with it, or the follow-up
+    pool silently loses a slot. It also needs the
+    `founder_dna_questions_dimension_code_check` constraint widened and the
+    questions themselves seeded, or the phase can never resolve it.
 
     Every dashboard card is now sourced by ASKING. Three of these
     (STRENGTHS_BLIND_SPOTS, STRESS_RESPONSE, COMMUNICATION_PREFERENCE) used
@@ -117,8 +141,14 @@ class FounderDnaDimension(StrEnum):
     DECISION_STYLE = "decision_style"
     COMMUNICATION_PREFERENCE = "communication_preference"
     FOCUS_ATTENTION = "focus_attention"
-    # -- GoXL addition, not in the doc's thirteen --
+    # -- GoXL additions, not in the doc's thirteen --
     EMOTIONAL_INTELLIGENCE = "emotional_intelligence"
+    # How a founder relates to downside they cannot fully model. Distinct from
+    # DECISION_STYLE, which is about HOW they decide (fast/slow, gut/data);
+    # this is about what they do when the decision could genuinely cost them.
+    # Asked as one opening forced_choice (arc 15) and one closing scenario
+    # (arc 96) per stage group, the same shape every other dimension uses.
+    RISK_APPETITE = "risk_appetite"
 
 
 class FounderDnaFormat(StrEnum):

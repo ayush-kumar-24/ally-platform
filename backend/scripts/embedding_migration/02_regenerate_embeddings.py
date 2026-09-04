@@ -1,13 +1,22 @@
 """Embedding migration 02/03 -- regenerate every vector with OpenAI.
 
-Reads each embedded row whose `embedding` is NULL, generates a new
+Reads each row that has never been embedded, generates a new
 text-embedding-3-small (1536-d) vector via the existing OpenAI embedding adapter,
 and writes back the vector plus its metadata (embedding_model,
 embedding_dimension, embedding_version).
 
-Idempotent / resumable: it only processes rows where `embedding IS NULL`, so a
-re-run finishes whatever a previous run left. Run 01_resize_schema.sql first (it
-nulls and widens the columns), then this, then 03_verify_embeddings.py.
+"Never been embedded" means `embedding IS NULL OR embedding_model IS NULL`. The
+second half matters as much as the first: several of these columns are NOT NULL,
+so a seed file inserting new reference rows must supply a placeholder vector
+(`array_fill(0, ARRAY[1536])`), and a zero vector is not NULL. Selecting on the
+vector alone therefore skipped every seeded row while reporting nothing to do --
+found on 1,213 questions that had been sitting unembedded and unnoticed.
+
+Idempotent / resumable, and now genuinely so: progress commits every `_BATCH`
+rows rather than once per table, so a killed run keeps what it finished. Run
+01_resize_schema.sql first (it nulls and widens the columns), then this, then
+03_verify_embeddings.py. Seeded rows need no 01 step -- they arrive already
+needing 02.
 
 Requires (env / .env):
     DATABASE_URL, OPENAI_API_KEY, EMBEDDING_PROVIDER=openai
@@ -34,6 +43,11 @@ from sqlalchemy import create_engine, text
 from app.core.config import settings
 from app.services import embeddings
 
+#: Rows per commit. Small enough that a killed run loses seconds of work, large
+#: enough that the commit overhead stays invisible beside the provider call that
+#: dominates each iteration.
+_BATCH = 25
+
 # table -> (primary key column, SQL expression for the text to embed).
 # Adjust the text expressions to match how you want each corpus represented.
 TABLES: dict[str, tuple[str, str]] = {
@@ -59,8 +73,16 @@ def migrate_table(engine, provider, table: str, dry_run: bool) -> tuple[int, int
     pk, text_expr = TABLES[table]
     with engine.connect() as conn:
         rows = conn.execute(
+            # `embedding_model IS NULL` is the real "needs embedding" marker,
+            # not `embedding IS NULL`. Seed files must supply a placeholder
+            # zero-vector to satisfy the NOT NULL constraint, and a zero vector
+            # is not NULL -- so the old predicate silently skipped every seeded
+            # row. embedding_model is only ever written by this script (see the
+            # UPDATE below), so it is null exactly when a row has never been
+            # embedded here: true for a NULL vector and a placeholder alike.
             text(f"SELECT {pk} AS id, {text_expr} AS content FROM {table} "
-                 f"WHERE embedding IS NULL ORDER BY {pk}")
+                 f"WHERE embedding IS NULL OR embedding_model IS NULL "
+                 f"ORDER BY {pk}")
         ).mappings().all()
 
     pending = len(rows)
@@ -69,7 +91,11 @@ def migrate_table(engine, provider, table: str, dry_run: bool) -> tuple[int, int
         return pending, 0
 
     done = 0
-    with engine.begin() as conn:
+    # Committed in batches, not once per table. The whole table used to be one
+    # transaction, which made "resumable" true only if the process was allowed
+    # to finish -- a run embedding 1,213 questions was killed partway and every
+    # one rolled back, discarding 20 minutes of paid-for provider calls.
+    with engine.connect() as conn:
         for row in rows:
             vector = provider.embed(row["content"] or "")
             conn.execute(
@@ -94,9 +120,11 @@ def migrate_table(engine, provider, table: str, dry_run: bool) -> tuple[int, int
                 },
             )
             done += 1
-            if done % 50 == 0:
-                print(f"  {table}: {done}/{pending}")
-    print(f"  {table}: {done}/{pending} embedded")
+            if done % _BATCH == 0:
+                conn.commit()
+                print(f"  {table}: {done}/{pending}", flush=True)
+        conn.commit()          # whatever the last partial batch left
+    print(f"  {table}: {done}/{pending} embedded", flush=True)
     return pending, done
 
 

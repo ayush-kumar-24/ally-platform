@@ -455,11 +455,322 @@ jobs:
               --tasks "${{ steps.migrate.outputs.task_arn }}" \
               --query 'tasks[0].{stoppedReason:stoppedReason,containers:containers[*].{name:name,reason:reason,exitCode:exitCode}}'
 
+            # The container's own output, not just its exit code.
+            #
+            # Without this the log says "Essential container in task exited"
+            # and nothing else -- which names the symptom and hides the cause,
+            # so every failed migration costs a round trip to someone with AWS
+            # access before anyone can even start diagnosing. Two failures in a
+            # row were debugged by guessing because of this.
+            #
+            # Read from the task definition rather than hardcoded: the log group
+            # and stream prefix belong to the container definition, and a
+            # hardcoded guess here would silently print nothing the day either
+            # changes.
+            echo "--- migration container log ---"
+            LOG_GROUP=$(aws ecs describe-task-definition \
+              --task-definition "${{ steps.migration-taskdef.outputs.arn }}" \
+              --query "taskDefinition.containerDefinitions[?name=='$CONTAINER_NAME']|[0].logConfiguration.options.\"awslogs-group\"" \
+              --output text 2>/dev/null)
+            LOG_PREFIX=$(aws ecs describe-task-definition \
+              --task-definition "${{ steps.migration-taskdef.outputs.arn }}" \
+              --query "taskDefinition.containerDefinitions[?name=='$CONTAINER_NAME']|[0].logConfiguration.options.\"awslogs-stream-prefix\"" \
+              --output text 2>/dev/null)
+            FAILED_TASK_ARN="${{ steps.migrate.outputs.task_arn }}"
+            TASK_ID="${FAILED_TASK_ARN##*/}"
+
+            if [ -n "$LOG_GROUP" ] && [ "$LOG_GROUP" != "None" ]; then
+              aws logs get-log-events \
+                --log-group-name "$LOG_GROUP" \
+                --log-stream-name "$LOG_PREFIX/$CONTAINER_NAME/$TASK_ID" \
+                --limit 100 \
+                --query 'events[*].message' \
+                --output text 2>/dev/null \
+                || echo "(could not read $LOG_GROUP -- check the task role has logs:GetLogEvents)"
+            else
+              echo "(no awslogs configuration on $CONTAINER_NAME; cannot fetch the error)"
+            fi
+            echo "--- end migration container log ---"
+
             echo "ECS service will NOT be updated."
             exit 1
           fi
 
           echo "Database migration successful."
+
+      # ---------------------------------------------------------
+      # 9A. EMBED BUSINESS-DNA QUESTIONS 2130-2229
+      #
+      # Uses the privileged migration task because this step writes
+      # embedding vectors and metadata to the database.
+      #
+      # The script itself is hard-scoped to IDs 2130-2229 and only
+      # processes NULL embeddings, so it is safe to resume/re-run.
+      # ---------------------------------------------------------
+
+      - name: Embed questions 2130-2229
+        run: |
+          RESULT=$(aws ecs run-task \
+            --cluster "$ECS_CLUSTER" \
+            --launch-type FARGATE \
+            --task-definition "${{ steps.migration-taskdef.outputs.arn }}" \
+            --network-configuration \
+            "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SECURITY_GROUP],assignPublicIp=ENABLED}" \
+            --overrides \
+            "{\"containerOverrides\":[{\"name\":\"$CONTAINER_NAME\",\"command\":[\"python\",\"scripts/embedding_migration/embed_questions_2130_2229.py\"]}]}")
+
+          echo "$RESULT"
+
+          TASK_ARN=$(echo "$RESULT" | jq -r '.tasks[0].taskArn // empty')
+
+          if [ -z "$TASK_ARN" ]; then
+            echo "Could not start Batch 2130-2229 embedding task."
+            echo "$RESULT" | jq '.failures'
+            exit 1
+          fi
+
+          echo "Embedding task: $TASK_ARN"
+
+          aws ecs wait tasks-stopped \
+            --cluster "$ECS_CLUSTER" \
+            --tasks "$TASK_ARN"
+
+          EXIT_CODE=$(aws ecs describe-tasks \
+            --cluster "$ECS_CLUSTER" \
+            --tasks "$TASK_ARN" \
+            --query "tasks[0].containers[?name=='$CONTAINER_NAME'].exitCode | [0]" \
+            --output text)
+
+          echo "Embedding exit code: $EXIT_CODE"
+
+          if [ "$EXIT_CODE" != "0" ]; then
+            echo "BATCH 2130-2229 EMBEDDING FAILED."
+
+            aws ecs describe-tasks \
+              --cluster "$ECS_CLUSTER" \
+              --tasks "$TASK_ARN" \
+              --query 'tasks[0].{stoppedReason:stoppedReason,containers:containers[*].{name:name,reason:reason,exitCode:exitCode}}'
+
+            echo "ECS service will NOT be updated."
+            exit 1
+          fi
+
+          echo "Batch 2130-2229 embedding completed successfully."
+
+      # ---------------------------------------------------------
+      # 9B. EMBED NEW DIAGNOSTIC DATA 2230-3342
+      #
+      # Hard-scoped write step:
+      #   questions   2230-3342
+      #   problems    270-275
+      #   root_causes 1976-2011
+      #
+      # Only NULL embeddings are processed.
+      # Uses migration credentials because this writes to DB.
+      # ---------------------------------------------------------
+
+      - name: Embed new diagnostic data 2230-3342
+        run: |
+          RESULT=$(aws ecs run-task \
+            --cluster "$ECS_CLUSTER" \
+            --launch-type FARGATE \
+            --task-definition "${{ steps.migration-taskdef.outputs.arn }}" \
+            --network-configuration \
+            "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SECURITY_GROUP],assignPublicIp=ENABLED}" \
+            --overrides \
+            "{\"containerOverrides\":[{\"name\":\"$CONTAINER_NAME\",\"command\":[\"python\",\"scripts/embedding_migration/embed_new_diagnostic_data_2230_3342.py\"]}]}")
+
+          echo "$RESULT"
+
+          TASK_ARN=$(echo "$RESULT" | jq -r '.tasks[0].taskArn // empty')
+
+          if [ -z "$TASK_ARN" ]; then
+            echo "Could not start new diagnostic embedding task."
+            echo "$RESULT" | jq '.failures'
+            exit 1
+          fi
+
+          echo "New diagnostic embedding task: $TASK_ARN"
+          echo "Waiting up to 90 minutes for diagnostic embeddings to finish."
+
+          TASK_STOPPED=false
+
+          for attempt in $(seq 1 360); do
+            LAST_STATUS=$(aws ecs describe-tasks \
+              --cluster "$ECS_CLUSTER" \
+              --tasks "$TASK_ARN" \
+              --query 'tasks[0].lastStatus' \
+              --output text)
+
+            echo "Embedding task status: $LAST_STATUS (attempt $attempt/360)"
+
+            if [ "$LAST_STATUS" = "STOPPED" ]; then
+              TASK_STOPPED=true
+              break
+            fi
+
+            sleep 15
+          done
+
+          if [ "$TASK_STOPPED" != "true" ]; then
+            echo "NEW DIAGNOSTIC EMBEDDING TIMED OUT after 90 minutes."
+
+            aws ecs describe-tasks \
+              --cluster "$ECS_CLUSTER" \
+              --tasks "$TASK_ARN" \
+              --query 'tasks[0].{lastStatus:lastStatus,stoppedReason:stoppedReason,containers:containers[*].{name:name,reason:reason,exitCode:exitCode}}'
+
+            echo "Stopping timed-out embedding task to prevent background database writes."
+
+            aws ecs stop-task \
+              --cluster "$ECS_CLUSTER" \
+              --task "$TASK_ARN" \
+              --reason "GitHub deployment timed out waiting for diagnostic embeddings"
+
+            echo "ECS service will NOT be updated."
+            exit 1
+          fi
+
+          EXIT_CODE=$(aws ecs describe-tasks \
+            --cluster "$ECS_CLUSTER" \
+            --tasks "$TASK_ARN" \
+            --query "tasks[0].containers[?name=='$CONTAINER_NAME'].exitCode | [0]" \
+            --output text)
+
+          echo "New diagnostic embedding exit code: $EXIT_CODE"
+
+          if [ "$EXIT_CODE" != "0" ]; then
+            echo "NEW DIAGNOSTIC EMBEDDING FAILED."
+
+            aws ecs describe-tasks \
+              --cluster "$ECS_CLUSTER" \
+              --tasks "$TASK_ARN" \
+              --query 'tasks[0].{stoppedReason:stoppedReason,containers:containers[*].{name:name,reason:reason,exitCode:exitCode}}'
+
+            echo "ECS service will NOT be updated."
+            exit 1
+          fi
+
+          echo "New diagnostic embeddings completed successfully."
+
+      # ---------------------------------------------------------
+      # 9B. VERIFY BUSINESS-DNA QUESTIONS 2130-2229
+      #
+      # Uses the normal runtime task definition, not migration DB
+      # credentials. Deployment stops unless the runtime role sees:
+      #
+      #   100 questions
+      #   exact IDs 2130-2229
+      #   275 tag mappings
+      #   zero NULL embeddings
+      #   1536 dimensions
+      #   correct model/version metadata
+      # ---------------------------------------------------------
+
+      - name: Verify questions 2130-2229
+        run: |
+          RESULT=$(aws ecs run-task \
+            --cluster "$ECS_CLUSTER" \
+            --launch-type FARGATE \
+            --task-definition "${{ steps.runtime-taskdef.outputs.arn }}" \
+            --network-configuration \
+            "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SECURITY_GROUP],assignPublicIp=ENABLED}" \
+            --overrides \
+            "{\"containerOverrides\":[{\"name\":\"$CONTAINER_NAME\",\"command\":[\"python\",\"scripts/embedding_migration/verify_questions_2130_2229.py\"]}]}")
+
+          echo "$RESULT"
+
+          TASK_ARN=$(echo "$RESULT" | jq -r '.tasks[0].taskArn // empty')
+
+          if [ -z "$TASK_ARN" ]; then
+            echo "Could not start Batch 2130-2229 verification task."
+            echo "$RESULT" | jq '.failures'
+            exit 1
+          fi
+
+          echo "Verification task: $TASK_ARN"
+
+          aws ecs wait tasks-stopped \
+            --cluster "$ECS_CLUSTER" \
+            --tasks "$TASK_ARN"
+
+          EXIT_CODE=$(aws ecs describe-tasks \
+            --cluster "$ECS_CLUSTER" \
+            --tasks "$TASK_ARN" \
+            --query "tasks[0].containers[?name=='$CONTAINER_NAME'].exitCode | [0]" \
+            --output text)
+
+          echo "Verification exit code: $EXIT_CODE"
+
+          if [ "$EXIT_CODE" != "0" ]; then
+            echo "BATCH 2130-2229 VERIFICATION FAILED."
+
+            aws ecs describe-tasks \
+              --cluster "$ECS_CLUSTER" \
+              --tasks "$TASK_ARN" \
+              --query 'tasks[0].{stoppedReason:stoppedReason,containers:containers[*].{name:name,reason:reason,exitCode:exitCode}}'
+
+            echo "ECS service will NOT be updated."
+            exit 1
+          fi
+
+          echo "Batch 2130-2229 verification passed."
+
+      # ---------------------------------------------------------
+      # 9D. VERIFY NEW DIAGNOSTIC DATA 2230-3342
+      #
+      # Uses runtime credentials to ensure ally_app can read the
+      # newly migrated data and its generated embeddings.
+      # ---------------------------------------------------------
+
+      - name: Verify new diagnostic data 2230-3342
+        run: |
+          RESULT=$(aws ecs run-task \
+            --cluster "$ECS_CLUSTER" \
+            --launch-type FARGATE \
+            --task-definition "${{ steps.runtime-taskdef.outputs.arn }}" \
+            --network-configuration \
+            "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SECURITY_GROUP],assignPublicIp=ENABLED}" \
+            --overrides \
+            "{\"containerOverrides\":[{\"name\":\"$CONTAINER_NAME\",\"command\":[\"python\",\"scripts/embedding_migration/verify_new_diagnostic_data_2230_3342.py\"]}]}")
+
+          echo "$RESULT"
+
+          TASK_ARN=$(echo "$RESULT" | jq -r '.tasks[0].taskArn // empty')
+
+          if [ -z "$TASK_ARN" ]; then
+            echo "Could not start new diagnostic verification task."
+            echo "$RESULT" | jq '.failures'
+            exit 1
+          fi
+
+          echo "New diagnostic verification task: $TASK_ARN"
+
+          aws ecs wait tasks-stopped \
+            --cluster "$ECS_CLUSTER" \
+            --tasks "$TASK_ARN"
+
+          EXIT_CODE=$(aws ecs describe-tasks \
+            --cluster "$ECS_CLUSTER" \
+            --tasks "$TASK_ARN" \
+            --query "tasks[0].containers[?name=='$CONTAINER_NAME'].exitCode | [0]" \
+            --output text)
+
+          echo "New diagnostic verification exit code: $EXIT_CODE"
+
+          if [ "$EXIT_CODE" != "0" ]; then
+            echo "NEW DIAGNOSTIC DATA VERIFICATION FAILED."
+
+            aws ecs describe-tasks \
+              --cluster "$ECS_CLUSTER" \
+              --tasks "$TASK_ARN" \
+              --query 'tasks[0].{stoppedReason:stoppedReason,containers:containers[*].{name:name,reason:reason,exitCode:exitCode}}'
+
+            echo "ECS service will NOT be updated."
+            exit 1
+          fi
+
+          echo "New diagnostic data verification passed."
 
       # ---------------------------------------------------------
       # 10. VERIFY RUNTIME ROLE AFTER MIGRATION

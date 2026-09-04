@@ -15,6 +15,7 @@ would have to unpick later.
 """
 
 from app.api.v1.diagnosis.repository import DiagnosisRepository
+from app.api.v1.diagnosis.stage_scope import resolve_scope
 from app.core.logger import logger
 from app.models import (
     DiagnosisSession,
@@ -184,6 +185,13 @@ class QuestionSelectionEngine:
         Counting ANSWERED (not asked) questions is deliberate: a question shown
         and abandoned must not consume its pillar's turn.
 
+        Pillars OUT OF SCOPE for the founder's stage never reach this key --
+        `candidate_questions` has already removed them -- so "every pillar" here
+        means every pillar the stage is diagnosed on. At ideation that is two,
+        and the round-robin spreads the budget across those two rather than
+        manufacturing turns for four pillars with nothing to say. See
+        `stage_scope.py`.
+
         Degrades to `_sort_key` if the pillar map is unavailable for any
         reason -- a coverage optimisation must never be able to stop the
         assessment from finding a next question.
@@ -275,14 +283,78 @@ class QuestionSelectionEngine:
     def candidate_questions(
         self, session: DiagnosisSession, founder: Founder
     ) -> list[Question]:
-        """Unanswered, stage-eligible questions for this session (unordered)."""
-        return self.repository.list_candidate_questions(
+        """Unanswered, stage-eligible, in-scope questions for this session.
+
+        Two independent stage filters apply, and both are needed. The repository
+        filters on `primary_stage_group`, which decides how a question is WORDED
+        for this founder. `_in_scope` then filters on pillar, which decides which
+        SUBJECTS may be raised at all. A Team & Leadership question written for
+        Stage 0 passes the first and fails the second.
+        """
+        candidates = self.repository.list_candidate_questions(
             session_id=session.session_id,
             stage_groups=resolve_stage_groups(founder),
             # Lets the repository drop questions this founder already answered
             # verbatim during Founder DNA -- see list_candidate_questions.
             founder_id=founder.founder_id,
         )
+        return self._in_scope(candidates, founder)
+
+    def _in_scope(self, candidates: list[Question], founder: Founder) -> list[Question]:
+        """Drop questions whose pillar the founder's stage is not diagnosed on.
+
+        Filtering here rather than in the ranking key is deliberate. The bias in
+        `_sort_key_for` only reorders, so an out-of-scope question would still be
+        asked once the in-scope ones ran out -- which is exactly the budget-tail
+        case an ideation founder hits. Scope is a rule about what may be asked,
+        not a preference about what to ask first, so it removes candidates.
+
+        Never returns empty when it was given a non-empty set. A scope that
+        matches nothing means the pillar map and the bank disagree, and ending a
+        founder's diagnosis early over a data problem is worse than asking a
+        question that is off-topic for their stage. Same reasoning as the
+        round-robin's degrade path: correctness of coverage must never be able to
+        stop the assessment from finding a next question.
+        """
+        scope = resolve_scope(founder)
+        if scope is None or scope.covers_all_pillars or not candidates:
+            return candidates
+
+        try:
+            problem_to_pillar = self.repository.problem_to_pillar()
+        except Exception:                                  # noqa: BLE001
+            logger.warning(
+                "Pillar map unavailable; cannot scope this stage's diagnosis",
+                extra={"stage_scope": scope.label},
+            )
+            return candidates
+
+        if not problem_to_pillar:
+            return candidates
+
+        scoped = [
+            q for q in candidates
+            if problem_to_pillar.get(q.problem_id) in scope.pillars
+        ]
+        if not scoped:
+            logger.warning(
+                "Stage scope matched no candidate question; leaving the set "
+                "unscoped rather than ending the diagnosis",
+                extra={"stage_scope": scope.label, "candidates": len(candidates)},
+            )
+            return candidates
+
+        logger.info(
+            "diagnosis scoped to stage",
+            extra={
+                "stage": "stage_scope",
+                "stage_scope": scope.label,
+                "pillars_in_scope": sorted(scope.pillars),
+                "candidates_before": len(candidates),
+                "candidates_after": len(scoped),
+            },
+        )
+        return scoped
 
     def order_candidates(
         self, candidates: list[Question], session: DiagnosisSession | None = None

@@ -44,10 +44,6 @@ from app.ai_chat.suggestions.service import SuggestionService
 from app.ai_chat.suggestions.sql_repository import SqlSuggestionRepository
 from app.settings.repository import SqlAlchemySettingsRepository
 from app.settings.service import SettingsService
-from app.admin.audit import InMemoryAuditRepository
-from app.admin.permissions import AdminRegistry
-from app.admin.repository import InMemoryAdminRepository, InMemoryAnnouncementRepository
-from app.admin.service import AdminService
 from app.planning.db_repository import SqlAlchemyPlanningRepository
 from app.planning.service import PlanningService
 from app.founder_goals.db_repository import SqlAlchemyFounderGoalRepository
@@ -119,15 +115,35 @@ class Container:
         # as conversations/attachments: a process-level singleton would lose every
         # suggestion and every founder's feedback on restart.
 
-        # --- Phase 12 admin & operations (independent) -- process-level in-memory
-        # repositories (a production adapter reads the DB + ai_chat stores). The admin
-        # registry (email -> role allowlist) is loaded from the environment.
-        self._admin_repository = InMemoryAdminRepository()
-        self._announcement_repository = InMemoryAnnouncementRepository()
-        self._audit_repository = InMemoryAuditRepository()
-        self._admin_registry = AdminRegistry()
+        # The Phase 12 admin & operations module -- process-level in-memory
+        # repositories, never DB-backed -- used to be wired here. Removed
+        # (Admin Panel Proposal Phase 5): every capability it had is
+        # superseded by the real, DB-backed Admin Panel below, and the
+        # frontend never called any of its endpoints (confirmed against
+        # frontend/src/services/admin.js before deleting). See
+        # app/admin/__init__.py for the full note.
         # Admin Panel allowlist -- built lazily so tests can set the env var first.
         self._panel_registry = None
+        # Admin Panel Phase 3 (Health page): process-level singleton so its
+        # green->red edge-trigger state (see HealthAlertService's own
+        # docstring) survives across requests within one process.
+        self._health_alert_service = self._build_health_alert_service()
+
+    def _build_health_alert_service(self):
+        """WhatsApp is not wired: the proposal asked for it alongside email,
+        but there is no WhatsApp-sending integration anywhere in this
+        codebase (checked -- no Twilio/Meta Cloud API client, no credentials
+        settings) and picking a provider is a decision this module does not
+        make unilaterally, same principle session_store.py's docstring gives
+        for a database change. `AlertChannel` is deliberately a protocol, so
+        a WhatsAppAlertChannel is a channel this list gains later, not a
+        redesign. Email ships now because app/services/email.py already
+        exists and works."""
+        from app.admin.health import EmailAlertChannel, HealthAlertService
+        channels = []
+        if settings.health_alert_emails:
+            channels.append(EmailAlertChannel(settings.health_alert_emails))
+        return HealthAlertService(channels)
 
     # --- Provider registry ------------------------------------------------
 
@@ -215,7 +231,26 @@ class Container:
             knowledge_graph=self.knowledge_graph(db),
             attachments=self.attachment_service(db),
             planning=self.planning_service(db),
+            founder_profile=lambda founder_id: self._founder_profile_text(db, founder_id),
         )
+
+    @staticmethod
+    def _founder_profile_text(db: Session, founder_id: int) -> str:
+        """What onboarding established about this founder, for the chat prompt.
+
+        Reuses the diagnosis advisor's brief so the two surfaces cannot describe
+        the same founder differently -- one renderer, one truth. Chat asks for
+        the profile half only: the Founder DNA and Current Problem excerpts are
+        sized for choosing the next diagnostic question, and chat already
+        receives the finished diagnosis separately.
+        """
+        from app.api.v1.diagnosis.founder_brief import build_founder_brief
+        from app.models import Founder
+
+        founder = db.get(Founder, founder_id)
+        if founder is None:
+            return ""
+        return build_founder_brief(db, founder, include_dna=False, include_problem=False)
 
     def grounded_prompt_manager(self):
         return self._grounded_prompt_manager
@@ -288,18 +323,6 @@ class Container:
         override the endpoint dependency with an in-memory-backed service."""
         return SettingsService(SqlAlchemySettingsRepository(db))
 
-    # --- Phase 12 admin accessors -----------------------------------------
-
-    def admin_registry(self) -> AdminRegistry:
-        return self._admin_registry
-
-    def admin_service(self) -> AdminService:
-        return AdminService(
-            admin_repository=self._admin_repository,
-            announcement_repository=self._announcement_repository,
-            audit_repository=self._audit_repository,
-        )
-
     # --- Planning accessor (DB-backed, per-request) -----------------------
 
     def planning_service(self, db: Session) -> PlanningService:
@@ -369,6 +392,27 @@ class Container:
     def credit_service(self, db: Session) -> CreditService:
         return CreditService(SqlAlchemyCreditRepository(db))
 
+    def payment_gateway(self):
+        """None when Razorpay isn't configured in this environment --
+        PaymentService turns that into a 503 rather than faking a successful
+        checkout (see app/payments/errors.py's PaymentsNotConfiguredError).
+        Built fresh per call (cheap: one httpx.Client construction) rather
+        than held as a singleton, so a settings change (e.g. in tests) takes
+        effect without restarting the process."""
+        if not settings.payments_enabled:
+            return None
+        from app.payments.gateway import RazorpayGateway
+        return RazorpayGateway(
+            key_id=settings.RAZORPAY_KEY_ID,
+            key_secret=settings.RAZORPAY_KEY_SECRET,
+            webhook_secret=settings.RAZORPAY_WEBHOOK_SECRET,
+        )
+
+    def payment_service(self, db: Session):
+        from app.payments.repository import PaymentRepository
+        from app.payments.service import PaymentService
+        return PaymentService(self.payment_gateway(), PaymentRepository(db), self.credit_service(db))
+
     def admin_panel_service(self, db: Session) -> AdminPanelService:
         """Request-scoped panel service. The audit repository is DB-backed so the
         trail survives restarts."""
@@ -390,11 +434,59 @@ class Container:
             report_regenerator=lambda founder_id: regenerate_report_for_founder(db, founder_id),
             privacy=SqlAlchemyPrivacyRepository(db),
             feedback=SqlAlchemyFeedbackReadRepository(db),
+            health=self.health_checker(db),
         )
 
     def insights_service(self, db: Session):
+        """Not wired into AdminPanelService -- GET /admin/metrics
+        (panel_router_v2.py, and frontend/src/services/admin.js's
+        `getMetrics()`) calls this directly, and is the only caller. An
+        earlier `/admin/dashboard-metrics` route through the service duplicated
+        it exactly (same data, different path, nothing ever called it) and was
+        removed rather than kept as a second way to reach the same cards --
+        see the Admin Panel Proposal's Phase 5."""
         from app.admin.insights import InsightsService, SqlAlchemyInsightsRepository
         return InsightsService(SqlAlchemyInsightsRepository(db))
+
+    def health_checker(self, db: Session):
+        """Request-scoped (needs the request's DB session for the database
+        and error-rate checks); the AI provider, report engine and storage
+        checks read process-level state/config, wired here as closures over
+        `self` rather than methods on SystemHealthChecker so that class stays
+        testable without a live provider, sidecar or bucket."""
+        from app.admin.health import SystemHealthChecker
+        from app.api.v1.reports.gotenberg import is_available as gotenberg_available
+        from app.services.object_storage import ObjectStorageError, build_object_storage
+
+        def ai_provider_health():
+            provider = self.execution().providers.get("auto")
+            if provider is None:
+                return False, "no provider registered"
+            h = provider.health()
+            return h.healthy, h.detail
+
+        def report_engine_available():
+            return gotenberg_available(base_url=settings.GOTENBERG_URL)
+
+        def storage_ping():
+            store = build_object_storage()
+            if store is None:
+                return None, "no S3 bucket configured (local storage in use)"
+            try:
+                store.ping()
+                return True, f"s3://{store.bucket} reachable"
+            except ObjectStorageError as exc:
+                return False, str(exc)
+
+        return SystemHealthChecker(
+            db,
+            ai_provider_health=ai_provider_health,
+            report_engine_available=report_engine_available,
+            storage_ping=storage_ping,
+        )
+
+    def health_alert_service(self):
+        return self._health_alert_service
 
     def feature_flag_service(self, db: Session):
         from app.admin.feature_flags import (

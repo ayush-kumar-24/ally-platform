@@ -303,6 +303,47 @@ QUESTIONS: list[tuple] = [
     (D.CORE_VALUES, S2, 93, SCEN,
      "Tell me about the last time you turned down money or growth because of "
      "something you weren't willing to trade. What was it?", None, False),
+
+    # ================= RISK APPETITE (15th dimension) =================
+    # How a founder relates to downside they cannot fully model -- distinct
+    # from DECISION_STYLE, which is about how they decide rather than what
+    # they do when the decision could genuinely cost them.
+    #
+    # Two per stage group, following the pattern every other dimension uses:
+    # an opening forced_choice in the 1-14 band, and a closing scenario in the
+    # 90-99 follow-up band. Arc 15 and 96 are free across all three groups.
+    #
+    # The forced choices are deliberately not framed as brave/cautious. A
+    # founder self-rating on courage answers the flattering option, which is
+    # what the doc's Section 1 warns against; asking where they sit RELATIVE to
+    # their team, or which feeling actually shows up, is answerable honestly.
+    (D.RISK_APPETITE, S0, 15, CHOICE,
+     "When this idea could fail in a way that costs you real time or money, "
+     "does that possibility excite you or unsettle you?",
+     ["It excites me", "It unsettles me"], False),
+    (D.RISK_APPETITE, S0, 96, SCEN,
+     "Tell me about the biggest risk you've taken on this idea so far, the "
+     "one where you genuinely didn't know how it would turn out. What made "
+     "you go ahead?", None, False),
+
+    (D.RISK_APPETITE, S1, 15, CHOICE,
+     "Right now, when a decision could go badly, are you the one pushing to "
+     "move despite the risk, or the one asking the team to slow down and "
+     "de-risk it first?",
+     ["Pushing to move despite the risk", "Asking to slow down and de-risk"],
+     False),
+    (D.RISK_APPETITE, S1, 96, SCEN,
+     "Tell me about a risk you talked yourself into taking here, that in "
+     "hindsight you wouldn't take again. What did you miss?", None, False),
+
+    (D.RISK_APPETITE, S2, 15, CHOICE,
+     "At this scale, when a bet could set the company back significantly if "
+     "it fails, do you find yourself more willing to take it than your team "
+     "is, or less?",
+     ["More willing than my team", "Less willing than my team"], False),
+    (D.RISK_APPETITE, S2, 96, SCEN,
+     "Tell me about the last major risk you chose not to take. Was that "
+     "caution, or was it actually fear dressed up as caution?", None, False),
 ]
 
 

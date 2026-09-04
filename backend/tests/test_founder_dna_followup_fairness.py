@@ -1,6 +1,6 @@
 """Follow-up slots must be spread across unresolved dimensions, not hoarded.
 
-Founder DNA has 14 dimensions and MAX_FOUNDER_DNA_QUESTIONS = 16, so once the
+Founder DNA has 15 dimensions and a ceiling of base + 2 follow-ups + 1 close, so once the
 base journey is done there are only a couple of follow-up slots left. Ordering
 those purely by arc_position let the lowest-arc unresolved dimension take every
 one of them.
@@ -16,6 +16,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from app.api.v1.founder_dna.engine import FOLLOW_UP_FLOOR, FounderDnaSelectionEngine
+from app.core.config import settings
 
 
 def _q(qid: int, dimension: str, arc: int, closing: bool = False):
@@ -145,7 +146,13 @@ def test_closing_question_wins_once_the_budget_is_spent():
     repo = _Repo(
         candidates,
         resolved=[],
-        answered_total=16,  # 16 + 1 reserved close > MAX_FOUNDER_DNA_QUESTIONS
+        # Derived from the ceiling, not pinned to it. This read `16` back when
+        # MAX_FOUNDER_DNA_QUESTIONS was 17; raising it to 18 for the fifteenth
+        # dimension (RISK_APPETITE) left the literal asserting nothing -- 16 + 1
+        # no longer spends the budget, so the phase correctly kept asking and
+        # the test failed on behaviour that was right. One less than the ceiling
+        # is the actual condition: the last slot is the reserved close.
+        answered_total=settings.MAX_FOUNDER_DNA_QUESTIONS - 1,
         per_dimension={"core_values": 0},
     )
 
@@ -181,7 +188,8 @@ def test_close_still_comes_last_when_a_follow_up_is_affordable():
     repo = _Repo(
         candidates,
         resolved=[],
-        answered_total=14,  # 14 + 1 reserved close < 16, so room for one more
+        # Comfortably inside the ceiling, so a follow-up is still affordable.
+        answered_total=settings.MAX_FOUNDER_DNA_QUESTIONS - 4,
         per_dimension={"energy_patterns": 1},
     )
 

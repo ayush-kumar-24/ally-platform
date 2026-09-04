@@ -64,6 +64,7 @@ class AdminPanelService:
         report_regenerator: Callable[[int], dict] | None = None,
         privacy=None,
         feedback=None,
+        health=None,
     ):
         self.users = users
         self.credits = credits
@@ -74,6 +75,11 @@ class AdminPanelService:
         self.report_regenerator = report_regenerator
         self.privacy = privacy  # PrivacyRepository -- backs cancel_pending_deletion
         self.feedback = feedback  # FeedbackReadRepository -- backs list_feedback/feedback_stats
+        # HealthChecker -- backs system_health. Read-only: the panel page never
+        # sends an alert itself, that side effect lives only in the scheduled
+        # /internal/jobs/check-health path (see that router's docstring) --
+        # a GET an admin loads to look at the page should not also page someone.
+        self.health = health
         self._now = clock or (lambda: datetime.now(timezone.utc))
 
     # --- reads ------------------------------------------------------------
@@ -93,6 +99,21 @@ class AdminPanelService:
         if detail is None:
             raise AdminFounderNotFoundError(founder_id)
         return detail
+
+    def system_health(self, admin):
+        """Admin Panel proposal Phase 3: the Health page -- database, AI
+        provider, report engine, storage, error rate, green/amber/red.
+
+        Same read tier as dashboard_metrics: operational status, not
+        per-founder data, so Support reads it too -- "if the database breaks,
+        we find out from a customer" was the whole point of this gap, and
+        that includes Support, who are the ones actually talking to the
+        customer first.
+        """
+        require(admin.role, Capability.VIEW_USERS)
+        if self.health is None:
+            raise InvalidSearchError("health checks are not configured")
+        return self.health.check()
 
     # --- user mutations ---------------------------------------------------
 

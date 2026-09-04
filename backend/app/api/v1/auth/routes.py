@@ -38,6 +38,7 @@ from sqlalchemy.orm import Session
 from app.core.auth import (
     ACCESS,
     REFRESH,
+    AccountSuspendedError,
     AuthError,
     AuthUser,
     create_access_token,
@@ -48,6 +49,8 @@ from app.core.auth import (
     get_session_store,
     get_upstream_identity,
     identity_from_claims,
+    is_account_active,
+    record_last_active,
 )
 from app.core.config import settings
 from app.db.session import get_db
@@ -193,7 +196,10 @@ async def refresh_session(
     """Trade a valid, non-revoked refresh token for a fresh token pair.
 
     The old refresh token is revoked as part of this call (rotation), so a
-    refresh token works exactly once.
+    refresh token works exactly once. Also refuses a suspended/banned founder
+    here, not just on their next API call -- a suspended founder should not be
+    able to mint a fresh access token at all, even one that would immediately
+    403 on first use.
     """
     token = _incoming_refresh_token(request, payload)
     claims = decode_token(token, REFRESH)
@@ -201,6 +207,9 @@ async def refresh_session(
     store = get_session_store(db)
     if store.is_revoked(claims["jti"]):
         raise AuthError("Refresh token has been revoked")
+    if not is_account_active(db, claims["sub"]):
+        raise AccountSuspendedError()
+    record_last_active(db, claims["sub"])
 
     store.revoke(claims["jti"], expires_at=_claim_expiry(claims))
     pair, new_refresh_token = _token_pair(identity_from_claims(claims))
@@ -235,6 +244,9 @@ async def resume_session(
     store = get_session_store(db)
     if store.is_revoked(claims["jti"]):
         raise AuthError("Session has ended; please log in again")
+    if not is_account_active(db, claims["sub"]):
+        raise AccountSuspendedError()
+    record_last_active(db, claims["sub"])
 
     store.revoke(claims["jti"], expires_at=_claim_expiry(claims))
     identity = identity_from_claims(claims)

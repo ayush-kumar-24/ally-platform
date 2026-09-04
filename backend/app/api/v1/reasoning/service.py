@@ -34,6 +34,7 @@ from sqlalchemy.orm import Session
 from app.api.v1.ally.memory.schemas import MemoryType
 from app.api.v1.reasoning.config import ReasoningConfig
 from app.api.v1.reasoning.engines.archetype import ArchetypeEngine
+from app.api.v1.diagnosis.stage_scope import resolve_scope
 from app.api.v1.reasoning.engines.business_health import BusinessHealthScorer
 from app.api.v1.reasoning.engines.founder_dna_extras import (
     origin_and_vision,
@@ -72,6 +73,7 @@ from app.api.v1.reasoning.schemas import (
     ReasoningResult,
     RecommendationType,
     ScoredRootCause,
+    SessionAssessment,
 )
 from app.core.config import settings
 from app.core.logger import logger
@@ -80,6 +82,7 @@ from app.models import (
     FounderReport,
     InternalIntelligenceReport,
     ReportType,
+    RoutingState,
     SessionStatus,
 )
 from app.models.diagnosis import Founder
@@ -88,7 +91,11 @@ from app.models.diagnosis import Founder
 # Routing state for a session that leaves the diagnostic loop for wellbeing
 # support (CONFIDENCE_HARD_RULES rule 1). Distinct from the confidence-driven
 # states so the app can divert to a support flow instead of asking more questions.
-DISTRESS_SUPPORT_ROUTE = "distress_support"
+#
+# Now an alias for the enum member rather than a second definition of the string.
+# It predates RoutingState carrying this value, and two spellings of one state is
+# how the DB CHECK and the enum drifted apart in the first place.
+DISTRESS_SUPPORT_ROUTE = RoutingState.DISTRESS_SUPPORT.value
 
 
 def _utcnow() -> datetime:
@@ -97,6 +104,19 @@ def _utcnow() -> datetime:
 
 def _elapsed_ms(start: float) -> float:
     return round((time.perf_counter() - start) * 1000, 2)
+
+
+def category_risk_map(category_risks: Sequence) -> dict[str, str]:
+    """`sessions.category_risk_scores` -- {category: normalised_risk}, 0..1.
+
+    The shape `ReportPayload` reads: `any_category_flagged` compares each value
+    against CAT_RISK_THRESHOLD and `top_sub_threshold_categories` ranks them.
+
+    str(), not float(). These are Decimals, the payload's `_to_float` parses
+    either, and a threshold comparison is exactly where binary-float drift on a
+    boundary value would silently flip which report variant a founder gets.
+    """
+    return {c.category: str(c.normalised_risk) for c in category_risks}
 
 
 class ReasoningService:
@@ -195,8 +215,47 @@ class ReasoningService:
 
     # --- Pipeline ---------------------------------------------------------
 
-    async def score_only(self, session, founder: Founder) -> Decimal | None:
-        """Confidence for a session AS IT STANDS, without producing a report.
+    def _monitor_eligible(self, confidence_inputs, context, answered: int) -> bool:
+        """Whether this finished session is an all-clear rather than an unfinished one.
+
+        Delegates the condition to `config.monitor_eligible`, the same function
+        the in-loop scorer uses, so the decision that ended the session and the
+        decision recorded on the report cannot disagree.
+
+        Never raises: a report is worth far more than a perfectly labelled
+        routing state, and the fallback is the pre-existing behaviour.
+        """
+        from app.api.v1.reasoning.config import (
+            DEFAULT_MONITOR_MIN_COVERAGE,
+            RuleCode,
+            monitor_eligible,
+        )
+
+        try:
+            budget = settings.question_budget(
+                self.repository.get_question_budget(context.stage_id)
+            )
+            values = self.repository.get_active_rule_values()
+            return monitor_eligible(
+                any_category_flagged=confidence_inputs.any_category_flagged,
+                answered=answered,
+                budget=budget,
+                min_coverage=values.get(
+                    RuleCode.MONITOR_MIN_COVERAGE.value, DEFAULT_MONITOR_MIN_COVERAGE
+                ),
+                min_answers=int(
+                    values.get(RuleCode.CONFIDENCE_MIN_QUESTIONS_FLOOR.value, 0)
+                ),
+            )
+        except Exception as exc:                              # noqa: BLE001
+            logger.warning(
+                "Monitor eligibility could not be resolved; leaving routing as scored",
+                extra={"session_id": context.session.session_id, "error": str(exc)},
+            )
+            return False
+
+    async def assess_only(self, session, founder: Founder) -> SessionAssessment | None:
+        """Confidence for a session AS IT STANDS, plus whether anything is wrong.
 
         The minimum needed to answer "how sure are we now": diagnosis (category /
         stage / symptom) -> root-cause detection and ranking -> confidence. It
@@ -209,6 +268,12 @@ class ReasoningService:
         this read-only means it cannot half-update a session if it throws.
 
         Returns None when the session has no answers yet.
+
+        The score alone cannot drive routing. Three of its five signals measure
+        pathology, so "we found nothing" and "we have not looked hard enough"
+        both come back as a low number, and rule 4 caps an unflagged session at
+        59 on top of that. `any_category_flagged` is what separates them, so it
+        travels with the score rather than being re-derived by the caller.
         """
         context = self._build_context(session, founder)
         answers = self.repository.get_answers_for_session(session.session_id)
@@ -235,7 +300,19 @@ class ReasoningService:
             context=context,
             consistency=None,
         )
-        return self.confidence_model.overall_confidence(inputs, context)
+        score = self.confidence_model.overall_confidence(inputs, context)
+        if score is None:
+            return None
+        return SessionAssessment(
+            score=score,
+            any_category_flagged=inputs.any_category_flagged,
+            questions_answered=len(answers),
+        )
+
+    async def score_only(self, session, founder: Founder) -> Decimal | None:
+        """Just the confidence number, for callers that do not route on it."""
+        assessment = await self.assess_only(session, founder)
+        return assessment.score if assessment is not None else None
 
     async def _run_pipeline(
         self, session, founder: Founder, *, force: bool = False
@@ -372,9 +449,19 @@ class ReasoningService:
             confidence_inputs, context
         )
         routing_state = self.config.confidence.routing_state_for(overall_confidence)
+        # A clean session that was asked enough ends on `monitor`, not `continue`.
+        # routing_state_for reads the score alone, and a healthy founder's score
+        # is low for the opposite of the usual reason -- nothing was found, rather
+        # than nothing has been found YET. Without this the in-loop decision that
+        # completed the session is silently relabelled here, moments later, by
+        # this pipeline recomputing from the same low number.
+        if self._monitor_eligible(confidence_inputs, context, len(answers)):
+            routing_state = RoutingState.MONITOR.value
         # Distress overrides routing entirely: wellbeing before diagnostic
         # completeness. The session leaves the confidence loop for a support path
-        # rather than being told to keep answering questions.
+        # rather than being told to keep answering questions. Last because it
+        # outranks every other outcome, monitor included -- a founder in distress
+        # is not "all clear" however clean their business answers were.
         if confidence_inputs.distress_override or distress.distress_override:
             routing_state = DISTRESS_SUPPORT_ROUTE
         self._log_stage(
@@ -399,22 +486,37 @@ class ReasoningService:
         # Fail-closed: if the pillar scoring formula is not configured, omit the
         # score from the report rather than failing the whole pipeline.
         start = time.perf_counter()
-        try:
-            business_health = self.business_health_scorer.compute(
-                list(diagnosis.classifications), questions, context
-            )
-            self._log_stage(
-                "business_health", session_id, start,
-                overall=str(business_health.overall_score),
-                red_flags=len(business_health.red_flags),
-            )
-        except FeatureDisabledError as exc:
+        scope = resolve_scope(context.founder)
+        if scope is not None and not scope.emits_business_health:
+            # An ideation founder is diagnosed on two pillars. Scoring them would
+            # renormalise 45% of the model up to 100 and present it as a verdict
+            # on a business that does not exist yet -- see StageScope.
+            # emits_business_health. Their report is the Founder DNA Snapshot and
+            # the Idea Validation read; `business_dna` stays null, which the
+            # report and dashboard already handle.
             business_health = None
             logger.info(
-                "business health score disabled; omitting from report",
+                "business health omitted for this stage",
                 extra={"session_id": session_id, "stage": "business_health",
-                       "reason": str(exc)},
+                       "stage_scope": scope.label},
             )
+        else:
+            try:
+                business_health = self.business_health_scorer.compute(
+                    list(diagnosis.classifications), questions, context
+                )
+                self._log_stage(
+                    "business_health", session_id, start,
+                    overall=str(business_health.overall_score),
+                    red_flags=len(business_health.red_flags),
+                )
+            except FeatureDisabledError as exc:
+                business_health = None
+                logger.info(
+                    "business health score disabled; omitting from report",
+                    extra={"session_id": session_id, "stage": "business_health",
+                           "reason": str(exc)},
+                )
 
         # --- Founder archetype / pattern (deterministic lexical match; LLM seam) ---
         start = time.perf_counter()
@@ -491,6 +593,7 @@ class ReasoningService:
             session=session,
             founder=founder,
             scored=scored,
+            category_risks=diagnosis.category_risks,
             overall_confidence=overall_confidence,
             routing_state=routing_state,
             distress_mode=distress_mode,
@@ -641,6 +744,7 @@ class ReasoningService:
         session,
         founder: Founder,
         scored: list[ScoredRootCause],
+        category_risks: Sequence = (),
         overall_confidence: Decimal,
         routing_state: str,
         distress_mode: bool,
@@ -673,6 +777,17 @@ class ReasoningService:
             session.routing_state = routing_state
             session.distress_mode_triggered = distress_mode
             session.session_state = self._session_state(session, distress_mode)
+            # Category risk, persisted for the report layer. This column had
+            # readers and no writer: `ReportPayload.any_category_flagged` and
+            # `top_sub_threshold_categories` both read it, and `select_variant`
+            # gates NO_CLEAR_DIAGNOSIS on `payload.category_risk_scores and not
+            # payload.any_category_flagged`. An empty dict is falsy, so with
+            # nothing ever written the variant was unreachable and every clean
+            # session fell through to LOW_CONFIDENCE -- the "areas to monitor"
+            # section, its copy and its template all existed and could never be
+            # selected.
+            #
+            session.category_risk_scores = category_risk_map(category_risks)
             session.last_activity_at = _utcnow()
 
             superseded = self.repository.deactivate_existing_reports(session.session_id)
@@ -932,10 +1047,26 @@ class ReasoningService:
         report aggregation and the dashboard display layer read."""
         if business_health is None:
             return None
+        # How much of the model this score was actually built on.
+        #
+        # PILLAR_SCORE_FROM_ANSWERS excludes an unanswered pillar and renormalises
+        # the rest to 100, so a partial assessment produces a number that LOOKS
+        # like a whole-business score. Stage scoping makes that routine rather than
+        # rare: a Validation founder is diagnosed on 3 of 6 pillars (60% of the
+        # weight) and a Prototype founder on 4 (80%). Ideation emits nothing at all.
+        #
+        # The renormalisation itself is right -- scoring an unasked pillar 0 would
+        # be worse. What was missing is any way for the reader to know. These three
+        # numbers travel with the score so the report can say what it is based on
+        # instead of implying all six were looked at.
+        assessed = [p for p in business_health.pillars if p.score is not None]
         return {
             "overall_score": int(business_health.overall_score),
             "band": business_health.band,
             "red_flags": list(business_health.red_flags),
+            "pillars_assessed": len(assessed),
+            "pillars_total": len(business_health.pillars),
+            "assessed_weight_pct": float(sum(p.weight for p in assessed)),
             "pillars": [
                 {
                     "pillar_id": p.pillar_id,

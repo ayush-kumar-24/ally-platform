@@ -321,12 +321,22 @@ class WeightedConfidenceModel(ConfidenceModel):
             consistency_score = None
 
         # (d) CONFIRMATION RATIO -- top causes' confirmation status rescaled to 0..1.
-        confirmation_ratio = self._confirmation_ratio(
+        #     None from the helper means the signal could not be measured at all.
+        measured_confirmation = self._confirmation_ratio(
             [s for s in scored if s.is_top_finding], cfg.confirmation_multipliers
         )
+        confirmation_available = measured_confirmation is not None
+        confirmation_ratio = measured_confirmation or _ZERO
 
         # (e) SEPARATION -- gap between the top two ranked scores.
-        separation = self._separation(scored)
+        measured_separation = self._separation(scored)
+        separation_available = measured_separation is not None
+        separation = measured_separation or _ZERO
+
+        # (a2) CATEGORY SIGNAL availability. No category risks means no answer was
+        #      classified into a category, so the strongest-risk figure above is a
+        #      max() over nothing rather than a reading of zero risk.
+        category_signal_available = bool(diagnosis.category_risks)
 
         # Reliability modifier: band for the session's distress score. None (High
         # Distress) or a distress trigger routes through the distress hard rule.
@@ -373,6 +383,9 @@ class WeightedConfidenceModel(ConfidenceModel):
             consistency_score=consistency_score,
             confirmation_ratio=confirmation_ratio,
             separation=separation,
+            category_signal_available=category_signal_available,
+            confirmation_available=confirmation_available,
+            separation_available=separation_available,
             reliability_factor=reliability_factor,
             questions_answered=questions_answered,
             flagged_category_count=len(flagged),
@@ -383,16 +396,26 @@ class WeightedConfidenceModel(ConfidenceModel):
 
     def _confirmation_ratio(
         self, top_findings, multipliers: ConfirmationMultipliers
-    ) -> Decimal:
+    ) -> Decimal | None:
         """Mean confirmation of the top-ranked causes, each mapped via the
         confirmation multipliers and rescaled (value - not_tested) / range to 0..1
-        (Confirmed 1.5 -> 1.0, Unconfirmed 1.0 -> 0.5, Not Tested 0.5 -> 0.0)."""
+        (Confirmed 1.5 -> 1.0, Unconfirmed 1.0 -> 0.5, Not Tested 0.5 -> 0.0).
+
+        None means NOT MEASURABLE, and is different from 0.0. With no top finding
+        there is no cause whose confirmation could be assessed -- the question was
+        never asked, so the strategy excludes the signal and renormalises. Zero
+        would claim we looked for confirmation and found none, which for a founder
+        with no detected problem is simply false, and cost them 15% of their score.
+        """
         if not top_findings:
-            return _ZERO
+            return None
         low = multipliers.not_tested
         span = multipliers.confirmed - low
         if span <= 0:
-            return _ZERO
+            # Misconfigured multipliers: the calculation could not run. That is
+            # "attempted and failed", which the rule treats exactly like "not
+            # measured" -- never as a clean zero.
+            return None
         by_status = {
             ConfirmationStatus.CONFIRMED: multipliers.confirmed,
             ConfirmationStatus.UNCONFIRMED: multipliers.unconfirmed,
@@ -404,13 +427,20 @@ class WeightedConfidenceModel(ConfidenceModel):
         ]
         return _q(sum(values, _ZERO) / Decimal(len(values)))
 
-    def _separation(self, scored: list[ScoredRootCause]) -> Decimal:
+    def _separation(self, scored: list[ScoredRootCause]) -> Decimal | None:
         """(top - second) / top over the ranked scores, capped at 1.0; 0 when the
         top score is 0 or the top two are tied. Guards against a decisive-sounding
-        report built on a near-tie."""
+        report built on a near-tie.
+
+        None means NOT MEASURABLE. With nothing ranked there are no causes to
+        separate, so the signal is excluded rather than scored 0 -- see
+        `_confirmation_ratio`. A tie or a zero top score DO stay 0: those are real
+        measurements of "these causes are not separated", which is exactly the
+        near-tie this signal exists to catch.
+        """
         ranked = sorted(scored, key=lambda s: s.rank)
         if not ranked:
-            return _ZERO
+            return None
         top = ranked[0].final_weighted_score
         if top <= _ZERO:
             return _ZERO

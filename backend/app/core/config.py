@@ -226,11 +226,30 @@ class Settings(BaseSettings):
     # Still inside the ceiling: 17 x ~75s is ~21 min, leaving ~19 min for the
     # 30-question business diagnosis inside the ~40-minute whole-journey budget.
     #
-    # Note this cannot reach 14/14 on its own: 10 of the 14 dimensions have no
+    # Note this cannot reach 15/15 on its own: 10 of the dimensions have no
     # follow-up question authored at all (core_values among them), so they are
     # one-shot regardless of budget. If the advisor cannot resolve one of those
     # from a single answer, no ceiling helps -- that needs content, not config.
-    MAX_FOUNDER_DNA_QUESTIONS: int = 17
+    #
+    # 2026-09-02: 17 -> 18, for RISK_APPETITE as the fifteenth dimension. The
+    # formula is unchanged and is the whole reason this moved: 15 base + 2
+    # follow-ups + 1 close = 18. Leaving it at 17 would not have dropped the
+    # new dimension -- base questions are asked before follow-ups -- it would
+    # have eaten a follow-up slot instead, reintroducing at 15 dimensions the
+    # exact "only one follow-up can ever fire" bug the 16 -> 17 change fixed at
+    # 14, and just as invisibly.
+    #
+    # Still safe on ordering: the close is TERMINAL by construction, not by
+    # budget exhaustion -- FounderDnaEngine.select_next_question pulls
+    # `is_closing` out of the candidate list and holds it back until the base
+    # journey is done (engine.py, `closing = next(... if q.is_closing)`). That
+    # is what the warning above asks to re-check, and it still holds.
+    #
+    # Timing: 18 x ~75s is ~22 min. The whole-journey budget is unchanged, but
+    # the diagnosis half is no longer a flat 30 -- per-stage budgets (8f3a1c92d7b4)
+    # put Ideation at 14 and Validation at 20, so the combined journey is
+    # shorter than it was at 17 + 30 for most founders, not longer.
+    MAX_FOUNDER_DNA_QUESTIONS: int = 18
     # Minimum answers a dimension needs before the resolution advisor is
     # asked to judge it. 1, not 2: a single specific, story-based answer CAN
     # fully resolve a dimension (verified live -- the advisor correctly held
@@ -310,6 +329,16 @@ class Settings(BaseSettings):
     def email_enabled(self) -> bool:
         return bool(self.EMAIL_HOST)
 
+    # Admin Panel Phase 3: who gets paged when the health check turns red.
+    # Comma-separated, same shape as CORS_ORIGINS below -- deliberately not
+    # GOXL_ADMIN_PANEL_USERS (panel *access* and *who gets alerted* are
+    # different questions; an on-call inbox may not be a panel login at all).
+    HEALTH_ALERT_EMAILS: str = ""
+
+    @property
+    def health_alert_emails(self) -> list[str]:
+        return [e.strip() for e in self.HEALTH_ALERT_EMAILS.split(",") if e.strip()]
+
     # --- CORS ---
     CORS_ORIGINS: str = "http://localhost:3000"
 
@@ -329,6 +358,22 @@ class Settings(BaseSettings):
     # correct but wrong-looking in a link a founder sends to an investor. Set
     # this to the site people actually visit (e.g. https://goxlally.ai).
     PUBLIC_APP_URL: str = ""
+
+    # --- Payments (Razorpay) ---
+    # Until both key settings are set, app.payments refuses to create a real
+    # order rather than simulating one -- unlike email/PDF rendering, a stub
+    # "success" here would hand out a paid plan for nothing. See
+    # app/payments/gateway.py.
+    RAZORPAY_KEY_ID: str = ""
+    RAZORPAY_KEY_SECRET: str = ""
+    # Separate from the key secret: this signs webhook deliveries specifically
+    # (set on the Razorpay dashboard's own webhook config), not the same value
+    # used to sign the checkout-callback or to authenticate API calls.
+    RAZORPAY_WEBHOOK_SECRET: str = ""
+
+    @property
+    def payments_enabled(self) -> bool:
+        return bool(self.RAZORPAY_KEY_ID and self.RAZORPAY_KEY_SECRET)
 
     # --- Google Calendar sync (per-founder, Plan Your Day) ---
     # Separate from GOOGLE_CALENDAR_* above: those are a SERVICE ACCOUNT on
