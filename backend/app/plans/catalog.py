@@ -1,6 +1,6 @@
 """The plan catalog -- one source of truth for what each tier includes.
 
-Everything that differs between Free / Starter / Pro is declared here: price,
+Everything that differs between the tiers is declared here: price,
 credits, the daily token ceiling, the feature set and the free-call allowance.
 Nothing else in the codebase should hard-code a tier's limits; it should ask this
 module. That is what stops the pricing page, the backend gate and the admin panel
@@ -14,7 +14,7 @@ more credits than its daily limit allows anyone to spend would strand the remain
 every month, which is a refund request waiting to happen.
 
     Free     1,431 credits (once)   8,000 chat + 7,700 planning tokens/day
-    Starter    180 credits/month    6,000 tokens/day -> 180,000, all reachable
+    Plus       105 credits/month    3,500 tokens/day -> 105,000, all reachable
     Pro        240 credits/month    8,000 tokens/day -> 240,000, all reachable
 
 Free grants credits **once**, not monthly: a renewing free tier is an unbounded
@@ -26,7 +26,7 @@ were exhausting inside a single sitting and reading as "Ally stopped
 responding" -- a 429 mid-flow is indistinguishable from a fault when you are
 trying to evaluate the product.
 
-Note this deliberately puts Free ABOVE Starter (6,000) and level with Pro
+Note this deliberately puts Free ABOVE Plus (3,500) and level with Pro
 (8,000), which is not a shippable ladder. It is a testing-phase value and has
 to come back down when Free is resized for a public launch -- the same moment
 the credit grant below is restored (see the PLANS.FREE comment on
@@ -103,8 +103,8 @@ class PlanTier(str, Enum):
     no founder-visible benefit."""
 
     FREE = "free"
-    BASIC = "basic"          # Rs 199 / month
-    STARTER = "starter"      # Rs 450 / month
+    BASIC = "basic"          # Rs 199 / month -- shown as "Starter"
+    STARTER = "starter"      # Rs 450 / month -- shown as "Plus"
     PRO = "pro"              # Rs 999 / month
 
 
@@ -117,8 +117,6 @@ class Feature(str, Enum):
     VOICE_CHAT = "voice_chat"
     PLAN_YOUR_DAY = "plan_your_day"
     KNOW_MY_ENERGY = "know_my_energy"
-    FOUNDER_DNA = "founder_dna"
-    BUSINESS_DNA = "business_dna"
     REPORTS = "reports"
     NEXT_STEPS = "next_steps"
     CALL_BOOKING = "call_booking"
@@ -130,31 +128,37 @@ class Feature(str, Enum):
     PRIORITY_CALL = "priority_call"
 
 
-#: What every tier gets, paid or not. This is the Rs 199 plan's whole surface:
-#: run the assessment, read the report, work the next three steps, and keep
-#: daily goals against them. Ally does not talk back and does not suggest --
-#: that starts at Rs 450 (chat) and Rs 999 (recommendations).
+#: What every tier gets. This is the Rs 199 plan's ENTIRE surface: run the
+#: adaptive diagnosis and read the Clarity Report it produces. Nothing else.
+#:
+#: Founder DNA and Business DNA are deliberately absent. They are not features a
+#: plan can include or withhold -- they are sections of the report the diagnosis
+#: writes (see reports/generator.py), so gating them separately would describe a
+#: product we do not have.
+#:
+#: Call booking is here because booking is open to everyone and every call is
+#: paid at CALL_PRICE_INR. It is sold beside the plans, not inside one.
 _BASE = frozenset({
     Feature.DIAGNOSIS,
-    Feature.VOICE_DIAGNOSIS,     # voice works in diagnosis for everyone
-    Feature.FOUNDER_DNA,
-    Feature.BUSINESS_DNA,
+    Feature.VOICE_DIAGNOSIS,     # voice within the diagnosis itself
     Feature.REPORTS,
-    Feature.NEXT_STEPS,
-    Feature.CALL_BOOKING,        # everyone may book; only the free allowance differs
-    Feature.GOALS,
-    Feature.PLAN_YOUR_DAY,       # daily plans against those goals
+    Feature.CALL_BOOKING,
 })
 
-#: Added at Rs 450: Ally starts answering.
-_CHAT = frozenset({
+#: Added at Rs 450: the founder gets somewhere to work, and Ally answers.
+#: Rs 199 buys an answer; this buys the place you act on it.
+_WORKSPACE = frozenset({
     Feature.ALLY_CHAT,
     Feature.VOICE_CHAT,          # voice inside Ally Chat
+    Feature.NEXT_STEPS,
+    Feature.GOALS,
+    Feature.PLAN_YOUR_DAY,
 })
 
 #: Added at Rs 999: Ally starts initiating. Everything here is Ally acting on
-#: its own -- proposing next moves, reasoning over the knowledge base, reaching
-#: into the founder's inbox, and jumping the call queue.
+#: its own -- proposing the next moves rather than only showing them, reasoning
+#: over the knowledge base, reaching into the founder's inbox, and jumping the
+#: call queue.
 _ADVISOR = frozenset({
     Feature.VISION,
     Feature.RECOMMENDATIONS,
@@ -244,17 +248,20 @@ PLANS: dict[PlanTier, Plan] = {
         # we send to, and a place ahead of paying founders in the call queue.
         # Resize this to `_BASE` at public launch, the same moment the credit
         # ladder in the module docstring has to be restored.
-        features=_BASE | frozenset({
-            Feature.ALLY_CHAT,
+        # Parenthesised deliberately: set `-` binds tighter than `|`, so without
+        # these brackets the subtraction applies only to the frozenset beside it
+        # and VOICE_CHAT survives from _WORKSPACE -- silently handing Free a paid
+        # feature.
+        features=(_BASE | _WORKSPACE | frozenset({
             Feature.VISION,
             Feature.RECOMMENDATIONS,
             Feature.KNOWLEDGE_CHAT,
-        }),
+        })) - frozenset({Feature.VOICE_CHAT}),
         tagline="One month free. See what Ally finds.",
     ),
     PlanTier.BASIC: Plan(
         tier=PlanTier.BASIC,
-        name="Basic",
+        name="Starter",
         price_inr=199,
         mrp_inr=300,
         # No chat, so no chat credits and no chat ceiling. The daily limits are
@@ -267,18 +274,22 @@ PLANS: dict[PlanTier, Plan] = {
         planning_daily_token_limit=0,
         free_calls_per_month=0,
         features=_BASE,
-        tagline="One diagnosis, one report, three clear next steps.",
+        tagline="One adaptive diagnosis, and the Clarity Report it writes.",
     ),
     PlanTier.STARTER: Plan(
         tier=PlanTier.STARTER,
-        name="Starter",
+        name="Plus",
         price_inr=450,
         mrp_inr=600,
-        monthly_credits=180,
+        # 105, not 180: at 3,500 tokens/day the most anyone can spend in a
+        # 30-day month is 105,000 tokens = 105 credits. Granting 180 would
+        # strand 75 credits every month, which is a refund request waiting to
+        # happen -- the reachability invariant this module documents.
+        monthly_credits=105,
         signup_credits=0,
-        daily_token_limit=6_000,
-        free_calls_per_month=1,
-        features=_BASE | _CHAT,
+        daily_token_limit=3_500,
+        free_calls_per_month=0,
+        features=_BASE | _WORKSPACE,
         tagline="For founders working on the business weekly.",
     ),
     PlanTier.PRO: Plan(
@@ -289,10 +300,10 @@ PLANS: dict[PlanTier, Plan] = {
         monthly_credits=240,
         signup_credits=0,
         daily_token_limit=8_000,
-        free_calls_per_month=2,
+        free_calls_per_month=0,
         # Know My Energy is declared here so the gate and the pricing page are
         # already correct; its founder-facing implementation is still to be built.
-        features=_BASE | _CHAT | _ADVISOR,
+        features=_BASE | _WORKSPACE | _ADVISOR,
         tagline="Ally as your standing advisor.",
     ),
 }
@@ -315,9 +326,25 @@ def get_plan(tier: PlanTier | str | None) -> Plan:
 
 
 def all_plans() -> list[Plan]:
-    """Catalog order: cheapest first, which is also the pricing-page order."""
+    """Every tier the system knows about, cheapest first.
+
+    Includes Free, which is NOT sold -- use `sold_plans()` for anything a
+    founder reads. Free still has to exist here: founders carry
+    plan_type='free' today and `get_plan()` resolves unknown values to it, so
+    removing the tier would strand them rather than stop offering it.
+    """
     return [PLANS[t] for t in (PlanTier.FREE, PlanTier.BASIC,
                                PlanTier.STARTER, PlanTier.PRO)]
+
+
+def sold_plans() -> list[Plan]:
+    """The tiers actually on sale, in pricing-page order.
+
+    Derived from `is_paid` rather than a second hand-maintained list: a tier
+    that costs nothing cannot be sold, and a list would eventually disagree
+    with the prices beside it.
+    """
+    return [p for p in all_plans() if p.is_paid]
 
 
 def credits_for_tokens(tokens: int) -> int:

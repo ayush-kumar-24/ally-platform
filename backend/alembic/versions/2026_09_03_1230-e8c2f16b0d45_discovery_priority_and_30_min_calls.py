@@ -1,8 +1,8 @@
-"""Discovery calls: 15-minute default and a priority stamp.
+"""Discovery calls: 30-minute default and a priority stamp.
 
 Two changes to `discovery_calls`:
 
-- `duration_minutes` default 45 -> 15. Existing rows are left alone on purpose:
+- `duration_minutes` default 45 -> 30. Existing rows are left alone on purpose:
   they record calls that were booked as 45-minute slots, and rewriting them
   would make the history disagree with what actually happened.
 - `is_priority`, stamped at booking time when the founder's plan carries
@@ -26,7 +26,7 @@ def upgrade() -> None:
                   server_default=sa.text("false")),
     )
     op.alter_column("discovery_calls", "duration_minutes",
-                    server_default=sa.text("15"))
+                    server_default=sa.text("30"))
 
 
 def downgrade() -> None:

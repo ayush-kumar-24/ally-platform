@@ -850,7 +850,7 @@ class DiscoveryCalls(Base):
     founder_id: Mapped[int] = mapped_column(Integer, nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, server_default=text("'pending'::character varying"))
     scheduled_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False)
-    duration_minutes: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text('15'))
+    duration_minutes: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text('30'))
     timezone: Mapped[str] = mapped_column(String(100), nullable=False, server_default=text("'Asia/Kolkata'::character varying"))
     reminder_sent_24h: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text('false'))
     reminder_sent_1h: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text('false'))

@@ -31,6 +31,7 @@ from app.plans.catalog import (
     TOPUP_PRICE_INR,
     Feature,
     all_plans,
+    sold_plans,
     get_plan,
 )
 
@@ -63,7 +64,7 @@ def catalog() -> dict:
                 "features": sorted(f.value for f in p.features),
                 "is_paid": p.is_paid,
             }
-            for p in all_plans()
+            for p in sold_plans()
         ],
     }
 
