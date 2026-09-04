@@ -11,6 +11,16 @@ from app.db.session import Base
 # table in the database has been deleted.
 import app.models  # noqa: F401
 
+# The admin-owned tables (audit log, feature flags, broadcasts, coupons, the beta
+# waitlist) declare their models next to the services that use them rather than in
+# app.models, so they need importing here too. Without this Alembic sees them in
+# the database but not in the metadata and autogenerates a DROP for each one.
+import app.admin.beta  # noqa: F401
+import app.admin.broadcasts  # noqa: F401
+import app.admin.coupons  # noqa: F401
+import app.admin.feature_flags  # noqa: F401
+import app.admin.panel_audit  # noqa: F401
+
 config = context.config
 
 # The URL comes from .env, never from alembic.ini -- alembic.ini gets committed,

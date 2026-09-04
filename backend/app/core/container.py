@@ -497,6 +497,24 @@ class Container:
         from app.admin.broadcasts import BroadcastService, SqlAlchemyBroadcastRepository
         return BroadcastService(SqlAlchemyBroadcastRepository(db))
 
+    def coupon_service(self, db: Session):
+        from app.admin.coupons import CouponService, SqlAlchemyCouponRepository
+        return CouponService(SqlAlchemyCouponRepository(db))
+
+    def beta_service(self, db: Session):
+        """Beta waitlist + cohorts, with the mail sender already wired in.
+
+        The coupon service is passed twice on purpose and for two different jobs:
+        the cohort validates its coupon code at creation time (so an invite can
+        never quote a code checkout would refuse), and the sender reads it again
+        to put "20% off" next to the code in the email.
+        """
+        from app.admin.beta import BetaAccessService, SqlAlchemyBetaRepository
+        from app.services.beta_notifications import build_sender
+        coupons = self.coupon_service(db)
+        return BetaAccessService(SqlAlchemyBetaRepository(db),
+                                 sender=build_sender(coupons), coupons=coupons)
+
 
 # Application-wide container instance. Import and use `container.chat_execution(db)`.
 container = Container()

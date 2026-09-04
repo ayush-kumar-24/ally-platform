@@ -15,6 +15,8 @@ from app.api.v1.privacy.router import router as privacy_router
 from app.api.v1.plans.router import router as plans_router
 from app.api.v1.admin.panel_router import router as admin_panel_router
 from app.api.v1.admin.panel_router_v2 import router as admin_panel_router_v2
+from app.api.v1.admin.growth_router import router as admin_growth_router
+from app.api.v1.beta.router import router as beta_router
 from app.api.v1.dashboard.routes import router as dashboard_router
 from app.api.v1.diagnosis.router import router as diagnosis_router
 from app.api.v1.current_problem.router import router as current_problem_router
@@ -73,6 +75,10 @@ api_router.include_router(plans_router)
 # /admin/credits, /admin/audit vs /admin/founders, /admin/announcements).
 api_router.include_router(admin_panel_router)
 api_router.include_router(admin_panel_router_v2)
+# Coupons + beta access. Paths (/admin/coupons, /admin/beta/*) do not collide
+# with either router above, so registration order is not load-bearing here.
+api_router.include_router(admin_growth_router)
+api_router.include_router(beta_router)
 api_router.include_router(webhooks_supabase_router)
 api_router.include_router(internal_jobs_router)
 

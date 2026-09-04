@@ -35,6 +35,11 @@ class Capability(str, Enum):
     VIEW_CHATS = "view_chats"
     VIEW_AUDIT = "view_audit"
     VIEW_FEEDBACK = "view_feedback"
+    # Read-only view of the growth layer: who is on the beta waitlist, which
+    # cohorts have gone out, what coupons exist and how often they have been
+    # claimed. Reading it tells you nothing a founder could be harmed by, so it
+    # sits at the same tier as the other read capabilities.
+    VIEW_GROWTH = "view_growth"
     # --- admin-level mutations ------------------------------------------
     EDIT_USER_PROFILE = "edit_user_profile"
     RESET_DIAGNOSIS = "reset_diagnosis"
@@ -57,6 +62,14 @@ class Capability(str, Enum):
     DELETE_USER = "delete_user"
     CHANGE_USER_ROLE = "change_user_role"
     SYSTEM_SETTINGS = "system_settings"
+    # Creating and retiring coupons is changing what people are charged, which is
+    # the same class of decision as MODIFY_SUBSCRIPTION -- Super Admin only.
+    MANAGE_COUPONS = "manage_coupons"
+    # Releasing a beta cohort mails every founder on the waitlist at once and is
+    # not undoable once the mail is out. Blast radius, not seniority, is what puts
+    # it here: an Admin who can reset one founder's diagnosis still should not be
+    # one mis-click from 200 emails.
+    MANAGE_BETA_ACCESS = "manage_beta_access"
 
 
 _SUPPORT: frozenset[Capability] = frozenset({
@@ -71,6 +84,7 @@ _ADMIN: frozenset[Capability] = frozenset({
     Capability.VIEW_REPORTS,
     Capability.VIEW_AUDIT,
     Capability.VIEW_FEEDBACK,
+    Capability.VIEW_GROWTH,
     Capability.EDIT_USER_PROFILE,
     Capability.RESET_DIAGNOSIS,
     Capability.RESET_CONVERSATIONS,
