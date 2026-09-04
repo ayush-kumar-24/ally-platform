@@ -359,6 +359,22 @@ class Settings(BaseSettings):
     # this to the site people actually visit (e.g. https://goxlally.ai).
     PUBLIC_APP_URL: str = ""
 
+    # --- Payments (Razorpay) ---
+    # Until both key settings are set, app.payments refuses to create a real
+    # order rather than simulating one -- unlike email/PDF rendering, a stub
+    # "success" here would hand out a paid plan for nothing. See
+    # app/payments/gateway.py.
+    RAZORPAY_KEY_ID: str = ""
+    RAZORPAY_KEY_SECRET: str = ""
+    # Separate from the key secret: this signs webhook deliveries specifically
+    # (set on the Razorpay dashboard's own webhook config), not the same value
+    # used to sign the checkout-callback or to authenticate API calls.
+    RAZORPAY_WEBHOOK_SECRET: str = ""
+
+    @property
+    def payments_enabled(self) -> bool:
+        return bool(self.RAZORPAY_KEY_ID and self.RAZORPAY_KEY_SECRET)
+
     # --- Google Calendar sync (per-founder, Plan Your Day) ---
     # Separate from GOOGLE_CALENDAR_* above: those are a SERVICE ACCOUNT on
     # GoXL's own calendar for discovery-call booking. These are a normal OAuth

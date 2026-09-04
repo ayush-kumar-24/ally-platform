@@ -12,6 +12,7 @@ from app.api.v1.auth.routes import router as auth_router
 from app.api.v1.consents.router import router as consents_router
 from app.api.v1.privacy.router import router as privacy_router
 from app.api.v1.plans.router import router as plans_router
+from app.api.v1.payments.router import router as payments_router
 from app.api.v1.admin.panel_router import router as admin_panel_router
 from app.api.v1.admin.panel_router_v2 import router as admin_panel_router_v2
 from app.api.v1.dashboard.routes import router as dashboard_router
@@ -33,6 +34,7 @@ from app.api.v1.settings.router import router as settings_preferences_router
 from app.api.v1.voice.router import router as voice_router
 from app.api.v1.webhooks.supabase import router as webhooks_supabase_router
 from app.api.v1.webhooks.internal_jobs import router as internal_jobs_router
+from app.api.v1.webhooks.razorpay import router as webhooks_razorpay_router
 from app.api.v1.reports.gotenberg import is_available as gotenberg_available
 from app.core.config import settings
 from app.db.session import engine
@@ -67,6 +69,7 @@ api_router.include_router(consents_router)
 api_router.include_router(privacy_router)
 api_router.include_router(voice_router)
 api_router.include_router(plans_router)
+api_router.include_router(payments_router)
 # The Phase 12 admin router (/admin/founders, /admin/dashboard, /admin/audit,
 # /admin/announcements -- all backed by in-memory, non-persistent repositories)
 # used to register here too. Removed: the frontend never called any of its
@@ -77,6 +80,7 @@ api_router.include_router(admin_panel_router)
 api_router.include_router(admin_panel_router_v2)
 api_router.include_router(webhooks_supabase_router)
 api_router.include_router(internal_jobs_router)
+api_router.include_router(webhooks_razorpay_router)
 
 
 @api_router.get("/health")

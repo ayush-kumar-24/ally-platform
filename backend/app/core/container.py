@@ -392,6 +392,27 @@ class Container:
     def credit_service(self, db: Session) -> CreditService:
         return CreditService(SqlAlchemyCreditRepository(db))
 
+    def payment_gateway(self):
+        """None when Razorpay isn't configured in this environment --
+        PaymentService turns that into a 503 rather than faking a successful
+        checkout (see app/payments/errors.py's PaymentsNotConfiguredError).
+        Built fresh per call (cheap: one httpx.Client construction) rather
+        than held as a singleton, so a settings change (e.g. in tests) takes
+        effect without restarting the process."""
+        if not settings.payments_enabled:
+            return None
+        from app.payments.gateway import RazorpayGateway
+        return RazorpayGateway(
+            key_id=settings.RAZORPAY_KEY_ID,
+            key_secret=settings.RAZORPAY_KEY_SECRET,
+            webhook_secret=settings.RAZORPAY_WEBHOOK_SECRET,
+        )
+
+    def payment_service(self, db: Session):
+        from app.payments.repository import PaymentRepository
+        from app.payments.service import PaymentService
+        return PaymentService(self.payment_gateway(), PaymentRepository(db), self.credit_service(db))
+
     def admin_panel_service(self, db: Session) -> AdminPanelService:
         """Request-scoped panel service. The audit repository is DB-backed so the
         trail survives restarts."""
