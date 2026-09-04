@@ -1,0 +1,751 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>The Growth Layer — Proposal</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm 16mm 16mm; }
+
+  :root {
+    --ink:      #16181d;
+    --ink-soft: #4a5058;
+    --ink-mute: #7b828c;
+    --rule:     #dfe3e8;
+    --rule-lt:  #eef1f4;
+    --accent:   #1f5f4f;
+    --accent-lt:#eaf2ef;
+    --warm:     #9a5b1e;
+    --warm-lt:  #fbf2e8;
+    --paper:    #ffffff;
+    --wash:     #f7f8fa;
+  }
+
+  * { box-sizing: border-box; }
+
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    font-size: 10.2pt;
+    line-height: 1.55;
+  }
+
+  /* ── page scaffolding ───────────────────────────────────────────── */
+  .page { page-break-after: always; }
+  .page:last-child { page-break-after: auto; }
+  .keep { page-break-inside: avoid; }
+
+  /* ── type ───────────────────────────────────────────────────────── */
+  h1, h2, h3, h4, .label, .kicker, th, .num, .tag, .step-n, .cover-meta {
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  }
+
+  h1 { font-size: 27pt; line-height: 1.1; margin: 0 0 10px; letter-spacing: -0.6px; font-weight: 700; }
+  h2 {
+    font-size: 14pt; margin: 0 0 4px; letter-spacing: -0.2px; font-weight: 700;
+    page-break-after: avoid;
+  }
+  h3 { font-size: 10.5pt; margin: 18px 0 5px; font-weight: 700; page-break-after: avoid; }
+  h4 { font-size: 9pt; margin: 0 0 4px; font-weight: 700; letter-spacing: 0.2px; }
+  p  { margin: 0 0 9px; }
+  ul, ol { margin: 0 0 9px; padding-left: 17px; }
+  li { margin-bottom: 4px; }
+  strong { font-weight: 700; }
+  code, .mono {
+    font-family: "SF Mono", "DejaVu Sans Mono", Menlo, Consolas, monospace;
+    font-size: 8.4pt;
+    background: var(--wash);
+    padding: 1px 4px;
+    border-radius: 3px;
+    color: var(--ink);
+  }
+
+  .kicker {
+    font-size: 7.6pt; letter-spacing: 1.6px; text-transform: uppercase;
+    color: var(--accent); font-weight: 700; margin: 0 0 6px;
+  }
+  .lede { font-size: 11.4pt; line-height: 1.5; color: var(--ink-soft); margin: 0 0 14px; }
+  .sub  { color: var(--ink-mute); font-size: 9.3pt; margin: -2px 0 12px; }
+
+  .sec-head {
+    border-top: 2px solid var(--ink);
+    padding-top: 7px;
+    margin: 0 0 12px;
+  }
+  .sec-head .n {
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-size: 7.6pt; letter-spacing: 1.4px; color: var(--ink-mute);
+    text-transform: uppercase; display: block; margin-bottom: 5px;
+  }
+
+  /* ── cover ──────────────────────────────────────────────────────── */
+  .cover { padding-top: 24mm; }
+  .cover .rule { height: 4px; background: var(--accent); width: 62px; margin: 0 0 22px; }
+  .cover h1 { font-size: 38pt; letter-spacing: -1.4px; }
+  .cover .tagline {
+    font-size: 13pt; color: var(--ink-soft); line-height: 1.45;
+    margin: 6px 0 0; max-width: 118mm;
+  }
+  .cover-meta {
+    margin-top: 34mm; border-top: 1px solid var(--rule); padding-top: 12px;
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;
+    font-size: 8.4pt; color: var(--ink-mute);
+  }
+  .cover-meta dt { letter-spacing: 0.8px; text-transform: uppercase; font-size: 7.2pt; margin-bottom: 3px; }
+  .cover-meta dd { margin: 0; color: var(--ink); font-weight: 600; font-size: 9pt; }
+
+  .cover-summary {
+    margin-top: 16mm; background: var(--wash); border-left: 3px solid var(--accent);
+    padding: 14px 16px; border-radius: 0 4px 4px 0;
+  }
+  .cover-summary p:last-child { margin-bottom: 0; }
+
+  /* ── layout helpers ─────────────────────────────────────────────── */
+  .cols2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .cols3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .spacer { height: 14px; }
+
+  .card {
+    border: 1px solid var(--rule); border-radius: 5px; padding: 12px 14px;
+    background: var(--paper);
+  }
+  .card.tinted { background: var(--accent-lt); border-color: #cfe0da; }
+  .card.warm   { background: var(--warm-lt);  border-color: #eddcc6; }
+  .card h4 { color: var(--accent); }
+  .card.warm h4 { color: var(--warm); }
+  .card p:last-child, .card ul:last-child { margin-bottom: 0; }
+  .card .small { font-size: 9pt; color: var(--ink-soft); }
+
+  /* ── tables ─────────────────────────────────────────────────────── */
+  table { width: 100%; border-collapse: collapse; margin: 4px 0 12px; font-size: 9pt; }
+  th {
+    text-align: left; font-size: 7.4pt; letter-spacing: 0.9px; text-transform: uppercase;
+    color: var(--ink-mute); border-bottom: 1.5px solid var(--ink); padding: 0 8px 5px 0;
+    font-weight: 700;
+  }
+  td { padding: 6px 8px 6px 0; border-bottom: 1px solid var(--rule-lt); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  td.mono-cell {
+    font-family: "SF Mono", "DejaVu Sans Mono", Menlo, Consolas, monospace;
+    font-size: 8pt; white-space: nowrap;
+  }
+  .t-narrow td:first-child, .t-narrow th:first-child { width: 34%; }
+
+  /* ── steps ──────────────────────────────────────────────────────── */
+  .step { display: grid; grid-template-columns: 26px 1fr; gap: 11px; margin-bottom: 13px; }
+  .step-n {
+    width: 22px; height: 22px; border-radius: 50%; background: var(--ink); color: #fff;
+    font-size: 8.6pt; font-weight: 700; display: flex; align-items: center;
+    justify-content: center; margin-top: 1px;
+  }
+  .step h4 { margin-bottom: 2px; }
+  .step p { margin-bottom: 0; font-size: 9.4pt; color: var(--ink-soft); }
+
+  /* ── email mockups ──────────────────────────────────────────────── */
+  .mail {
+    border: 1px solid var(--rule); border-radius: 5px; overflow: hidden;
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; font-size: 8.8pt;
+  }
+  .mail-head {
+    background: var(--wash); border-bottom: 1px solid var(--rule);
+    padding: 7px 11px; font-size: 8pt; color: var(--ink-mute);
+  }
+  .mail-head .subj { color: var(--ink); font-weight: 700; font-size: 9pt; display: block; margin-top: 2px; }
+  .mail-body { padding: 11px; line-height: 1.5; color: var(--ink-soft); }
+  .mail-body p { margin: 0 0 7px; }
+  .mail-body p:last-child { margin-bottom: 0; }
+  .mail-body .code-chip {
+    display: inline-block; background: var(--accent-lt); color: var(--accent);
+    border: 1px dashed #a9c8be; border-radius: 3px; padding: 2px 7px;
+    font-family: "SF Mono", "DejaVu Sans Mono", Menlo, monospace; font-weight: 700;
+    font-size: 8.4pt;
+  }
+
+  /* ── misc ───────────────────────────────────────────────────────── */
+  .tag {
+    display: inline-block; font-size: 7.2pt; letter-spacing: 0.7px; text-transform: uppercase;
+    font-weight: 700; padding: 2px 6px; border-radius: 3px; vertical-align: 1px;
+  }
+  .tag.super { background: #f3e3e3; color: #8c3030; }
+  .tag.admin { background: var(--accent-lt); color: var(--accent); }
+  .tag.new   { background: #e8eefb; color: #2a4d94; }
+
+  .callout {
+    border-left: 3px solid var(--warm); background: var(--warm-lt);
+    padding: 10px 13px; border-radius: 0 4px 4px 0; margin: 12px 0;
+    font-size: 9.3pt;
+  }
+  .callout p:last-child { margin-bottom: 0; }
+  .callout .lbl {
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; font-size: 7.4pt;
+    letter-spacing: 1px; text-transform: uppercase; color: var(--warm);
+    font-weight: 700; display: block; margin-bottom: 3px;
+  }
+
+  .footer-note {
+    margin-top: 16px; border-top: 1px solid var(--rule); padding-top: 8px;
+    font-size: 8.2pt; color: var(--ink-mute);
+  }
+
+  figure { margin: 6px 0 14px; }
+  figcaption { font-size: 8.2pt; color: var(--ink-mute); margin-top: 6px; }
+  svg { display: block; width: 100%; height: auto; }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════ COVER ══════════════════════════ -->
+<section class="page cover">
+  <div class="rule"></div>
+  <p class="kicker">Ally Platform · Internal proposal</p>
+  <h1>The Growth Layer</h1>
+  <p class="tagline">
+    One admin-controlled layer for coupons and discounts, and a beta waitlist
+    that remembers who it passed over — so the people we skip this round go
+    first in the next one.
+  </p>
+
+  <div class="cover-summary">
+    <p><strong>In one paragraph.</strong> We have more people wanting into the beta
+    than we have places. Today there is nothing in the product that records who
+    asked, who we let in, or who we turned away — so every round we would pick from
+    scratch, and the founder who has been waiting since day one can be skipped
+    forever without anyone noticing. This proposal adds a queue with a memory, a
+    two-step selection flow that cannot email 200 people by accident, and a coupon
+    system the admin panel controls so a beta invite can carry a real offer.</p>
+  </div>
+
+  <dl class="cover-meta">
+    <div><dt>Status</dt><dd>Proposal — for review</dd></div>
+    <div><dt>Surface</dt><dd>Admin Panel + backend</dd></div>
+    <div><dt>Date</dt><dd>4 September 2026</dd></div>
+  </dl>
+</section>
+
+
+<!-- ══════════════════════ 1. THE PROBLEM ══════════════════════ -->
+<section class="page">
+  <div class="sec-head"><span class="n">Section 01</span><h2>Why we need this</h2></div>
+
+  <p class="lede">Two problems that look unrelated, solved by one layer — because
+  they meet at exactly one point: the invite email.</p>
+
+  <div class="cols2">
+    <div class="card">
+      <h4>Problem 1 — the waitlist has no memory</h4>
+      <p class="small">Say 200 founders register for the beta and we can support 100.
+      We pick 100. Next month we open another 100 places. Who goes first?</p>
+      <p class="small">Right now the honest answer is <em>whoever happens to be at the
+      top of a spreadsheet</em>. Nothing records that a founder was already passed over
+      once. A person can be skipped three rounds running while somebody who signed up
+      yesterday gets in ahead of them, and we would never find out — they just quietly
+      stop caring about us.</p>
+    </div>
+    <div class="card">
+      <h4>Problem 2 — offers live in people's heads</h4>
+      <p class="small">There is no coupon or discount concept anywhere in the codebase.
+      Any offer we make today is a promise made in an email that no part of the system
+      can check, count, or expire.</p>
+      <p class="small">That means we cannot cap how many people claim it, cannot stop
+      one person using it five times, cannot see how many were redeemed, and cannot
+      turn it off without emailing everyone again.</p>
+    </div>
+  </div>
+
+  <h3>What "solved" looks like</h3>
+  <table>
+    <thead><tr><th>Today</th><th>After this change</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>Beta signups live in a spreadsheet or an inbox.</td>
+        <td>One list in the admin panel, with a status per person.</td>
+      </tr>
+      <tr>
+        <td>Selecting 100 people means copying IDs by hand.</td>
+        <td>One button picks the correct next 100, in the correct order. You can still
+            override it person by person.</td>
+      </tr>
+      <tr>
+        <td>Nobody is told they were not selected.</td>
+        <td>Everyone hears something, and the people we skipped are told exactly where
+            they now stand.</td>
+      </tr>
+      <tr>
+        <td>Being skipped has no consequence.</td>
+        <td>Being skipped is what moves you to the front of the queue.</td>
+      </tr>
+      <tr>
+        <td>A discount is a sentence in an email.</td>
+        <td>A discount is a code with a cap, a window, and a record of every claim.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout">
+    <span class="lbl">The thing worth arguing about</span>
+    <p>The whole design turns on one decision: <strong>we email the people we did
+    <em>not</em> pick.</strong> It is more work, and it invites a reply we may not want.
+    We think it is right — a silent waitlist is indistinguishable from a rejection, and
+    a founder who is told "you are next, and here is why" stays warm. The behaviour is
+    a per-round toggle, so we can turn it off if the first round proves us wrong.</p>
+  </div>
+</section>
+
+
+<!-- ═════════════════ 2. THE QUEUE MECHANIC ═════════════════ -->
+<section class="page">
+  <div class="sec-head"><span class="n">Section 02</span><h2>The queue, and how it remembers</h2></div>
+
+  <p class="lede">Every founder on the waitlist carries a counter. Each release adds
+  one to that counter for everyone still waiting. The queue sorts by it. That is the
+  entire mechanism.</p>
+
+  <p>Concretely, the order we invite from is:</p>
+
+  <p style="margin: 10px 0 14px;"><code>ORDER BY times_deferred DESC, priority DESC, joined_at ASC</code></p>
+
+  <table class="t-narrow">
+    <thead><tr><th>Read left to right</th><th>What it means in the room</th></tr></thead>
+    <tbody>
+      <tr><td><strong>times_deferred</strong>, highest first</td>
+          <td>Whoever we have passed over most times goes first. Being skipped is the
+              thing that promotes you.</td></tr>
+      <tr><td><strong>priority</strong>, highest first</td>
+          <td>A deliberate bump for someone we genuinely want early — an investor
+              referral, a design partner. Set by hand, recorded in the audit log.</td></tr>
+      <tr><td><strong>joined_at</strong>, oldest first</td>
+          <td>Among equals, first come first served. This is the tiebreak, not the
+              main rule.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>A worked round, with the numbers from the brief</h3>
+
+  <figure class="keep">
+  <svg viewBox="0 0 700 300" role="img" aria-label="Two rounds of beta selection showing deferred founders moving to the front of the queue">
+    <defs>
+      <marker id="ar" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+        <path d="M0,0 L9,4.5 L0,9 z" fill="#7b828c"/>
+      </marker>
+    </defs>
+    <style>
+      .lbl  { font: 600 11px "Helvetica Neue", Helvetica, Arial, sans-serif; fill: #16181d; }
+      .lblm { font: 400 10px "Helvetica Neue", Helvetica, Arial, sans-serif; fill: #7b828c; }
+      .big  { font: 700 19px "Helvetica Neue", Helvetica, Arial, sans-serif; }
+      .rnd  { font: 700 9px "Helvetica Neue", Helvetica, Arial, sans-serif; letter-spacing: 1.2px; fill: #7b828c; }
+    </style>
+
+    <!-- ROUND 1 -->
+    <text class="rnd" x="0" y="12">ROUND 1 · SLOT OF 100</text>
+    <rect x="0" y="22" width="150" height="62" rx="5" fill="#f7f8fa" stroke="#dfe3e8"/>
+    <text class="big" x="12" y="49" fill="#16181d">200</text>
+    <text class="lbl" x="12" y="66">on the waitlist</text>
+    <text class="lblm" x="12" y="78">all at counter 0</text>
+
+    <line x1="158" y1="53" x2="196" y2="53" stroke="#7b828c" stroke-width="1.3" marker-end="url(#ar)"/>
+
+    <rect x="204" y="0" width="176" height="50" rx="5" fill="#eaf2ef" stroke="#cfe0da"/>
+    <text class="big" x="216" y="26" fill="#1f5f4f">100</text>
+    <text class="lbl" x="216" y="42" fill="#1f5f4f">invited — access opens</text>
+
+    <rect x="204" y="58" width="176" height="62" rx="5" fill="#fbf2e8" stroke="#eddcc6"/>
+    <text class="big" x="216" y="84" fill="#9a5b1e">100</text>
+    <text class="lbl" x="216" y="100" fill="#9a5b1e">passed over</text>
+    <text class="lblm" x="216" y="113" fill="#9a5b1e">counter 0 → 1</text>
+
+    <!-- carry arrow: the deferred 100 flow back into the pool that round 2 draws from.
+         Enters the round-2 box at its top-right corner so it clears the round label. -->
+    <path d="M218 124 C 206 148, 188 172, 160 190" fill="none" stroke="#9a5b1e"
+          stroke-width="1.3" stroke-dasharray="4 3" marker-end="url(#ar)"/>
+    <text class="lblm" x="238" y="152" fill="#9a5b1e">carried forward into the next round</text>
+
+    <!-- ROUND 2 -->
+    <text class="rnd" x="0" y="176">ROUND 2 · SLOT OF 100</text>
+    <rect x="0" y="186" width="150" height="76" rx="5" fill="#f7f8fa" stroke="#dfe3e8"/>
+    <text class="big" x="12" y="212" fill="#16181d">150</text>
+    <text class="lbl" x="12" y="229">waiting</text>
+    <text class="lblm" x="12" y="243">100 at counter 1</text>
+    <text class="lblm" x="12" y="256">50 new at counter 0</text>
+
+    <line x1="158" y1="222" x2="196" y2="222" stroke="#7b828c" stroke-width="1.3" marker-end="url(#ar)"/>
+
+    <rect x="204" y="186" width="176" height="50" rx="5" fill="#eaf2ef" stroke="#cfe0da"/>
+    <text class="big" x="216" y="212" fill="#1f5f4f">100</text>
+    <text class="lbl" x="216" y="228" fill="#1f5f4f">the same 100, invited</text>
+
+    <rect x="204" y="244" width="176" height="50" rx="5" fill="#fbf2e8" stroke="#eddcc6"/>
+    <text class="big" x="216" y="270" fill="#9a5b1e">50</text>
+    <text class="lbl" x="216" y="286" fill="#9a5b1e">new joiners wait</text>
+
+    <!-- right-hand note -->
+    <line x1="418" y1="186" x2="418" y2="294" stroke="#dfe3e8"/>
+    <text class="lbl" x="434" y="200">Nobody has to remember</text>
+    <text class="lbl" x="434" y="215">anything.</text>
+    <text class="lblm" x="434" y="236">The 100 we skipped in round 1</text>
+    <text class="lblm" x="434" y="250">outrank the 50 who joined after</text>
+    <text class="lblm" x="434" y="264">them because their counter is</text>
+    <text class="lblm" x="434" y="278">higher — not because anyone</text>
+    <text class="lblm" x="434" y="292">kept a list.</text>
+  </svg>
+  <figcaption>Two consecutive rounds. The counter is what makes round 2 fair; no manual
+  bookkeeping is involved, and the order is the same whoever clicks the button.</figcaption>
+  </figure>
+
+  <div class="callout">
+    <span class="lbl">Why a stored counter rather than working it out later</span>
+    <p>We could in principle reconstruct "who did we skip" by joining cohort membership
+    against release timestamps. It would be correct in theory and wrong the first time
+    anyone edits a round by hand or a release half-fails. The counter is one integer
+    that is true by construction.</p>
+  </div>
+</section>
+
+
+<!-- ═══════════════ 3. THE ADMIN WORKFLOW ═══════════════ -->
+<section class="page">
+  <div class="sec-head"><span class="n">Section 03</span><h2>What running a round actually looks like</h2></div>
+
+  <p class="lede">Five steps in the admin panel. The important design decision is that
+  <strong>picking people and emailing them are two separate buttons.</strong></p>
+
+  <div class="step">
+    <div class="step-n">1</div>
+    <div>
+      <h4>Open a round</h4>
+      <p>Give it a name ("Beta round 2") and a size (100). Optionally attach a coupon
+      code that every invite in this round will carry. If the code does not exist or has
+      expired, we refuse right here — better than discovering it in 100 emails quoting an
+      offer that checkout will reject.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-n">2</div>
+    <div>
+      <h4>Pick the people</h4>
+      <p>Press <em>auto-pick 100</em> and the queue fills the round in the correct order.
+      Or tick people by hand. Or paste a list of IDs. All three end in the same place,
+      and the panel shows you the list before anything happens.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-n">3</div>
+    <div>
+      <h4>Review, and change your mind freely</h4>
+      <p>Selection sends nothing. You can re-pick as many times as you like; the previous
+      staging is replaced, not added to, so a corrected list can never quietly overshoot
+      the slot size.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-n">4</div>
+    <div>
+      <h4>Release</h4>
+      <p>This is the irreversible one, and it asks for explicit confirmation. In one
+      operation: the selected become <em>invited</em>, everyone still waiting has their
+      counter incremented, and both groups have an email queued.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-n">5</div>
+    <div>
+      <h4>Watch the mail go out</h4>
+      <p>The panel shows sent / failed / not-yet-sent per person. A bounced address can be
+      re-queued individually. Nothing is ever sent twice.</p>
+    </div>
+  </div>
+
+  <div class="spacer"></div>
+
+  <div class="cols2 keep">
+    <div class="card tinted">
+      <h4>Why two steps and not one</h4>
+      <p class="small">Selection is reviewable and reversible. Release mails every founder
+      on the list. Those have completely different consequences if you click them by
+      mistake, so they are two buttons. Merging them means the first slip of the mouse
+      emails 200 people.</p>
+    </div>
+    <div class="card warm">
+      <h4>Why release does not send the mail itself</h4>
+      <p class="small">Release records the decision and stops. A separate job drains the
+      mail queue. If the server restarts halfway through 200 messages, the queue is still
+      on disk and we simply drain it again — and because only <em>unsent</em> rows are
+      picked up, re-running it can never double-send.</p>
+    </div>
+  </div>
+</section>
+
+
+<!-- ═══════════════ 4. WHAT FOUNDERS RECEIVE ═══════════════ -->
+<section class="page">
+  <div class="sec-head"><span class="n">Section 04</span><h2>What the two groups actually receive</h2></div>
+
+  <p class="lede">The second email is the one that matters. Telling 100 people they are in
+  is easy; the 100 who are not are the ones who decide whether our waitlist reads as a
+  queue or a lottery.</p>
+
+  <div class="cols2">
+    <div>
+      <h3 style="margin-top:0">The 100 who are in</h3>
+      <div class="mail">
+        <div class="mail-head">
+          to: priya@example.com
+          <span class="subj">You're in — your Ally beta access is open</span>
+        </div>
+        <div class="mail-body">
+          <p>Hi Priya,</p>
+          <p>You've been selected for the Ally beta (Beta round 2). Your access is open
+          now.</p>
+          <p>Your code: <span class="code-chip">BETA20</span> (20% off). Apply it when you
+          pick a plan.</p>
+          <p><strong>Start here →</strong></p>
+          <p>We read every piece of feedback in this phase, so tell us what breaks.</p>
+          <p>The GoXL Team</p>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <h3 style="margin-top:0">The 100 who are not</h3>
+      <div class="mail">
+        <div class="mail-head">
+          to: arun@example.com
+          <span class="subj">You're next in line for the Ally beta</span>
+        </div>
+        <div class="mail-body">
+          <p>Hi Arun,</p>
+          <p>We've just opened this round of the Ally beta (Beta round 2) and your name
+          wasn't in it. Places are limited, so this is about batch size, not about you.</p>
+          <p>You're now at the front of the queue for the next round. We invite from the
+          top of that queue, oldest first, so you don't have to do anything to keep your
+          place.</p>
+          <p>You'll hear from us when the next slot opens.</p>
+          <p>The GoXL Team</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h3>Why the second email says a number</h3>
+  <p>Once someone has been passed over more than once, the wording changes to name it:
+  <em>"You've been ahead of new signups for 2 rounds now, and you stay ahead until you're
+  in."</em> That is a claim they can hold us to. "We'll be in touch" is not — and people
+  can tell the difference immediately.</p>
+
+  <div class="callout">
+    <span class="lbl">One thing to decide together</span>
+    <p>If we run rounds weekly, the same founder gets a "you're next" email every week,
+    which stops being reassuring and starts being annoying. The toggle is per round, so
+    the safe default is: send it on the first few rounds, and if we go to a fast cadence,
+    turn it off and move that information into the product instead.</p>
+  </div>
+
+  <h3>What founders can see for themselves</h3>
+  <p>A logged-in founder can check their own standing — status, when they joined, how many
+  rounds they have been passed over. Nobody can see anybody else's, and an anonymous
+  visitor sees nothing at all: a signup form that tells you whether an address is already
+  registered is an email-enumeration tool, so joining the list gives the same response
+  either way.</p>
+</section>
+
+
+<!-- ═══════════════ 5. COUPONS ═══════════════ -->
+<section class="page">
+  <div class="sec-head"><span class="n">Section 05</span><h2>Coupons and discounts</h2></div>
+
+  <p class="lede">A coupon here is a <strong>rule</strong>, not money. The layer owns three
+  questions and deliberately nothing else.</p>
+
+  <div class="cols3">
+    <div class="card"><h4>1. What exists?</h4><p class="small">The set of codes, what each
+      one is worth, who it applies to, and when it stops working.</p></div>
+    <div class="card"><h4>2. May this person use it?</h4><p class="small">Checked on the
+      server, every time, with a reason we can show the founder when the answer is no.</p></div>
+    <div class="card"><h4>3. Who has claimed it?</h4><p class="small">A permanent ledger
+      row per redemption. This is what makes caps enforceable and reporting possible.</p></div>
+  </div>
+
+  <div class="spacer"></div>
+
+  <h3>Four kinds of discount</h3>
+  <table>
+    <thead><tr><th>Type</th><th>Value means</th><th>Example</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Percent</strong></td><td>1–100, off the order total</td><td>20% off</td></tr>
+      <tr><td><strong>Fixed</strong></td><td>An absolute amount, stored in paise</td><td>Rs 500 off</td></tr>
+      <tr><td><strong>Credits</strong></td><td>Ally credits granted on redemption</td><td>1,500 bonus credits</td></tr>
+      <tr><td><strong>Free days</strong></td><td>Days of the plan given free</td><td>30 days free</td></tr>
+    </tbody>
+  </table>
+
+  <p>Every value is an integer — money is never stored as a decimal fraction, so a discount
+  cannot round differently in two places and produce two different invoices.</p>
+
+  <h3>The controls on each code</h3>
+  <table class="t-narrow">
+    <thead><tr><th>Control</th><th>What it stops</th></tr></thead>
+    <tbody>
+      <tr><td>Total redemption cap</td><td>An offer meant for 100 people reaching 4,000 because it was shared publicly.</td></tr>
+      <tr><td>Per-founder cap</td><td>One person claiming the same discount every month.</td></tr>
+      <tr><td>Start / expiry window</td><td>A launch offer still being honoured a year later.</td></tr>
+      <tr><td>Plan restriction</td><td>A Pro-only offer being applied to Starter.</td></tr>
+      <tr><td>Active switch</td><td>Needing to email everyone to withdraw an offer.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="cols2 keep">
+    <div class="card warm">
+      <h4>What we are deliberately NOT building yet</h4>
+      <p class="small">There is no payment provider wired into this codebase. So this layer
+      defines discounts and records claims — it does not change what anyone is charged.
+      A "discount" that pretended to would be fiction. When checkout arrives it asks this
+      layer <em>"is this code valid, and what is it worth?"</em> and applies the answer.</p>
+    </div>
+    <div class="card">
+      <h4>Two rules worth knowing</h4>
+      <p class="small"><strong>A code's value cannot be edited.</strong> A code somebody
+      already redeemed at 20% must keep meaning 20% — silently re-pointing it would rewrite
+      what past redemptions were worth. Retire it and issue a new one.</p>
+      <p class="small"><strong>Validation fails closed.</strong> Unknown code, expired
+      window, exhausted cap, wrong plan, plan not specified — all refused, each with its
+      own reason.</p>
+    </div>
+  </div>
+</section>
+
+
+<!-- ═══════════════ 6. SHAPE OF THE BUILD ═══════════════ -->
+<section class="page">
+  <div class="sec-head"><span class="n">Section 06</span><h2>The shape of the build</h2></div>
+
+  <p class="lede">Four new tables, one new admin section, and one small public endpoint.
+  Everything follows the pattern the admin panel already uses.</p>
+
+  <h3>Tables</h3>
+  <table>
+    <thead><tr><th>Table</th><th>Holds</th><th>The column that matters</th></tr></thead>
+    <tbody>
+      <tr><td class="mono-cell">beta_waitlist_entries</td>
+          <td>One row per person who wants in</td>
+          <td class="mono-cell">times_deferred</td></tr>
+      <tr><td class="mono-cell">beta_cohorts</td>
+          <td>One row per round: name, size, coupon, when it went out</td>
+          <td class="mono-cell">slot_size</td></tr>
+      <tr><td class="mono-cell">coupons</td>
+          <td>The discount rules</td>
+          <td class="mono-cell">discount_type + value</td></tr>
+      <tr><td class="mono-cell">coupon_redemptions</td>
+          <td>Every claim, permanently</td>
+          <td class="mono-cell">(code, founder_id)</td></tr>
+    </tbody>
+  </table>
+
+  <p>The email address is the identity on the waitlist and is unique — so signing up twice
+  does not get you two places, and, more to the point, does not let someone reset their own
+  deferral counter by resubmitting the form. The waitlist row survives account deletion as
+  a queue position with no account attached.</p>
+
+  <h3>New admin pages <span class="tag new">new</span></h3>
+  <ul>
+    <li><strong>Beta Access</strong> — the waitlist in queue order, the round builder,
+      per-person email status, and a "who's next" preview you can look at before committing.</li>
+    <li><strong>Coupons</strong> — create, retire, and see redemption counts against caps.</li>
+  </ul>
+
+  <h3>Who is allowed to do what</h3>
+  <table>
+    <thead><tr><th>Action</th><th>Support</th><th>Admin</th><th>Super Admin</th></tr></thead>
+    <tbody>
+      <tr><td>See the waitlist, rounds and coupons</td><td>—</td><td>✓</td><td>✓</td></tr>
+      <tr><td>Create / retire a coupon</td><td>—</td><td>—</td><td>✓</td></tr>
+      <tr><td>Open a round, select, release</td><td>—</td><td>—</td><td>✓</td></tr>
+    </tbody>
+  </table>
+  <p class="sub">Releasing a round mails every founder on the list at once and cannot be
+  undone. That is why it sits at the top tier — blast radius, not seniority. An Admin who
+  can reset one founder's diagnosis still should not be one mis-click from 200 emails.</p>
+
+  <p>Every write — creating a coupon, bumping someone's priority, releasing a round — is
+  recorded in the existing admin audit trail with who did it, when, from where, and what
+  changed.</p>
+
+  <p>Every write — creating a coupon, bumping someone's priority, releasing a round — is
+  recorded in the existing admin audit trail with who did it, when, from where, and what
+  changed.</p>
+</section>
+
+
+<!-- ═══════════════ 7. PLAN ═══════════════ -->
+<section class="page">
+  <div class="sec-head"><span class="n">Section 07</span><h2>Plan, and what we need from you</h2></div>
+
+  <p class="lede">Four phases. The first three are this proposal; the fourth waits on
+  something outside it.</p>
+
+  <table>
+    <thead><tr><th>Phase</th><th>Scope</th><th>Rough size</th></tr></thead>
+    <tbody>
+      <tr><td><strong>1 · Backend</strong></td>
+          <td>Tables and migration, the queue logic, coupon validation and the redemption
+              ledger, the admin API, tests</td>
+          <td>~2 days</td></tr>
+      <tr><td><strong>2 · Admin UI</strong></td>
+          <td>The two new panel pages — Beta Access and Coupons</td>
+          <td>~1 day</td></tr>
+      <tr><td><strong>3 · Mail</strong></td>
+          <td>Both templates, the durable send queue, per-person status and retries</td>
+          <td>~0.5 day</td></tr>
+      <tr><td><strong>4 · Later</strong></td>
+          <td>Hook coupon validation into checkout — blocked until a payment provider
+              is wired in</td>
+          <td>Not now</td></tr>
+    </tbody>
+  </table>
+
+  <h3>How we would know it worked</h3>
+  <ul>
+    <li>Nobody's <span class="mono">times_deferred</span> keeps climbing while newer signups
+      get in ahead of them. If that ever happens, the queue is broken and the number will
+      show it.</li>
+    <li>A round can be released, and every person on the list ends up with a recorded
+      outcome — sent, failed, or explicitly not notified. No silent gaps.</li>
+    <li>A coupon's redemption count never exceeds its cap, under any sequence of clicks.</li>
+  </ul>
+
+  <h3>Three decisions we need from the team</h3>
+  <table class="t-narrow">
+    <thead><tr><th>Question</th><th>Why it matters</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Do we email the deferred group every round, or only the first few?</strong></td>
+          <td>Weekly rounds turn a reassuring email into a nagging one. The toggle exists
+              either way; we need a default.</td></tr>
+      <tr><td><strong>Does an unused invite expire?</strong></td>
+          <td>If someone is invited and never signs in, that place is spent. An expiry would
+              return it to the queue — but it also means telling someone their invite
+              lapsed.</td></tr>
+      <tr><td><strong>Does accepting an invite auto-redeem the attached coupon?</strong></td>
+          <td>Auto-redeeming is smoother but burns the code for someone who never subscribes.
+              Leaving it to checkout is honest but adds a step.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout">
+    <span class="lbl">What we are asking for</span>
+    <p>Agreement on the queue rule — <em>skipped founders go first, always</em> — and answers
+    to the three questions above. Everything else in this document is an implementation
+    detail we can change later without anyone noticing.</p>
+  </div>
+
+  <div class="footer-note">
+    Ally Platform · Internal proposal · 4 September 2026 — for review, nothing here is built yet.
+  </div>
+</section>
+
+</body>
+</html>
