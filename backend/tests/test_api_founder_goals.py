@@ -8,7 +8,11 @@ from types import SimpleNamespace
 import pytest
 from fastapi.testclient import TestClient
 
-from app.api.v1.founder_goals.dependencies import get_current_founder_id, get_founder_goal_service
+from app.api.v1.founder_goals.dependencies import (
+    get_current_founder_id,
+    get_founder_goal_service,
+    require_goals,
+)
 from app.founder_goals import build_founder_goal_service
 from app.main import app
 
@@ -33,8 +37,13 @@ def client():
     founder = {"id": 1}
     app.dependency_overrides[get_current_founder_id] = lambda: founder["id"]
     app.dependency_overrides[get_founder_goal_service] = lambda: service
+    # Goals is gated on Feature.GOALS (Rs 450). These tests are about goal
+    # behaviour, not entitlement, and the real gate would pull in get_db and
+    # get_founder_record that no goals test provides. The gate itself is
+    # covered in test_plan_feature_gates.py.
+    app.dependency_overrides[require_goals] = lambda: None
     yield SimpleNamespace(http=TestClient(app), founder=founder, service=service)
-    for dep in (get_current_founder_id, get_founder_goal_service):
+    for dep in (get_current_founder_id, get_founder_goal_service, require_goals):
         app.dependency_overrides.pop(dep, None)
 
 

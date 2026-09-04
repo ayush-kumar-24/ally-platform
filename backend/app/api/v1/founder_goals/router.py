@@ -2,22 +2,27 @@
 authenticated founder and delegates to FounderGoalService; ownership +
 validation live in the service. Domain errors propagate to the global handler.
 
-No plan-gate dependency, unlike app/api/v1/planning/router.py: Goals is a
-free feature, available immediately -- setting a goal doesn't depend on
-Ally having learned anything, and it isn't part of the paid Plan Your Day
-feature that app.planning's nested Goal belongs to.
+Gated on Feature.GOALS (Rs 450) at the router, like planning and vision --
+see require_goals. This is app.founder_goals' standalone Goal, distinct from
+the nested Goal inside Plan Your Day, but both now sit on the same tier: the
+pricing page sells them together as the place a founder acts on their report.
 """
 
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends
 
-from app.api.v1.founder_goals.dependencies import get_current_founder_id, get_founder_goal_service
+from app.api.v1.founder_goals.dependencies import (
+    get_current_founder_id,
+    get_founder_goal_service,
+    require_goals,
+)
 from app.api.v1.founder_goals.responses import FounderGoalListResponse, FounderGoalResponse
 from app.api.v1.founder_goals.schemas import FounderGoalCreate, FounderGoalUpdate
 from app.founder_goals.service import FounderGoalService
 
-router = APIRouter(prefix="/goals", tags=["founder-goals"])
+router = APIRouter(prefix="/goals", tags=["founder-goals"],
+                   dependencies=[Depends(require_goals)])
 
 
 @router.post("", response_model=FounderGoalResponse, status_code=201, summary="Create a goal")
