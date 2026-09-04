@@ -28,6 +28,7 @@
 
 import { clearTokens, post, setTokens } from './api';
 import { supabaseConfigured } from './supabaseConfig';
+import { isChunkLoadError, loadChunk } from '../utils/loadChunk';
 
 /**
  * The Supabase SDK is ~40 kB gzipped and is needed only while signing in, so it
@@ -36,8 +37,22 @@ import { supabaseConfigured } from './supabaseConfig';
  * repeat calls do not re-download it.
  */
 async function getSupabase() {
-  const { supabase } = await import('./supabaseClient');
-  return supabase;
+  try {
+    const { supabase } = await loadChunk(() => import('./supabaseClient'));
+    return supabase;
+  } catch (error) {
+    // The chunk could not be fetched even after loadChunk's retry-and-reload
+    // (offline, a blocked request, a half-published deploy). Vite's raw
+    // "Failed to fetch dynamically imported module: .../supabaseClient-XXXX.js"
+    // means nothing to a founder staring at the login form, so say what they
+    // can actually do about it.
+    if (isChunkLoadError(error)) {
+      throw new AuthStepError(
+        'We could not finish loading sign-in. Check your connection and reload the page.',
+      );
+    }
+    throw error;
+  }
 }
 
 export class AuthNotConfiguredError extends Error {
