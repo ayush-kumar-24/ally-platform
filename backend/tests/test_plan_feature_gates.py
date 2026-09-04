@@ -141,7 +141,7 @@ _ENFORCED = {
     # dependency. Same endpoint backs RECOMMENDATIONS below.
     Feature.NEXT_STEPS: False,
     Feature.RECOMMENDATIONS: False,
-    Feature.EMAIL_NOTIFICATIONS: False,
+    Feature.EMAIL_NOTIFICATIONS: True,   # services/reminder_dispatch.py
     Feature.KNOW_MY_ENERGY: False,
 }
 
@@ -161,16 +161,18 @@ def test_a_tier_difference_the_page_advertises_is_actually_enforced():
     """Any feature that DIFFERS between paid tiers is a paywall the page draws.
     If it is unenforced, the cheaper tier can simply call the endpoint.
 
-    Still failing for four, each for a different reason and none of them an
+    Still failing for three, each for a different reason and none of them an
     oversight to fix by adding a dependency:
 
       next_steps, recommendations -- both served by
         /reports/{id}/recommendations, which is report content Rs 199 pays for.
         Splitting the report needs a product decision.
-      email_notifications -- there is no email-sending path in the backend at
-        all, so there is nothing yet to refuse.
       know_my_energy -- declared in the catalog before the feature is built
         (see the catalog's own note).
+
+    email_notifications came off this list when the reminder dispatcher landed:
+    it is checked at DELIVERY time (services/reminder_dispatch.py) rather than
+    on a request, because nobody makes a request for a reminder -- a cron does.
 
     Recorded rather than hidden: this belongs in CI, not in a founder's
     devtools.

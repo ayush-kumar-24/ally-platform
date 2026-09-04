@@ -51,6 +51,20 @@ jobs:
           API: ${{ vars.ALLY_API_BASE || 'https://api.goxlally.ai' }}
           SECRET: ${{ secrets.INTERNAL_JOBS_SECRET }}
 
+      # On the 10-minute schedule, not a slower one: a founder who set a
+      # reminder for 09:00 and gets it at 09:40 has been failed by it. Both
+      # queues only select rows they have not marked sent, so a re-run finds
+      # nothing new rather than mailing twice.
+      - name: Send due reminders
+        if: github.event.schedule == '*/10 * * * *' || github.event_name == 'workflow_dispatch'
+        run: |
+          curl -sS -f -X POST \
+            "$API/api/v1/internal/jobs/send-reminders" \
+            -H "X-Internal-Secret: $SECRET"
+        env:
+          API: ${{ vars.ALLY_API_BASE || 'https://api.goxlally.ai' }}
+          SECRET: ${{ secrets.INTERNAL_JOBS_SECRET }}
+
       - name: Process due account deletions
         if: github.event.schedule == '30 2 * * *' || github.event_name == 'workflow_dispatch'
         run: |

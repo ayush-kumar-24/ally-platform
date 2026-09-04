@@ -176,3 +176,42 @@ def check_health(
         "checked_at": report.checked_at.isoformat(),
         "alert_sent": alerted,
     }
+
+
+@router.post(
+    "/send-reminders",
+    summary="Deliver due task reminders and discovery-call reminders",
+)
+def send_reminders(
+    x_internal_secret: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Both reminder queues, in one sweep.
+
+    They are separate systems -- planning_reminders is a founder scheduling a
+    nudge on their own task, discovery_calls is our own 24h/1h call reminder --
+    but they answer to the same schedule and the same failure mode, so one
+    endpoint means one cron entry and one place to look when mail goes quiet.
+
+    Idempotent: each side only selects rows it has not marked sent, so a re-run
+    (or an overlapping run) finds nothing new rather than mailing twice.
+
+    The two are isolated from each other on purpose. Discovery reminders are
+    transactional and unrelated to any plan; letting a failure in the task
+    sweep cancel them would take out a call reminder over an unrelated bug.
+    """
+    _verify_secret(x_internal_secret)
+
+    from app.services.discovery_notifications import send_due_reminders
+    from app.services.reminder_dispatch import send_due_task_reminders
+
+    out: dict = {}
+    for key, run in (("tasks", send_due_task_reminders), ("calls", send_due_reminders)):
+        try:
+            out[key] = run(db)
+        except Exception as exc:  # noqa: BLE001 -- one queue must not take out the other
+            logger.error("reminder sweep failed for one queue, continuing",
+                         extra={"queue": key, "error": str(exc)})
+            db.rollback()
+            out[key] = {"error": str(exc)}
+    return out
