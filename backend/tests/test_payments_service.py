@@ -24,7 +24,7 @@ from app.payments.errors import (
 from app.payments.gateway import GatewayOrder
 from app.payments.models import WebhookOutcome
 from app.payments.service import PaymentService
-from app.plans.catalog import PlanTier
+from app.plans.catalog import PLANS, PlanTier
 
 NOW = datetime(2026, 9, 4, 12, 0, tzinfo=timezone.utc)
 WEBHOOK_SECRET = "whsec_test"
@@ -237,7 +237,11 @@ def test_captured_payment_grants_the_plan_and_credits():
     assert repo.subscriptions_created[0]["plan_type"] == "starter"
     assert credits.grants[0]["founder_id"] == 42
     assert credits.grants[0]["operation"] == CreditOperation.ADD
-    assert credits.grants[0]["amount"] == 180   # Starter's monthly_credits
+    # Read from the catalog, not pinned to a literal: the grant IS the catalog's
+    # monthly_credits, and a hard-coded copy here only asserts that someone
+    # remembered to edit two places. This number moved once already when the
+    # Rs 450 tier's daily ceiling changed and its credit grant had to follow.
+    assert credits.grants[0]["amount"] == PLANS[PlanTier.STARTER].monthly_credits
 
 
 def test_captured_payment_is_idempotent_on_retry():
