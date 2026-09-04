@@ -41,7 +41,7 @@ def user(fid, name="U", email="u@x.com", status=UserStatus.ACTIVE, plan="free",
         created_at=T0 - timedelta(days=days_ago), last_active_at=T0)
 
 
-def build(users=None, balances=None, insights=None):
+def build(users=None, balances=None):
     repo = InMemoryAdminUserRepository(users or [user(1)])
     credits = build_credit_service(
         InMemoryCreditRepository(balances or {1: 100}), clock=lambda: T0)
@@ -49,7 +49,7 @@ def build(users=None, balances=None, insights=None):
     c = count(1)
     recorder = AuditRecorder(audit_repo, clock=lambda: T0, id_factory=lambda: f"e-{next(c)}")
     return AdminPanelService(repo, credits=credits, audit=recorder,
-                             clock=lambda: T0, insights=insights), repo, audit_repo
+                             clock=lambda: T0), repo, audit_repo
 
 
 # --- RBAC matrix ------------------------------------------------------------
@@ -224,35 +224,13 @@ def test_support_can_list_users():
     assert s.list_users(SUPPORT).total == 4
 
 
-# --- dashboard metrics (Phase 2: Live now / Today / 7 days) ------------------
-
-class _FakeInsights:
-    def __init__(self, metrics):
-        self._metrics = metrics
-        self.called = False
-
-    def dashboard_metrics(self):
-        self.called = True
-        return self._metrics
-
-
-def test_dashboard_metrics_delegates_to_insights():
-    fake = _FakeInsights(["m1", "m2"])
-    s, _, _ = build(insights=fake)
-    assert s.dashboard_metrics(SUPER) == ["m1", "m2"]
-    assert fake.called is True
-
-
-def test_dashboard_metrics_readable_by_support():
-    """Same read tier as list_users -- aggregate counts, not per-founder PII."""
-    s, _, _ = build(insights=_FakeInsights([]))
-    s.dashboard_metrics(SUPPORT)  # must not raise
-
-
-def test_dashboard_metrics_unconfigured_reports_rather_than_crashes():
-    s, _, _ = build(insights=None)
-    with pytest.raises(InvalidSearchError):
-        s.dashboard_metrics(SUPER)
+# Dashboard metrics (Phase 2: Live now / Today / 7 days): AdminPanelService
+# used to carry a `dashboard_metrics` method + `insights` collaborator, but
+# nothing ever called it through the service -- GET /admin/metrics
+# (panel_router_v2.py) reads InsightsService directly, and is the only
+# caller (see container.py's insights_service()'s own note). Removed rather
+# than kept as a second, dead path to the same cards (Admin Panel Proposal
+# Phase 5); test_admin_insights.py still covers the metrics themselves.
 
 
 # --- health page (Phase 3) ---------------------------------------------------

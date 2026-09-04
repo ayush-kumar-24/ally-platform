@@ -44,10 +44,6 @@ from app.ai_chat.suggestions.service import SuggestionService
 from app.ai_chat.suggestions.sql_repository import SqlSuggestionRepository
 from app.settings.repository import SqlAlchemySettingsRepository
 from app.settings.service import SettingsService
-from app.admin.audit import InMemoryAuditRepository
-from app.admin.permissions import AdminRegistry
-from app.admin.repository import InMemoryAdminRepository, InMemoryAnnouncementRepository
-from app.admin.service import AdminService
 from app.planning.db_repository import SqlAlchemyPlanningRepository
 from app.planning.service import PlanningService
 from app.founder_goals.db_repository import SqlAlchemyFounderGoalRepository
@@ -119,13 +115,13 @@ class Container:
         # as conversations/attachments: a process-level singleton would lose every
         # suggestion and every founder's feedback on restart.
 
-        # --- Phase 12 admin & operations (independent) -- process-level in-memory
-        # repositories (a production adapter reads the DB + ai_chat stores). The admin
-        # registry (email -> role allowlist) is loaded from the environment.
-        self._admin_repository = InMemoryAdminRepository()
-        self._announcement_repository = InMemoryAnnouncementRepository()
-        self._audit_repository = InMemoryAuditRepository()
-        self._admin_registry = AdminRegistry()
+        # The Phase 12 admin & operations module -- process-level in-memory
+        # repositories, never DB-backed -- used to be wired here. Removed
+        # (Admin Panel Proposal Phase 5): every capability it had is
+        # superseded by the real, DB-backed Admin Panel below, and the
+        # frontend never called any of its endpoints (confirmed against
+        # frontend/src/services/admin.js before deleting). See
+        # app/admin/__init__.py for the full note.
         # Admin Panel allowlist -- built lazily so tests can set the env var first.
         self._panel_registry = None
         # Admin Panel Phase 3 (Health page): process-level singleton so its
@@ -327,18 +323,6 @@ class Container:
         override the endpoint dependency with an in-memory-backed service."""
         return SettingsService(SqlAlchemySettingsRepository(db))
 
-    # --- Phase 12 admin accessors -----------------------------------------
-
-    def admin_registry(self) -> AdminRegistry:
-        return self._admin_registry
-
-    def admin_service(self) -> AdminService:
-        return AdminService(
-            admin_repository=self._admin_repository,
-            announcement_repository=self._announcement_repository,
-            audit_repository=self._audit_repository,
-        )
-
     # --- Planning accessor (DB-backed, per-request) -----------------------
 
     def planning_service(self, db: Session) -> PlanningService:
@@ -408,6 +392,27 @@ class Container:
     def credit_service(self, db: Session) -> CreditService:
         return CreditService(SqlAlchemyCreditRepository(db))
 
+    def payment_gateway(self):
+        """None when Razorpay isn't configured in this environment --
+        PaymentService turns that into a 503 rather than faking a successful
+        checkout (see app/payments/errors.py's PaymentsNotConfiguredError).
+        Built fresh per call (cheap: one httpx.Client construction) rather
+        than held as a singleton, so a settings change (e.g. in tests) takes
+        effect without restarting the process."""
+        if not settings.payments_enabled:
+            return None
+        from app.payments.gateway import RazorpayGateway
+        return RazorpayGateway(
+            key_id=settings.RAZORPAY_KEY_ID,
+            key_secret=settings.RAZORPAY_KEY_SECRET,
+            webhook_secret=settings.RAZORPAY_WEBHOOK_SECRET,
+        )
+
+    def payment_service(self, db: Session):
+        from app.payments.repository import PaymentRepository
+        from app.payments.service import PaymentService
+        return PaymentService(self.payment_gateway(), PaymentRepository(db), self.credit_service(db))
+
     def admin_panel_service(self, db: Session) -> AdminPanelService:
         """Request-scoped panel service. The audit repository is DB-backed so the
         trail survives restarts."""
@@ -429,11 +434,17 @@ class Container:
             report_regenerator=lambda founder_id: regenerate_report_for_founder(db, founder_id),
             privacy=SqlAlchemyPrivacyRepository(db),
             feedback=SqlAlchemyFeedbackReadRepository(db),
-            insights=self.insights_service(db),
             health=self.health_checker(db),
         )
 
     def insights_service(self, db: Session):
+        """Not wired into AdminPanelService -- GET /admin/metrics
+        (panel_router_v2.py, and frontend/src/services/admin.js's
+        `getMetrics()`) calls this directly, and is the only caller. An
+        earlier `/admin/dashboard-metrics` route through the service duplicated
+        it exactly (same data, different path, nothing ever called it) and was
+        removed rather than kept as a second way to reach the same cards --
+        see the Admin Panel Proposal's Phase 5."""
         from app.admin.insights import InsightsService, SqlAlchemyInsightsRepository
         return InsightsService(SqlAlchemyInsightsRepository(db))
 

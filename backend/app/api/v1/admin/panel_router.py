@@ -1,7 +1,6 @@
 """Admin Panel endpoints -- transport only; every rule lives in AdminPanelService.
 
     GET    /admin/me                       caller's role + capabilities
-    GET    /admin/dashboard-metrics        total users, Live now / Today / 7 days, and the rest
     GET    /admin/health                   database, AI provider, report engine, storage, error rate
     GET    /admin/users                    search / filter / sort / paginate
     GET    /admin/users/{id}               full detail
@@ -17,9 +16,10 @@
     PATCH  /admin/privacy-requests/{id}    resolve a queued request
     GET    /admin/audit-log               immutable audit trail
 
-Named /audit-log, not /audit: the Phase 12 admin router already owns GET /admin/audit
-and is registered first, so a second /audit here would be silently shadowed and never
-reached. Distinct paths keep both endpoints usable.
+Named /audit-log, not /audit: the Phase 12 admin router used to own GET /admin/audit
+and registered first, so a second /audit here would have been silently shadowed and
+never reached. That router is gone (Admin Panel Proposal Phase 5), but the name stays
+-- the frontend already calls /admin/audit-log (frontend/src/services/admin.js).
 
 Every route depends on `get_panel_admin`, so an unauthenticated or non-admin caller
 is rejected before any handler body runs. There is no route here without it.
@@ -50,7 +50,6 @@ from app.api.v1.admin.panel_responses import (
     CreditAdjustResponse,
     CreditLedgerResponse,
     CreditTransactionResponse,
-    DashboardMetricsResponse,
     HealthReportResponse,
     PrivacyRequestListResponse,
     PrivacyRequestResponse,
@@ -81,17 +80,6 @@ class ConfirmationRequiredError(AppError):
 def whoami(admin: PanelAdmin = Depends(get_panel_admin)) -> WhoAmIResponse:
     return WhoAmIResponse(admin_id=admin.admin_id, email=admin.email,
                           role=admin.role.value, capabilities=capabilities_for(admin.role))
-
-
-@router.get("/dashboard-metrics", response_model=DashboardMetricsResponse,
-           summary="Dashboard cards: total users, Live now / Today / 7 days, and the rest")
-def dashboard_metrics(admin: PanelAdmin = Depends(get_panel_admin),
-                      service=Depends(get_panel_service)) -> DashboardMetricsResponse:
-    """Named /dashboard-metrics, not /dashboard: the Phase 12 admin router
-    already owns GET /admin/dashboard and is registered first, so a second
-    /dashboard here would be silently shadowed and never reached -- the exact
-    collision /audit-log below was already named around."""
-    return DashboardMetricsResponse.from_domain(service.dashboard_metrics(admin))
 
 
 @router.get("/health", response_model=HealthReportResponse,

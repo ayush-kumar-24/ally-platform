@@ -64,7 +64,6 @@ class AdminPanelService:
         report_regenerator: Callable[[int], dict] | None = None,
         privacy=None,
         feedback=None,
-        insights=None,
         health=None,
     ):
         self.users = users
@@ -76,7 +75,6 @@ class AdminPanelService:
         self.report_regenerator = report_regenerator
         self.privacy = privacy  # PrivacyRepository -- backs cancel_pending_deletion
         self.feedback = feedback  # FeedbackReadRepository -- backs list_feedback/feedback_stats
-        self.insights = insights  # InsightsService -- backs dashboard_metrics
         # HealthChecker -- backs system_health. Read-only: the panel page never
         # sends an alert itself, that side effect lives only in the scheduled
         # /internal/jobs/check-health path (see that router's docstring) --
@@ -101,18 +99,6 @@ class AdminPanelService:
         if detail is None:
             raise AdminFounderNotFoundError(founder_id)
         return detail
-
-    def dashboard_metrics(self, admin) -> list:
-        """Admin Panel proposal Phase 2: "Live now / Today / 7 days" and the
-        rest of the dashboard cards -- see `app/admin/insights.py`.
-
-        Same read-only tier as `list_users`/`get_user`: none of this is
-        per-founder PII, it's aggregate counts, so Support reads it too.
-        """
-        require(admin.role, Capability.VIEW_USERS)
-        if self.insights is None:
-            raise InvalidSearchError("dashboard metrics are not configured")
-        return self.insights.dashboard_metrics()
 
     def system_health(self, admin):
         """Admin Panel proposal Phase 3: the Health page -- database, AI
