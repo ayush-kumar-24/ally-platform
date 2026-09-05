@@ -31,7 +31,7 @@ export const FAQS = [
   },
   {
     q: 'How do plans work?',
-    a: 'There are three: Starter (₹199/month), Plus (₹450/month) and Pro (₹999/month). All three include one adaptive diagnosis, your Clarity Report, voice in the diagnosis, and booking a discovery call at ₹300 per 30 minutes. Plus adds chat with Ally (3,500 tokens a day), voice in chat, your next 3 steps, Goals and Plan Your Day. Pro raises chat to 8,000 tokens a day and adds Ally recommending your steps, Vision, discussing the knowledge base, email reminders, Know My Energy and priority call booking.',
+    a: 'There are three: Starter (₹199, paid once), Plus (₹450/month) and Pro (₹999/month). All three include one adaptive diagnosis, your Clarity Report, voice in the diagnosis, and booking a discovery call at ₹300 per 30 minutes. Plus adds chat with Ally (3,500 tokens a day), voice in chat, your next 3 steps, Goals and Plan Your Day. Pro raises chat to 8,000 tokens a day and adds Ally recommending your steps, Vision, discussing the knowledge base, email reminders, Know My Energy and priority call booking.',
     keywords: 'pricing price cost subscription tiers basic starter plus pro difference compare free',
   },
   {

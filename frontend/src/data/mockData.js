@@ -140,7 +140,7 @@ export const LANDING_NAV_ITEMS = [
  */
 export const MOCK_PLANS = [
   {
-    id: 'basic', name: 'Starter', price: 199, mrp: 300, period: '/mo',
+    id: 'basic', name: 'Starter', price: 199, mrp: 300, period: ' once', oneTime: true,
     tag: 'One adaptive diagnosis and your Clarity Report',
     popular: false, cta: 'Start Starter',
     features: [
