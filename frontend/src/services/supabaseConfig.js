@@ -28,8 +28,9 @@ export const supabaseEnvPresent = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
 export const devMockAuth = import.meta.env.DEV && import.meta.env.VITE_DEV_MOCK_OTP === '1';
 export const DEV_MOCK_CODE = '00000000';
 
-/** Where founders without access are sent -- the waitlist site. */
-export const WAITLIST_URL = import.meta.env.VITE_WAITLIST_URL || 'https://join.goxlally.ai';
+/** Where founders without access are sent -- the waitlist site, which is now
+ *  the public face of Ally on www. This app lives on app.goxlally.ai. */
+export const WAITLIST_URL = import.meta.env.VITE_WAITLIST_URL || 'https://www.goxlally.ai';
 
 export const supabaseConfigured = supabaseEnvPresent || devMockAuth;
 

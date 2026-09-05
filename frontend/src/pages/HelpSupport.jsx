@@ -3,49 +3,9 @@ import { useApp } from '../context/AppContext';
 import { useNavigate } from 'react-router-dom';
 import { useCallAccess } from '../hooks/useCallAccess';
 import Modal from '../components/Modal';
+import { FAQS, searchFaqs } from '../data/faqs';
 import { FEEDBACK, submitFeedback } from '../services/feedback';
 import { ApiError } from '../services/api';
-
-/* Answers are checked against what the code actually does, not what the product
-   is meant to do eventually. Four of the originals were wrong -- the worst
-   claimed Pro "unlocks unlimited diagnoses", while every tier including Pro is
-   capped at diagnosis_lifetime_limit = 1 (backend/app/plans/catalog.py), and
-   described a two-tier ladder when Starter exists. A support page that
-   overstates a paid plan is worse than no support page. */
-const FAQS = [
-  {
-    q: 'How do I start a diagnosis?',
-    a: 'Open "Adaptive diagnosis" in the sidebar — or "Start Founder Diagnosis" on your Compass. Ally begins with Founder DNA (how you decide and work), then moves to your current problem, then the business itself.'
-  },
-  {
-    q: 'How do plans work?',
-    a: 'There are three: Free (₹0), Starter (₹450/month) and Pro (₹999/month). All three include the diagnosis, Founder DNA, Business DNA, reports and next steps. What changes is daily chat allowance (Free 8,000 tokens during the testing phase, Starter 6,000, Pro 8,000), free discovery calls per month (Free none, Starter 1, Pro 2), and voice inside Ally Chat plus Plan Your Day, which are paid features.'
-  },
-  {
-    q: 'How many diagnoses do I get?',
-    a: 'One full diagnosis per account, on every plan including Pro — it is a deep one-time mapping, not something to re-run weekly. Upgrading raises your chat allowance and calls, not the diagnosis count. If you genuinely need a second run, contact support and we will look at it case by case.'
-  },
-  {
-    q: 'How do reminders work?',
-    a: 'Tasks you set in Plan Your Day show up as "Next due", and Ally nudges you about anything overdue or due today while you are in the app. There are no push notifications or reminder emails yet, so Ally cannot reach you when the app is closed.'
-  },
-  {
-    q: 'How do I upgrade?',
-    a: 'Go to Profile, then the Subscription & billing card, and click "Upgrade plan".'
-  },
-  {
-    q: 'Can I edit my Founder Profile?',
-    a: 'Yes. Go to Profile, click "Edit" in the Founder Identity section, change your name, email or LinkedIn URL, and save.'
-  },
-  {
-    q: 'Can I export or download my report?',
-    a: 'Not yet from the report page — there is no download or share button there today. What you can do right now is export everything Ally holds about you, including your full diagnosis history, from Profile → Privacy Center → "Download my data". It arrives as a JSON file immediately.'
-  },
-  {
-    q: 'What happens to my data, and can I delete it?',
-    a: 'Profile → Privacy Center is the single place for this. You can download everything we hold, see a category-by-category summary, pause AI processing, withdraw consent, or request account deletion — which is scheduled with a 30-day recovery window before anything is permanently erased.'
-  }
-];
 
 export default function HelpSupport() {
   const { showToast } = useApp();
@@ -68,18 +28,13 @@ export default function HelpSupport() {
   };
 
   // The intro copy always said "search the answers below"; there was never a
-  // search box. Matches every word separately across question AND answer text,
-  // not the phrase as typed -- someone asking "delete my data" should land on
-  // the privacy answer even though that exact phrase appears in neither its
-  // question nor its wording. Phrase matching found nothing for that query.
-  const filteredFaqs = useMemo(() => {
-    const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
-    if (!words.length) return FAQS;
-    return FAQS.filter(f => {
-      const haystack = `${f.q} ${f.a}`.toLowerCase();
-      return words.every(w => haystack.includes(w));
-    });
-  }, [query]);
+  // search box. searchFaqs (data/faqs.js) matches every word separately across
+  // the question, its search keywords and the answer -- someone asking "delete
+  // my data" should land on the privacy answer even though that exact phrase
+  // appears in neither its question nor its wording. It also ranks, so the
+  // answer whose subject is what you typed comes first. Shared with the help
+  // widget so both surfaces answer identically.
+  const filteredFaqs = useMemo(() => searchFaqs(query), [query]);
 
   const scrollToFaqs = () => {
     // Honour reduced-motion: a long smooth scroll is exactly the kind of

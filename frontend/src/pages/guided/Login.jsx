@@ -78,6 +78,9 @@ export default function Login() {
   const [notice, setNotice] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [cooldown, setCooldown] = useState(0);
+  // True when the address came in on the invite link (#email=…): this founder
+  // has been approved, so offering them the waitlist would only confuse.
+  const [fromInvite, setFromInvite] = useState(false);
   // Ref, not state: state updates are async, so two submits in the same tick
   // would both see `submitting === false` and both fire. The ref flips
   // synchronously.
@@ -105,6 +108,7 @@ export default function Login() {
       if (!EMAIL_RE.test(candidate)) return;
       setEmail(candidate);
       setStep('email');
+      setFromInvite(true);
     };
     applyEmailFromHash();
     // Also when the link is followed while this page is already open: a
@@ -397,8 +401,8 @@ export default function Login() {
       <div className="j-inner">
         <div className="j-avatar"><img src="/ally-logo.png" alt="" /></div>
         <div className="j-eye"><span className="lv"></span> GoXL &middot; Ally</div>
-        <h1 className="j-title">Meet Ally, your <em>founder DNA</em> engine.</h1>
-        <p className="j-sub">In about 20 minutes, Ally learns how you lead and finds what's really holding your business back. You'll leave with a clarity report and your next move.</p>
+        <h1 className="j-title">Meet Ally, your <em>Founder&rsquo;s Compass</em>.</h1>
+        <p className="j-sub">Your founder journey starts here &mdash; sign in, and Ally will find your next move.</p>
 
         {validationError && (
           <div className="consent-error" role="alert" id="consent-error">
@@ -443,15 +447,19 @@ export default function Login() {
                 Email me a code
               </button>
             </p>
-            <p className="auth-alt">
-              Don&rsquo;t have access yet?{' '}
-              <a className="auth-link-btn" href={WAITLIST_URL}>Join the waitlist</a>
-            </p>
+            {!fromInvite && (
+              <p className="auth-alt">
+                Don&rsquo;t have access yet?{' '}
+                <a className="auth-link-btn" href={WAITLIST_URL}>Join the waitlist</a>
+              </p>
+            )}
           </form>
         ) : step === 'email' ? (
           <form className="auth-form" onSubmit={handleSendCode} noValidate>
             <label className="auth-field">
-              <span className="auth-label">Email</span>
+              {/* One field on this step, so the caption only adds noise above the
+                  box; kept for screen readers. */}
+              <span className="auth-label sr-only">Email</span>
               <input className="auth-input" type="email" name="email" autoComplete="username"
                      inputMode="email" placeholder="you@company.com" value={email} autoFocus
                      disabled={submitting}
@@ -471,10 +479,12 @@ export default function Login() {
                 Sign in instead
               </button>
             </p>
-            <p className="auth-alt">
-              Don&rsquo;t have access yet?{' '}
-              <a className="auth-link-btn" href={WAITLIST_URL}>Join the waitlist</a>
-            </p>
+            {!fromInvite && (
+              <p className="auth-alt">
+                Don&rsquo;t have access yet?{' '}
+                <a className="auth-link-btn" href={WAITLIST_URL}>Join the waitlist</a>
+              </p>
+            )}
           </form>
         ) : (
           <form className="auth-form" onSubmit={handleVerify} noValidate>
