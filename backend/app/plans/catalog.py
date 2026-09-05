@@ -201,6 +201,12 @@ class Plan:
     #: a strikethrough that saves nothing is a false claim, and `has_offer` below
     #: is what the API and the pricing page read, not the raw number.
     mrp_inr: int = 0
+    #: True when `price_inr` is charged ONCE, with nothing renewing -- Starter is
+    #: a single diagnosis and the report it writes, not a month of service. Every
+    #: surface that prints the price reads this rather than assuming "/mo": a
+    #: one-time purchase labelled monthly is a false claim about what the founder
+    #: will be charged next month, not a wording nit.
+    one_time: bool = False
 
     @property
     def has_offer(self) -> bool:
@@ -264,6 +270,9 @@ PLANS: dict[PlanTier, Plan] = {
         name="Starter",
         price_inr=199,
         mrp_inr=300,
+        # Paid once for one diagnosis, not monthly: there is no recurring
+        # service here to renew.
+        one_time=True,
         # No chat, so no chat credits and no chat ceiling. The daily limits are
         # zero rather than small: a founder on this tier never reaches a metered
         # surface, and a non-zero budget here would read as an allowance they

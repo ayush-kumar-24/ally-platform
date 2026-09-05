@@ -99,7 +99,10 @@ function useCatalog() {
           // made once, server-side, so no surface can render a crossed-out
           // number that saves the founder nothing.
           mrp: p.mrp_inr ?? null,
-          period: p.price_inr ? '/mo' : '',
+          // Starter is paid once for one diagnosis; Plus and Pro renew. The
+          // backend decides which, so no surface here assumes "/mo".
+          oneTime: Boolean(p.one_time),
+          period: p.price_inr ? (p.one_time ? 'one-time' : '/mo') : '',
           tag: p.tagline,
           popular: p.tier === 'pro',
           cta: p.price_inr ? `Start ${p.name}` : 'Current',
@@ -170,11 +173,13 @@ function PlansView({ onSelectPlan, currentPlan }) {
                     )}
                     <span className="cur">₹</span>
                     <span className="amt">{price.toLocaleString()}</span>
-                    <span className="per">/mo</span>
+                    <span className="per">{plan.period}</span>
                   </>
                 )}
               </div>
-              {plan.price > 0 && <div className="pc-sub">billed monthly</div>}
+              {plan.price > 0 && (
+                <div className="pc-sub">{plan.oneTime ? 'one-time payment' : 'billed monthly'}</div>
+              )}
               <button
                 id={`plan-cta-${plan.id}`}
                 className={`pc-cta${isCurrent ? '' : ' primary'}`}
@@ -232,7 +237,9 @@ function PlansView({ onSelectPlan, currentPlan }) {
               {PLANS.map(p => (
                 <th scope="col" key={p.id} className={p.popular ? 'cmp-col-pop' : ''}>
                   <div className="cmp-pn">{p.name}</div>
-                  <div className="cmp-pp">{p.price === 0 ? 'Free' : `₹${p.price.toLocaleString()}/mo`}</div>
+                  <div className="cmp-pp">
+                    {p.price === 0 ? 'Free' : `₹${p.price.toLocaleString()} ${p.period}`}
+                  </div>
                 </th>
               ))}
             </tr>
@@ -503,7 +510,7 @@ function CheckoutView({ plan, onBack, onSuccess }) {
           <div className="bl-os-plan-badge">
             <div className="bl-os-plan-name">{plan.name} Plan</div>
             <div className="bl-os-plan-tag">{plan.tag}</div>
-            <div className="bl-os-plan-cycle">Billed Monthly</div>
+            <div className="bl-os-plan-cycle">{plan.oneTime ? 'One-time payment' : 'Billed Monthly'}</div>
           </div>
 
           <ul className="bl-os-feats">
@@ -517,7 +524,7 @@ function CheckoutView({ plan, onBack, onSuccess }) {
 
           <div className="bl-os-breakdown">
             <div className="bl-os-line">
-              <span>{plan.name} (Monthly)</span>
+              <span>{plan.name} ({plan.oneTime ? 'One-time' : 'Monthly'})</span>
               <span>₹{price.toLocaleString()}</span>
             </div>
             <div className="bl-os-line">
@@ -525,7 +532,7 @@ function CheckoutView({ plan, onBack, onSuccess }) {
               <span>₹{gst.toLocaleString()}</span>
             </div>
             <div className="bl-os-total">
-              <span>Total / month</span>
+              <span>{plan.oneTime ? 'Total' : 'Total / month'}</span>
               <span>₹{total.toLocaleString()}</span>
             </div>
           </div>
@@ -556,14 +563,17 @@ function SuccessView({ plan, onViewStatus }) {
       </div>
       <h2 className="bl-success-title">Payment Successful!</h2>
       <p className="bl-success-sub">
-        Welcome to the <strong>{plan.name} Plan</strong>. Your subscription is now active.
+        Welcome to the <strong>{plan.name} Plan</strong>. Your {plan.oneTime ? 'plan' : 'subscription'} is now active.
         A confirmation receipt has been sent to <strong>{founder?.email ?? 'your email'}</strong>.
       </p>
       <div className="bl-success-details">
         <div className="bl-sd-row"><span>Plan</span><strong>{plan.name}</strong></div>
-        <div className="bl-sd-row"><span>Amount charged</span><strong>₹{plan.displayPrice?.toLocaleString()}/mo + GST</strong></div>
-        <div className="bl-sd-row"><span>Billing cycle</span><strong>Monthly</strong></div>
-        <div className="bl-sd-row"><span>Next renewal</span><strong>Aug 2026</strong></div>
+        <div className="bl-sd-row">
+          <span>Amount charged</span>
+          <strong>₹{plan.displayPrice?.toLocaleString()}{plan.oneTime ? '' : '/mo'} + GST</strong>
+        </div>
+        <div className="bl-sd-row"><span>Billing cycle</span><strong>{plan.oneTime ? 'One-time' : 'Monthly'}</strong></div>
+        {!plan.oneTime && <div className="bl-sd-row"><span>Next renewal</span><strong>Aug 2026</strong></div>}
         <div className="bl-sd-row"><span>Status</span><strong className="bl-status-badge active">Active</strong></div>
       </div>
       <button id="view-subscription-btn" className="bl-pay-btn" onClick={onViewStatus}>
@@ -614,7 +624,11 @@ function StatusView({ onUpgrade, currentPlan }) {
             {plan.name} Plan
             <span className="bl-status-badge active">Active</span>
           </h2>
-          <p className="bl-status-renew">Next renewal: <strong>August 1, 2026</strong> · ₹{plan.price.toLocaleString()}/mo</p>
+          {plan.oneTime ? (
+            <p className="bl-status-renew">One-time purchase · ₹{plan.price.toLocaleString()} · nothing renews</p>
+          ) : (
+            <p className="bl-status-renew">Next renewal: <strong>August 1, 2026</strong> · ₹{plan.price.toLocaleString()}/mo</p>
+          )}
         </div>
         <div className="bl-status-actions">
           <button id="upgrade-plan-btn" className="bl-action-btn primary" onClick={onUpgrade}>

@@ -60,6 +60,17 @@ def test_struck_through_price_is_only_ever_a_real_saving():
         (300, 199), (600, 450), (1_200, 999)]
 
 
+def test_starter_is_the_only_one_time_purchase():
+    """Starter is one diagnosis paid for once; Plus and Pro renew monthly. A
+    one-time plan carrying monthly credits would be a renewing grant with no
+    renewing payment behind it, so the two facts must agree."""
+    assert [p.tier for p in all_plans() if p.one_time] == [PlanTier.BASIC]
+    for plan in all_plans():
+        if plan.one_time:
+            assert plan.is_paid, plan.name
+            assert plan.monthly_credits == 0, plan.name
+
+
 def test_paid_credit_ladder_ascends():
     """Paying more must grant more, or the pricing page contradicts itself."""
     _, _, plus, pro = all_plans()

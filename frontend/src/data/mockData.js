@@ -140,7 +140,7 @@ export const LANDING_NAV_ITEMS = [
  */
 export const MOCK_PLANS = [
   {
-    id: 'basic', name: 'Starter', price: 199, mrp: 300, period: '/mo',
+    id: 'basic', name: 'Starter', price: 199, mrp: 300, period: 'one-time', oneTime: true,
     tag: 'One adaptive diagnosis and your Clarity Report',
     popular: false, cta: 'Start Starter',
     features: [
@@ -151,7 +151,7 @@ export const MOCK_PLANS = [
     ],
   },
   {
-    id: 'starter', name: 'Plus', price: 450, mrp: 600, period: '/mo',
+    id: 'starter', name: 'Plus', price: 450, mrp: 600, period: '/mo', oneTime: false,
     tag: 'For founders working on the business weekly', popular: false, cta: 'Start Plus',
     features: [
       '3,500 tokens per day',
@@ -164,7 +164,7 @@ export const MOCK_PLANS = [
     ],
   },
   {
-    id: 'pro', name: 'Pro', price: 999, mrp: 1200, period: '/mo',
+    id: 'pro', name: 'Pro', price: 999, mrp: 1200, period: '/mo', oneTime: false,
     tag: 'Ally as your standing advisor', popular: true, cta: 'Start Pro',
     features: [
       '8,000 tokens per day',
