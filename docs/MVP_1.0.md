@@ -1,7 +1,7 @@
 # Ally — MVP 1.0 Definition
 
 - **Status** — Finalized scope, pending build of the launch-critical fixes in §6
-- **Revision** — 2. Adds Decision 5 (no free tier; coupons are the acquisition mechanism) and the four open decisions it creates, in §9.
+- **Revision** — 3. Rev 2 added Decision 5 (no free tier; coupons are the acquisition mechanism) and the open decisions it creates, in §9. Rev 3 adds P0-11/12/13: the diagnosis engine has never been run against a live model, and the defaults hide that rather than surface it.
 - **Date** — 5 September 2026
 - **Product** — Ally, the Founder DNA Platform. An AI co-founder coach that diagnoses the *founder* first, then the business, then the root cause sitting at their intersection.
 - **Stack** — FastAPI + SQLAlchemy + Alembic on Supabase Postgres · Vite + React 19 + Tailwind + react-router · Backend on AWS App Runner/ECS Fargate, frontend on Vercel · Razorpay (INR) · Supabase Auth
@@ -63,7 +63,7 @@ Legend: **Live** = built and working · **Fix** = built but has a launch-critica
 | Per-stage question budget | Live | `founder_stages.question_budget` |
 | Confidence scoring + routing bands (Continue <60 · Validate 60–80 · Report ≥80) | Live | `reasoning/engines/confidence.py` |
 | Voice input inside the diagnosis | Live | All tiers |
-| Reasoning engines: archetype, business health, root cause, stage detection, psychological state, distress language, symptom detection, consistency, recommendation, action plan | Live | 19 engines under `reasoning/engines/` |
+| Reasoning engines: archetype, business health, root cause, stage detection, psychological state, distress language, symptom detection, consistency, recommendation, action plan | Live, **but LLM-gated** | 19 engines under `reasoning/engines/`. Nine independent flags decide whether each reasons by model or degrades to a deterministic path, and **all nine default to off** — see P0-11 |
 | Lifetime diagnosis cap enforced per plan | Live | Only *completed* diagnoses count |
 
 ### 1.4 Outputs
@@ -526,10 +526,33 @@ So:
 | P0-4 | **Top-up advertised, unpurchasable.** | `app/api/v1/plans/router.py:48` vs `payments/router.py` | Add the top-up checkout path |
 | P0-5 | **The Free tier must be withdrawn** (Decision 5). It is currently a funded trial sized for internal testing — 8,000 tokens/day, *above* Plus (3,500) and level with Pro, carrying three ₹999 surfaces. | `app/plans/catalog.py:222-260`, flagged in the file's own comments | §5.5 — redefine `free` as the no-access state rather than deleting the tier. Supersedes the earlier "resize it" fix. |
 | P0-6 | **No scheduler in production.** Discovery reminders, the account-deletion sweep, report reconciliation and partition creation are all endpoints nothing calls. | `webhooks/internal_jobs.py` | EventBridge (or pg_cron) hitting the internal endpoints with `INTERNAL_JOBS_SECRET` |
+| P0-11 | **The diagnosis engine has never been run against a live model.** Nine reasoning flags gate whether a model is involved at all, and every one defaults off. Worse, nothing fails when they are: the engines degrade to deterministic paths and the API keeps returning 200s, so a green run is not evidence a model was ever called. | `app/core/config.py:124,149,156,169,411,430,448,453`; `scripts/verify_llm_integration.py` | Configure a key, turn the flags on, run the preflight, then drive a full diagnosis end-to-end and read the report by hand |
+| P0-12 | **Chat silently answers from the mock when unconfigured.** `ALLY_LLM_PROVIDER` defaults to `"mock"`, and `build_routing_policy` falls back to the mock whenever the selected provider has no key — without raising. `FailoverLLMProvider` also keeps mock as the last link by design, so a provider outage fabricates an answer rather than failing. **This has already happened once**: the module's own docstring records chat replying "Grounded answer from mock-standard" and reporting success, with whether it happened depending on import order. | `app/integrations/llm/settings.py:8,36-43,109,131` | Assert at startup that production never resolves to `mock`, and drop `mock` from any production fallback chain |
+| P0-13 | **`diagnosis_scoring_configured` is false by default.** `ADAPTIVE_QUESTIONS=False` and `ANSWER_CLASSIFIER="stored"` together mean no answer is ever banded, so every diagnosis yields a report with no evidence behind it. The code names this as the direct cause of a past P0 and logs an error at startup — but only logs it. | `app/core/config.py:500-517`, `app/main.py:176` | Set `ADAPTIVE_QUESTIONS=true` (preferred) or `ANSWER_CLASSIFIER=llm`, and make it a startup refusal in production rather than a log line |
 | P0-8 | **No comp grant path.** A ₹0 redemption cannot go through Razorpay, so "some founders get a plan free" is currently unimplementable by any route. | — | §5.3 — `POST /coupons/redeem`, transactional grant + redemption + audit, admin-issued codes only |
 | P0-9 | **No lapsed state exists.** Today "downgrade" means moving to Free, which grants a full trial's worth of access. Once Free means no-access, every expiry, cancellation and comp exit lands there — and what a lapsed founder can still see is **undecided** (§9-2). | `app/plans/catalog.py`, expiry sweep | Define the state, then build it. Blocking: the sweep in P0-1 has nowhere correct to land until this is settled |
 | P0-10 | **Paywall position is undecided** (§9-1) and gates the onboarding build. Positions A, B and C imply different screens, different drop-off, and different LLM cost exposure for non-payers. | §2 diagram | Product decision required before the onboarding and billing work can be sequenced |
 | P0-7 | **`RAZORPAY_*` keys absent from `.env.example`.** A deploy that forgets them silently disables payments — `payments_configured` returns false and checkout 500s. | `backend/.env.example` | Document all three keys; assert at startup in production |
+
+#### Verifying the engine — the order to do it in
+
+`scripts/verify_llm_integration.py` is the preflight. It needs no database, writes nothing, and uses the app's own resolution code rather than reimplementing it, so it reports what the product will actually do. It exists because a passing test run cannot tell you a model was involved:
+
+```
+python scripts/verify_llm_integration.py
+```
+
+It checks all nine reasoning flags and what each degrades to, whether the classifier has a vendor and a key, **what the chat path resolves to — failing if that is the mock**, a real probe call to every configured provider (asserting the response is stamped with that vendor, not `mock`), and the retrieval/embedding configuration. Exit 0 means genuinely wired; non-zero names the flag or key responsible.
+
+Then, in order:
+
+1. **Preflight** — green, with a real provider probed and no mock resolution.
+2. **Drive one full diagnosis end-to-end**, using the harness promoted per P1-7. It answers as a realistic Stage-0 founder, so the output is judgeable.
+3. **Read the report by hand.** This is the step no script replaces. Confidence scores, root-cause ranking, the archetype and the narrative prose are all now model-produced, and the only way to know whether they are *right* — rather than merely present — is for someone who knows the product to read one and say so.
+4. **Check `narrator_provenance` on every report section.** Sections that fell back to template prose record it, so a report that looks written may still be half-generated. If provenance says template where it should say model, the flag or the call is failing silently.
+5. **Re-run with each flag toggled off in turn**, to confirm the degraded paths still produce a coherent report. Every one of these is a live production failure mode, not a hypothetical.
+
+Budget for it: a diagnosis is roughly 24,400 tokens and answers are classified six at a time, so a full run is inexpensive but not instant.
 
 ### P1 — must be right at launch
 
@@ -540,7 +563,8 @@ So:
 | P1-3 | **Error boundary does not reset on navigation.** One crash keeps sibling routes broken until a manual reload. | `MANUAL_QA_CHECKLIST.md §12` | Key the boundary on the route |
 | P1-4 | **Know My Energy is sold but not finished.** Declared in Pro's feature set. | `catalog.py:300` | Finish it, or remove it from the advertised set until it ships |
 | P1-5 | **Docs contradict the product.** `backend/README.md` says "social login only — Google and LinkedIn, no passwords"; the product ships email + OTP + password. `backend/PROGRESS.md` says the diagnosis engine is unbuilt; it is built. | `backend/README.md`, `backend/PROGRESS.md` | Rewrite both. A new engineer onboarding off these docs starts wrong. |
-| P1-6 | **Build artefacts and scratch files are committed.** `frontend.zip` (1.6 MB), `backend/_tmp_diag.py`, `_tmp_run_diagnosis.py`, `cur.json`, `sum.json`. | `git ls-files` | Delete and gitignore |
+| P1-6 | **Build artefacts committed.** `frontend.zip` (1.6 MB), and the captured API responses `backend/cur.json` / `sum.json`. | `git ls-files` | Delete and gitignore |
+| P1-7 | **Two real diagnosis harnesses are sitting in scratch files.** `_tmp_run_diagnosis.py` drives a full diagnosis over HTTP and `_tmp_diag.py` does it in-process via `TestClient`, both answering as a realistic Stage-0 founder from a hand-written bank of 20+ in-character answers. That is most of the end-to-end test P0-11 needs. | `backend/_tmp_*.py` | **Promote, do not delete** — move into `scripts/` as the diagnosis E2E harness |
 
 ### P2 — do it in the launch window if it fits
 
@@ -561,6 +585,8 @@ So:
 - [ ] The Free tier is withdrawn: no "free" or "trial" copy survives anywhere in the product, and a lapsed founder lands in the defined state rather than on a trial's worth of access
 - [ ] The scheduler is live and every internal job has run successfully at least once in production
 - [ ] `MANUAL_QA_CHECKLIST.md` passes end to end on production, on desktop and at 375px
+- [ ] `scripts/verify_llm_integration.py` exits 0 against production configuration, with a real provider probed and nothing resolving to the mock
+- [ ] At least one complete diagnosis has been run against a live model and its report read end to end by a person, with `narrator_provenance` confirming the sections were model-written
 - [ ] Zero console errors and zero 5xx across a full founder journey
 - [ ] Every screen a founder can reach shows real data or an honest empty state — no mock, no hardcoded date, no fabricated name
 
@@ -689,5 +715,7 @@ Today's testers hold `plan_type='free'` with the testing-phase allowance. When F
 | c | Sign-off on the confidence-formula weights | Viraj | Engine calibration |
 | d | "Core questions expected per stage" and the minimum-question floor | Product | Confidence coverage denominator |
 | e | Whether `business_dimensions` (empty, superseded by `readiness_pillars`) is dropped | Team | Schema hygiene |
+| f | Which provider and model the diagnosis engine runs on in production, and the monthly token budget that implies | Product / Eng | P0-11 |
+| g | Which of the nine reasoning flags are on at launch — each one off is a surface running deterministically, which is a product choice, not only a config one | Product | P0-11 |
 
 *(The former Decision 1, "Free-tier launch sizing", is closed: Decision 5 withdraws the tier, so there is no ladder left to size — only the lapsed state in 9-2 to define.)*
