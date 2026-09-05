@@ -72,21 +72,18 @@ const NAV_GROUPS = [
   {
     label: 'FOUNDER DIAGNOSIS',
     items: [
-      /* Ordered to read as the journey itself: Founder DNA, then Business DNA,
-         then the diagnosis that uses both. That is the sequence a founder is
-         actually taken through, and the nav is the only place it is visible.
-         (2026-08-27 product decision.)
+      /* Entry point first, then the pages it produces. "Adaptive diagnosis" is
+         the thing a founder runs; Founder DNA and Business DNA are written
+         *from* it and stay locked until there is a report.
 
-         Worth knowing when reading this list: the first two are the RESULT
-         pages, written *from* a finished diagnosis, while "Adaptive diagnosis"
-         below is the entry point that runs all three phases. So for a founder
-         with no report yet, the two items above the entry point are locked --
-         the order tells them what they are working toward, not what to click
-         first. If that ever reads as friction rather than a map, the fix is to
-         surface the entry point separately, not to reshuffle these again. */
+         This reverses the 2026-08-27 order, which put the two result pages
+         first so the section read as the journey. It read instead as two
+         locked rows above the one row a new founder could actually click --
+         the map was there, but the door was below it. (2026-09-05 product
+         decision.) */
+      { path: '/app/founder-dna-journey', tip: 'Adaptive diagnosis', icon: IconPulse, label: 'Adaptive diagnosis', badge: null },
       { path: '/app/founder-dna', tip: 'Founder DNA', icon: IconUser, label: 'Founder DNA', badge: null, needsReport: true },
       { path: '/app/business-dna', tip: 'Business DNA', icon: IconTrendingUp, label: 'Business DNA', badge: null, needsReport: true },
-      { path: '/app/founder-dna-journey', tip: 'Adaptive diagnosis', icon: IconPulse, label: 'Adaptive diagnosis', badge: null },
       /* Unlike the DNA pages above, this isn't derived from a diagnosis report
          -- it's the founder's own long-term vision, written whenever they like.
          No needsReport gate: nothing here depends on one existing. */

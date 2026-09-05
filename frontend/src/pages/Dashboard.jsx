@@ -53,7 +53,14 @@ function progressPct(target, current) {
 
 /** The compass gauge -- an SVG dial, ported from the reference mockup's
  *  Founder's Compass Overview. `pct` null renders a resting needle and an
- *  empty arc rather than a fabricated reading. */
+ *  empty arc rather than a fabricated reading.
+ *
+ *  The dial face is a compass rose. It used to be the percentage and the words
+ *  "toward your target", which the needle swept straight across -- at most
+ *  angles the number sat under the blade and was unreadable, and the product
+ *  is called the Founder's Compass. The reading itself is not lost: the arc
+ *  carries it visually, and the figure's aria-label still states it in words
+ *  for anyone who cannot see either. */
 function CompassGauge({ pct }) {
   const r = 118;
   const circumference = 2 * Math.PI * r;
@@ -70,16 +77,32 @@ function CompassGauge({ pct }) {
           strokeDasharray={circumference} strokeDashoffset={offset} transform="rotate(-90 150 150)"
           style={{ transition: 'stroke-dashoffset 1s var(--ease)' }}
         />
+        {/* Rose first, needle over it: the blade should read as sitting on the
+            face, the way it does on a real dial. */}
+        <g className="compass-rose">
+          <path d="M150 104 L154 150 L146 150 Z" />
+          <path d="M150 196 L154 150 L146 150 Z" />
+          <path d="M196 150 L150 154 L150 146 Z" />
+          <path d="M104 150 L150 154 L150 146 Z" />
+          <g className="compass-rose-minor">
+            <path d="M171 129 L153 147 L147 153 Z" />
+            <path d="M171 171 L153 153 L147 147 Z" />
+            <path d="M129 171 L147 153 L153 147 Z" />
+            <path d="M129 129 L147 147 L153 153 Z" />
+          </g>
+          <g className="compass-rose-letters">
+            <text x="150" y="76" textAnchor="middle">N</text>
+            <text x="224" y="155" textAnchor="middle">E</text>
+            <text x="150" y="232" textAnchor="middle">S</text>
+            <text x="76" y="155" textAnchor="middle">W</text>
+          </g>
+        </g>
         <g style={{ transformOrigin: '150px 150px', transition: 'transform 1.1s var(--ease)', transform: `rotate(${angle}deg)` }}>
           <path d="M150 62 L156 150 L150 160 L144 150 Z" fill="var(--forest)" />
           <path d="M150 160 L156 150 L150 232 L144 150 Z" fill="rgba(27,67,50,.16)" />
         </g>
         <circle cx="150" cy="150" r="6" fill="var(--ivory-2)" stroke="var(--forest)" strokeWidth="1.5" />
       </svg>
-      <figcaption className="compass-gauge-center">
-        <b>{known ? `${pct}%` : '—'}</b>
-        <span>{known ? 'toward your target' : 'not enough data'}</span>
-      </figcaption>
     </figure>
   );
 }

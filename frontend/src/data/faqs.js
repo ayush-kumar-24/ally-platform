@@ -55,9 +55,9 @@ export const FAQS = [
     keywords: 'change name email linkedin details update identity',
   },
   {
-    q: 'Can I export or download my report?',
-    a: 'Not yet from the report page — there is no download or share button there today. What you can do right now is export everything Ally holds about you, including your full diagnosis history, from Profile → Privacy Center → "Download my data". It arrives as a JSON file immediately.',
-    keywords: 'pdf save print share copy export download report',
+    q: 'Can I export, download or share my report?',
+    a: 'Yes. The report page has a download button that gives you the report as a PDF, and a share button that creates a link anyone can open without signing in. Shared links are listed under "Links you have shared" on the same page, and you can revoke one there at any time. To export everything Ally holds about you — not just this report — use Profile → Privacy Center → "Download my data", which arrives as a JSON file immediately.',
+    keywords: 'pdf save print share copy export download report link revoke send',
   },
   {
     q: 'What happens to my data, and can I delete it?',
