@@ -41,13 +41,30 @@ Waitlist-gated auth (email + OTP + password) · guided onboarding · the three-p
 
 ## 3. Feature list
 
-**Live:** auth + session rotation, waitlist gate, guided onboarding, consent ledger, all three diagnosis phases, stage-scoped pillar selection, per-stage question budget, confidence routing (continue <60 / validate 60–80 / report ≥80), Clarity Report, Founder DNA, Business DNA (6 pillars), Next Steps, dashboard, Ally Chat, Plan Your Day, Goals, Vision, Recommendations, Knowledge chat, Frameworks, Achievements, Journey, Notifications, Help assistant, profile/settings/feedback, discovery slots + booking, credit ledger with lazy settlement, daily token ceilings, server-side entitlements, unbilled-usage reconciliation, admin panel (RBAC, users, credits, flags, broadcasts, usage, audit), GDPR flows, Sentry.
+Read the middle column as "what a founder can do today" and the right as "what stands between that and launch". The gaps cluster almost entirely in **Money** and **Admin** — the rest of the product is built.
 
-**Live but LLM-gated:** the 19 reasoning engines. Nine flags decide whether each reasons by model or degrades deterministically — **all nine default off** (P0-11).
+| Area | Working today | Still needed for 1.0 |
+|---|---|---|
+| **Access** | Waitlist gate · email + OTP + password sign-in · session tokens with refresh rotation | — |
+| **Onboarding** | Consent ledger · profile build · stage tour · problem statement · resume part-way | Where the paywall interrupts this (§8-1) |
+| **Diagnosis** | All three phases · stage-scoped pillars · per-stage question budget · confidence routing · resumable sessions · voice input | ⚠ **Never run against a live model.** Nine flags gate the reasoning; all default off (P0-11/12/13) |
+| **Outputs** | Clarity Report + Clarity Score · Founder DNA · Business DNA (6 pillars) · root-cause chain · Next Steps · honest empty states | — |
+| **Workspace** | Dashboard · Ally Chat (grounded, streaming, attachments, voice) · Plan Your Day · Goals · Vision · Recommendations · Knowledge chat · Frameworks · Achievements · Journey · Notifications · Help assistant · profile & settings | **Know My Energy** — sold on the pricing page, not built |
+| **Coaching calls** | Live Google Calendar slots · request-and-confirm booking · priority lead time for Pro · confirmation emails | Reminder emails need a scheduler · ₹300 paid calls have no payment path |
+| **Money** | Plan catalog as one source of truth · credit ledger with lazy settlement · daily token ceilings · server-side entitlements · Razorpay checkout · webhook-granted plans · unbilled-usage reconciliation | **Recurring subscriptions · coupons incl. 100% comps · real Billing UI · top-up checkout · Free-tier withdrawal · the lapsed state** |
+| **Admin** | 3-role RBAC · user search & detail · credit adjustment + bulk grants · diagnosis/conversation resets · suspension & deletion · privacy queue · feature flags · broadcasts · usage & cost · immutable audit log | **Coupon CRUD + redemption report · subscription view (mandate, next charge, failures) · cancel/refund from the panel · failed-payment queue · waitlist view** |
+| **Trust** | GDPR export · restrict processing · withdraw consent · 30-day scheduled deletion · Terms & Privacy | Deletion sweep needs a scheduler |
+| **Platform** | Sentry · mobile 375px on main routes · stale-chunk recovery after deploy | Scheduler for all internal jobs · error boundary doesn't reset on navigation |
 
-**Must finish for 1.0:** Know My Energy (sold on the pricing page, not built) · discovery reminder emails (code works, nothing schedules it).
+**What each tier buys** — enforced server-side; the UI only mirrors it:
 
-**Must build for 1.0:** recurring subscriptions · coupons incl. comps · real Billing UI · top-up checkout · Free-tier withdrawal · the lapsed state.
+| | Starter ₹199 | Plus ₹450 | Pro ₹999 |
+|---|:--:|:--:|:--:|
+| Diagnosis, Clarity Report, call booking | ● | ● | ● |
+| Ally Chat, voice chat, Next Steps, Goals, Plan Your Day | | ● | ● |
+| Vision, Recommendations, Knowledge chat, email outreach, priority call slots, Know My Energy | | | ● |
+
+The ladder reads as three sentences: **₹199** buys the answer · **₹450** buys somewhere to act on it · **₹999** is Ally initiating rather than responding.
 
 ---
 
