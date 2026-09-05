@@ -211,3 +211,36 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* --- Reduced motion -------------------------------------------------------
+ *
+ * Two sources, one result. The media query honours the device setting; the
+ * attribute honours Ally's own switch in Profile > Preferences, which is set on
+ * <html> by services/motion.js. Before this, the in-app switch saved a value
+ * that nothing ever read, so turning it on changed nothing at all.
+ *
+ * Durations are flattened rather than set to 0: a 0s animation never fires its
+ * `animationend`, and anything waiting on that event would hang instead of
+ * finishing instantly. 0.01ms completes on the next frame and still reads as
+ * "no motion".
+ *
+ * `scroll-behavior` is included because a long smooth scroll is exactly the
+ * kind of unrequested movement this setting exists to stop.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+[data-reduced-motion="true"] *,
+[data-reduced-motion="true"] *::before,
+[data-reduced-motion="true"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}

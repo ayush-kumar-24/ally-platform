@@ -739,6 +739,30 @@ def _section_body(key: str, narrative, ctx: Mapping[str, Any]) -> str:
 
 # --- the document ------------------------------------------------------------
 
+def _unpopulated_note(narrative) -> str:
+    """Name any section this report did not get, rather than silently omitting it.
+
+    The generator already decides to leave a section out when it has nothing
+    real to put there -- expected_impact is the usual one -- and records which.
+    The React fallback view printed that list; this document, which is what a
+    founder actually reads on screen and in the PDF, did not. So the honesty was
+    written and then not delivered to anybody.
+
+    Worded as a deliberate omission, because that is what it is: a founder who
+    sees a section named and empty should understand we chose not to invent it,
+    not wonder whether their report failed halfway.
+    """
+    names = tuple(getattr(narrative, "unpopulated_sections", ()) or ())
+    if not names:
+        return ""
+    readable = ", ".join(n.replace("_", " ") for n in names)
+    return (
+        '<p class="footnote">Not included in this report: '
+        f'{e(readable)}. Ally leaves a section out when it does not have enough '
+        'to say something true there, rather than filling it in.</p>'
+    )
+
+
 def build_report_document(
     narrative,
     insights: Mapping[str, Any] | None,
@@ -837,12 +861,20 @@ def build_report_document(
               has_root_cause=has_root_cause, wellbeing_first=wellbeing_first),
         lead,
         "".join(blocks),
+        # Was "Come back and re-run the clarity check once these actions are
+        # done". There is one diagnosis per account on every plan, so the report
+        # was inviting founders to do the one thing the product refuses -- and
+        # then they arrive at support asking why they cannot. Re-running at a
+        # stage change is intended but unbuilt; until it exists, the closing
+        # line points at the surfaces that DO keep moving.
         '<div class="close"><div><h3>This report is yours to keep.</h3>'
-        '<p>Come back and re-run the clarity check once these actions are done '
-        '&mdash; that is when this picture will actually move.</p></div>'
+        '<p>Work through the actions above in Next steps &mdash; that is where '
+        'this picture actually moves. Ally knows what is in this report, so you '
+        'can talk any of it through whenever you want.</p></div>'
         + ('<button class="btn btn-dark" data-report-action="download">Download PDF</button>'
            if (with_actions and not for_print) else "")
         + '</div>',
+        _unpopulated_note(narrative),
         f'<p class="footnote">Generated from your diagnosis on '
         f'{e((generated_at or datetime.now()).strftime("%d %b %Y"))}. Bands reflect how '
         f'much evidence supported this read &mdash; not how well you are doing.</p>',

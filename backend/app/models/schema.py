@@ -982,7 +982,11 @@ class Notifications(Base):
 class PrivacyRequests(Base):
     __tablename__ = 'privacy_requests'
     __table_args__ = (
-        CheckConstraint("request_type::text = ANY (ARRAY['view_data'::character varying, 'download_data'::character varying, 'correct_data'::character varying, 'withdraw_consent'::character varying, 'restrict_processing'::character varying, 'portability'::character varying]::text[])", name='privacy_requests_request_type_check'),
+        # `delete_account` and `cancel_deletion` added by f2c7a91d4e83. Without them
+        # erasure, its cancellation and consent withdrawal all logged as
+        # `withdraw_consent`, so the audit trail could not answer "who asked to be
+        # deleted" -- the one question it exists to answer.
+        CheckConstraint("request_type::text = ANY (ARRAY['view_data'::character varying, 'download_data'::character varying, 'correct_data'::character varying, 'withdraw_consent'::character varying, 'restrict_processing'::character varying, 'portability'::character varying, 'delete_account'::character varying, 'cancel_deletion'::character varying]::text[])", name='privacy_requests_request_type_check'),
         CheckConstraint("status::text = ANY (ARRAY['pending'::character varying, 'in_progress'::character varying, 'completed'::character varying, 'rejected'::character varying]::text[])", name='privacy_requests_status_check'),
         ForeignKeyConstraint(['founder_id'], ['founders.founder_id'], name='privacy_requests_founder_id_fkey'),
         PrimaryKeyConstraint('request_id', name='privacy_requests_pkey'),

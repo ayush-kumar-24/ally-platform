@@ -1,0 +1,295 @@
+{
+  "schema_version": "1.0",
+  "file": "group-08-talking-to-ally",
+  "group": "talking-to-ally",
+  "group_number": 8,
+  "group_title": "Talking to Ally",
+  "question_bank": "Founder Question Bank v3 — group 8 (questions 090-107)",
+  "created": "2026-09-05",
+  "content_rules": {
+    "voice": "Very simple, easy English. Short sentences. Common everyday words. No idioms. Friendly and warm, but plain.",
+    "answer_length": "About 120 words maximum. Short paragraphs with a blank line between them.",
+    "no_tier_names": "Do not name plan tiers or quote allowances. Both change with the Rs 199 entry plan. Say 'your plan' and point at the billing page."
+  },
+  "walk_log": {
+    "walked_on": "2026-09-05",
+    "environment": "local dev build against the Supabase database (NOT production RDS)",
+    "observed": [
+      "Attachments accept PDF, DOCX, TXT, Markdown, CSV, and PNG/JPEG/GIF/WEBP images. Text pulled from an attachment is clamped before it reaches the model, so a very long document is read in part, not whole.",
+      "Deleting a conversation defaults to ARCHIVE, and there is a restore endpoint. A permanent delete is a separate explicit mode.",
+      "Chat context is assembled from four things: the founder's diagnosis, their memory, retrieved knowledge, and a related diagnostic map. Their open Plan Your Day tasks are flattened into it too.",
+      "Voice in chat is a paid feature; voice during the diagnosis is free on every plan. The app's own words: 'Voice chat is a paid-plan feature. Voice input is available for free during your diagnosis.'",
+      "The prompt manager supports exactly one language — English. preferred_language exists as a setting but there are no non-English prompts behind it.",
+      "There is no search in the chat UI.",
+      "LIVE TEST: asked Ally 'How much does the Pro plan cost and how do I cancel my subscription?'. It declined, but did not recognise the question as being about itself — it described the subscription as belonging to 'a tool you're using' and suggested checking their pricing page. See the finding on question 99."
+    ]
+  },
+  "answers": [
+    {
+      "id": 90,
+      "question": "Can Ally read a file if I upload it? What kinds?",
+      "answer": "Yes, for documents. You can attach a file in the chat and Ally will read it.\n\nIt reads PDFs, Word documents, plain text, Markdown and CSV files.\n\nImages are the exception. You can attach a photo or a screenshot and it will upload, but Ally cannot read what is inside it yet — so if your numbers are in a screenshot, please paste them as text instead. Scanned PDFs are the same: if there is no real text in the file, Ally cannot read it.\n\nWith a long document Ally reads a portion rather than every page, so it helps to say which part you care about.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/ally-chat"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "TESTED END TO END. Uploaded a CSV and asked Ally to quote its contents: it returned both months and both revenue figures exactly. Uploaded a PNG containing two plain numbers: it could not read them."
+      },
+      "finding": "CORRECTED, AND THE PRODUCT FIXED. An earlier draft listed images as supported because the mime-type list accepts them. They upload (201) but cannot be read: LLMMessage.content is a plain string, so the provider layer has no way to carry an image at all. The vision builder was assembling media blocks that were then dropped, while the prompt told the model the file was 'attached for you to look at' — so Ally claimed to have read images it never saw. That is the bank's question 217. Media is now off by default and Ally says plainly that it cannot read the file. Turn it back on in the same change that makes the transport multimodal."
+    },
+    {
+      "id": 91,
+      "question": "Can it build me a pitch deck?",
+      "answer": "It can help you write one, but it cannot hand you a file.\n\nAlly will work through the story with you — what to lead with, what your one-line problem is, which numbers matter, what an investor will ask. You can then copy that into your own slides.\n\nWhat it cannot do is produce a PowerPoint or a Google Slides deck for you to download. There is no file export from chat.\n\nThe one document Ally does produce is your report, which you can download as a PDF.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/ally-chat",
+        "/app/report"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Chat returns text only. The report PDF is the single document export anywhere in the product."
+      }
+    },
+    {
+      "id": 92,
+      "question": "Does Ally remember what I told it last week?",
+      "answer": "Yes. Ally keeps a memory of you and brings it into every conversation.\n\nThat includes your diagnosis, what came out of it, and things you have told it since. So you do not have to explain your business again each time you open the chat.\n\nIt is not a word-for-word transcript of everything you have ever said. It is a summary of what matters, which is why it sometimes remembers the point you made rather than the exact sentence.\n\nIf it has remembered something wrongly, just tell it in the chat.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/ally-chat"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Chat context includes a founder memory summary alongside the diagnosis, retrieved knowledge and a diagnostic map."
+      }
+    },
+    {
+      "id": 93,
+      "question": "Why did Ally stop replying?",
+      "answer": "Almost always one of three things.\n\nYou have used your chat allowance for today. It resets, and you can carry on tomorrow.\n\nYou have used up your allowance for the month. Your billing page shows what is left.\n\nOr AI processing is paused on your account — that only happens if you turned it off yourself in Profile, then Privacy Center. There is a banner there with a Resume button.\n\nIf it is none of those and Ally simply stopped mid-answer, that is a fault. Please send it to support so we can look.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/billing",
+        "/app/profile",
+        "/app/help"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Three distinct refusals exist: a daily token ceiling, an exhausted credit balance, and a processing-restricted block. The restricted case returns a clear message naming the Privacy Center."
+      }
+    },
+    {
+      "id": 94,
+      "question": "Can I delete a conversation?",
+      "answer": "Yes, and by default it is reversible.\n\nRemoving a conversation archives it. It disappears from your list, but it is not gone, and we can bring it back if you ask.\n\nThere is also a permanent delete, which really does remove it.\n\nIf you want everything gone rather than one conversation, Profile, then Privacy Center, has the options for that — including deleting your whole account.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/ally-chat",
+        "/app/profile"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "The delete endpoint defaults to archive mode and a restore endpoint exists. Permanent removal is a separate explicit mode."
+      }
+    },
+    {
+      "id": 95,
+      "question": "What's the difference between Ally chat and the diagnosis?",
+      "answer": "The diagnosis is a one-off. Chat is the everyday part.\n\nThe diagnosis is a structured conversation that happens once. Ally asks the questions, in an order it chooses, and it ends with your report.\n\nChat is the opposite way round — you ask, about anything, whenever you like. Ally already knows your report and remembers your business, so you are carrying on a conversation rather than starting from scratch.\n\nOne finds the problem. The other helps you work on it.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/diagnosis",
+        "/app/ally-chat"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Separate flows with separate endpoints. Chat receives the diagnosis as context."
+      }
+    },
+    {
+      "id": 96,
+      "question": "Does Ally know what's in my report when I'm chatting to it?",
+      "answer": "Yes. Your report is part of what Ally has in front of it every time you chat.\n\nSo you can ask about any part of it — what a section meant, why it reached a conclusion, what to do about the root cause first — without pasting anything in.\n\nThe quickest way in is the \"Discuss this with Ally\" button at the bottom of your report.\n\nIt also has your memory and your open tasks, so it can connect the report to what you are actually working on.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/report",
+        "/app/ally-chat"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "The chat prompt carries the diagnosis, the founder's memory, retrieved knowledge and a diagnostic map, plus open planning tasks."
+      }
+    },
+    {
+      "id": 97,
+      "question": "Does Ally know my goals, my tasks and my vision?",
+      "answer": "It knows your open tasks from Plan Your Day, and it will connect what you are asking to what is already on your list.\n\nSo if you ask about something you have already set yourself, Ally should recognise it rather than suggest it again from scratch.\n\nIt does not always have every goal and every line of your Vision in front of it. If something matters to the question, it is worth saying so in the chat — that is never wasted.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/ally-chat",
+        "/app/plan",
+        "/app/goals"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Open Plan Your Day tasks are explicitly flattened into the chat prompt with title, status and priority. Goals and Vision are not carried in the same way."
+      }
+    },
+    {
+      "id": 98,
+      "question": "Ally's advice contradicts my report. Which one do I trust?",
+      "answer": "Start with the report, then ask Ally why it differs.\n\nThe report came from a long, structured conversation. Chat is quicker and works from whatever you have just said, so if you gave it different information, it may reasonably reach a different answer.\n\nThe useful move is to put the contradiction to Ally directly: tell it what your report said and ask why it is now saying something else. That usually clears it up in one reply.\n\nIf it does not, please tell us. A real contradiction is something we want to see.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/report",
+        "/app/ally-chat",
+        "/app/feedback"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Chat is grounded on the diagnosis but responds to the immediate message, so new input can move the answer."
+      }
+    },
+    {
+      "id": 99,
+      "question": "Why won't Ally answer my question about billing?",
+      "answer": "Because Ally is built to work on your business, not to answer questions about the product itself. It does not know your plan, your allowance or your payments.\n\nFor anything like that, the right places are Profile, where the Subscription and billing section lives, and Help & Support, where you can message a person.\n\nIf Ally gave you a vague answer rather than sending you there, that is our fault and not yours. We are working on making it point you in the right direction.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/profile",
+        "/app/help"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "LIVE TEST. Asked Ally about plan pricing and cancelling a subscription. It declined to answer, correctly."
+      },
+      "finding": "PRODUCT GAP. Ally declines these questions, but not by design — there is no rule anywhere in the prompts about product, plan or billing questions. It simply has no such knowledge. Worse, it does not recognise the question as being about ITSELF: in the live test it described the subscription as belonging to 'a tool you're using' and suggested checking their pricing page. The founder is left with nowhere to go. A short instruction telling Ally to name Help & Support and the billing page when asked about the product would fix this cheaply, and is the same self-knowledge gap the help-bot plan was written for."
+    },
+    {
+      "id": 100,
+      "question": "Can I ask Ally about legal, tax or investment decisions?",
+      "answer": null,
+      "answer_type": "policy",
+      "status": "open_for_team",
+      "blocked_by": "No boundary exists anywhere. Checked the prompt library, the knowledge base and the grounding prompts — nothing states what Ally may or may not advise on. The prompts forbid inventing findings, which is a different thing. This needs writing from scratch and is a legal position as much as a product one.",
+      "links": [],
+      "verified": null
+    },
+    {
+      "id": 101,
+      "question": "Ally told me something that isn't true. How do I report that?",
+      "answer": "Please do tell us — it is genuinely useful.\n\nThe Feedback page is the quickest route. Choose \"Something is broken\" if Ally stated a plain fact that is wrong, or \"Something confused me\" if it was more that the answer did not make sense.\n\nIf you can, paste what you asked and what it replied. That makes it far easier for us to find the cause.\n\nAlly is not allowed to invent findings about your business, so a made-up fact is a fault worth chasing, not something to shrug off.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/feedback"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Feedback topics confirmed. The grounding rules forbid inventing findings, scores, sources or advice."
+      }
+    },
+    {
+      "id": 102,
+      "question": "Can I start a fresh conversation, or does everything run together?",
+      "answer": "You can start as many separate conversations as you like. Use New chat and you get a clean thread.\n\nThey stay separate in your list, so you can keep one for hiring and another for pricing without them mixing.\n\nWhat carries across all of them is Ally's memory of you and your business. So a new conversation is a fresh page, not a fresh start — you never have to explain who you are again.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/ally-chat"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "New chat creates a conversation and is written not to leave an empty thread behind. Memory is founder-level rather than conversation-level."
+      }
+    },
+    {
+      "id": 103,
+      "question": "Can I search or export my past conversations?",
+      "answer": "You can export them. There is no search yet, sorry.\n\nTo export, go to Profile, then Privacy Center, and use \"Download my data\". Your conversations and messages come down with everything else, as a file.\n\nInside the app you can scroll your conversation list and open any thread, but there is no way to search across them for a word. If that would help you, please tell us — it is a fair thing to want.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/profile",
+        "/app/ally-chat"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Conversations and messages are two of the sections in the data export. No search exists in the chat UI."
+      }
+    },
+    {
+      "id": 104,
+      "question": "Why do I get a different answer when I ask the same thing twice?",
+      "answer": "Because Ally writes each answer rather than looking one up.\n\nAsk the same question twice and the shape of the answer will usually match, but the words will not be identical. That is normal.\n\nWhat can change the substance is context. If the conversation has moved on, or you gave a detail in between, Ally takes that into account.\n\nIf the two answers actually contradict each other rather than just reading differently, that is worth reporting on the Feedback page.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/ally-chat",
+        "/app/feedback"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Answers are generated per request with the conversation as context, so wording varies by design."
+      }
+    },
+    {
+      "id": 105,
+      "question": "Can I talk instead of typing?",
+      "answer": "During the diagnosis, yes — voice is free for everyone there. There is a microphone button, and you can speak your answers instead of typing them.\n\nIn Ally chat, voice is part of the paid plans. If it is not available on yours, you will see a note saying so.\n\nEverything works by typing either way. Voice is a convenience, not a different Ally.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/diagnosis",
+        "/app/ally-chat",
+        "/app/billing"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "The diagnosis screen states 'Voice input free on every plan here'. Chat gates voice behind a paid feature with the message 'Voice chat is a paid-plan feature. Voice input is available for free during your diagnosis.'"
+      }
+    },
+    {
+      "id": 106,
+      "question": "The microphone isn't working.",
+      "answer": "Usually it is one of these.\n\nYour browser needs permission. The first time you use it, a small prompt appears asking to use the microphone — if you dismissed it, you can turn it back on from the padlock icon next to the web address.\n\nIt also needs a browser that supports voice input. Chrome is the safest choice; some browsers do not support it at all.\n\nAnd in the chat, voice may simply not be included on your plan, in which case you will see a note rather than a fault.\n\nIf none of that explains it, please tell support which browser and device you are on.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/help"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Voice input uses the browser's own speech support, so availability and permission are browser-level. The chat gate produces a plan message rather than an error."
+      },
+      "note": "Browser-by-browser behaviour has not been tested end to end. That test is listed against question 203."
+    },
+    {
+      "id": 107,
+      "question": "Can I use Ally in Hindi, or another language?",
+      "answer": "Ally works in English at the moment. That is the only language it is built for.\n\nYou can write to it in another language and it will often understand you, but its questions, your report and everything else will come back in English. It has not been checked for quality in any other language, so we would not want to promise it.\n\nIf you would use Ally in another language, please tell us which one. We are keeping track of what people ask for.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/feedback"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "The prompt manager is configured with a single supported language, English. A preferred_language setting exists on the account but there are no non-English prompts behind it."
+      }
+    }
+  ]
+}

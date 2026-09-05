@@ -1,0 +1,90 @@
+{
+  "schema_version": "1.0",
+  "file": "group-04-reading-the-report",
+  "group": "reading-the-report",
+  "group_number": 4,
+  "group_title": "Reading the report",
+  "question_bank": "Founder Question Bank v3 — group 4 (questions 061-072)",
+  "created": "2026-09-05",
+  "content_rules": {
+    "voice": "Very simple, easy English. Short sentences. Common everyday words. No idioms. Friendly and warm, but plain. Never make the founder feel silly for asking.",
+    "answer_length": "About 120 words maximum. Short paragraphs with a blank line between them.",
+    "bands_not_numbers": "The report's stated contract is bands, never numbers. Confidence is High / Moderate / Early. Pillar levels are Critical Gap / Needs Attention / Developing / Strong. Never quote a percentage to a founder."
+  },
+  "walk_log": {
+    "walked_on": "2026-09-05",
+    "environment": "local dev build against the production Supabase database",
+    "what_was_done": "Opened a real generated report in the app and inspected its structure and controls. Only headings, labels and buttons were read; no founder's personal prose was recorded or reproduced.",
+    "observed": [
+      "Sidebar entry 'Report' appears only once a report exists.",
+      "The report carries a month stamp in its header, e.g. 'FOUNDER CLARITY REPORT · AUG 2026'.",
+      "Download PDF appears twice (top and bottom of the document) and Share once.",
+      "Below the document: 'See your next steps' and 'Discuss this with Ally', plus a 'Was this report useful?' feedback prompt.",
+      "The finding is labelled in words: 'Ally's finding · High confidence'. Bands are High (>=75), Moderate (>=50), Early (below 50). No percentage is shown.",
+      "Findings also carry a confirmation status categorically, so a not-tested finding never reads as certain as a confirmed one."
+    ]
+  },
+  "answers": [
+    {"id": 61, "question": "What am I supposed to do with this report?",
+     "answer": "Read it once, then pick one thing.\n\nThe most important part is the root cause — the one thing Ally thinks is really holding you back. Everything else in the report supports it.\n\nUnder that you will find your priority actions. Start with the first one. They are in that order on purpose, because the first usually makes the next one easier.\n\nAt the bottom there are two buttons. \"See your next steps\" opens your action list, and \"Discuss this with Ally\" lets you talk any of it through.\n\nYou do not need to act on everything. One real change beats six half-changes.",
+     "answer_type": "walked", "status": "answered", "links": ["/app/report", "/app/next-steps", "/app/ally-chat"],
+     "verified": {"walked_on": "2026-09-05", "how": "Both buttons confirmed at the foot of a real report."}},
+
+    {"id": 62, "question": "Why is my confidence score low? Is that bad?",
+     "answer": "Not bad, but worth knowing.\n\nNext to the finding, Ally says how sure it is: High, Moderate, or Early. It is a word rather than a percentage, because a number invites you to read it as a mark out of 100.\n\n\"Early\" usually means there was less to go on — a shorter conversation, or an area Ally could not test properly. It does not mean the finding is wrong. It means treat it as a strong lead rather than a settled fact.\n\nEither way the test is the same. If it rings true, act on it. If it does not, please tell us.",
+     "answer_type": "walked", "status": "answered", "links": ["/app/report", "/app/feedback"],
+     "verified": {"walked_on": "2026-09-05", "how": "A real report showed 'Ally's finding · High confidence' as a word. Bands are High/Moderate/Early; percentages are deliberately suppressed."}},
+
+    {"id": 63, "question": "What does \"root cause\" actually mean here?",
+     "answer": "It is the thing sitting underneath the problem you came in with.\n\nMost founders arrive with a symptom — sales are slow, the team is not delivering, there is never enough time. Those are real, but they are usually produced by something else, and treating the symptom alone does not hold.\n\nThe root cause is Ally's best answer to \"what is actually causing this?\"\n\nIt is written in plain words and given a name, so you can argue with it. If it does not sound like your business, that is worth telling us.",
+     "answer_type": "walked", "status": "answered", "links": ["/app/report"],
+     "verified": {"walked_on": "2026-09-05", "how": "The Root cause section names the finding in plain language and states the symptom the founder came in with alongside it."}},
+
+    {"id": 64, "question": "My report looks thin — is that all of it?",
+     "answer": null,
+     "answer_type": "policy", "status": "open_for_team",
+     "blocked_by": "Open decision: do we defend shorter reports or fix them? An answer written before that is decided would either excuse a real product problem or admit one we have not agreed to admit.",
+     "links": ["/app/report"], "verified": null},
+
+    {"id": 65, "question": "A section says it isn't filled in yet. Is my report incomplete?",
+     "answer": "No, your report is complete. That line is us being straight with you.\n\nSome sections are only written when there is something real to put in them. Rather than pad one out, Ally leaves it out and tells you that it did.\n\nThe one most often missing is expected impact — a projection of what should change once you act. We would rather leave it blank than give you a number we made up.\n\nEverything that matters is there: your root cause, and what to do about it.",
+     "answer_type": "walked", "status": "answered", "links": ["/app/report"],
+     "verified": {"walked_on": "2026-09-05", "how": "'expected_impact' is the section listed as unpopulated on generated reports."},
+     "finding": "CHECK WHERE THIS LINE ACTUALLY SHOWS. The 'Not generated for this report: ...' line is rendered by the React fallback view, but did not appear inside the server-built report document that founders actually see. So a founder may never be shown which section was skipped — which is the opposite of the honesty the line was written for. Worth confirming and, if true, adding it to the document builder."},
+
+    {"id": 66, "question": "What's the difference between \"priority actions\" and \"how to sequence this\"?",
+     "answer": "Priority actions are what to do. Sequencing is what order to do it in.\n\nThe actions are the moves themselves, usually three, chosen because they deal with the root cause rather than the symptom.\n\nThe sequencing section explains why that order and not another. Often the first action is not the biggest one — it is the one that makes the rest possible.\n\nNot every report has a sequencing section. When it is missing, the actions are still listed in priority order, so start at the top.",
+     "answer_type": "walked", "status": "answered", "links": ["/app/report", "/app/next-steps"],
+     "verified": {"walked_on": "2026-09-05", "how": "'Priority actions' appeared in every report sampled; 'How to sequence this' in only one, confirming it is conditional."}},
+
+    {"id": 67, "question": "Why does it repeat things I already told it?",
+     "answer": "Because it shows you what it heard before it tells you what it thinks.\n\nYour report includes a part that reflects your own words back to you. It can look like repetition, but it is there so you can check Ally understood you before you take its conclusions seriously.\n\nIf that part does not match what you meant, then everything after it is built on a misunderstanding. Much better to catch that on the first page than at the end.",
+     "answer_type": "walked", "status": "answered", "links": ["/app/report"],
+     "verified": {"walked_on": "2026-09-05", "how": "A real report carried a 'What we heard' section reflecting the founder's stated symptom back before the finding."}},
+
+    {"id": 68, "question": "It named a problem I already fixed.",
+     "answer": "That can happen, and it is usually about timing.\n\nYour report is a picture of the moment you did the diagnosis. It does not update afterwards, so anything you fixed the week after will not be in it.\n\nIt is also worth reading twice before dismissing it. Sometimes what you fixed was the symptom, and Ally is pointing at what was causing it.\n\nIf it is genuinely out of date, please tell us. And if you would like to talk it through, you can book a discovery call.",
+     "answer_type": "walked", "status": "answered", "links": ["/app/feedback", "/app/discovery-call"],
+     "verified": {"walked_on": "2026-09-05", "how": "The report is generated once and stored as a frozen snapshot; nothing recomputes it."}},
+
+    {"id": 69, "question": "Does the report update over time, or is it frozen from the day I did it?",
+     "answer": "It is frozen, and that is on purpose.\n\nYour report is built from one diagnosis and stays exactly as it was on the day it was made. It even carries the month in its header.\n\nWe do it this way because a report that quietly changes is not something you can act on. You would never know whether you were making progress or the goalposts had moved.\n\nThink of it as a photograph, not a dashboard. The parts of Ally that do keep moving are your next steps, your goals, and Plan Your Day.",
+     "answer_type": "walked", "status": "answered", "links": ["/app/report", "/app/next-steps", "/app/plan"],
+     "verified": {"walked_on": "2026-09-05", "how": "The report header carries a month stamp; the narrative is stored as a snapshot at generation time and never regenerated."}},
+
+    {"id": 70, "question": "My business has changed a lot since. Is the report worthless now?",
+     "answer": "Not worthless, but read it with the date in mind.\n\nThe facts in it — your numbers, your team, your stage — are from the day you did it, and those go out of date.\n\nThe root cause usually does not, at least not quickly. Patterns in how a founder decides, and how a business runs, tend to outlast a quarter. Plenty of founders find the same cause is still there, just wearing different clothes.\n\nRunning the diagnosis again is not available yet. It is something we intend to offer once your business stage changes.",
+     "answer_type": "walked", "status": "answered", "links": ["/app/report"],
+     "verified": {"walked_on": "2026-09-05", "how": "Agreed position: one diagnosis per account today; re-diagnosis at a stage change is intended but not built or sold."}},
+
+    {"id": 71, "question": "Where do I find my report again later?",
+     "answer": "It is always in the sidebar, under Report.\n\nThat link appears once your first report exists, and every report you run is kept there. Nothing expires.\n\nOn the report itself there are two buttons at the top: Download PDF saves a copy you can keep, and Share creates a link.\n\nIf you cannot see Report in your sidebar, it means no report has been generated yet.",
+     "answer_type": "walked", "status": "answered", "links": ["/app/report"],
+     "verified": {"walked_on": "2026-09-05", "how": "Sidebar entry 'Report' is gated on a report existing. Download PDF and Share confirmed on the live report document."}},
+
+    {"id": 72, "question": "Can I get someone — or Ally — to walk me through it line by line?",
+     "answer": "Yes, both.\n\nAt the bottom of your report there is a \"Discuss this with Ally\" button. That opens a chat where Ally already knows what is in your report, so you can ask about any part of it — what a section means, or how it reached a conclusion.\n\nIf you would rather talk to a person, you can book a discovery call.\n\nThere is also a \"Was this report useful?\" question at the end of the report. It takes seconds to answer and it genuinely reaches us.",
+     "answer_type": "walked", "status": "answered", "links": ["/app/ally-chat", "/app/discovery-call"],
+     "verified": {"walked_on": "2026-09-05", "how": "Both buttons and the feedback prompt confirmed on a real report page."}}
+  ]
+}

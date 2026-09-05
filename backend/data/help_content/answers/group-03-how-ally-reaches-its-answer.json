@@ -1,0 +1,409 @@
+{
+  "schema_version": "1.0",
+  "file": "group-03-how-ally-reaches-its-answer",
+  "group": "how-ally-reaches-its-answer",
+  "group_number": 3,
+  "group_title": "How Ally reaches its answer",
+  "question_bank": "Founder Question Bank v3 — group 3 (questions 033-060)",
+  "created": "2026-09-05",
+  "content_rules": {
+    "voice": "Very simple, easy English. Short sentences. Common everyday words. No idioms. Friendly and warm, but plain. Never make the founder feel silly for asking.",
+    "answer_length": "About 120 words maximum. Short paragraphs with a blank line between them.",
+    "disclosure": "Name the six pillars and the four band names. Do NOT publish what sits beneath them, the pillar weightings, or any database count. Never name the AI model or vendor.",
+    "public_figures": "Only the figures published on join.goxlally.ai may appear: 100+ entrepreneurial dimensions, 10,000+ founder case studies, 25,000+ founder problems mapped to root causes.",
+    "accuracy": "No accuracy percentage may be claimed. Accuracy is described only through what the method is built on."
+  },
+  "walk_log": {
+    "walked_on": "2026-09-05",
+    "environment": "local dev build against the production Supabase database",
+    "what_was_done": [
+      "Read the six readiness pillars, their four score bands with written descriptions, and their red-flag thresholds.",
+      "Read the four industries.",
+      "Read the per-stage question budgets and the stage scoping rules.",
+      "Compared the section headings of seven real generated reports to see how report shape actually varies. Only headings were read, never founders' personal content."
+    ],
+    "evidence_report_shape": "Four sections appear in every report: Founder DNA, Business DNA, Root cause, Priority actions. A report generated under high distress opens with 'Before we begin' and 'A first step for you' and drops 'What this is based on', 'How to sequence this' and 'Why these steps'. A stable-state report carried ten sections."
+  },
+  "answers": [
+    {
+      "id": 33,
+      "question": "How does answering some questions tell you what's actually wrong with my business?",
+      "answer": "Because Ally is not reading your answers one at a time. It is looking for the pattern underneath them.\n\nEach answer is matched against a large body of real founder problems and the causes behind them. When several of your answers point the same way, that pattern narrows down to one likely cause.\n\nThat is why the questions change as you go. Each answer rules some things out, so the next question can be sharper about what is left.\n\nThe problem you came in with is the starting point, not the answer.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/diagnosis"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Watched the live diagnosis choose each next question after the previous answer, and move between categories."
+      }
+    },
+    {
+      "id": 34,
+      "question": "Is this based on a real framework, or something you made up?",
+      "answer": "It is our own framework, built deliberately rather than borrowed.\n\nAlly looks at your business across six areas: Founder Readiness, Market Clarity, Revenue Maturity, Product & Execution, Team & Leadership, and Strategic Clarity. Underneath those sit more than a hundred smaller things it can look at.\n\nIt was built from real founder work — more than 10,000 founder case studies, and 25,000 founder problems traced back to what actually caused them.\n\nSo: made by us, but not made up.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Six pillars read from the readiness_pillars reference table. The corpus figures are the ones published on join.goxlally.ai."
+      }
+    },
+    {
+      "id": 35,
+      "question": "Why six pillars? Why not more?",
+      "answer": "There are more than six things being looked at. Six is how they are grouped so you can read them.\n\nUnderneath those six sit over a hundred smaller areas. Ally works at that finer level, then rolls what it finds up into six, so your report is something you can actually take in.\n\nIf we showed you a hundred scores you would have data, not clarity. Six areas that each mean something are more useful than a hundred that blur together.",
+      "answer_type": "policy",
+      "status": "answered",
+      "links": [],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Agreed disclosure position: name the six, describe what sits beneath only as 'more than a hundred', never the internal counts."
+      }
+    },
+    {
+      "id": 36,
+      "question": "Why those six, and not the things I actually worry about — pricing, hiring, funding?",
+      "answer": "Those are all in there. They sit inside the six.\n\nPricing is part of Revenue Maturity, along with your sales process and your unit economics. Hiring sits in Team & Leadership. Funding sits in Strategic Clarity, with your goals and how you make trade-offs.\n\nThe six are groups, not a list of topics. They are grouped by what causes what, rather than by department — because a pricing problem is often really a market clarity problem wearing different clothes.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Read each pillar's band descriptions: pricing and unit economics sit under Revenue Maturity, delegation and hiring under Team & Leadership, capital strategy under Strategic Clarity."
+      }
+    },
+    {
+      "id": 37,
+      "question": "Who decided what a \"healthy\" business looks like?",
+      "answer": "We did, and it comes from patterns in real founder cases rather than from opinion.\n\nEach of the six areas has four levels: Critical Gap, Needs Attention, Developing, and Strong. Each level has a written description of what a business at that level actually looks like — for example, Strong in Revenue Maturity means pricing on value, tracking pipeline, and knowing your unit economics.\n\nThose descriptions came from thousands of real founder cases, not from a textbook idea of a perfect company.\n\nThe six are also not weighted equally. Some matter more to whether a business survives.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Read all four band descriptions for all six pillars, and their differing weights."
+      }
+    },
+    {
+      "id": 38,
+      "question": "Am I being compared against other founders, or only against myself?",
+      "answer": "Against a pattern, not against a leaderboard.\n\nYour answers are matched against a large body of real founder cases, to work out what your situation most resembles and what usually causes it. That is where the read comes from.\n\nBut you are not ranked against other founders, no one else's results change yours, and nobody is told how you compare.\n\nYour stage matters too. A founder still working on an idea is not measured against one with a team and revenue.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Scoring runs against seeded reference thresholds per stage and industry. No cross-founder ranking exists anywhere in the product."
+      }
+    },
+    {
+      "id": 39,
+      "question": "What is my business health measured out of, and how is it worked out?",
+      "answer": "Each of the six areas is scored out of 100, and each score lands in one of four levels: Critical Gap, Needs Attention, Developing, or Strong.\n\nYour overall reading combines those six, but not evenly. The areas that matter most to whether a business survives count for more.\n\nOnly the areas Ally actually asked you about are included. If your stage meant an area was never in scope, it is left out rather than guessed at.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Band ranges read from readiness_pillars: 0-35 Critical Gap, 36-55 Needs Attention, 56-75 Developing, 76-100 Strong. Weights differ per pillar and sum to 100. Out-of-scope pillars are excluded and the remaining weights renormalised."
+      }
+    },
+    {
+      "id": 40,
+      "question": "My report has no health reading at all. Is something missing?",
+      "answer": "No, nothing is missing. This happens on purpose at the earliest stage.\n\nIf you are still working on an idea, there is not enough business yet to score fairly. Ally would be scoring you on things that do not exist, and a number like that would look precise while meaning nothing.\n\nInstead you get a read on you as a founder, and on the idea itself. That is the honest thing to give you at this point.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/report"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Stage scope marks the earliest stage as not emitting a business health score at all, because only two of the six pillars are in scope there."
+      }
+    },
+    {
+      "id": 41,
+      "question": "Why do I get a word like \"Developing\" instead of a number?",
+      "answer": "Because the word is more honest than a number would be.\n\nThere are four levels: Critical Gap, Needs Attention, Developing, and Strong. Developing means you are reasonably solid in that area — some gaps and blind spots, but nothing blocking you.\n\nA number invites you to chase it. Going from 61 to 64 feels like progress but usually means nothing real. Moving from Developing to Strong is a change you would actually feel in the business.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/business-dna"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "The four band names and their ranges are the founder-facing output; raw scores are deliberately not shown."
+      }
+    },
+    {
+      "id": 42,
+      "question": "Why does my report look different from another founder's?",
+      "answer": "Because it is built for your situation, not printed from a template.\n\nFour parts are always there: your Founder DNA, your Business DNA, the root cause, and your priority actions. Everything else depends on what Ally found.\n\nIf Ally picked up that you are under real strain, your report opens differently — it starts with that before it talks about the business, and it offers a first step for you rather than a list of business tasks.\n\nYour stage changes it too, because that decides which areas were examined at all.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/report"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Compared seven real reports. Four headings appear in all of them; a high-distress report opened with 'Before we begin' and 'A first step for you' and carried seven sections, while a stable-state report carried ten."
+      }
+    },
+    {
+      "id": 43,
+      "question": "How much of this was written for me, and how much is a template?",
+      "answer": "The words are written for you, from your answers.\n\nThe structure is shared — every report covers your Founder DNA, your Business DNA, the root cause, and your next actions. What goes inside those sections is built from what you said and what Ally worked out from it.\n\nWhich sections you get is not fixed either. Reports genuinely differ in shape depending on what was found.\n\nIf you ever read something that feels like it could be about anyone, please tell us. That would be a fault worth knowing about.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/report"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Seven real reports carried between seven and ten sections, in different orders, with different section sets."
+      }
+    },
+    {
+      "id": 44,
+      "question": "Did an AI write my report, or did a person?",
+      "answer": "AI wrote it, and no person read it before you did.\n\nWhat it is allowed to say is not open-ended, though. It works only from the answers you gave and what our framework found in them, and it is not allowed to invent findings, scores or sources that are not there.\n\nIf you want a person involved, you can book a discovery call and talk it through with someone.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/discovery-call"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "The report is generated server-side with no human review step anywhere in the path. The grounding rules forbid inventing findings, scores or sources."
+      }
+    },
+    {
+      "id": 45,
+      "question": "Which AI is behind Ally? Is this just ChatGPT?",
+      "answer": "We do not name the technology we use. That is a deliberate choice, not us being cagey.\n\nThe honest answer to \"is this just ChatGPT\" is no — but not because of which AI it is. A general chatbot answers whatever you ask it. Ally works through a fixed method: your Founder DNA, then your Business DNA, then the cause sitting underneath both, using a large body of real founder cases as its reference.\n\nThe method is what makes it different, not the engine.",
+      "answer_type": "policy",
+      "status": "answered",
+      "links": [],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Agreed disclosure position: never name the model or vendor in any founder-facing surface."
+      }
+    },
+    {
+      "id": 46,
+      "question": "Does Ally ever just guess?",
+      "answer": "It is not supposed to, and it is built so that it cannot invent things.\n\nAlly can only work from what you told it and what its framework found in that. If it does not have something, the rule is to leave it out rather than fill it in. That is why a section is sometimes missing from a report — a gap is more honest than a guess.\n\nWhat it does do is infer. If several of your answers point the same way, it will name that pattern even though you never said it directly. That is a conclusion, not a guess, and you are free to disagree with it.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "The generator omits a section outright when it has no value for it rather than narrating around the gap, and the grounding prompt forbids inventing findings, scores, sources or advice."
+      }
+    },
+    {
+      "id": 47,
+      "question": "Will Ally tell me when it isn't sure?",
+      "answer": "Yes, and it says so on your report.\n\nNext to the finding, Ally states how sure it is in a word: High, Moderate, or Early. It is deliberately a word and not a percentage — a number invites you to read it as a mark out of 100, when what it really describes is how much evidence there was.\n\nThe wording changes too. Where Ally is less certain, findings are put as possibilities and next steps are offered as things to try rather than things to do.\n\nAnd if a conclusion feels wrong to you, say so. Nothing in the report is beyond question.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/report"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "A real report showed 'Ally's finding · High confidence'. Bands are High (>=75), Moderate (>=50), Early (below 50). Percentages are suppressed by design."
+      },
+      "note": "CORRECTED 2026-09-05. An earlier draft said Ally does not show confidence at all. That was wrong: it is shown, as a band. What is suppressed is the numeric percentage, not the confidence itself."
+    },
+    {
+      "id": 48,
+      "question": "What is \"a note on certainty\" doing in my report?",
+      "answer": "It appears when Ally is less sure than usual, and wants to say so rather than let you assume otherwise.\n\nThat usually means there was less to go on — a shorter conversation, or answers that were understandably held back. When confidence is low, this note opens the report instead of being buried at the end.\n\nIt is not a warning that the report is wrong. It is a note about how firmly to hold it. Treat the findings as a strong starting point rather than a verdict, and if something rings true, act on it.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/report"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "The report builder opens a low-confidence report with this section, which is why it did not appear in the sampled reports - none of them was low-confidence."
+      },
+      "note": "CORRECTED 2026-09-05. An earlier draft flagged this section as possibly unreachable because it appeared in none of seven sampled reports. It is reachable: it is the opening section of a LOW_CONFIDENCE report, and the sample simply contained none."
+    },
+    {
+      "id": 49,
+      "question": "My report says things I never told it. Where did that come from?",
+      "answer": "From patterns across your answers, rather than from any one thing you said.\n\nIf three separate answers all point the same way, Ally will name that pattern even though you never put it in those words. That is much of the value — it says the thing you have not said yet.\n\nIt is not allowed to invent facts about your business. Numbers, names and events come only from you.\n\nIf something genuinely does not match your business, that is worth telling us.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/report",
+        "/app/feedback"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "The diagnosis maps answers to seeded root causes and behaviour patterns; the narrator is grounded and forbidden from inventing findings."
+      }
+    },
+    {
+      "id": 50,
+      "question": "What's in \"what this is based on\"?",
+      "answer": "It is Ally showing its working.\n\nThat section sets out what the findings were drawn from — the parts of your conversation, and the patterns they matched. It is there so a conclusion is not simply asserted at you.\n\nNot every report has it. When it is missing, that is because there was not enough to show, not because anything was hidden.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/report"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "'What this is based on' appeared in one of the seven sampled reports, confirming it is conditional rather than standard."
+      }
+    },
+    {
+      "id": 51,
+      "question": "How did you decide what stage I'm at? Can that be wrong?",
+      "answer": "It comes from what you told us. You choose your stage yourself when you build your profile, near the start.\n\nThere are eight stages, from working on an idea through to exit.\n\nAnd yes, it can be wrong — usually because the choice was made quickly. It matters more than it looks, because your stage decides which areas Ally asks about and how many questions you get.\n\nIf it looks wrong on your report, please tell us and we will look at it with you.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/guided/profile",
+        "/app/help"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Entrepreneurial stage is the second field in the profile build, chosen by the founder. founder_stages holds eight stages, from Ideation to Exit."
+      },
+      "note": "Deliberately does not tell the founder to change it in Profile. Whether stage can be changed after a report exists is question 4, still open with the team."
+    },
+    {
+      "id": 52,
+      "question": "Why is my industry one of only four options? Mine isn't there.",
+      "answer": "The four are broad on purpose: Technology & SaaS, Services & Consulting, Manufacturing & D2C, and Social Impact & NGO.\n\nThey are not meant to describe your business exactly. They are there to set expectations — what normal margins look like, how long sales usually take, what growth tends to look like. Most businesses sit reasonably inside one of the four for that purpose.\n\nPick whichever is closest. The detail about what you actually do comes from your own answers, and that is what the diagnosis really runs on.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/guided/profile"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Read the four industries from the industries table, and the per-industry, per-stage threshold table they feed."
+      }
+    },
+    {
+      "id": 53,
+      "question": "What is a red flag, and what sets one off?",
+      "answer": "A red flag means one of the six areas came out low enough that it is probably holding the others back.\n\nEach area has a line it needs to stay above. Fall below it and Ally treats that area as the thing to deal with first, because work elsewhere tends not to stick while it is unresolved.\n\nIt is not a judgement on you. It is Ally telling you where to start.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/business-dna"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Each pillar carries its own red-flag threshold in readiness_pillars — 35 for five of them, 40 for Revenue Maturity."
+      }
+    },
+    {
+      "id": 54,
+      "question": "One area is flagged but the report barely talks about it. Why?",
+      "answer": "Because the report is built around the one thing most worth fixing first, not around everything that is imperfect.\n\nIf an area is flagged but only mentioned briefly, it usually means Ally traced it back to something else. The flagged area is a symptom of the root cause it did write about, so fixing the cause tends to move it on its own.\n\nIf you would rather work on the flagged area directly, that is a fair thing to raise on a discovery call.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/report",
+        "/app/discovery-call"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "The diagnosis converges on one root cause and the report is written around it; other flagged pillars appear as supporting detail rather than separate narratives."
+      }
+    },
+    {
+      "id": 55,
+      "question": "Why does the report talk about me before it talks about the business?",
+      "answer": "Because that is the order the diagnosis works in, and often the order the problem works in too.\n\nAlly starts with how you decide and operate, then looks at the business through that. A business problem that keeps coming back is often held in place by a habit of the founder — so naming that first makes the business section land properly.\n\nIf Ally picked up that you are under real strain, it will put that even further forward, before anything about the business at all.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/report"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Every sampled report placed Founder DNA before Business DNA. High-distress reports opened with 'Before we begin' and 'A first step for you' ahead of both."
+      }
+    },
+    {
+      "id": 56,
+      "question": "Why is there a note about my psychological state? I didn't ask for that.",
+      "answer": "It is a fair thing to be surprised by, so here is what it is.\n\nThat section appears when Ally noticed real strain in the way you answered — pressure, exhaustion, or pulling back. It is there because business advice given to someone running on empty usually does not get acted on.\n\nIt is about how you are right now, not about who you are. It is not a diagnosis, and it is not on any record.\n\nIf it does not match how you feel, please say so. It is a read from one conversation, and it can be wrong.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/report",
+        "/app/feedback"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "The section is driven by the seeded psychological-state model, which reads signals in the answers and is what shifts the report's opening under distress."
+      },
+      "note": "Reports generated before late August carry the internal heading 'Section H — Psychological State Note'. Newer ones use 'Before the business — how you're doing'. Because a report is frozen when it is made, older founders keep the old heading. Not a live bug, but a support agent may see the old wording quoted back at them."
+    },
+    {
+      "id": 57,
+      "question": "Are you diagnosing my mental health?",
+      "answer": "No. We are not qualified to, and Ally is not trying to.\n\nWhat it does is much smaller: it notices how you answered — whether you sounded stretched, or held back — and uses that to decide how carefully to word your report and how much weight to put on it. It produces no mental health assessment of any kind.\n\nIf something in your report worries you, please talk to someone qualified. And if you are having a genuinely hard time, please reach out to a real person. That matters far more than any of this.",
+      "answer_type": "policy",
+      "status": "answered",
+      "links": [],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Agreed position: the psychological signal is a session-reliability measure that changes report framing, not a clinical assessment."
+      }
+    },
+    {
+      "id": 58,
+      "question": "What happens to my answers after the report? Are they reused?",
+      "answer": "They stay in your account, and they are used to help you.\n\nYour answers are what your report was built from, and Ally draws on them when you talk to it later, so you do not have to explain your business again every time.\n\nThey are not shared with other founders and they are not sold.\n\nYou can download everything we hold at any time from Profile → Privacy Center, or ask us to delete it.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/profile"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Diagnosis answers appear in the data export as their own section, and are available to chat as founder memory."
+      }
+    },
+    {
+      "id": 59,
+      "question": "If I did this again tomorrow, would I get the same answer?",
+      "answer": "Broadly yes, but not word for word.\n\nThe method is fixed and your situation would be the same, so the root cause it lands on should be the same. The wording would differ, and if you answered a question differently, Ally would follow that thread instead.\n\nA big change usually means something real changed — you were more open the second time, or something in the business moved.\n\nIn practice this is not something you can test: there is one diagnosis per account.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Question selection follows the previous answer, so a different answer changes the path. The lifetime limit is one completed diagnosis per account on every plan."
+      }
+    },
+    {
+      "id": 60,
+      "question": "How accurate is this? Has it been tested against anything?",
+      "answer": "Here is the honest answer. We have not published an accuracy figure, and we would rather say so than give you a number that sounds impressive and means nothing.\n\nWhat we can tell you is what it is built on: more than 10,000 founder case studies and 25,000 founder problems traced back to their causes, across more than a hundred areas.\n\nThe better test is whether the root cause it names sounds true when you read it. If it does not, please tell us. That is far more useful to us than a score.",
+      "answer_type": "policy",
+      "status": "answered",
+      "links": [
+        "/app/feedback"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Agreed position: no accuracy percentage may be claimed; describe the method's basis using only the published figures."
+      }
+    }
+  ]
+}

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { prefersReducedMotion } from '../services/motion';
 
 const EASE = 'cubic-bezier(.22,1,.3,1)';
 
@@ -35,7 +36,7 @@ export default function SplashScreen({ onDone }) {
      query; this one blocked the whole app and did not. Skipped outright under
      reduced motion, and there is now a visible Skip control either way. */
   useEffect(() => {
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) finish();
+    if (prefersReducedMotion()) finish();
   }, [finish]);
 
   // When fade-out transition ends, call onDone

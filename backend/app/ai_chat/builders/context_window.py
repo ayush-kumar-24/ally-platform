@@ -43,13 +43,34 @@ _EXTRACTABLE_MIME = {
 _DEFAULT_ATTACHMENT_BYTE_BUDGET = 5_000_000  # total bytes READ+extracted per turn
 
 # How many files per turn may be sent as pictures for the model to look at.
-# Separate from attachment_limit, and much smaller, because the costs are not
-# comparable: a named-only file is a dozen tokens, an image is ~1,500 -- a
-# fifth of a free founder's daily chat allowance, and was over a third of it
-# before that ceiling was raised for testing (plans/catalog.py). Two
-# is enough for "here is the error and here is my config" and bounded enough
-# that a turn cannot quietly cost a whole day.
-_DEFAULT_MEDIA_LIMIT = 2
+#
+# ZERO, because nothing downstream can carry an image. LLMMessage.content is a
+# plain `str` (services/llm/base.py) -- the provider interface has no multimodal
+# content block at all -- so a media block built here is assembled, described,
+# and then dropped on the floor.
+#
+# That was worse than doing nothing. With a media block present, the attachment
+# flattener takes its second branch and tells the model the file is "attached to
+# this message for you to look at ... Read it yourself and answer from what you
+# actually see". The model believed it, and founders got replies that claimed to
+# have read an image and then could not quote a word of it. Reproduced on
+# 2026-09-05 with a PNG containing two plain numbers: uploaded 201, and Ally
+# answered "I can read the image you attached, but in this chat I don't have
+# access to the actual text inside it". That is the question bank's "I uploaded
+# a file and Ally says it can't see it".
+#
+# At zero the flattener falls to its third branch instead -- "uploaded, but its
+# contents cannot be read yet; you only know it exists" -- which is true, and
+# lets Ally say so plainly rather than pretending.
+#
+# The media builder itself is deliberately left in place: it is correct, it is
+# tested, and it becomes useful the moment LLMMessage can carry content blocks.
+# Raise this to 2 in the same change that makes the transport multimodal, not
+# before. The old value and its reasoning: two images per turn, ~1,500 tokens
+# each against a dozen for a named-only file, which is a fifth of a founder's
+# daily chat allowance -- enough for "here is the error and here is my config"
+# without a single turn quietly costing a whole day.
+_DEFAULT_MEDIA_LIMIT = 0
 
 
 class ContextWindowConfig:

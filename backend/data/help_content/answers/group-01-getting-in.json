@@ -1,0 +1,165 @@
+{
+  "schema_version": "1.0",
+  "file": "group-01-getting-in",
+  "group": "getting-in",
+  "group_number": 1,
+  "group_title": "Getting in",
+  "question_bank": "Founder Question Bank v3 — group 1 (questions 001-014)",
+  "created": "2026-09-04",
+  "content_rules": {
+    "no_answer_from_memory": "Every answer is produced by walking the real screens. Nothing is written from source code or recall. The live FAQ is wrong today because it was written from what was true at the time and never re-checked.",
+    "voice": "Very simple, easy English. Every founder must understand it, including those who do not read English quickly. Short sentences. Common everyday words. No idioms. Friendly and warm, but plain. Say 'not yet, sorry' rather than 'this is not supported'. Never sound like an instruction manual and never make the founder feel silly for asking.",
+    "answer_length": "About 120 words maximum. Short paragraphs with a blank line between them.",
+    "vocabulary": "Use the product's words, not the landing page's. Frameworks and Vision, never 'knowledge base' or 'vision board'. Eight stages, not four groups.",
+    "public_figures": "Only figures published on join.goxlally.ai may appear in an answer. Never quote a database count to a founder.",
+    "pricing": "There is no free plan. Entry is Rs 199 one-time for the diagnosis and full report; Rs 450 and Rs 999 are the monthly plans. All prices include GST."
+  },
+  "walk_log": {
+    "walked_on": "2026-09-04",
+    "environment": "local dev build (frontend :3000, backend :8000) against the production Supabase database, plus the live sign-in page at goxlally.ai for question 012",
+    "account": "dev founder Rohan Mehta / e2e-resume-test@ally.local, founder_id 10756",
+    "screens_walked": [
+      "/guided/expectation - the three phases and the ~20 minute figure",
+      "/guided/welcome and /guided/ally-intro - what Ally says it will do",
+      "/guided/profile - the profile build, 4 sections and 17 fields, counted on screen",
+      "/guided/summary - the editable read-back plus Ally's early read",
+      "/guided/validate - the 'did I get you right' check",
+      "/guided/problem - the single 'what feels most stuck' question before the diagnosis",
+      "/guided/resume - the 'welcome back, you are 64% of the way' screen",
+      "/app/profile - Preferences, Replay tour",
+      "goxlally.ai sign-in page (live, signed out) - the real sign-in options"
+    ],
+    "not_walked": "004 was left unanswered on purpose - see OPEN-FOR-TEAM.md."
+  },
+  "answers": [
+    {
+      "id": 1,
+      "question": "Why do I have to fill in my whole profile before I can start?",
+      "answer": "This part is the start, not a form before the start.\n\nThe questions Ally asks here are how it learns the way you think and work. Your Founder DNA builds up on the right side of the screen as you answer, so you can watch it take shape.\n\nThere are 17 questions in four short parts. Ally asks about you, then what you are building, then what you already know, and finishes with your biggest challenge and where you want to be.\n\nSkip it and Ally would be guessing about you. Then the diagnosis at the end would be a general one, not yours.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": ["/guided/profile"],
+      "verified": {"walked_on": "2026-09-04", "how": "Counted the sections and fields on the profile build screen: Personal details (5), Understanding where you are (4), What do you know (5), Final questions (3)."}
+    },
+    {
+      "id": 2,
+      "question": "What happens in this diagnosis, and how long will it take?",
+      "answer": "About 20 minutes in total. It is a conversation, not a form.\n\nThere are three parts. First you and Ally talk, which takes about 10 minutes. Then Ally connects what it learned about you to how your business runs. Then you get your report.\n\nThe report gives you the root cause holding you back, your blind spots, and clear next steps.\n\nYou do not have to do it all at once. You can stop and come back.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": ["/guided/expectation"],
+      "verified": {"walked_on": "2026-09-04", "how": "Read the three phases and timings off the 'How it works' screen."}
+    },
+    {
+      "id": 3,
+      "question": "Do I have to do Founder DNA first? Can I skip to the business part?",
+      "answer": "No, Founder DNA cannot be skipped. It is the first part, and everyone does it.\n\nThe reason is that it is what makes the report yours. Ally looks at your business through what it learns about you — how you decide, where you push, where you get stuck. Without that, you would get general business advice, which you can find anywhere.\n\nIt is also the shorter part. Once it is done, the business questions move faster, because Ally already knows how to read your answers.",
+      "answer_type": "policy",
+      "status": "answered",
+      "links": ["/guided/profile"],
+      "verified": {"walked_on": "2026-09-04", "how": "Product decision confirmed by the team: Founder DNA is mandatory and cannot be skipped by any route."}
+    },
+    {
+      "id": 4,
+      "question": "I picked the wrong stage. Can I change it?",
+      "answer": null,
+      "answer_type": "walked",
+      "status": "open_for_team",
+      "blocked_by": "Left deliberately unanswered pending a team discussion. See OPEN-FOR-TEAM.md.",
+      "test": "Profile > Founder Identity > Edit. Establish whether stage is editable there, and — the part that actually matters — what happens to a report that was already generated against the old stage. Stage decides which pillars are in scope and whether a business health score is published at all, so changing it after a diagnosis is not a cosmetic edit.",
+      "links": ["/app/profile"],
+      "verified": null
+    },
+    {
+      "id": 5,
+      "question": "Is this going to try to sell me something?",
+      "answer": "Yes, and we would rather say so now than surprise you later. Ally is a paid product.\n\nThe starting price is ₹199. You pay once, not every month. That gives you the full diagnosis and your complete report.\n\nIf you want to keep going after that, there are monthly plans at ₹450 and ₹999. They add your Founder DNA and Business DNA pages, your next steps, and Ally to talk to every day.\n\nAll prices include GST. Nobody will call you to push a sale.",
+      "answer_type": "policy",
+      "status": "answered_pending_product_change",
+      "links": ["/app/billing"],
+      "verified": {"walked_on": "2026-09-04", "how": "Written from the agreed pricing, NOT from the running product."},
+      "finding": "CONFLICTS WITH THE LIVE PRODUCT. The app still ships a Free tier: the test account shows 'Ally Free' at ₹0, and the plan catalog defines free/starter/pro at ₹0/₹450/₹999 with no ₹199 tier. This answer is correct against the decision and wrong against the product until the catalog is changed. Do not publish it before then."
+    },
+    {
+      "id": 6,
+      "question": "I closed the onboarding halfway. Do I start again?",
+      "answer": "No, you carry on from where you stopped.\n\nWhen you sign in again, Ally shows you a \"Welcome back\" screen with how far you got — for example 64% of the way to your report. It shows your progress on Founder DNA and Business DNA separately.\n\nClick Continue assessment and you go straight back to the next question. Nothing you already answered is lost.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": ["/guided/resume"],
+      "verified": {"walked_on": "2026-09-04", "how": "Opened the resume screen on a part-finished account: it showed 64%, Founder DNA 64%, Business DNA 55%, and a Continue assessment button."}
+    },
+    {
+      "id": 7,
+      "question": "What was that quick tour? Can I see it again?",
+      "answer": "Yes, any time.\n\nGo to Profile, find Product tour under Preferences, and click Replay tour.\n\nIt walks you through the whole app in 14 short steps, starting at your Compass. There is a Skip button on every step, so you can stop whenever you like.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": ["/app/profile"],
+      "verified": {"walked_on": "2026-09-04", "how": "Clicked Replay tour and ran it. Step 1 of 14 opened on the Compass; Skip ended it and returned to the app."}
+    },
+    {
+      "id": 8,
+      "question": "Why did it read my own answers back to me?",
+      "answer": "So you can correct anything before Ally builds on it.\n\nThat screen shows your founder profile in your own words, plus Ally's early read of you. Everything on it can be edited. If a word is not quite right, change it, then confirm.\n\nIt matters because everything after this is built on those answers. Fixing something here is much easier than disagreeing with your report later.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": ["/guided/summary"],
+      "verified": {"walked_on": "2026-09-04", "how": "Opened the summary screen: it reads back each profile field, shows 'Ally's early read', and says to reword anything before confirming."}
+    },
+    {
+      "id": 9,
+      "question": "What is the \"validation\" step checking?",
+      "answer": "It is Ally checking that it understood you correctly.\n\nAlly shows you one sentence about how you work — something it worked out from your answers — and asks if it is true. You can say yes, or say it is mostly true with some nuance.\n\nIt is a short step but an important one. Your answer shapes the questions that come next, so if the sentence feels wrong, say so.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": ["/guided/validate"],
+      "verified": {"walked_on": "2026-09-04", "how": "Opened the validate screen: it states one inferred sentence, says 'Your answer shapes everything that comes next', and offers 'Yes — that's me' or 'Mostly, with nuance'."}
+    },
+    {
+      "id": 10,
+      "question": "What order am I meant to do all this in?",
+      "answer": "Ally walks you through it, so you do not have to plan anything.\n\nThe order is: sign in, a short \"how it works\" screen, meeting Ally, then building your founder profile. After that Ally shows you a summary of your answers to confirm, checks it understood you, and asks what feels most stuck right now.\n\nThen the diagnosis starts, and your report comes at the end.\n\nAfter the report, the rest of the app opens up and you can use it in any order you like.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": ["/guided/expectation"],
+      "verified": {"walked_on": "2026-09-04", "how": "Walked every guided screen in sequence and recorded the order."}
+    },
+    {
+      "id": 11,
+      "question": "Do I have to do \"current problem\" before the diagnosis?",
+      "answer": "Yes, but it is short — one question.\n\nAlly asks what feels most stuck right now, in your own words. There are a few quick options if it helps, like growth being flat or cash feeling tight, but you can just describe it yourself.\n\nDo not try to work out the cause. That is Ally's job. Just describe what you are seeing. The Start diagnosis button is right there, and the diagnosis begins from what you wrote.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": ["/guided/problem"],
+      "verified": {"walked_on": "2026-09-04", "how": "Opened the problem screen: one free-text field, three suggested chips, and a Start diagnosis button. Its own words: 'Don't diagnose it — just describe it.'"}
+    },
+    {
+      "id": 12,
+      "question": "Can I sign in with Google, or only email?",
+      "answer": "Email only at the moment. There is no Google or LinkedIn sign-in yet.\n\nYou sign in with your email and password.\n\nIf it is your first time, or you have forgotten your password, use the \"Email me a code\" link on the sign-in page. We send a code to your email and you get in with that.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": ["/guided/login"],
+      "verified": {"walked_on": "2026-09-04", "how": "Read the LIVE sign-in page at goxlally.ai while signed out. It offers email + password and 'First time here, or forgotten your password? Email me a code'. No Google or LinkedIn buttons are present."}
+    },
+    {
+      "id": 13,
+      "question": "Do I need a registered company to use this?",
+      "answer": "No. Ally never asks for company registration papers, a GST number, or anything official.\n\nWhen you build your profile, Ally asks what you are building, who you serve, and what industry you are in. You can answer all of that without a registered company.\n\nIf your business is not registered yet, that is completely fine.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": ["/guided/profile"],
+      "verified": {"walked_on": "2026-09-04", "how": "Read all 17 profile-build fields. None asks for registration, GST, or any legal document."}
+    },
+    {
+      "id": 14,
+      "question": "I don't have a business yet, just an idea. Is this for me?",
+      "answer": "Yes. Ally is built for people at that point too.\n\nWhen you start, you tell Ally what stage you are at, and \"just exploring an idea\" is one of the choices. Ally then asks you different questions from someone running a business with a team.\n\nOne thing to know: at the idea stage your report will not include a business health score, because there is not enough of a business to score yet. You get a read on you as a founder and on the idea instead.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": ["/guided/profile"],
+      "verified": {"walked_on": "2026-09-04", "how": "The live landing page lists aspiring founders as an audience and shows an 'Aspiring' starting stage. The profile build asks for entrepreneurial stage as its second question."}
+    }
+  ]
+}

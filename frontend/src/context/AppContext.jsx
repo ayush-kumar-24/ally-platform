@@ -4,6 +4,8 @@
 import { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import { getAccessToken } from '../services/api';
 import { getProfile } from '../services/profile';
+import { applyReducedMotion } from '../services/motion';
+import { getNotificationPreferences } from '../services/settings';
 import { listNotifications, markAllRead, toDisplay } from '../services/notifications';
 import { isDueOrOverdue, listTasks } from '../services/planning';
 import { firstSafe } from '../utils/looksLikeToken';
@@ -166,6 +168,27 @@ export function AppProvider({ children }) {
       localStorage.setItem('ally_founder', JSON.stringify(user));
     }
   }, [user]);
+
+  // Apply the founder's reduced-motion choice for the whole app, not just the
+  // page that owns the switch. Loaded here because motion happens everywhere --
+  // the splash screen and the product tour both run before Profile is ever
+  // opened, and a founder who set this last week should not have to visit
+  // Settings again for it to take effect.
+  //
+  // Failure is silent on purpose: the device-level `prefers-reduced-motion`
+  // rule in animations.css still applies, so the worst case is that we honour
+  // the operating system but not the in-app switch -- which is where this
+  // started, and is better than blocking startup on a preferences call.
+  useEffect(() => {
+    if (!getAccessToken()) return undefined;
+    let cancelled = false;
+    getNotificationPreferences()
+      .then(prefs => {
+        if (!cancelled && prefs) applyReducedMotion(prefs.reduced_motion ?? false);
+      })
+      .catch(() => { /* device setting still applies */ });
+    return () => { cancelled = true; };
+  }, []);
 
   // Ally nudges the founder about overdue/due-today plan tasks while they're
   // active in the app -- there's no backend delivery worker for this (the

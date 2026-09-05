@@ -233,7 +233,7 @@ def test_binary_attachment_is_named_not_fabricated():
     c = _conv_with(conv, (U, "hi"))
     w = builder.build(ally_context=make_ctx(), conversation=c, current_message="hi")
     assert "deck.pdf" in w.attachments_text
-    assert "cannot be read yet" in w.attachments_text
+    assert "cannot read its contents" in w.attachments_text
 
 
 def test_pdf_attachment_text_is_extracted_and_inlined():
@@ -283,7 +283,7 @@ def test_corrupted_pdf_attachment_is_named_not_fabricated():
     w = builder.build(ally_context=make_ctx(), conversation=c2, current_message="hi")
     assert w.attachments_injected is True  # the block itself still renders
     assert "corrupt.pdf" in w.attachments_text
-    assert "cannot be read yet" in w.attachments_text
+    assert "cannot read its contents" in w.attachments_text
 
 
 def test_attachment_byte_budget_falls_back_to_name_only_past_the_cap():

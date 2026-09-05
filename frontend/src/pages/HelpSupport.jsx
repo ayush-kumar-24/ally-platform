@@ -5,6 +5,7 @@ import { useCallAccess } from '../hooks/useCallAccess';
 import Modal from '../components/Modal';
 import { FEEDBACK, submitFeedback } from '../services/feedback';
 import { ApiError } from '../services/api';
+import { prefersReducedMotion } from '../services/motion';
 
 /* Answers are checked against what the code actually does, not what the product
    is meant to do eventually. Four of the originals were wrong -- the worst
@@ -84,7 +85,7 @@ export default function HelpSupport() {
   const scrollToFaqs = () => {
     // Honour reduced-motion: a long smooth scroll is exactly the kind of
     // unrequested movement that setting exists to suppress.
-    const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    const reduced = prefersReducedMotion();
     faqRef.current?.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' });
   };
 

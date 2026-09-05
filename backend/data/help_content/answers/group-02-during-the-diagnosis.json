@@ -1,0 +1,194 @@
+{
+  "schema_version": "1.0",
+  "file": "group-02-during-the-diagnosis",
+  "group": "during-the-diagnosis",
+  "group_number": 2,
+  "group_title": "During the diagnosis",
+  "question_bank": "Founder Question Bank v3 — group 2 (questions 015-032)",
+  "created": "2026-09-05",
+  "content_rules": {
+    "no_answer_from_memory": "Every answer is produced by walking the real screens. Nothing is written from source code or recall.",
+    "voice": "Very simple, easy English. Short sentences. Common everyday words. No idioms. Friendly and warm, but plain. Say 'not yet, sorry' rather than 'this is not supported'. Never make the founder feel silly for asking.",
+    "answer_length": "About 120 words maximum. Short paragraphs with a blank line between them.",
+    "pricing": "There is no free plan. Entry is Rs 199 one-time; Rs 450 and Rs 999 are the monthly plans."
+  },
+  "walk_log": {
+    "walked_on": "2026-09-05",
+    "environment": "local dev build against the production Supabase database",
+    "account": "dev founder Rohan Mehta / e2e-resume-test@ally.local, founder_id 10756, mid-diagnosis session 713",
+    "what_was_done": [
+      "Opened a live in-progress diagnosis and read the whole screen: category chip, progress line, answer box, 'I'm not sure' button, microphone, and the live knowledge graph panel.",
+      "Actually pressed 'I'm not sure' and watched what happened: the diagnosis advanced to a different question in a different category.",
+      "Checked the database afterwards - the 'I'm not sure' produced NO answer row, so it advances without being recorded.",
+      "Read the per-stage question budgets from founder_stages (seeded by migration 8f3a1c92d7b4, applied 2026-09-04)."
+    ]
+  },
+  "answers": [
+    {
+      "id": 15,
+      "question": "Why is it asking me personal questions? I came here for business help.",
+      "answer": "Because how you work shapes what happens in your business.\n\nAlly starts with you — how you decide, what you push on, where you get stuck — and then looks at your business through that. It is what makes the report yours instead of general advice.\n\nThe personal part is the shorter one. Once Ally understands how you think, the business questions go faster and land closer to your real situation.\n\nNothing you say here is shared with anyone.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": ["/app/diagnosis"],
+      "verified": {"walked_on": "2026-09-05", "how": "The live diagnosis opened on a 'Founder Psychology' category and moved to 'Idea & Validation' after one answer."}
+    },
+    {
+      "id": 16,
+      "question": "Why did it only ask me 14 questions? I expected more.",
+      "answer": "The number depends on the stage you are at, and 14 is the number for the earliest stage.\n\nIf you are still working on an idea, there is less business to look at, so Ally asks fewer questions. Founders further along get around 30.\n\nIt is not a fixed list either. Ally chooses each question after reading your last answer, so a shorter set that follows what you actually said tells it more than a long form everyone fills in.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": ["/app/diagnosis"],
+      "verified": {"walked_on": "2026-09-05", "how": "Per-stage budgets read from founder_stages: Ideation 14, Validation 20, Prototype/MVP 24, Early Traction 30, Growth 30, Expansion 32, Maturity 32, Exit 30."},
+      "note": "Do not publish the full budget table to founders. 'Fourteen at the earliest stage, around thirty further along' is enough and stays true if the numbers are retuned."
+    },
+    {
+      "id": 17,
+      "question": "Am I getting the same questions as everyone else?",
+      "answer": "No. Ally chooses each question after reading your last answer.\n\nTwo founders at the same stage will start in similar territory, but the moment your answers differ, the questions differ. You will also see the topic change as you go — you might move from questions about how you think to questions about your idea, depending on what Ally is following up.\n\nYour stage also decides which areas Ally covers at all.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": ["/app/diagnosis"],
+      "verified": {"walked_on": "2026-09-05", "how": "Watched the category chip change from Founder Psychology to Idea & Validation, and the next question was chosen after the previous answer was sent."}
+    },
+    {
+      "id": 18,
+      "question": "Can I skip a question I don't want to answer?",
+      "answer": "There is no skip button, but there is a way past.\n\nUnder the answer box there is an \"I'm not sure\" button. Tap it and Ally moves on to a different question.\n\nIt does not count against you and it is not saved as an answer. It is there for questions you cannot answer, or would rather not.\n\nIf a question feels wrong for your business, that is a good moment to use it.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": ["/app/diagnosis"],
+      "verified": {"walked_on": "2026-09-05", "how": "Pressed it. The session moved from question 307 (Founder Psychology) to 217 (Idea & Validation), and no answer row was written to the database."}
+    },
+    {
+      "id": 19,
+      "question": "I don't know the answer to this. What do I put?",
+      "answer": "Use the \"I'm not sure\" button under the answer box. That is exactly what it is for.\n\nAlly will move to a different question. Nothing is marked wrong and nothing is lost.\n\nPlease do not guess, especially with numbers. A made-up figure is worse than no answer, because Ally will treat it as real and build on it.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": ["/app/diagnosis"],
+      "verified": {"walked_on": "2026-09-05", "how": "Same walk as question 18."}
+    },
+    {
+      "id": 20,
+      "question": "Can I go back and change an answer?",
+      "answer": "Not during the diagnosis, sorry. There is no back button, and once an answer is sent it stays.\n\nIf you want to correct something, type the correction as your next answer. Ally reads everything you write, so saying \"actually, about that last question…\" does reach it.\n\nThere is one place you can edit freely: before the diagnosis starts, Ally shows you a summary of your profile answers, and everything on that screen can be changed.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": ["/app/diagnosis", "/guided/summary"],
+      "verified": {"walked_on": "2026-09-05", "how": "Read the full diagnosis screen: the only controls are the answer box, the 'I'm not sure' button, a microphone and send. No back or edit control exists."}
+    },
+    {
+      "id": 21,
+      "question": "I closed the tab. Did I lose my progress?",
+      "answer": "No. Your answers are saved as you go — the diagnosis screen says so at the top of the page.\n\nWhen you come back, Ally shows a \"Welcome back\" screen with how far you got, and picks up at the next question.\n\nYou can close the tab, come back on another device, or leave it for days. Nothing is lost.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": ["/app/diagnosis", "/guided/resume"],
+      "verified": {"walked_on": "2026-09-05", "how": "The diagnosis header reads 'your answers are saved as you go' and the footer showed 'Saving your answer...' on send. A session started 2026-08-25 resumed intact eleven days later."}
+    },
+    {
+      "id": 22,
+      "question": "Why did it ask the same thing twice?",
+      "answer": "It should not, and if it did, that is a fault on our side rather than anything you did.\n\nPlease answer it again if you can, and Ally will carry on. Then tell us using Report a bug on the Help page, with roughly the day and time. That helps us find it.\n\nWe have seen this happen when a diagnosis is picked up again after a long gap, and we are working on it.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": ["/app/help"],
+      "verified": {"walked_on": "2026-09-05", "how": "Reproduced. A session last answered on 2026-08-25 re-asked the question it had already answered (question 307) when resumed."},
+      "finding": "BUG REPRODUCED. Session 713 held one saved answer to question 307, but current_question_id was still 307, so resuming re-asked a question the founder had already answered. It only advanced once a new answer was submitted. Worth a proper look: on resume the founder is asked to repeat themselves, which reads as the product not listening."
+    },
+    {
+      "id": 23,
+      "question": "It asked something that doesn't apply to my business.",
+      "answer": "That happens, and there is a quick way past it. Tap \"I'm not sure\" under the answer box and Ally moves on.\n\nYou can also just say so in your own words — for example, \"we don't have a sales team yet\". Ally reads that and takes it into account.\n\nIf several questions feel wrong for your business, please send us feedback. That usually means we have your stage or your industry wrong, and we would want to know.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": ["/app/diagnosis", "/app/feedback"],
+      "verified": {"walked_on": "2026-09-05", "how": "The answer box accepts free text alongside the 'I'm not sure' button; its placeholder is 'Answer Ally's question or ask anything…'."}
+    },
+    {
+      "id": 24,
+      "question": "How long should my answers be? Does writing more get me a better report?",
+      "answer": "Write as much as you naturally would. A few sentences is plenty.\n\nLonger is not automatically better. What helps is being specific — real numbers, real examples, what actually happened. One clear sentence about a real situation is worth more than a paragraph of general description.\n\nShort answers are fine too. If you only have one line, give the one line.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": ["/app/diagnosis"],
+      "verified": {"walked_on": "2026-09-05", "how": "The answer box is free text with no length guidance or limit shown. A long saved answer and a two-word one were both accepted."}
+    },
+    {
+      "id": 25,
+      "question": "What if I'd rather not be fully honest about something?",
+      "answer": "That is your choice, and nobody will know.\n\nBut it is worth knowing what happens. Ally notices when answers feel guarded, and when they do it treats the diagnosis as less certain and words your report more carefully. It is not accusing you of anything.\n\nThe report is only as good as what it is built on. If something is hard to say, \"I'm not sure\" is a cleaner answer than one that is not quite true.\n\nNothing you write here is shared with anyone.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": ["/app/diagnosis"],
+      "verified": {"walked_on": "2026-09-05", "how": "The seeded session-state model reads guardedness and lowers a reliability factor, which changes how the report is framed rather than what it accuses the founder of."}
+    },
+    {
+      "id": 26,
+      "question": "Can I answer out loud instead of typing?",
+      "answer": "Yes. There is a microphone button next to the answer box. Tap it and speak.\n\nVoice works during the diagnosis on every plan.\n\nYour words appear as text before they are sent, so you can read them back and fix anything before you answer.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": ["/app/diagnosis"],
+      "verified": {"walked_on": "2026-09-05", "how": "The microphone button sits inside the answer box, and the screen footer reads 'Structured diagnosis · Voice input free on every plan here'."}
+    },
+    {
+      "id": 27,
+      "question": "The voice transcription got my words wrong.",
+      "answer": "That does happen, especially with names, numbers, and Indian city or brand names.\n\nYour words appear as text in the answer box before they are sent, so you can correct them there before answering. Please do check any numbers — a wrong revenue figure will change what Ally concludes.\n\nIf it keeps getting one particular word wrong, just type that part.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": ["/app/diagnosis"],
+      "verified": {"walked_on": "2026-09-05", "how": "Voice input writes into the same editable answer box, so text can be corrected before sending."},
+      "note": "The claim about accuracy on Indian names is a general caution, not a measured result. If a support answer should not say that, cut the first line - the rest stands on its own."
+    },
+    {
+      "id": 28,
+      "question": "It never asked me anything about my team or my revenue. Why not?",
+      "answer": "That is on purpose, not something missed.\n\nAlly only asks about the areas that make sense for your stage. If you are still working on an idea, there is no team or revenue to examine yet, so asking would only produce guesses — and a guess treated as fact makes the report worse, not better.\n\nAt the idea stage Ally looks at you as a founder and at the idea itself. Founders further along are asked about team, revenue and operations as well.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": ["/app/diagnosis"],
+      "verified": {"walked_on": "2026-09-05", "how": "Stage scope is applied before questions are ranked: the earliest stage covers only Founder Readiness and Market Clarity, and no business health score is published for it."}
+    },
+    {
+      "id": 29,
+      "question": "Can I stop and come back tomorrow?",
+      "answer": "Yes, whenever you like. There is no time limit and nothing expires.\n\nYour answers save as you go, so you can simply close the tab. When you come back, Ally shows how far you got and starts again at the next question.\n\nTaking a break is fine. Some of these questions are worth thinking about.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": ["/app/diagnosis", "/guided/resume"],
+      "verified": {"walked_on": "2026-09-05", "how": "A session started on 2026-08-25 was still in progress and resumable on 2026-09-05, eleven days later, with its answer intact."}
+    },
+    {
+      "id": 30,
+      "question": "It crashed halfway. Have I burned my one diagnosis?",
+      "answer": "No. Only a finished diagnosis counts.\n\nIf it stopped part-way, your answers are still saved and you can carry on from where you were. Sign in again and Ally will show you your progress.\n\nIf it will not continue, please tell us using Report a bug on the Help page and we will look at your session.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": ["/app/help"],
+      "verified": {"walked_on": "2026-09-05", "how": "An in-progress session eleven days old was still open and resumable, and had not been counted against the account."}
+    },
+    {
+      "id": 31,
+      "question": "My cofounder knows the numbers. Can they answer part of it?",
+      "answer": "It is better if you answer it yourself.\n\nThe diagnosis is built around how you think and decide, so answers written in someone else's words change what it finds. There is also one login per account.\n\nThe practical way is to ask your cofounder for the numbers first, then do the diagnosis yourself with those numbers next to you. Where you are still not sure of a figure, \"I'm not sure\" is better than a guess.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": ["/app/diagnosis"],
+      "verified": {"walked_on": "2026-09-05", "how": "One account, one session. Shared or multi-user access does not exist in the product today."},
+      "note": "Related to the open team-account decision (questions 200, 201). This answer deliberately gives the practical workaround rather than promising anything about shared accounts."
+    },
+    {
+      "id": 32,
+      "question": "Is Ally judging me while I answer?",
+      "answer": "No. Ally is not scoring you as a person, and there is no pass or fail.\n\nIt does pay attention to how you answer as well as what you say — for example, whether answers feel guarded, or whether you sound like you are under a lot of pressure. That is only used to decide how carefully to word your report and how much weight to put on it.\n\nNobody else sees your answers.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": ["/app/diagnosis"],
+      "verified": {"walked_on": "2026-09-05", "how": "The seeded psychological-state model changes report framing and a reliability figure. It produces no score about the founder as a person."}
+    }
+  ]
+}
