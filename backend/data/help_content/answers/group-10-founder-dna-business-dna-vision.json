@@ -1,0 +1,74 @@
+{
+  "schema_version": "1.0",
+  "file": "group-10-founder-dna-business-dna-vision",
+  "group": "founder-dna-business-dna-vision",
+  "group_number": 10,
+  "group_title": "Founder DNA, Business DNA, Vision",
+  "question_bank": "Founder Question Bank v3 — group 10 (questions 117-125)",
+  "created": "2026-09-05",
+  "content_rules": {
+    "voice": "Very simple, easy English. Short sentences. Common everyday words. No idioms. Friendly and warm, but plain.",
+    "answer_length": "About 120 words maximum. Short paragraphs with a blank line between them.",
+    "no_internal_counts": "Name the six pillars and the four bands. Never quote how many dimensions or archetypes exist internally."
+  },
+  "walk_log": {
+    "walked_on": "2026-09-05",
+    "environment": "local dev build against the Supabase database (NOT production RDS)",
+    "observed": [
+      "The Founder DNA page carries: a hero taken from the report's own Founder DNA section, 'How you operate', 'Motivation & archetype', and 'Your vision'.",
+      "The archetype card shows a percentage match with the line 'from your own words in the diagnosis', and lists which terms it matched on. So it is a match against the founder's own language, not a score against an outside test.",
+      "The Business DNA page shows a hero and 'Business dimensions'.",
+      "Both Founder DNA and Business DNA are gated in the sidebar on a report existing. They are not plan features.",
+      "Vision has six areas — life, business, impact, financial, ideal day and legacy — each with a statement, two tags and an optional picture, plus an overall summary.",
+      "IMPORTANT: the Vision page is NOT sent to Ally in chat. The chat context carries the founder's memory, retrieved knowledge, a diagnostic map, their open plan tasks and an onboarding profile brief. That brief does include the one-year vision and 90-day goal captured during onboarding — but nothing from the Vision page itself."
+    ],
+    "finding": "The Vision page is the fullest statement a founder ever writes about where they are trying to get to, and the AI meant to help them get there never sees it. Answers 121 and 122 are honest about this rather than implying it feeds the advice. Worth considering for the same change that widens chat context, alongside goals."
+  },
+  "answers": [
+    {"id": 117, "question": "What is my Founder DNA and what am I supposed to do with it?",
+     "answer": "It is Ally's read of how you work — how you decide, what drives you, where you tend to get stuck.\n\nThe page has three parts: how you operate, your motivation and archetype, and your vision. The archetype is matched from your own words in the diagnosis, and it shows you which words it matched on.\n\nWhat to do with it: read it once, and notice what you recognise. It is most useful as a lens on the business problem rather than on its own — the same constraint that shows up in how you work usually shows up in the company too.\n\nIt is not a label, and nobody else sees it.",
+     "answer_type": "walked", "status": "answered", "links": ["/app/founder-dna", "/app/report"],
+     "verified": {"walked_on": "2026-09-05", "how": "Read the live Founder DNA page: hero, 'How you operate', 'Motivation & archetype' with matched terms, and 'Your vision'."}},
+
+    {"id": 118, "question": "Can I redo Founder DNA if I answered badly?",
+     "answer": "Not on its own, sorry. Founder DNA comes out of the diagnosis, and there is one diagnosis per account.\n\nIt also could not really be redone by itself. What Ally learns about you is what it reads your business answers through, so changing one without the other would leave the two halves disagreeing.\n\nWhat helps now: open Ally chat and tell it what you would have said. It will work with the fuller picture from then on, even though the page itself stays as it is.\n\nIf your answers were badly off, contact support and we will look at it with you.",
+     "answer_type": "walked", "status": "answered", "links": ["/app/ally-chat", "/app/help"],
+     "verified": {"walked_on": "2026-09-05", "how": "No partial re-run exists. The only reset is a whole-diagnosis admin action, used case by case."}},
+
+    {"id": 119, "question": "What's Business DNA, and how is it different from Founder DNA?",
+     "answer": "Founder DNA is about you. Business DNA is about the company.\n\nBusiness DNA scores your business across six areas: Founder Readiness, Market Clarity, Revenue Maturity, Product & Execution, Team & Leadership, and Strategic Clarity. Each one lands in a band — Critical Gap, Needs Attention, Developing or Strong.\n\nFounder DNA is how you decide and operate. Business DNA is how the business currently runs.\n\nThe point of having both is what sits between them. Ally looks for the place where a pattern of yours and a weakness in the business meet, and that is usually the root cause.",
+     "answer_type": "walked", "status": "answered", "links": ["/app/business-dna", "/app/founder-dna"],
+     "verified": {"walked_on": "2026-09-05", "how": "Pillar names and band names read from the reference data. The Business DNA page renders 'Business dimensions'."}},
+
+    {"id": 120, "question": "Why is Business DNA locked?",
+     "answer": "Because it is built from your diagnosis, and there is nothing to show before you have done one.\n\nIt is not a paid feature and there is nothing to buy. Finish the diagnosis and both Business DNA and Founder DNA open up, along with your report.\n\nIf you have already finished a diagnosis and it still looks locked, that is a fault rather than a setting. Please tell support.",
+     "answer_type": "walked", "status": "answered", "links": ["/app/business-dna", "/app/diagnosis", "/app/help"],
+     "verified": {"walked_on": "2026-09-05", "how": "The sidebar gates Founder DNA and Business DNA on a report existing. Neither appears in the plan catalog's feature gates as a paid item."}},
+
+    {"id": 121, "question": "What's Vision for? Do I have to fill it in?",
+     "answer": "No, it is completely optional. Nothing is blocked if you leave it empty.\n\nVision is a place to write down where you are actually trying to get to, across six areas: your life, the business, the impact you want, the financial picture, your ideal day, and what you want to leave behind. Each one takes a sentence or two, and you can add a picture.\n\nWhat you write shows on your Compass as your north star, so it is in front of you rather than in a document you never open.\n\nIt is for you. It is not scored and nobody else sees it.",
+     "answer_type": "walked", "status": "answered", "links": ["/app/vision", "/app"],
+     "verified": {"walked_on": "2026-09-05", "how": "Six territory keys confirmed: life, business, impact, financial, ideal_day, legacy — each with a statement, two tags and an optional image, plus a summary. The Compass north-star panel reads it."}},
+
+    {"id": 122, "question": "Does Ally actually use my vision, or is it just for me to look at?",
+     "answer": "Honest answer: mostly the second, for now.\n\nWhen you chat with Ally it does not read your Vision page. It works from your diagnosis, what it remembers about you, your open tasks, and the profile you filled in at the start — which does include the one-year vision and 90-day goal you gave then.\n\nSo Ally knows roughly where you said you were heading. It does not see the six areas you wrote on the Vision page.\n\nIf your vision matters to a question, say it in the chat and Ally will use it. And we would like to close this gap — it is a fair thing to expect.",
+     "answer_type": "walked", "status": "answered", "links": ["/app/vision", "/app/ally-chat"],
+     "verified": {"walked_on": "2026-09-05", "how": "Traced the whole chat context assembly. It injects memory, retrieval, a diagnostic map, attachments, open plan tasks and an onboarding profile brief. That brief carries current challenges, the 90-day goal and the one-year vision. Nothing reads vision_territories or vision_summary."},
+     "finding": "PRODUCT GAP. The Vision page is the fullest statement a founder ever writes about where they are trying to get to, and the AI meant to help them get there never sees it. Same for Goals. Worth including in whatever change next widens chat context."},
+
+    {"id": 123, "question": "Founder DNA is in my report and it's also a page. What's the difference?",
+     "answer": "Same source, two different jobs.\n\nThe section in your report is the short version, written as part of the diagnosis and fixed to the day it was made. It is there because the rest of the report is built on it.\n\nThe page is the fuller view you can come back to — how you operate, your motivation and archetype, and your vision, laid out to read rather than to support an argument.\n\nNeither changes on its own. If they ever disagree, please tell us, because they should not.",
+     "answer_type": "walked", "status": "answered", "links": ["/app/founder-dna", "/app/report"],
+     "verified": {"walked_on": "2026-09-05", "how": "The Founder DNA page hero takes its heading from the report's own Founder DNA section, then adds the operating, archetype and vision panels."}},
+
+    {"id": 124, "question": "We've pivoted. Can I change my Business DNA?",
+     "answer": "Not directly, no. Business DNA comes from your diagnosis, and it stays as it was on the day you did it.\n\nThat is worth knowing rather than working around: after a real pivot, the scores describe the business you used to have. Read them with the date in mind.\n\nRunning the diagnosis again after a change of stage is something we intend to add, but it is not available yet.\n\nWhat you can do now is tell Ally in the chat what changed. It will work from that going forward. And if the pivot was large, contact support and we will look at your case.",
+     "answer_type": "walked", "status": "answered", "links": ["/app/business-dna", "/app/ally-chat", "/app/help"],
+     "verified": {"walked_on": "2026-09-05", "how": "Business DNA is stored on the report, which is a frozen snapshot. One diagnosis per account on every plan."}},
+
+    {"id": 125, "question": "Is Founder DNA a personality test? Which one is it based on?",
+     "answer": "No, and it is not based on any of the well-known ones.\n\nThere is no questionnaire scored against a published personality model, and you will not get a four-letter type. Ally reads what you actually wrote about your own situation during the diagnosis and looks for patterns in it.\n\nThe archetype it shows you is matched from your own words — the page even lists which words it matched on, so you can see where it came from.\n\nSo treat it as a read of how you were working at that moment, not a fixed type. If it does not sound like you, say so.",
+     "answer_type": "walked", "status": "answered", "links": ["/app/founder-dna", "/app/feedback"],
+     "verified": {"walked_on": "2026-09-05", "how": "The archetype card states 'from your own words in the diagnosis' and renders the matched terms. Nothing in the product references an external personality instrument."}}
+  ]
+}

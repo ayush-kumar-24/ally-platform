@@ -50,6 +50,11 @@ class Capability(str, Enum):
     # the Privacy Center) -- same admin tier as CANCEL_DELETION: it resolves a
     # founder-initiated data-rights request, not routine account admin.
     MANAGE_PRIVACY_REQUESTS = "manage_privacy_requests"
+    # Confirming or declining a founder's discovery-call request. Support tier
+    # as well as admin, deliberately: a call request is a scheduling decision
+    # about the team's own diary, not account administration, and the people who
+    # answer founders are the people who know whether the slot works.
+    MANAGE_DISCOVERY_CALLS = "manage_discovery_calls"
     # --- super-admin-only mutations -------------------------------------
     TRANSFER_CREDITS = "transfer_credits"
     MODIFY_SUBSCRIPTION = "modify_subscription"
@@ -64,6 +69,7 @@ _SUPPORT: frozenset[Capability] = frozenset({
     Capability.VIEW_REPORTS,
     Capability.VIEW_CHATS,
     Capability.VIEW_FEEDBACK,
+    Capability.MANAGE_DISCOVERY_CALLS,
 })
 
 _ADMIN: frozenset[Capability] = frozenset({
@@ -76,6 +82,7 @@ _ADMIN: frozenset[Capability] = frozenset({
     Capability.RESET_CONVERSATIONS,
     Capability.CANCEL_DELETION,
     Capability.MANAGE_PRIVACY_REQUESTS,
+    Capability.MANAGE_DISCOVERY_CALLS,
 })
 
 # Super Admin holds every capability -- stated as "all of them" so a capability

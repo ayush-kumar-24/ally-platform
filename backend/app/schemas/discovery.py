@@ -33,3 +33,26 @@ class CallRead(BaseModel):
     booking_source: str | None = None
     notes_pre_call: str | None = None
     created_at: datetime | None = None
+
+
+class CancelRequest(BaseModel):
+    """Why the founder is cancelling. Optional -- never block a cancellation on
+    making someone explain themselves."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str | None = Field(default=None, max_length=500)
+
+
+class RescheduleRequest(BaseModel):
+    """Move a booked call to a different slot.
+
+    Modelled as cancel-then-book rather than an in-place edit: the old row is
+    kept as `cancelled` and the new one records `rescheduled_from_call_id`, so
+    the history of a call that moved three times is still readable afterwards.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    scheduled_at: datetime
+    reason: str | None = Field(default=None, max_length=500)

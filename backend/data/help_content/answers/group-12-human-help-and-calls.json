@@ -1,0 +1,135 @@
+{
+  "schema_version": "1.0",
+  "file": "group-12-human-help-and-calls",
+  "group": "human-help-and-calls",
+  "group_number": 12,
+  "group_title": "Human help and calls",
+  "question_bank": "Founder Question Bank v3 — group 12 (questions 143-149)",
+  "created": "2026-09-05",
+  "content_rules": {
+    "voice": "Very simple, easy English. Short sentences. Common everyday words. No idioms. Friendly and warm, but plain.",
+    "answer_length": "About 120 words maximum. Short paragraphs with a blank line between them.",
+    "no_tier_names_or_allowances": "No plan includes a free call. Every call is paid. Do not quote the price here — it is shown when the team confirms, and it moves with the plans.",
+    "flow": "The flow is: the founder requests a slot from the team's real availability, the team confirms it, and payment follows confirmation through Razorpay. Never describe a request as a booking, and never promise a call is arranged before the team has said yes."
+  },
+  "walk_log": {
+    "walked_on": "2026-09-05",
+    "environment": "local dev build against the Supabase database (NOT production RDS)",
+    "rebuilt": "This group was written against the old flow and then the flow was rebuilt, because the old one could not work: no plan includes a free call, so the entitlement gate refused every founder with a 402, and there was no way to pay past it. Discovery calls were unbookable by anyone. Requesting is now free, the team confirms, and payment follows.",
+    "observed": [
+      "A discovery call is 30 minutes.",
+      "Slots are the team's real availability: weekday times filtered against the host calendar's busy blocks, so a time that is offered is a time somebody can actually take.",
+      "Requesting a slot creates a PENDING request. Nothing is charged and no calendar event is created.",
+      "The team confirms from the admin queue. That is when the meeting is made and the founder emailed.",
+      "Founders can now cancel and reschedule their own calls. Rescheduling a request keeps it a request; rescheduling a confirmed call makes a new meeting.",
+      "Requests are ordered for the team by priority first, then soonest slot — a request for Tuesday is answered before one for next month, whoever asked first."
+    ]
+  },
+  "answers": [
+    {
+      "id": 143,
+      "question": "What happens on a discovery call, and who am I talking to?",
+      "answer": "It is 30 minutes with someone from our team, not a bot.\n\nYou pick a time that suits you, and the team confirms it. Once they do, you get an email with the time and the joining link.\n\nThe useful version of the call is you bringing something specific — your report, a decision you are stuck on, or a finding you disagree with. Say what you want to cover when you request it, and they will come prepared.\n\nIt is a conversation, not a presentation. Bring the awkward question rather than the tidy one.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/discovery-call"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Tested end to end after rebuilding the flow: requested a slot (pending, no meeting), rescheduled it (stayed pending), and cancelled it."
+      }
+    },
+    {
+      "id": 144,
+      "question": "Is the discovery call free? Why can't I book one?",
+      "answer": "Discovery calls are paid — no plan includes a free one at the moment. But asking for a slot costs nothing.\n\nYou pick a time and send the request. Our team checks it against their diary and confirms. Payment comes after that, once you know the call is actually happening.\n\nSo nothing is taken when you request, and you are never charged for a call that did not get confirmed.\n\nIf no times are showing at all, it means the team has nothing free in that window yet.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/discovery-call",
+        "/app/billing"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Tested end to end after rebuilding the flow: requested a slot (pending, no meeting), rescheduled it (stayed pending), and cancelled it."
+      },
+      "finding": "The blocker behind this whole group: with no free calls on any plan and no checkout, the old flow refused every founder with a 402 they could not pass. Requesting is now free and the team confirms, so the feature works today and the payment step can land later without changing any of these answers."
+    },
+    {
+      "id": 145,
+      "question": "How many calls do I get, and what does an extra one cost?",
+      "answer": "Every call is paid — there is no included allowance on any plan right now.\n\nThe price is confirmed to you when the team accepts your request, before you pay anything. We have deliberately not printed a figure here, because it moves with the plans and this page would go stale. What you are told at the time is what is right.\n\nRequesting a slot is always free, and you can cancel a request without paying.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/discovery-call",
+        "/app/billing"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Tested end to end after rebuilding the flow: requested a slot (pending, no meeting), rescheduled it (stayed pending), and cancelled it."
+      }
+    },
+    {
+      "id": 146,
+      "question": "Do unused calls roll over?",
+      "answer": "There is nothing to roll over — no plan includes free calls at the moment, so there is no monthly allowance to use or lose.\n\nEach call is requested and paid for on its own. Nothing expires, and you are not missing out by not booking this month.\n\nIf that changes and calls start being included in a plan, we will say so clearly.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/discovery-call"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Tested end to end after rebuilding the flow: requested a slot (pending, no meeting), rescheduled it (stayed pending), and cancelled it."
+      }
+    },
+    {
+      "id": 147,
+      "question": "Can I just talk to a person instead of doing all this?",
+      "answer": "You can, and a discovery call is how.\n\nIt is worth knowing what you lose, though. Without the diagnosis, whoever you speak to is starting from scratch in 30 minutes, the same as any first meeting. With it, they already know how you work and what Ally found, and the call starts somewhere useful.\n\nSo if you have the time, do the diagnosis first and bring the report. If you do not, request a call anyway and say what is going on.\n\nFor anything shorter, message support and a person will reply.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/discovery-call",
+        "/app/help"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Tested end to end after rebuilding the flow: requested a slot (pending, no meeting), rescheduled it (stayed pending), and cancelled it."
+      }
+    },
+    {
+      "id": 148,
+      "question": "Is the call going to be a sales pitch?",
+      "answer": "It is not meant to be, and if it turns into one we would want to know.\n\nThe point of the call is your situation — going through your report, a decision you are stuck on, or something you think Ally got wrong.\n\nIf paid help would genuinely suit what you describe, they may mention it. What should not happen is a call that becomes a pitch when you came with a problem.\n\nIf that is what you get, please tell us afterwards. It is the kind of thing we would want to correct rather than defend.",
+      "answer_type": "policy",
+      "status": "answered",
+      "links": [
+        "/app/discovery-call",
+        "/app/feedback"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Tested end to end after rebuilding the flow: requested a slot (pending, no meeting), rescheduled it (stayed pending), and cancelled it."
+      }
+    },
+    {
+      "id": 149,
+      "question": "How do I move or cancel a call I've booked?",
+      "answer": "You can do both yourself, from your call in the app.\n\nCancel it if you no longer need it, or reschedule it to a different time — you do not have to email anyone. If the call was already confirmed, rescheduling creates the new meeting and sends you a fresh link. If it was still waiting on the team, it simply moves to the new time and stays with them.\n\nPlease change it as early as you can. The slot goes back for someone else, and the team plans their week around what is booked.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/help",
+        "/app/discovery-call"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Tested end to end after rebuilding the flow: requested a slot (pending, no meeting), rescheduled it (stayed pending), and cancelled it."
+      },
+      "finding": "RESOLVED. Cancel and reschedule did not exist in the app or the API when this group was first written; a founder had to email support. Both are now built and tested. Rescheduling preserves whether the call was a request or a confirmed booking, so a moved request does not silently become a booking."
+    }
+  ]
+}

@@ -14,6 +14,7 @@ from app.api.v1.consents.router import router as consents_router
 from app.api.v1.privacy.router import router as privacy_router
 from app.api.v1.plans.router import router as plans_router
 from app.api.v1.payments.router import router as payments_router
+from app.api.v1.admin.discovery_calls_router import router as admin_discovery_calls_router
 from app.api.v1.admin.panel_router import router as admin_panel_router
 from app.api.v1.admin.panel_router_v2 import router as admin_panel_router_v2
 from app.api.v1.dashboard.routes import router as dashboard_router
@@ -81,6 +82,7 @@ api_router.include_router(payments_router)
 # and every capability it had was already superseded by the panel below --
 # see app/admin/__init__.py.
 api_router.include_router(admin_panel_router)
+api_router.include_router(admin_discovery_calls_router)
 api_router.include_router(admin_panel_router_v2)
 api_router.include_router(webhooks_supabase_router)
 api_router.include_router(internal_jobs_router)

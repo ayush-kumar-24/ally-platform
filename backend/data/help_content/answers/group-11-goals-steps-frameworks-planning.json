@@ -1,0 +1,291 @@
+{
+  "schema_version": "1.0",
+  "file": "group-11-goals-steps-frameworks-planning",
+  "group": "goals-steps-frameworks-planning",
+  "group_number": 11,
+  "group_title": "Goals, steps, frameworks, planning",
+  "question_bank": "Founder Question Bank v3 — group 11 (questions 126-142)",
+  "created": "2026-09-05",
+  "content_rules": {
+    "voice": "Very simple, easy English. Short sentences. Common everyday words. No idioms. Friendly and warm, but plain.",
+    "answer_length": "About 120 words maximum. Short paragraphs with a blank line between them.",
+    "one_real_list": "Settled: Plan Your Day is the founder's real to-do list. Recommendations, Next steps and the report's priority actions all feed it. Say that consistently."
+  },
+  "walk_log": {
+    "walked_on": "2026-09-05",
+    "environment": "local dev build against the Supabase database (NOT production RDS)",
+    "observed": [
+      "Recommendations come from the report — they are a section of the diagnosis, not separately written.",
+      "The report's action plan is capped at three actions to confirm or isolate the problem and three to solve it. It is a ceiling rather than a quota: fewer is written when fewer is honest.",
+      "Frameworks are a fixed library of ten, identical for every founder. What is personal is which ones you have opened and the notes you write on them, which are yours and never AI-written.",
+      "Plan Your Day tasks are pushed to Google Calendar when a founder connects one. The push is real, not aspirational.",
+      "Goals are NOT sent to Ally in chat. Only open Plan Your Day tasks are, alongside memory, the diagnosis, retrieval and the onboarding profile brief.",
+      "Know My Energy renders a deliberate 'Coming soon' page. It is declared as a paid feature in the plan catalog but the founder-facing side does not exist.",
+      "Reminders are in-app only. Nothing emails or pushes, so nothing reaches a founder while the app is closed."
+    ],
+    "flag_for_team": "Resolved: calendar sync is confirmed working on the production domain. The empty connections table was Supabase, not production RDS. A reminder that anything counted in Supabase says nothing about production — see docs/PRODUCTION-RDS-CHECKS.md."
+  },
+  "answers": [
+    {
+      "id": 126,
+      "question": "What's the difference between Goals and Plan Your Day?",
+      "answer": "Goals are what you are trying to achieve. Plan Your Day is what you are doing about it today.\n\nA goal is bigger and slower — grow revenue, hire a second engineer, get to a repeatable sales process. It sits there while you work towards it.\n\nPlan Your Day is the short list of actual tasks, with times if you want them. It is where the work happens.\n\nMost founders set a handful of goals and rarely change them, then live in Plan Your Day. If you only look at one, look at that one.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/goals",
+        "/app/plan"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Separate features with separate storage: goals hold outcomes, planning holds dated tasks with status."
+      }
+    },
+    {
+      "id": 127,
+      "question": "Does Ally know about my goals when I'm talking to it?",
+      "answer": "It knows your open tasks from Plan Your Day, and it will connect what you are asking to something already on your list.\n\nIt does not currently read your Goals page. So if a goal matters to what you are asking, mention it in the chat — Ally will use it straight away, it just will not have picked it up on its own.\n\nIt also knows the 90-day goal and one-year vision you gave during onboarding, because those were part of your profile.\n\nWe would like to close this gap. It is a fair thing to expect.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/goals",
+        "/app/ally-chat"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Traced the chat context: open plan tasks are injected with title, status and priority. Nothing reads the goals tables. The onboarding brief does carry the 90-day goal and one-year vision."
+      }
+    },
+    {
+      "id": 128,
+      "question": "Where do my recommendations come from? Did a person write these?",
+      "answer": "They come from your diagnosis. No person wrote them for you.\n\nThey are part of your report — the same analysis, shown on their own page so you can work through them without opening the whole document.\n\nSo they are specific to what Ally found in your answers, not a general list of good advice. If a recommendation does not match your business, that is worth telling us, because it means the finding behind it may be off.\n\nIf you want a person involved, you can book a discovery call and go through them together.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/recommendations",
+        "/app/report",
+        "/app/discovery-call"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Recommendations are served as a section of the report itself, generated from the diagnosis with no human review step anywhere in the path."
+      }
+    },
+    {
+      "id": 129,
+      "question": "Why do I only have two or three recommendations?",
+      "answer": "Because that is the most you can actually act on, and because Ally would rather give you three real ones than six padded ones.\n\nThe plan is built as up to three moves to confirm what is really going on, and up to three to fix it. That is a ceiling, not a target — if only two are worth doing, you get two.\n\nIt is deliberate. A list of ten actions reads as thorough and gets nothing done. Three ordered ones, where the first makes the second easier, usually do.\n\nStart at the top and work down.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/recommendations",
+        "/app/next-steps"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "The action plan is capped at three confirm/isolate actions and three solve actions, explicitly documented as a ceiling rather than a quota."
+      }
+    },
+    {
+      "id": 130,
+      "question": "What's the difference between recommendations and next steps?",
+      "answer": "Same advice, two different views.\n\nRecommendations are the thinking — what Ally suggests and why, straight from your diagnosis.\n\nNext steps is the working list. It is where you actually pick things up, tick them off, and see what is left.\n\nSo read Recommendations once to understand the reasoning, then live in Next steps. And when you commit to doing something on a particular day, put it in Plan Your Day — that is the list that runs your week.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/recommendations",
+        "/app/next-steps",
+        "/app/plan"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Both are gated on a report existing and both trace back to the same diagnosis output."
+      }
+    },
+    {
+      "id": 131,
+      "question": "What are frameworks and how do I actually use one?",
+      "answer": "They are short, practical thinking tools — ten of them, each for a particular kind of decision.\n\nOpen one and you get the idea explained plainly, with how to apply it. There is a space for your own notes underneath, so you can write what it means for your business. Those notes are yours and Ally never writes them for you.\n\nThe useful way to use one is with a real decision in front of you rather than as reading. Pick the one that matches what you are stuck on, work your problem through it, and write down what came out.\n\nAlly remembers which ones you have opened.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/frameworks"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Ten frameworks in the library. Per-founder usage records last-opened and the founder's own note, explicitly never AI-written."
+      }
+    },
+    {
+      "id": 132,
+      "question": "Are the frameworks picked for me, or does everyone see the same ones?",
+      "answer": "Everyone sees the same ten. They are a library, not a recommendation.\n\nWhat is personal is what you do with them — which ones you have opened, when, and the notes you have written on each.\n\nSo nothing here is chosen for you based on your diagnosis. If you want to know which one fits your situation, ask Ally in the chat — it knows your report and can point you at the right one.\n\nIf frameworks picked for you would be more useful, tell us. It is a reasonable thing to want.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/frameworks",
+        "/app/ally-chat",
+        "/app/feedback"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "The framework list is a fixed set of ten shipped with the app, identical for every founder. Only usage and notes are per-founder."
+      }
+    },
+    {
+      "id": 133,
+      "question": "What's the difference between a task and a goal?",
+      "answer": "A task is one thing you do. A goal is what all those things add up to.\n\n\"Call five customers this week\" is a task. \"Understand why people churn\" is a goal.\n\nTasks live in Plan Your Day, can have a time on them, and get ticked off. Goals live on the Goals page and stay put while you work towards them.\n\nIf you are not sure which something is, ask whether you could finish it in a sitting. If yes, it is a task.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/plan",
+        "/app/goals"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Tasks carry a status and an optional time and are completed; goals are outcomes without completion mechanics."
+      }
+    },
+    {
+      "id": 134,
+      "question": "Can I set a time for a task, and will I get a reminder?",
+      "answer": "You can set a time, yes. The reminder is the weaker half.\n\nAlly will nudge you inside the app about anything due or overdue. But it does not email you and there are no phone notifications, so if Ally is closed, nothing reaches you.\n\nIf you have connected a calendar, your tasks go onto it — and then your calendar reminds you, which works whether Ally is open or not. That is the most reliable option today.\n\nWe know in-app-only is a real limitation and we would like to fix it.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/plan"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Nudges are computed client-side from due and overdue tasks. Only discovery-call notifications send email. Connected calendars receive a real event push."
+      }
+    },
+    {
+      "id": 135,
+      "question": "There are four different lists telling me what to do. Which is the real one?",
+      "answer": "Plan Your Day. That is the one to work from.\n\nHere is how the others relate to it. Your report names the priority actions — that is the thinking. Recommendations is the same advice on its own page. Next steps is the working list of those actions.\n\nWhen you decide you are actually going to do something, put it in Plan Your Day with a day and a time. That is the only list built for doing rather than reading.\n\nSo: report to understand, Next steps to choose, Plan Your Day to work.",
+      "answer_type": "policy",
+      "status": "answered",
+      "links": [
+        "/app/plan",
+        "/app/next-steps",
+        "/app/recommendations",
+        "/app/report"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Settled position: Plan Your Day is the founder's real to-do list; the other surfaces feed it."
+      }
+    },
+    {
+      "id": 136,
+      "question": "What happens when I tick something off? Does anything update?",
+      "answer": "Yes. Your completed count goes up and the task leaves your open list.\n\nThat count is how progress is actually measured in Ally. Your report is fixed at the day you made it, so it does not move — what moves is how many of its actions you have done. Your Compass reflects that.\n\nWhat does not happen: your bands do not change, and nothing gets re-scored. Ticking off a task is a record of work done, not a new diagnosis.\n\nSo it is worth ticking things off honestly rather than tidily.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/plan",
+        "/app/next-steps",
+        "/app"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "The dashboard tracks actions_open against actions_completed. Nothing recomputes report bands from task completion."
+      }
+    },
+    {
+      "id": 137,
+      "question": "Will Ally hold me to this? Does it check in?",
+      "answer": "Only while you are in the app, and honestly that is a limitation.\n\nWhen you open Ally, it will nudge you about anything overdue or due today. If you have connected a calendar, your tasks are on it and it will remind you properly.\n\nWhat Ally will not do is chase you. It does not email you, it will not message you, and it cannot notice on a Thursday that you have not opened it since Monday.\n\nSo the accountability has to come from you opening it. If you would like Ally to check in properly, tell us — you would not be the first to ask.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/plan",
+        "/app/feedback"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Nudges are computed only while the founder is in the app. No scheduled worker sends anything, and the reminders table is not polled."
+      }
+    },
+    {
+      "id": 138,
+      "question": "Can a framework be applied to my business, or is it just something to read?",
+      "answer": "It does not apply itself, but it is not only reading either.\n\nEach framework has a space for your own notes, and that is where it becomes about your business — you work your actual problem through it and write down what came out. Those notes stay with the framework, so you can come back to them.\n\nAlly will not fill a framework in for you. But you can bring one into the chat: say which framework and what you are deciding, and it will think it through with you using what it knows about your business.\n\nThat combination is where they earn their keep.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/frameworks",
+        "/app/ally-chat"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Framework notes are stored per founder and documented as never AI-written. Nothing auto-applies a framework to a founder's data."
+      }
+    },
+    {
+      "id": 139,
+      "question": "Does the calendar actually put tasks in my Google Calendar?",
+      "answer": "Yes, if you have connected one. Tasks you set in Plan Your Day are added to your Google Calendar as real events, and edits follow.\n\nThat also makes it the most reliable way to be reminded, because your calendar can reach you when Ally is closed and Ally itself cannot.\n\nYou connect it from Plan Your Day. If you cannot see a Connect option, calendar syncing is not switched on for your account yet.\n\nIf you connected one and nothing is appearing, please tell support — that is a fault and we would want to see it.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/plan",
+        "/app/help"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "A real push exists: creating or editing a task pushes an event and records the outcome. The Connect button is hidden entirely where the OAuth client is not configured."
+      },
+      "finding": "RESOLVED 2026-09-05. An earlier note here worried that no founder had ever connected a calendar, because the connections table was empty. That table was in Supabase, which is NOT the production database — production runs on AWS RDS. Confirmed by the team that calendar sync works on the real domain and that they have connected their own. The answer stands as written."
+    },
+    {
+      "id": 140,
+      "question": "Can I turn notifications off?",
+      "answer": "Yes. Go to Profile, then Preferences, and switch Notifications off.\n\nThat stops the nudges Ally shows you inside the app — reminders about tasks, replies, and updates about your report.\n\nIt does not change anything outside the app, because there is nothing to change: Ally does not send reminder emails or phone notifications. The only email it sends is about discovery calls.\n\nIf you have connected a calendar, its reminders are separate and keep working. You would turn those off in your calendar, not here.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/profile"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "The Notifications switch controls in-app nudges. Only discovery-call notifications send email anywhere in the product."
+      }
+    },
+    {
+      "id": 141,
+      "question": "What is Know My Energy for?",
+      "answer": "It is not built yet, and the page says so rather than pretending.\n\nThe idea is to look at how your energy actually moves through a week — when you do your sharpest work, when you are running on empty — and use that to plan around it instead of against it.\n\nToday there is nothing to use. Opening it gives you an honest \"coming soon\".\n\nUntil then, Plan Your Day is where you shape your week, and Ally will talk through your working patterns with you if you ask it.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/know-my-energy",
+        "/app/plan",
+        "/app/ally-chat"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "The page renders a deliberate 'Coming soon' panel. Nothing behind it exists."
+      }
+    },
+    {
+      "id": 142,
+      "question": "I'm on Pro and Know My Energy does nothing.",
+      "answer": "You are right, and we are sorry — that is our mistake rather than anything wrong with your account.\n\nKnow My Energy is listed against the top plan, but the feature itself has not been built yet. So there is nothing to unlock and nothing you are missing out on by comparison with anyone else. Nobody has it.\n\nIt should not have been presented as something your plan includes while it does not exist, and we are fixing how it is shown.\n\nIf you upgraded specifically for it, please contact support and tell us. That is a fair thing to raise.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/know-my-energy",
+        "/app/help"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "The feature is declared in the plan catalog against the top tier, with a code comment stating the founder-facing implementation is still to be built. The page confirms it."
+      },
+      "finding": "The plan catalog advertises Know My Energy on the top tier while the page renders 'Coming soon'. Either remove it from the tier's feature list until it exists, or mark it as coming soon on the pricing page. Selling a named feature that does nothing is the kind of thing a paying founder remembers."
+    }
+  ]
+}
