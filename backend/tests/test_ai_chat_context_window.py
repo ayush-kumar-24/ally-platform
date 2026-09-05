@@ -160,6 +160,50 @@ def test_graph_injected():
     assert w.graph_injected and len(w.graph.nodes) == 2
 
 
+# --- knowledge entitlement (Feature.KNOWLEDGE_CHAT, Rs 999) -----------------
+
+
+def test_knowledge_disabled_withholds_both_retrieval_and_graph():
+    """Discussing the knowledge base is a Rs 999 feature. Retrieval and the graph
+    are the same material reached two ways, so both go together -- withholding
+    the passages while still expanding the graph over them would leak what the
+    entitlement exists to withhold."""
+    conv, builder = setup()
+    c = _conv_with(conv, (U, "how do I activate users"))
+    w = builder.build(ally_context=make_ctx(), conversation=c,
+                      current_message="how do I activate users",
+                      knowledge_enabled=False)
+    assert w.retrieval is None and w.graph is None
+    assert not w.retrieval_injected and not w.graph_injected
+
+
+def test_knowledge_disabled_keeps_the_founders_own_context():
+    """Only the reference material is withheld. The founder's own memory and the
+    conversation they are having are theirs on every tier -- degrading those
+    would make the cheaper plans feel broken rather than smaller."""
+    mem = build_memory_service(InMemoryMemoryRepository(), clock=FakeClock())
+    mem.store(1, MemoryType.STRATEGIC, "Founder ships on Fridays.",
+              importance=80, actor="t")
+    conv, builder = setup(memory=mem)
+    c = _conv_with(conv, (U, "remind me what you know"))
+    w = builder.build(ally_context=make_ctx(), conversation=c,
+                      current_message="remind me what you know",
+                      knowledge_enabled=False)
+    assert w.memory_injected and w.memory_items
+    assert w.ally_context is not None
+    assert "remind me what you know" in w.request.message
+
+
+def test_knowledge_is_enabled_by_default():
+    """A caller that has not been taught about plans must behave exactly as it
+    did before plan gating existed -- the route narrows this, nothing else."""
+    conv, builder = setup()
+    c = _conv_with(conv, (U, "how do I activate users"))
+    w = builder.build(ally_context=make_ctx(), conversation=c,
+                      current_message="how do I activate users")
+    assert w.retrieval_injected and w.graph_injected
+
+
 # --- fail-closed degradation ------------------------------------------------
 
 

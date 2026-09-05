@@ -850,10 +850,14 @@ class DiscoveryCalls(Base):
     founder_id: Mapped[int] = mapped_column(Integer, nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, server_default=text("'pending'::character varying"))
     scheduled_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False)
-    duration_minutes: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text('45'))
+    duration_minutes: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text('30'))
     timezone: Mapped[str] = mapped_column(String(100), nullable=False, server_default=text("'Asia/Kolkata'::character varying"))
     reminder_sent_24h: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text('false'))
     reminder_sent_1h: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text('false'))
+    #: Was the founder on a plan carrying Feature.PRIORITY_CALL at booking time?
+    #: Stamped once, never recomputed -- the queue needs to know what was true
+    #: when the request was made, not what the founder's plan says today.
+    is_priority: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text('false'))
     meeting_link: Mapped[Optional[str]] = mapped_column(String(500))
     goxml_host: Mapped[Optional[str]] = mapped_column(String(100))
     booking_source: Mapped[Optional[str]] = mapped_column(String(50))

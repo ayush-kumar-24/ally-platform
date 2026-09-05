@@ -19,7 +19,11 @@ import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 
-from app.api.v1.vision.dependencies import get_current_founder_id, get_vision_service
+from app.api.v1.vision.dependencies import (
+    get_current_founder_id,
+    get_vision_service,
+    require_vision,
+)
 from app.api.v1.vision.router import _local_dir
 from app.main import app
 from app.vision import InMemoryVisionRepository, build_vision_service
@@ -44,10 +48,15 @@ def client():
     service = build_vision_service(repo, clock=StepClock())
     app.dependency_overrides[get_current_founder_id] = lambda: 1
     app.dependency_overrides[get_vision_service] = lambda: service
+    # Vision is gated on Feature.VISION (Rs 999). These tests are about vision
+    # behaviour, not entitlement, and the real gate would pull in get_db and
+    # get_founder_record that no vision test provides. The gate is covered in
+    # test_plans.py; here it is a no-op so the routes under test are reachable.
+    app.dependency_overrides[require_vision] = lambda: None
     http = TestClient(app)
     http.repo = repo
     yield http
-    for dep in (get_current_founder_id, get_vision_service):
+    for dep in (get_current_founder_id, get_vision_service, require_vision):
         app.dependency_overrides.pop(dep, None)
 
 

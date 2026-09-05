@@ -104,6 +104,20 @@ class ChatGate:
     #: Where unbilled usage goes when metering fails. None in the dormant path.
     reconciliation: object | None = None
 
+    @property
+    def knowledge_enabled(self) -> bool:
+        """May Ally reason over the knowledge base for this founder (Rs 999)?
+
+        Unlike require_voice this is NOT behind `enforced`: it grants a capability
+        rather than refusing a request, so leaving it dark when the quota gate is
+        off would hand every founder the Rs 999 entitlement. With no service
+        wired it falls back to True, which keeps the dormant/testing path behaving
+        exactly as it did before plans existed.
+        """
+        if self.service is None:
+            return True
+        return self.service.has_feature(self.tier, Feature.KNOWLEDGE_CHAT)
+
     def require_voice(self) -> None:
         """Call when a request carries voice input.
 

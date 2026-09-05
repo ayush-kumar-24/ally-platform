@@ -7,7 +7,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from app.admin.insights import Metric
+from app.admin.health import ComponentHealth, HealthReport
 from app.admin.panel_audit import PanelAuditEvent
 from app.admin.users_models import UserDetail, UserPage, UserSummary
 from app.credits.models import CreditTransaction
@@ -176,26 +176,27 @@ class WhoAmIResponse(BaseModel):
     capabilities: list[str]
 
 
-class MetricResponse(BaseModel):
-    """One dashboard card. `available=False` means "could not be measured" --
-    see `Metric`'s own docstring on why that is shown as "--", not a false 0."""
-
+class ComponentHealthResponse(BaseModel):
     key: str
     label: str
-    value: float | int | None
-    unit: str = ""
-    available: bool
-    unavailable_reason: str | None = None
+    status: str
+    detail: str = ""
 
     @classmethod
-    def from_domain(cls, m: Metric) -> "MetricResponse":
-        return cls(key=m.key, label=m.label, value=m.value, unit=m.unit,
-                   available=m.available, unavailable_reason=m.unavailable_reason)
+    def from_domain(cls, c: ComponentHealth) -> "ComponentHealthResponse":
+        return cls(key=c.key, label=c.label, status=c.status.value, detail=c.detail)
 
 
-class DashboardMetricsResponse(BaseModel):
-    items: list[MetricResponse]
+class HealthReportResponse(BaseModel):
+    """`status` is green/amber/red -- worst of every component below, not an
+    average (see HealthReport.status's own docstring)."""
+
+    status: str
+    components: list[ComponentHealthResponse]
+    checked_at: datetime
 
     @classmethod
-    def from_domain(cls, metrics: list[Metric]) -> "DashboardMetricsResponse":
-        return cls(items=[MetricResponse.from_domain(m) for m in metrics])
+    def from_domain(cls, r: HealthReport) -> "HealthReportResponse":
+        return cls(status=r.status.value,
+                   components=[ComponentHealthResponse.from_domain(c) for c in r.components],
+                   checked_at=r.checked_at)

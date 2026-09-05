@@ -41,7 +41,7 @@ def user(fid, name="U", email="u@x.com", status=UserStatus.ACTIVE, plan="free",
         created_at=T0 - timedelta(days=days_ago), last_active_at=T0)
 
 
-def build(users=None, balances=None, insights=None):
+def build(users=None, balances=None):
     repo = InMemoryAdminUserRepository(users or [user(1)])
     credits = build_credit_service(
         InMemoryCreditRepository(balances or {1: 100}), clock=lambda: T0)
@@ -49,7 +49,7 @@ def build(users=None, balances=None, insights=None):
     c = count(1)
     recorder = AuditRecorder(audit_repo, clock=lambda: T0, id_factory=lambda: f"e-{next(c)}")
     return AdminPanelService(repo, credits=credits, audit=recorder,
-                             clock=lambda: T0, insights=insights), repo, audit_repo
+                             clock=lambda: T0), repo, audit_repo
 
 
 # --- RBAC matrix ------------------------------------------------------------
@@ -224,35 +224,59 @@ def test_support_can_list_users():
     assert s.list_users(SUPPORT).total == 4
 
 
-# --- dashboard metrics (Phase 2: Live now / Today / 7 days) ------------------
+# Dashboard metrics (Phase 2: Live now / Today / 7 days): AdminPanelService
+# used to carry a `dashboard_metrics` method + `insights` collaborator, but
+# nothing ever called it through the service -- GET /admin/metrics
+# (panel_router_v2.py) reads InsightsService directly, and is the only
+# caller (see container.py's insights_service()'s own note). Removed rather
+# than kept as a second, dead path to the same cards (Admin Panel Proposal
+# Phase 5); test_admin_insights.py still covers the metrics themselves.
 
-class _FakeInsights:
-    def __init__(self, metrics):
-        self._metrics = metrics
+
+# --- health page (Phase 3) ---------------------------------------------------
+
+class _FakeHealth:
+    def __init__(self, report):
+        self._report = report
         self.called = False
 
-    def dashboard_metrics(self):
+    def check(self):
         self.called = True
-        return self._metrics
+        return self._report
 
 
-def test_dashboard_metrics_delegates_to_insights():
-    fake = _FakeInsights(["m1", "m2"])
-    s, _, _ = build(insights=fake)
-    assert s.dashboard_metrics(SUPER) == ["m1", "m2"]
+def test_system_health_delegates_to_the_checker():
+    from app.admin.panel_service import AdminPanelService
+    fake = _FakeHealth("a-report")
+    repo = InMemoryAdminUserRepository([user(1)])
+    credits = build_credit_service(InMemoryCreditRepository({1: 100}), clock=lambda: T0)
+    s = AdminPanelService(
+        repo, credits=credits,
+        audit=AuditRecorder(InMemoryPanelAuditRepository(), clock=lambda: T0,
+                            id_factory=lambda: "e-1"),
+        clock=lambda: T0, health=fake,
+    )
+    assert s.system_health(SUPER) == "a-report"
     assert fake.called is True
 
 
-def test_dashboard_metrics_readable_by_support():
-    """Same read tier as list_users -- aggregate counts, not per-founder PII."""
-    s, _, _ = build(insights=_FakeInsights([]))
-    s.dashboard_metrics(SUPPORT)  # must not raise
+def test_system_health_readable_by_support():
+    from app.admin.panel_service import AdminPanelService
+    repo = InMemoryAdminUserRepository([user(1)])
+    credits = build_credit_service(InMemoryCreditRepository({1: 100}), clock=lambda: T0)
+    s = AdminPanelService(
+        repo, credits=credits,
+        audit=AuditRecorder(InMemoryPanelAuditRepository(), clock=lambda: T0,
+                            id_factory=lambda: "e-1"),
+        clock=lambda: T0, health=_FakeHealth([]),
+    )
+    s.system_health(SUPPORT)  # must not raise
 
 
-def test_dashboard_metrics_unconfigured_reports_rather_than_crashes():
-    s, _, _ = build(insights=None)
+def test_system_health_unconfigured_reports_rather_than_crashes():
+    s, _, _ = build()  # no health collaborator
     with pytest.raises(InvalidSearchError):
-        s.dashboard_metrics(SUPER)
+        s.system_health(SUPER)
 
 
 # --- audit ------------------------------------------------------------------

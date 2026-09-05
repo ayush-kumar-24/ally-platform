@@ -282,7 +282,7 @@ class Settings(BaseSettings):
     GOOGLE_CALENDAR_ID: str = ""
     GOOGLE_CALENDAR_CREDENTIALS_FILE: str = ""
     GOOGLE_CALENDAR_CREDENTIALS_JSON: str = ""
-    DISCOVERY_CALL_DURATION_MINUTES: int = 45
+    DISCOVERY_CALL_DURATION_MINUTES: int = 30
     DISCOVERY_TIMEZONE: str = "Asia/Kolkata"
     # Which midnight ends a founder's metered day (plans/usage.py).
     #
@@ -329,6 +329,16 @@ class Settings(BaseSettings):
     def email_enabled(self) -> bool:
         return bool(self.EMAIL_HOST)
 
+    # Admin Panel Phase 3: who gets paged when the health check turns red.
+    # Comma-separated, same shape as CORS_ORIGINS below -- deliberately not
+    # GOXL_ADMIN_PANEL_USERS (panel *access* and *who gets alerted* are
+    # different questions; an on-call inbox may not be a panel login at all).
+    HEALTH_ALERT_EMAILS: str = ""
+
+    @property
+    def health_alert_emails(self) -> list[str]:
+        return [e.strip() for e in self.HEALTH_ALERT_EMAILS.split(",") if e.strip()]
+
     # --- CORS ---
     CORS_ORIGINS: str = "http://localhost:3000"
 
@@ -348,6 +358,22 @@ class Settings(BaseSettings):
     # correct but wrong-looking in a link a founder sends to an investor. Set
     # this to the site people actually visit (e.g. https://goxlally.ai).
     PUBLIC_APP_URL: str = ""
+
+    # --- Payments (Razorpay) ---
+    # Until both key settings are set, app.payments refuses to create a real
+    # order rather than simulating one -- unlike email/PDF rendering, a stub
+    # "success" here would hand out a paid plan for nothing. See
+    # app/payments/gateway.py.
+    RAZORPAY_KEY_ID: str = ""
+    RAZORPAY_KEY_SECRET: str = ""
+    # Separate from the key secret: this signs webhook deliveries specifically
+    # (set on the Razorpay dashboard's own webhook config), not the same value
+    # used to sign the checkout-callback or to authenticate API calls.
+    RAZORPAY_WEBHOOK_SECRET: str = ""
+
+    @property
+    def payments_enabled(self) -> bool:
+        return bool(self.RAZORPAY_KEY_ID and self.RAZORPAY_KEY_SECRET)
 
     # --- Google Calendar sync (per-founder, Plan Your Day) ---
     # Separate from GOOGLE_CALENDAR_* above: those are a SERVICE ACCOUNT on

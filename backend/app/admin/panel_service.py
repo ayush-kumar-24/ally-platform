@@ -64,7 +64,7 @@ class AdminPanelService:
         report_regenerator: Callable[[int], dict] | None = None,
         privacy=None,
         feedback=None,
-        insights=None,
+        health=None,
     ):
         self.users = users
         self.credits = credits
@@ -75,7 +75,11 @@ class AdminPanelService:
         self.report_regenerator = report_regenerator
         self.privacy = privacy  # PrivacyRepository -- backs cancel_pending_deletion
         self.feedback = feedback  # FeedbackReadRepository -- backs list_feedback/feedback_stats
-        self.insights = insights  # InsightsService -- backs dashboard_metrics
+        # HealthChecker -- backs system_health. Read-only: the panel page never
+        # sends an alert itself, that side effect lives only in the scheduled
+        # /internal/jobs/check-health path (see that router's docstring) --
+        # a GET an admin loads to look at the page should not also page someone.
+        self.health = health
         self._now = clock or (lambda: datetime.now(timezone.utc))
 
     # --- reads ------------------------------------------------------------
@@ -96,17 +100,20 @@ class AdminPanelService:
             raise AdminFounderNotFoundError(founder_id)
         return detail
 
-    def dashboard_metrics(self, admin) -> list:
-        """Admin Panel proposal Phase 2: "Live now / Today / 7 days" and the
-        rest of the dashboard cards -- see `app/admin/insights.py`.
+    def system_health(self, admin):
+        """Admin Panel proposal Phase 3: the Health page -- database, AI
+        provider, report engine, storage, error rate, green/amber/red.
 
-        Same read-only tier as `list_users`/`get_user`: none of this is
-        per-founder PII, it's aggregate counts, so Support reads it too.
+        Same read tier as dashboard_metrics: operational status, not
+        per-founder data, so Support reads it too -- "if the database breaks,
+        we find out from a customer" was the whole point of this gap, and
+        that includes Support, who are the ones actually talking to the
+        customer first.
         """
         require(admin.role, Capability.VIEW_USERS)
-        if self.insights is None:
-            raise InvalidSearchError("dashboard metrics are not configured")
-        return self.insights.dashboard_metrics()
+        if self.health is None:
+            raise InvalidSearchError("health checks are not configured")
+        return self.health.check()
 
     # --- user mutations ---------------------------------------------------
 

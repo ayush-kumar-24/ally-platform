@@ -54,10 +54,35 @@ def _service():
     return build("calendar", "v3", credentials=creds, cache_discovery=False)
 
 
-def _candidate_slots(from_dt: datetime, days: int) -> list[datetime]:
-    """The grid of possible slots: weekday business hours, starting tomorrow."""
+def _opening_day(from_dt: datetime, lead_days: int):
+    """The first bookable date, `lead_days` BUSINESS days out.
+
+    Business days, not calendar days, because the slot grid skips weekends: a
+    calendar-day lead applied on a Thursday or Friday falls entirely inside a
+    weekend that is skipped anyway, so a founder without priority would open on
+    the same Monday as one with it and the Rs 999 perk would silently evaporate
+    for two days in every five.
+    """
+    day = from_dt.date()
+    remaining = max(1, lead_days)
+    while remaining:
+        day += timedelta(days=1)
+        if day.weekday() < 5:
+            remaining -= 1
+    return day
+
+
+def _candidate_slots(from_dt: datetime, days: int, lead_days: int = 1) -> list[datetime]:
+    """The grid of possible slots: weekday business hours.
+
+    `lead_days` is how far out the window opens, in business days -- 1 means
+    "the next working day". It is what makes Rs 999 priority booking work: a
+    founder without the perk gets a later opening, so the same slots exist for
+    everyone but Pro reaches them first. `days` still counts calendar days from
+    the opening, so a longer lead shifts the window rather than shrinking it.
+    """
     slots: list[datetime] = []
-    start = (from_dt + timedelta(days=1)).date()
+    start = _opening_day(from_dt, lead_days)
     for offset in range(days):
         day = start + timedelta(days=offset)
         if day.weekday() >= 5:  # skip Sat/Sun
@@ -67,13 +92,13 @@ def _candidate_slots(from_dt: datetime, days: int) -> list[datetime]:
     return slots
 
 
-def available_slots(from_dt: datetime, days: int = 7) -> list[datetime]:
-    """Bookable slots over the next `days` weekdays.
+def available_slots(from_dt: datetime, days: int = 7, lead_days: int = 1) -> list[datetime]:
+    """Bookable slots over the next `days` weekdays, opening `lead_days` out.
 
     Real mode removes anything overlapping the host calendar's busy blocks; stub
     mode returns the full candidate grid.
     """
-    candidates = _candidate_slots(from_dt, days)
+    candidates = _candidate_slots(from_dt, days, lead_days)
     if not settings.google_calendar_enabled:
         return candidates
 
@@ -81,7 +106,14 @@ def available_slots(from_dt: datetime, days: int = 7) -> list[datetime]:
         service = _service()
         resp = service.freebusy().query(body={
             "timeMin": from_dt.isoformat(),
-            "timeMax": (from_dt + timedelta(days=days + 1)).isoformat(),
+            # Spans the shifted grid. Derived from the actual opening day rather
+            # than from lead_days, which counts business days and can therefore
+            # sit further out in calendar terms than its own number suggests --
+            # a bound of days+1 would leave the tail of the grid unchecked
+            # against the host calendar and offer times the host is booked for.
+            "timeMax": (datetime.combine(_opening_day(from_dt, lead_days), time(0),
+                                         tzinfo=timezone.utc)
+                        + timedelta(days=days + 1)).isoformat(),
             "items": [{"id": settings.GOOGLE_CALENDAR_ID}],
         }).execute()
         busy = resp["calendars"][settings.GOOGLE_CALENDAR_ID]["busy"]

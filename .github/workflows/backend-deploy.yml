@@ -180,16 +180,33 @@ jobs:
             --query taskDefinition \
             > current-taskdef.json
 
+          # Feature flags whose production value is a DEPLOY decision, not an
+          # operator one. They live here rather than being set by hand on the
+          # task definition because a hand-set variable survives only until the
+          # next deploy overwrites the revision -- which is how ADAPTIVE_QUESTIONS
+          # came to be off in production while the code for it was merged and
+          # tested. Anything in this list is re-asserted on every deploy.
+          #
+          # ADAPTIVE_QUESTIONS turns on the LLM layer across all three phases:
+          # the diagnosis next-question advisor (which reads the founder brief),
+          # the Founder DNA dimension-resolution advisor, and the LLM answer
+          # classifier. With it off, every one of those falls back to a
+          # deterministic path and no founder context reaches question choice.
           jq \
             --arg IMAGE "${{ steps.image.outputs.uri }}" \
             --arg CONTAINER "$CONTAINER_NAME" \
+            --argjson FLAGS '[
+              {"name": "ARCHETYPE_LLM", "value": "true"},
+              {"name": "ADAPTIVE_QUESTIONS", "value": "true"}
+            ]' \
             '
             .containerDefinitions |= map(
               if .name == $CONTAINER
               then .image = $IMAGE
                 | .environment = (
-                    ((.environment // []) | map(select(.name != "ARCHETYPE_LLM")))
-                    + [{"name": "ARCHETYPE_LLM", "value": "true"}]
+                    ((.environment // [])
+                       | map(select(.name as $n | $FLAGS | map(.name) | index($n) | not)))
+                    + $FLAGS
                   )
               else .
               end

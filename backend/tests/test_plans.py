@@ -39,18 +39,33 @@ def svc(tier=PlanTier.FREE, balance=1000, now=T0):
 # ── catalog ─────────────────────────────────────────────────────────────────
 
 
-def test_three_tiers_in_price_order():
+def test_four_tiers_in_price_order():
     plans = all_plans()
-    assert [p.tier for p in plans] == [PlanTier.FREE, PlanTier.STARTER, PlanTier.PRO]
-    assert [p.price_inr for p in plans] == [0, 450, 999]
+    assert [p.tier for p in plans] == [PlanTier.FREE, PlanTier.BASIC,
+                                       PlanTier.STARTER, PlanTier.PRO]
+    assert [p.price_inr for p in plans] == [0, 199, 450, 999]
+
+
+def test_struck_through_price_is_only_ever_a_real_saving():
+    """`mrp_inr` renders as a strikethrough next to what we charge. A value
+    equal to or below `price_inr` would put a crossed-out number on the pricing
+    page that saves the founder nothing -- a false claim, not a formatting bug."""
+    for plan in all_plans():
+        if plan.mrp_inr:
+            assert plan.mrp_inr > plan.price_inr, plan.name
+            assert plan.has_offer, plan.name
+        else:
+            assert not plan.has_offer, plan.name
+    assert [(p.mrp_inr, p.price_inr) for p in all_plans() if p.has_offer] == [
+        (300, 199), (600, 450), (1_200, 999)]
 
 
 def test_paid_credit_ladder_ascends():
     """Paying more must grant more, or the pricing page contradicts itself."""
-    _, starter, pro = all_plans()
-    assert starter.monthly_credits == 180
+    _, _, plus, pro = all_plans()
+    assert plus.monthly_credits == 105
     assert pro.monthly_credits == 240
-    assert starter.monthly_credits < pro.monthly_credits
+    assert plus.monthly_credits < pro.monthly_credits
 
 
 def test_free_is_currently_a_testing_allowance_and_outgrants_paid_tiers():
@@ -67,18 +82,22 @@ def test_free_is_currently_a_testing_allowance_and_outgrants_paid_tiers():
     free tier breaks this test and forces the ladder invariant to be restored,
     instead of the inversion quietly surviving into launch.
     """
-    free, starter, pro = all_plans()
+    free, _, starter, pro = all_plans()
     assert free.signup_credits == 1_431 and free.monthly_credits == 0
     assert free.signup_credits > pro.monthly_credits > starter.monthly_credits
 
 
 def test_daily_limits():
-    free, starter, pro = all_plans()
+    free, basic, starter, pro = all_plans()
+    # Basic has no chat, so it has no chat budget. Zero rather than a small
+    # number on purpose: a non-zero ceiling here would read as an allowance the
+    # founder could spend, and there is no metered surface for them to spend it on.
+    assert (basic.daily_token_limit, basic.planning_daily_token_limit) == (0, 0)
     # Free sits at 8,000 for the testing phase -- deliberately above Starter and
     # level with Pro, which is why this is not asserted as an ascending ladder.
     # When Free is resized for a public launch this becomes ascending again.
     assert (free.daily_token_limit, starter.daily_token_limit, pro.daily_token_limit) \
-        == (8_000, 6_000, 8_000)
+        == (8_000, 3_500, 8_000)
     # Planning meters separately, and only Free is sized for it so far.
     assert free.planning_daily_token_limit == 7_700
     assert starter.planning_daily_token_limit == 0
@@ -136,9 +155,12 @@ def test_monthly_credits_are_reachable_under_the_daily_ceiling():
 
 
 def test_free_call_allowances():
-    free, starter, pro = all_plans()
-    assert (free.free_calls_per_month, starter.free_calls_per_month,
-            pro.free_calls_per_month) == (0, 1, 2)
+    free, basic, starter, pro = all_plans()
+    # Nobody gets an included call. Booking is open to every tier and every call
+    # is paid at CALL_PRICE_INR -- "free to book, priced per call", not an
+    # allowance that differs by plan.
+    assert (free.free_calls_per_month, basic.free_calls_per_month,
+            starter.free_calls_per_month, pro.free_calls_per_month) == (0, 0, 0, 0)
 
 
 def test_unknown_tier_falls_back_to_free():
@@ -158,12 +180,52 @@ def test_credits_round_up(tokens, expected):
 # ── feature gates ───────────────────────────────────────────────────────────
 
 
-def test_everyone_gets_chat_diagnosis_and_voice_in_diagnosis():
+def test_every_tier_gets_the_assessment_and_what_comes_out_of_it():
     s, _ = svc()
     for tier in PlanTier:
-        for feature in (Feature.ALLY_CHAT, Feature.DIAGNOSIS, Feature.VOICE_DIAGNOSIS,
-                        Feature.CALL_BOOKING, Feature.FOUNDER_DNA, Feature.BUSINESS_DNA):
+        # Founder DNA and Business DNA are absent on purpose: they are sections
+        # of the report the diagnosis writes, not features a plan can withhold.
+        for feature in (Feature.DIAGNOSIS, Feature.VOICE_DIAGNOSIS,
+                        Feature.REPORTS, Feature.CALL_BOOKING):
             assert s.has_feature(tier, feature), (tier, feature)
+
+
+def test_basic_buys_the_diagnosis_and_its_report_and_nothing_else():
+    """Rs 199 is exactly one thing: run the adaptive diagnosis, read the Clarity
+    Report. No workspace to act in, no Ally answering, nothing Ally initiates.
+    Asserted per feature rather than by counting so that adding anything to
+    _BASE has to be a deliberate decision about this tier, not a side effect."""
+    s, _ = svc()
+    for feature in (Feature.ALLY_CHAT, Feature.VOICE_CHAT, Feature.NEXT_STEPS,
+                    Feature.GOALS, Feature.PLAN_YOUR_DAY, Feature.VISION,
+                    Feature.RECOMMENDATIONS, Feature.KNOWLEDGE_CHAT,
+                    Feature.EMAIL_NOTIFICATIONS, Feature.PRIORITY_CALL,
+                    Feature.KNOW_MY_ENERGY):
+        assert not s.has_feature(PlanTier.BASIC, feature), feature
+
+
+def test_starter_buys_the_conversation_but_not_ally_initiating():
+    """Rs 450 is where Ally answers; Rs 999 is where Ally starts things. Vision,
+    recommendations, the knowledge base, mail and call priority all sit on the
+    far side of that line -- this is the distinction the two paid tiers sell."""
+    s, _ = svc()
+    assert s.has_feature(PlanTier.STARTER, Feature.ALLY_CHAT)
+    assert s.has_feature(PlanTier.STARTER, Feature.NEXT_STEPS)
+    assert s.has_feature(PlanTier.STARTER, Feature.PLAN_YOUR_DAY)
+    for feature in (Feature.VISION, Feature.RECOMMENDATIONS, Feature.KNOWLEDGE_CHAT,
+                    Feature.EMAIL_NOTIFICATIONS, Feature.PRIORITY_CALL):
+        assert not s.has_feature(PlanTier.STARTER, feature), feature
+        assert s.has_feature(PlanTier.PRO, feature), feature
+
+
+def test_free_never_out_grants_paid_on_the_scarce_perks():
+    """Free deliberately out-grants Rs 450 on features that cost us only tokens
+    (see the catalog comment). It must never do so on the two that cost someone
+    else something real: an inbox we send to, and a place in the call queue
+    ahead of founders who paid for it."""
+    s, _ = svc()
+    assert not s.has_feature(PlanTier.FREE, Feature.EMAIL_NOTIFICATIONS)
+    assert not s.has_feature(PlanTier.FREE, Feature.PRIORITY_CALL)
 
 
 def test_voice_in_chat_is_paid_only():
@@ -207,7 +269,7 @@ def test_require_feature_names_the_upgrade():
     # for the testing phase, so it no longer raises from Free at all.
     with pytest.raises(FeatureNotInPlanError) as exc:
         s.require_feature(PlanTier.FREE, Feature.VOICE_CHAT)
-    assert exc.value.required_plan == "Starter"
+    assert exc.value.required_plan == "Plus"
     with pytest.raises(FeatureNotInPlanError) as exc:
         s.require_feature(PlanTier.STARTER, Feature.KNOW_MY_ENERGY)
     assert exc.value.required_plan == "Pro"
@@ -228,7 +290,7 @@ def test_free_user_blocked_from_voice_chat_with_403_not_429():
 def test_daily_limit_blocks_before_credits():
     """The rate ceiling must fire ahead of the credit check: a founder who is out
     of tokens for today should be told to come back tomorrow, not told to pay."""
-    free, _, _ = all_plans()
+    free, *_ = all_plans()
     s, usage = svc(PlanTier.FREE, balance=0)
     # Seeded from the catalog, not a literal -- this test previously pinned 4,000
     # and silently stopped testing anything the moment the limit was raised: the
@@ -242,7 +304,7 @@ def test_daily_limit_blocks_before_credits():
 def test_chat_and_planning_meter_separately():
     """Exhausting one feature must not disable the other -- they are different
     features sharing only a founder."""
-    free, _, _ = all_plans()
+    free, *_ = all_plans()
     s, usage = svc(PlanTier.FREE)
     usage.add_tokens(UID, T0.date(), free.daily_token_limit, at=T0, source="chat")
 
@@ -284,7 +346,7 @@ def test_usage_records_tokens_and_charges_credits():
     assert result["tokens_used"] == 2_500
     assert result["credits_charged"] == 3                    # 2,500 -> 3 credits
     assert result["daily_used"] == 2_500
-    assert result["daily_remaining"] == 3_500                # 6,000 - 2,500
+    assert result["daily_remaining"] == 1_000                # 3,500 - 2,500
     assert usage.get_daily(UID, T0.date()).tokens_used == 2_500
 
 
@@ -321,32 +383,33 @@ def test_free_user_always_pays_for_calls():
         s.consume_free_call(UID, PlanTier.FREE)
 
 
-def test_starter_gets_one_free_call_then_pays():
-    s, _ = svc(PlanTier.STARTER)
-    assert s.quote_call(UID, PlanTier.STARTER).is_free is True
-    s.consume_free_call(UID, PlanTier.STARTER)
-    after = s.quote_call(UID, PlanTier.STARTER)
-    assert after.is_free is False and after.price_inr == CALL_PRICE_INR
-    with pytest.raises(NoFreeCallsRemainingError):
-        s.consume_free_call(UID, PlanTier.STARTER)
+def test_every_tier_books_freely_and_pays_per_call():
+    """Booking is open to every tier and every call is charged. No plan includes
+    a call, so the price a founder sees does not depend on what they pay us --
+    only on whether they want a call."""
+    for tier in PlanTier:
+        s, _ = svc(tier)
+        q = s.quote_call(UID, tier)
+        assert q.is_free is False, tier
+        assert q.price_inr == CALL_PRICE_INR, tier
+        assert q.free_remaining == 0, tier
+        with pytest.raises(NoFreeCallsRemainingError):
+            s.consume_free_call(UID, tier)
 
 
-def test_pro_gets_two_free_calls():
-    s, _ = svc(PlanTier.PRO)
-    s.consume_free_call(UID, PlanTier.PRO)
-    assert s.quote_call(UID, PlanTier.PRO).is_free is True      # second still free
-    s.consume_free_call(UID, PlanTier.PRO)
-    assert s.quote_call(UID, PlanTier.PRO).is_free is False
-
-
-def test_free_calls_reset_next_month():
+def test_free_call_claims_are_counted_per_month():
+    """No tier grants a free call today, so this drives the allowance mechanism
+    directly rather than through a plan. It is kept because the reset is the
+    part that would silently break if an included call is ever reinstated --
+    a counter that never rolls over turns one free call a month into one ever."""
     usage = InMemoryUsageRepository()
-    august = build_entitlement_service(usage, clock=lambda: T0)
-    august.consume_free_call(UID, PlanTier.STARTER)
-    assert august.quote_call(UID, PlanTier.STARTER).is_free is False
-
-    september = build_entitlement_service(usage, clock=lambda: T0 + timedelta(days=31))
-    assert september.quote_call(UID, PlanTier.STARTER).is_free is True
+    # Returns the new CallUsage on success and None when the allowance is spent.
+    assert usage.try_claim_free_call(UID, "2026-08", 1, at=T0) is not None
+    assert usage.try_claim_free_call(UID, "2026-08", 1, at=T0) is None
+    assert usage.get_calls(UID, "2026-08").free_calls_used == 1
+    # A new period starts from zero.
+    assert usage.try_claim_free_call(UID, "2026-09", 1,
+                                     at=T0 + timedelta(days=31)) is not None
 
 
 def test_period_month_key():
@@ -360,11 +423,10 @@ def test_period_month_key():
 def test_entitlements_summary():
     s, usage = svc(PlanTier.PRO, balance=240)
     usage.add_tokens(UID, T0.date(), 1_000, at=T0)
-    s.consume_free_call(UID, PlanTier.PRO)
     e = s.entitlements(UID, PlanTier.PRO)
     assert e.plan_name == "Pro" and e.credits_balance == 240
     assert e.daily_token_limit == 8_000 and e.daily_tokens_remaining == 7_000
-    assert e.free_calls_allowance == 2 and e.free_calls_remaining == 1
+    assert e.free_calls_allowance == 0 and e.free_calls_remaining == 0
     assert "know_my_energy" in e.features
 
 
@@ -382,20 +444,16 @@ def test_concurrent_token_recording_does_not_lose_counts():
 
 
 def test_concurrent_free_call_claims_do_not_exceed_allowance():
-    s, _ = svc(PlanTier.PRO)
-    claimed, refused = [], []
-
-    def claim(_):
-        try:
-            s.consume_free_call(UID, PlanTier.PRO)
-            claimed.append(1)
-        except NoFreeCallsRemainingError:
-            refused.append(1)
+    """Driven at the repository with an explicit allowance: no catalog tier
+    grants a call today, and this guards the claim itself, not the catalog."""
+    usage = InMemoryUsageRepository()
 
     with ThreadPoolExecutor(max_workers=8) as pool:
-        list(pool.map(claim, range(15)))
+        results = [r is not None for r in pool.map(
+            lambda _: usage.try_claim_free_call(UID, "2026-08", 2, at=T0), range(15))]
 
-    assert len(claimed) == 2 and len(refused) == 13
+    assert results.count(True) == 2 and results.count(False) == 13
+    assert usage.get_calls(UID, "2026-08").free_calls_used == 2
 
 
 def test_free_call_claim_is_atomic_under_forced_interleaving():
@@ -416,15 +474,14 @@ def test_free_call_claim_is_atomic_under_forced_interleaving():
             return super().try_claim_free_call(founder_id, period, allowance, at=at)
 
     repo = SlowRepo()
-    s = build_entitlement_service(repo, clock=lambda: T0)
     results = []
 
     def claim():
-        try:
-            s.consume_free_call(UID, PlanTier.STARTER)     # allowance of exactly 1
-            results.append("claimed")
-        except NoFreeCallsRemainingError:
-            results.append("refused")
+        # An explicit allowance of exactly 1, not a tier: no plan includes a
+        # call today, and the window being guarded is in the repository.
+        results.append("claimed"
+                       if repo.try_claim_free_call(UID, period_month(T0), 1, at=T0) is not None
+                       else "refused")
 
     threads = [threading.Thread(target=claim) for _ in range(2)]
     for t in threads:

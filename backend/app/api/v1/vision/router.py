@@ -2,7 +2,8 @@
 authenticated founder and delegates to VisionService; validation lives in
 the service. Domain errors propagate to the global handler.
 
-Free feature, available immediately -- no plan-gate dependency, same as
+Gated on Feature.VISION (Rs 999) at the router, not per endpoint -- see
+require_vision. Goals, the cheaper tiers' equivalent, stays ungated in
 app/api/v1/founder_goals/router.py.
 """
 
@@ -17,12 +18,24 @@ from app.core.logger import logger
 from app.middleware.error_handler import AppError
 from app.services.object_storage import ObjectStorageError, build_object_storage
 
-from app.api.v1.vision.dependencies import get_current_founder_id, get_vision_service
+from app.api.v1.vision.dependencies import (
+    get_current_founder_id,
+    get_vision_service,
+    require_vision,
+)
 from app.api.v1.vision.responses import VisionResponse, VisionSummaryResponse, VisionTerritoryResponse
 from app.api.v1.vision.schemas import VisionSummaryUpdate, VisionTerritoryUpdate
 from app.vision.service import VisionService
 
-router = APIRouter(prefix="/vision", tags=["vision"])
+router = APIRouter(prefix="/vision", tags=["vision"],
+                   dependencies=[Depends(require_vision)])
+
+#: The image route lives on its own router because it must NOT inherit the plan
+#: gate above. It is unauthenticated by necessity (an <img src> sends no
+#: Authorization header), so a router-level dependency would 401 every vision
+#: picture -- including for the Rs 999 founders the gate exists to serve.
+#: Mounted separately in app/api/v1/router.py; both carry the /vision prefix.
+public_router = APIRouter(prefix="/vision", tags=["vision"])
 
 #: Same three formats the avatar upload accepts. GIF is left out on purpose: an
 #: animated vision board is a different feature with different storage costs,
@@ -195,7 +208,7 @@ def delete_territory_image(
     return VisionTerritoryResponse.from_domain(territory_key, updated)
 
 
-@router.get("/image/{founder_id}/{filename}", include_in_schema=False)
+@public_router.get("/image/{founder_id}/{filename}", include_in_schema=False)
 def serve_vision_image(founder_id: int, filename: str):
     """Proxies an S3-stored vision image back to the browser.
 
