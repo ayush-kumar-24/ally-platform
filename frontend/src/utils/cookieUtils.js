@@ -7,10 +7,16 @@ let isAnalyticsInitialized = false;
 let isMarketingInitialized = false;
 
 /**
- * Injects Google Analytics tracking script
- * Uses a placeholder GTM ID if not configured.
+ * Injects Google Analytics tracking script.
+ *
+ * Only when a real measurement ID is configured. The previous default was a
+ * placeholder, which meant every founder who accepted cookies had their
+ * browser call Google with a fake ID from inside the diagnosis -- noise for
+ * us, and a third-party request from pages that hold private answers. With
+ * nothing configured, consent is recorded and nothing loads.
  */
-export function initializeAnalytics(measurementId = 'G-MOCKTRACKINGID') {
+export function initializeAnalytics(measurementId = import.meta.env.VITE_GA_MEASUREMENT_ID) {
+  if (!measurementId) return;
   if (isAnalyticsInitialized) return;
   if (window.gtag) {
     isAnalyticsInitialized = true;
@@ -45,9 +51,15 @@ export function initializeAnalytics(measurementId = 'G-MOCKTRACKINGID') {
 }
 
 /**
- * Injects Meta Pixel (Facebook Pixel) tracking script
+ * Injects Meta Pixel (Facebook Pixel) tracking script.
+ *
+ * Same rule: nothing loads without a configured pixel ID. Ad pixels inside
+ * the signed-in product are a deliberate decision, not a default -- the
+ * marketing measurement plan keeps Meta on the public landing site and
+ * sends only coarse server-side events from the product.
  */
-export function initializeMarketing(pixelId = 'MOCK_PIXEL_ID') {
+export function initializeMarketing(pixelId = import.meta.env.VITE_META_PIXEL_ID) {
+  if (!pixelId) return;
   if (isMarketingInitialized) return;
   if (window.fbq) {
     isMarketingInitialized = true;
