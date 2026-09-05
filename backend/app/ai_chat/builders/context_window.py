@@ -43,13 +43,34 @@ _EXTRACTABLE_MIME = {
 _DEFAULT_ATTACHMENT_BYTE_BUDGET = 5_000_000  # total bytes READ+extracted per turn
 
 # How many files per turn may be sent as pictures for the model to look at.
-# Separate from attachment_limit, and much smaller, because the costs are not
-# comparable: a named-only file is a dozen tokens, an image is ~1,500 -- a
-# fifth of a free founder's daily chat allowance, and was over a third of it
-# before that ceiling was raised for testing (plans/catalog.py). Two
-# is enough for "here is the error and here is my config" and bounded enough
-# that a turn cannot quietly cost a whole day.
-_DEFAULT_MEDIA_LIMIT = 2
+#
+# ZERO, because nothing downstream can carry an image. LLMMessage.content is a
+# plain `str` (services/llm/base.py) -- the provider interface has no multimodal
+# content block at all -- so a media block built here is assembled, described,
+# and then dropped on the floor.
+#
+# That was worse than doing nothing. With a media block present, the attachment
+# flattener takes its second branch and tells the model the file is "attached to
+# this message for you to look at ... Read it yourself and answer from what you
+# actually see". The model believed it, and founders got replies that claimed to
+# have read an image and then could not quote a word of it. Reproduced on
+# 2026-09-05 with a PNG containing two plain numbers: uploaded 201, and Ally
+# answered "I can read the image you attached, but in this chat I don't have
+# access to the actual text inside it". That is the question bank's "I uploaded
+# a file and Ally says it can't see it".
+#
+# At zero the flattener falls to its third branch instead -- "uploaded, but its
+# contents cannot be read yet; you only know it exists" -- which is true, and
+# lets Ally say so plainly rather than pretending.
+#
+# The media builder itself is deliberately left in place: it is correct, it is
+# tested, and it becomes useful the moment LLMMessage can carry content blocks.
+# Raise this to 2 in the same change that makes the transport multimodal, not
+# before. The old value and its reasoning: two images per turn, ~1,500 tokens
+# each against a dozen for a named-only file, which is a fifth of a founder's
+# daily chat allowance -- enough for "here is the error and here is my config"
+# without a single turn quietly costing a whole day.
+_DEFAULT_MEDIA_LIMIT = 0
 
 
 class ContextWindowConfig:
@@ -87,6 +108,7 @@ class ContextWindowBuilder:
         knowledge_graph,
         attachments=None,
         planning=None,
+        founder_profile=None,
         config: ContextWindowConfig | None = None,
     ):
         self.conversation_service = conversation_service
@@ -95,6 +117,10 @@ class ContextWindowBuilder:
         self.knowledge_graph = knowledge_graph
         self.attachments = attachments
         self.planning = planning
+        # Callable(founder_id) -> str. A callable rather than a service object
+        # because there is nothing to configure: the caller already has the db
+        # session and decides how to load the founder.
+        self.founder_profile = founder_profile
         self.config = config or ContextWindowConfig()
 
     def build(
@@ -105,7 +131,15 @@ class ContextWindowBuilder:
         current_message: str,
         language: str = "en",
         response_category: str = "general_chat",
+        knowledge_enabled: bool = True,
     ) -> ConversationContextWindow:
+        """`knowledge_enabled` False means this founder's plan does not include
+        discussing the knowledge base with Ally (Feature.KNOWLEDGE_CHAT, Rs 999).
+        The turn still runs -- their own memory, attachments and plan all stay --
+        it is only the retrieved reference material and the graph expansion that
+        are withheld. Defaults True so a caller that has not been taught about
+        plans behaves exactly as before rather than silently degrading Ally.
+        """
         # 1-4. History + trimming + important preservation (reuse frozen M1).
         conv_ctx = self.conversation_service.build_context(
             conversation.conversation_id, max_messages=self.config.max_history_messages
@@ -115,10 +149,19 @@ class ContextWindowBuilder:
         memory_items, memory_ok = self._safe_memory(conversation.founder_id)
 
         # 6. Inject retrieval (M3), queried by the current message -- fail closed.
-        retrieval, retrieval_ok = self._safe_retrieval(ally_context, current_message)
-
         # 7. Inject graph expansion (M4) -- fail closed.
-        graph, graph_ok = self._safe_graph(ally_context)
+        # Both are the knowledge base, so both answer to the same entitlement:
+        # withholding the retrieved passages while still expanding the graph over
+        # them would leak the same material by a different route.
+        if knowledge_enabled:
+            retrieval, retrieval_ok = self._safe_retrieval(ally_context, current_message)
+            graph, graph_ok = self._safe_graph(ally_context)
+        else:
+            # Not an injection failure -- there was nothing to inject. The *_ok
+            # flags feed telemetry, and reporting these as failures would make a
+            # plan boundary look like a broken retrieval pipeline.
+            retrieval, retrieval_ok = None, False
+            graph, graph_ok = None, False
 
         # 7b. Inject uploaded-file context (Milestone 4) -- fail closed. Text-
         # readable files are decoded and inlined; images and scanned PDFs, which
@@ -131,6 +174,12 @@ class ContextWindowBuilder:
         # ("you had 'finish the pitch deck' on your plan") without the prompt
         # accumulating months of completed history.
         tasks_text, tasks_ok = self._safe_tasks(conversation.founder_id)
+
+        # 7d. Inject what onboarding established about this founder -- fail
+        # closed. Without it Ally has the diagnosis but not the person: it told
+        # a founder mid-conversation that it had no problem statement, target
+        # customer or product details, all of which onboarding had captured.
+        profile_text, profile_ok = self._safe_profile(conversation.founder_id)
 
         # 8. Include the current message, folding recent history into the text.
         founder_message = self._compose_message(conv_ctx, current_message)
@@ -152,10 +201,27 @@ class ContextWindowBuilder:
             attachments_text=attachments_text,
             tasks_injected=tasks_ok,
             tasks_text=tasks_text,
+            profile_injected=profile_ok,
+            profile_text=profile_text,
             media=media,
         )
 
     # --- fail-closed source injection ------------------------------------
+
+    def _safe_profile(self, founder_id: int) -> tuple[str, bool]:
+        """Who this founder is, from onboarding. Never raises.
+
+        Degrades to "" like every other source here: a missing profile costs
+        Ally context, and must never cost the founder their turn.
+        """
+        if self.founder_profile is None:
+            return "", False
+        try:
+            return (self.founder_profile(founder_id) or ""), True
+        except Exception as exc:  # noqa: BLE001 -- degrade, never fail the turn
+            logger.warning("ai_chat: founder profile injection failed; continuing",
+                           extra={"stage": "inject_profile", "error": str(exc)})
+            return "", False
 
     def _safe_memory(self, founder_id: int):
         try:

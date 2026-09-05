@@ -6,6 +6,7 @@ import Modal from '../components/Modal';
 import { FAQS, searchFaqs } from '../data/faqs';
 import { FEEDBACK, submitFeedback } from '../services/feedback';
 import { ApiError } from '../services/api';
+import { prefersReducedMotion } from '../services/motion';
 
 export default function HelpSupport() {
   const { showToast } = useApp();
@@ -39,7 +40,7 @@ export default function HelpSupport() {
   const scrollToFaqs = () => {
     // Honour reduced-motion: a long smooth scroll is exactly the kind of
     // unrequested movement that setting exists to suppress.
-    const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    const reduced = prefersReducedMotion();
     faqRef.current?.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' });
   };
 

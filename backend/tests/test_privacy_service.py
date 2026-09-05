@@ -29,7 +29,24 @@ def test_export_returns_sections_and_logs_request():
     assert bundle.founder_id == 1 and bundle.generated_at == T0
     assert set(bundle.sections) == {"founder_profile", "plans"}
     assert bundle.record_count == 3
-    assert action.request_type == "portability" and action.status == "pending"
+    # A bare export_data() is the right of ACCESS, and is logged as such. It used
+    # to log "portability" whichever button the founder pressed, so the audit
+    # trail could not tell the two rights apart.
+    assert action.request_type == "download_data" and action.status == "pending"
+
+
+def test_portability_export_is_logged_as_portability():
+    """The other button exercises Art 20, and the audit trail says so."""
+    s = svc()
+    _, action = s.export_data(1, kind="portability")
+    assert action.request_type == "portability"
+
+
+def test_unknown_export_kind_falls_back_to_access():
+    """Fails closed towards the fuller export: a typo must not silently hand
+    back a narrower file than the founder asked for."""
+    _, action = svc().export_data(1, kind="nonsense")
+    assert action.request_type == "download_data"
 
 
 def test_export_is_immediate_no_due_date():
@@ -41,7 +58,7 @@ def test_export_is_immediate_no_due_date():
 def test_export_is_logged_for_accountability():
     s = svc()
     s.export_data(1)
-    assert [r.request_type for r in s.list_requests(1)] == ["portability"]
+    assert [r.request_type for r in s.list_requests(1)] == ["download_data"]
 
 
 # --- Art 17: erasure --------------------------------------------------------
@@ -53,7 +70,10 @@ def test_deletion_is_scheduled_not_immediate():
     assert state.deletion_requested_at == T0
     assert state.deletion_scheduled_at == T0 + timedelta(days=DELETION_GRACE_DAYS)
     assert state.deletion_pending is True
-    assert action.request_type == "withdraw_consent"
+    # Erasure has its own label (f2c7a91d4e83). It used to log "withdraw_consent",
+    # the same value cancellation and actual consent withdrawal wrote, so the audit
+    # trail could not tell a deletion request from either of them.
+    assert action.request_type == "delete_account"
 
 
 def test_second_deletion_request_refused():
@@ -139,3 +159,17 @@ def test_founder_isolation():
     assert s.get_state(2).processing_restricted is False
     assert s.list_requests(2) == []
     assert s.may_process(2) is True
+
+def test_cancelled_deletion_is_logged_as_its_own_event():
+    """Erasure, cancelling erasure and withdrawing consent are three different
+    things a founder can do. Before f2c7a91d4e83 all three logged the same
+    label, so "prove this founder cancelled" was unanswerable from the table
+    that exists to answer exactly that."""
+    s = svc()
+    s.request_account_deletion(1)
+    _, action = s.cancel_account_deletion(1)
+    assert action.request_type == "cancel_deletion"
+    # Newest first, so the cancellation leads and the request it undid follows.
+    assert [r.request_type for r in s.list_requests(1)] == [
+        "cancel_deletion", "delete_account",
+    ]

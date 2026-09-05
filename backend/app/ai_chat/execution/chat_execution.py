@@ -134,6 +134,7 @@ class ChatExecutionService:
             ally_context=ally_context, conversation=conversation,
             current_message=request.message, language=request.language,
             response_category=request.response_category,
+            knowledge_enabled=request.knowledge_enabled,
         )
         completed.append(BUILD_WINDOW)
 

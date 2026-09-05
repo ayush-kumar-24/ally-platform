@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { getOverview, markTourSeen } from '../services/dashboard';
 import { useCallAccess } from '../hooks/useCallAccess';
+import { prefersReducedMotion } from '../services/motion';
 
 /* The tour runs once the diagnosis is done, so it is the first time a founder
    sees the whole product rather than the one screen they were sent to. It now
@@ -96,7 +97,7 @@ export default function ProductTour() {
   const reduceRef = useRef(false);
 
   useEffect(() => {
-    reduceRef.current = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    reduceRef.current = prefersReducedMotion();
   }, []);
 
   // start/reset when opened

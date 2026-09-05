@@ -106,11 +106,20 @@ class NoFreeCallsRemainingError(PlanError):
     """Not an error the user cannot pass -- they can still pay for the call."""
 
     def __init__(self, used: int, allowance: int, price: int):
-        super().__init__(
-            f"You have used all {allowance} free call(s) this month. "
-            f"Additional calls are Rs {price}.",
-            status_code=402,
-        )
+        # Two genuinely different situations, and one sentence cannot serve both.
+        #
+        # A plan that INCLUDES calls and has run out is "you have used all 2 this
+        # month". A plan that includes none never had any to use, and telling
+        # that founder they "have used all 0 free call(s)" reads as a bug -- it
+        # was written when every plan carried an allowance, and no plan does now.
+        if allowance <= 0:
+            message = f"Discovery calls are Rs {price} each on your plan."
+        else:
+            message = (
+                f"You have used all {allowance} free call(s) this month. "
+                f"Additional calls are Rs {price}."
+            )
+        super().__init__(message, status_code=402)
         self.used = used
         self.allowance = allowance
         self.price = price

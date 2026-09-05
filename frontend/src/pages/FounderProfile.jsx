@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { get, post } from '../services/api';
+import { applyReducedMotion } from '../services/motion';
 import { getProfile, getProgress, updateBusinessSection, updateProfile } from '../services/profile';
 import { STAGE_GROUPS } from '../data/onboardingQuestions';
 import { getNotificationPreferences, updateNotificationPreferences } from '../services/settings';
@@ -35,7 +36,7 @@ const PRIVACY_ACTIONS = [
     type: 'download_data',
     kind: 'export',
     label: 'Download my data',
-    desc: 'Get a full export (JSON) of all data Ally holds about you — founder profile, sessions, and diagnosis history.',
+    desc: 'Get everything Ally holds about you as JSON — profile, diagnosis sessions and answers, reports, conversations, and what Ally worked out about you.',
     icon: (
       <svg viewBox="0 0 24 24">
         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -52,7 +53,7 @@ const PRIVACY_ACTIONS = [
     type: 'view_data',
     kind: 'summary',
     label: 'View data summary',
-    desc: 'See a category-by-category count of what personal and business data Ally currently holds for your account.',
+    desc: 'See how much data Ally holds for you, grouped by what it is — shown here, no download.',
     icon: (
       <svg viewBox="0 0 24 24">
         <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
@@ -60,7 +61,7 @@ const PRIVACY_ACTIONS = [
       </svg>
     ),
     confirmTitle: 'View your data summary?',
-    confirmDesc: 'Ally will count what\'s held under your account, by category, and download it now.',
+    confirmDesc: 'Ally will count what it holds under your account and show you the totals, grouped by what the data is. Nothing is downloaded.',
     confirmColor: '#4338ca',
     confirmBg: '#f0f4ff',
   },
@@ -84,7 +85,7 @@ const PRIVACY_ACTIONS = [
     type: 'portability',
     kind: 'export',
     label: 'Export for portability',
-    desc: 'Download a machine-readable copy of your data in a portable format (JSON/CSV) to take to another service.',
+    desc: 'Download just the data you gave us — your answers, goals, tasks and conversations — as JSON you can take to another service. Leaves out Ally\'s own analysis.',
     icon: (
       <svg viewBox="0 0 24 24">
         <polyline points="16 3 21 3 21 8" />
@@ -222,6 +223,10 @@ export default function FounderProfile() {
   // Danger Zone section off-screen behind a wall of history rows.
   const [historyOpen, setHistoryOpen] = useState(false);
   const [privacyState, setPrivacyState] = useState(null);   // restriction / deletion standing
+  // "View data summary" used to download a JSON file of database table names --
+  // it neither viewed anything nor said anything a founder could read. Held here
+  // so it can be shown on the page instead.
+  const [dataSummary, setDataSummary] = useState(null);
   // Ref, not state: state updates are async, so two clicks in the same tick would
   // both see submitting === false. The ref flips synchronously.
   const inFlight = useRef(false);
@@ -254,21 +259,30 @@ export default function FounderProfile() {
     try {
       switch (pendingAction.kind) {
         case 'export': {
+          // The two export buttons exercise different rights and now produce
+          // different files: 'download_data' is the full right-of-access copy,
+          // 'portability' carries only what the founder gave us. Filenames differ
+          // so the two are still tellable apart in a downloads folder.
+          const portability = pendingAction.type === 'portability';
           setProgress('Assembling your data…');
-          const bundle = await exportData();
+          const bundle = await exportData(portability ? 'portability' : 'access');
           setProgress('Preparing download…');
-          downloadExport(bundle, `ally-data-export-${new Date().toISOString().slice(0, 10)}.json`);
+          const stamp = new Date().toISOString().slice(0, 10);
+          downloadExport(bundle, portability
+            ? `ally-portability-export-${stamp}.json`
+            : `ally-data-export-${stamp}.json`);
           setPrivacyRequests(prev => [bundle.request, ...prev]);
           showToast(`Export ready — ${bundle.record_count} records downloaded ✓`);
           break;
         }
         case 'summary': {
+          // Shown, not downloaded. The button says "View", and a founder asking
+          // what we hold should get an answer they can read on the spot rather
+          // than a file of table names to decipher.
           setProgress('Counting your data…');
           const summary = await getDataSummary();
-          setProgress('Preparing download…');
-          downloadExport(summary, `ally-data-summary-${new Date().toISOString().slice(0, 10)}.json`);
           setPrivacyRequests(prev => [summary.request, ...prev]);
-          showToast(`Summary ready — ${summary.total_records} records across ${Object.keys(summary.counts).length} categories ✓`);
+          setDataSummary(summary);
           break;
         }
         case 'restrict': {
@@ -449,10 +463,16 @@ export default function FounderProfile() {
   const toggleSwitch = async (key) => {
     const next = !switches[key];
     setSwitches(prev => ({ ...prev, [key]: next }));
+    // Reduced motion has to take effect on the spot, not on the next reload:
+    // someone turning it on is asking the movement to stop now. Rolled back
+    // below with the switch if the save fails, so the page never disagrees
+    // with the server about what is set.
+    if (key === 'reducedMotion') applyReducedMotion(next);
     try {
       await updateNotificationPreferences({ [SWITCH_FIELD[key]]: next });
     } catch (err) {
       setSwitches(prev => ({ ...prev, [key]: !next }));
+      if (key === 'reducedMotion') applyReducedMotion(!next);
       showToast(err?.message || 'Could not save that preference — please try again.');
     }
   };
@@ -492,6 +512,63 @@ export default function FounderProfile() {
 
   return (
     <div className="dc-container">
+      {/* What Ally holds, shown rather than downloaded. Grouped and labelled by
+          the server so this page, the help bot and anything else describing a
+          founder's data use one set of words. */}
+      {dataSummary && (
+        <div className="pr-privacy-overlay" onClick={() => setDataSummary(null)}>
+          <div
+            className="pr-privacy-modal"
+            onClick={e => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="pr-summary-title"
+            style={{ maxWidth: 520, textAlign: 'left' }}
+          >
+            <h3 id="pr-summary-title" style={{ textAlign: 'left' }}>What Ally holds about you</h3>
+            <p style={{ textAlign: 'left' }}>
+              {dataSummary.total_records} records in total, as of{' '}
+              {fmtDate(dataSummary.generated_at)}.
+            </p>
+
+            <div style={{ margin: '16px 0', display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {(dataSummary.categories ?? []).map(c => (
+                <div
+                  key={c.key}
+                  style={{
+                    display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
+                    gap: 16, padding: '10px 0', borderTop: '1px solid var(--pr-line, #e8e3da)',
+                  }}
+                >
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, fontSize: 14 }}>{c.label}</div>
+                    <div style={{ fontSize: 12.5, opacity: 0.72, marginTop: 2 }}>{c.description}</div>
+                  </div>
+                  <div style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600, fontSize: 15 }}>
+                    {c.count}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <p style={{ textAlign: 'left', fontSize: 13, opacity: 0.8 }}>
+              This is the count, not the contents. To read the data itself, use
+              “Download my data”.
+            </p>
+
+            <div className="pr-privacy-modal-actions">
+              <button
+                className="pr-privacy-cancel-btn"
+                onClick={() => setDataSummary(null)}
+                type="button"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Confirm modal */}
       {pendingAction && (
         <div className="pr-privacy-overlay" onClick={() => !submitting && setPendingAction(null)}>
@@ -524,7 +601,9 @@ export default function FounderProfile() {
               >
                 {submitting
                   ? (progress || 'Working…')
-                  : (['export', 'summary'].includes(pendingAction.kind) ? 'Download now' : 'Confirm')}
+                  : pendingAction.kind === 'summary' ? 'Show me'
+                  : pendingAction.kind === 'export' ? 'Download now'
+                  : 'Confirm'}
               </button>
             </div>
           </div>
@@ -1115,9 +1194,15 @@ export default function FounderProfile() {
             background: '#fff1f2', border: '1px solid #fecdd3', borderRadius: 10,
             padding: '12px 14px', marginBottom: 14, color: '#991b1b', fontSize: 13,
           }}>
+            {/* Was "Contact support before then to cancel" -- untrue since
+                DeletionPendingGate shipped: signing in again offers a one-click
+                cancel, and the founder can undo it themselves. Sending them to
+                email for something the product already does is the kind of
+                answer that makes a support page feel abandoned. */}
             <strong>Account deletion scheduled.</strong>{' '}
-            Your data will be erased on {fmtDate(privacyState.deletion_scheduled_at)}. Contact
-            support before then to cancel.
+            Your data will be erased on {fmtDate(privacyState.deletion_scheduled_at)}. You can
+            still change your mind — sign in again before then and choose “Cancel deletion &amp;
+            continue”, or email support if you would rather we did it for you.
           </div>
         )}
         {privacyState?.processing_restricted && !privacyState?.deletion_pending && (
@@ -1175,7 +1260,10 @@ export default function FounderProfile() {
               </svg>
               {action.kind === 'restrict' && privacyState?.processing_restricted ? 'Paused'
                 : action.kind === 'delete' && privacyState?.deletion_pending ? 'Scheduled'
-                : ['export', 'summary'].includes(action.kind) ? 'Download'
+                /* 'summary' shows on the page now, so promising a download here
+                   would be the third thing on this row contradicting itself. */
+                : action.kind === 'summary' ? 'View'
+                : action.kind === 'export' ? 'Download'
                 : 'Request'}
             </button>
           </div>

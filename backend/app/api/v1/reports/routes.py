@@ -29,8 +29,51 @@ from app.api.v1.reports.schemas import (
     InsightsView, ReportView, SectionOut, SectionSlice, ShareCreated, ShareOut,
     SharedReportView, SharedSection,
 )
+from app.core.logger import logger
 from app.db.session import get_db
 from app.models import Founder, FounderReport
+
+
+#: The public answer for every share failure, whatever the real cause.
+_SHARE_UNAVAILABLE = "This shared report is not available."
+
+
+def _resolve_share_or_404(db: Session, token: str, *, route: str):
+    """Resolve a share token, or raise the one public 404 both share routes use.
+
+    The visitor-facing answer is deliberately identical for an unknown token, a
+    revoked or expired share, and a share whose report has been deactivated --
+    otherwise the endpoint tells a stranger which tokens exist.
+
+    That is right for the response and useless for us. A founder reporting "my
+    share link says it is not available" could mean any of three different
+    faults, and from the outside they are indistinguishable, so the first step
+    of every investigation is a guess. The reason is logged here instead: same
+    404 to the visitor, a named cause in our logs. The token itself is never
+    logged -- it is the credential.
+    """
+    share = reports_repository.get_active_share(db, token)
+    if share is None:
+        # Covers all three of unknown / revoked / expired: get_active_share
+        # returns None for each, and looking further to tell them apart would
+        # mean a second query on every probe.
+        logger.warning("share_link_rejected", extra={
+            "reason": "token_unknown_revoked_or_expired", "route": route,
+            "token_len": len(token),
+        })
+        raise HTTPException(status.HTTP_404_NOT_FOUND, _SHARE_UNAVAILABLE)
+
+    report = db.get(FounderReport, share.report_id)
+    if report is None or not report.is_active:
+        # A live share pointing at a report that has gone. The founder sees the
+        # same sentence as a bad token, but this one is our fault, not theirs.
+        logger.warning("share_link_rejected", extra={
+            "reason": "report_missing" if report is None else "report_inactive",
+            "route": route, "share_id": share.share_id, "report_id": share.report_id,
+        })
+        raise HTTPException(status.HTTP_404_NOT_FOUND, _SHARE_UNAVAILABLE)
+
+    return share, report
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
@@ -137,12 +180,7 @@ def share_url_for(token: str, request: Request) -> str:
 @router.get("/shared/{token}", response_model=SharedReportView)
 async def shared_report(token: str, db: Session = Depends(get_db)) -> SharedReportView:
     """PUBLIC. Strict subset: headings + prose only."""
-    share = reports_repository.get_active_share(db, token)
-    if share is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "This shared report is not available.")
-    report = db.get(FounderReport, share.report_id)
-    if report is None or not report.is_active:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "This shared report is not available.")
+    _share, report = _resolve_share_or_404(db, token, route="json")
     narrative = _build_narrative(db, report)
     return SharedReportView(
         variant=narrative.variant.value,
@@ -176,12 +214,7 @@ async def shared_report_page(token: str, db: Session = Depends(get_db)) -> HTMLR
     An expired, revoked or unknown token is a 404 -- deliberately the same answer
     for all three, so the endpoint cannot be used to probe which tokens exist.
     """
-    share = reports_repository.get_active_share(db, token)
-    if share is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "This shared report is not available.")
-    report = db.get(FounderReport, share.report_id)
-    if report is None or not report.is_active:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "This shared report is not available.")
+    _share, report = _resolve_share_or_404(db, token, route="view")
 
     founder = db.get(Founder, report.founder_id)
     return HTMLResponse(

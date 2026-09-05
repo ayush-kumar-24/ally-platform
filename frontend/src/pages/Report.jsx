@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   createShareLink, downloadReportPdf, factList,
   getLatestReport, getReport, getReportDocument,
+  listShareLinks, revokeShareLink,
 } from '../services/reports';
 import { DnaError, DnaLoading, DnaNoReport } from '../components/DnaState';
 import FeedbackPrompt from '../components/FeedbackPrompt';
@@ -24,6 +25,13 @@ import { getOverview } from '../services/dashboard';
  * The frame is grown to its content height instead of scrolling internally, so
  * the shell's own scroller keeps working — and with it the read-gate below.
  */
+function fmtShareDate(iso) {
+  if (!iso) return 'its expiry date';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return 'its expiry date';
+  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
 function ReportDocument({ html, onDownload, onShare, frameRef }) {
   const [height, setHeight] = useState(900);
 
@@ -283,14 +291,47 @@ export default function Report() {
         7000));
   }, [reportId, showToast]);
 
+  /* Live share links, so a founder can take one back.
+
+     The API has listed and revoked shares since the feature shipped; nothing in
+     the app ever called either. So creating a link was one click and undoing it
+     was an email to support, for thirty days, on a document that needs no
+     sign-in to read and contains a personal read of the founder. */
+  const [shares, setShares] = useState([]);
+  const [revoking, setRevoking] = useState(null);
+
+  const refreshShares = useCallback(() => {
+    if (!reportId) return;
+    listShareLinks(reportId)
+      .then((rows) => setShares(Array.isArray(rows) ? rows : []))
+      .catch(() => { /* the list is a convenience; never break the report over it */ });
+  }, [reportId]);
+
+  useEffect(() => { refreshShares(); }, [refreshShares]);
+
   const handleShare = useCallback(() => {
     if (!reportId) return;
     createShareLink(reportId)
       .then(({ share_url }) => navigator.clipboard?.writeText(share_url)
         .then(() => showToast('Share link copied to your clipboard.'))
         .catch(() => showToast(`Share link: ${share_url}`, 8000)))
+      .then(refreshShares)
       .catch(() => showToast("Couldn't create a share link. Try again in a moment.", 6000));
-  }, [reportId, showToast]);
+  }, [reportId, showToast, refreshShares]);
+
+  const handleRevoke = useCallback((token) => {
+    if (!reportId || revoking) return;
+    setRevoking(token);
+    revokeShareLink(reportId, token)
+      .then(() => {
+        // Drop it locally rather than waiting for a refetch: the founder just
+        // asked for this link to stop working and should see that immediately.
+        setShares((prev) => prev.filter((r) => r.share_token !== token));
+        showToast('That link has been turned off. It will not open for anyone now.');
+      })
+      .catch(() => showToast("Couldn't turn that link off. Try again in a moment.", 6000))
+      .finally(() => setRevoking(null));
+  }, [reportId, revoking, showToast]);
 
   const offerTour = useCallback(() => {
     // Ask the server rather than assuming: it knows from tour_seen_at whether
@@ -328,6 +369,48 @@ export default function Report() {
       ) : (
         <ReportView report={state.report} meta={state.meta} containerRef={contentRef} />
       )}
+      {/* Only rendered when links exist -- a founder who has never shared sees
+          nothing, and a founder who has sees exactly what is live and who has
+          opened it. */}
+      {shares.length > 0 && (
+        <div style={{ marginTop: 30 }}>
+          <h3 style={{ fontSize: 15, margin: '0 0 4px' }}>Links you have shared</h3>
+          <p style={{ fontSize: 13, opacity: 0.75, margin: '0 0 12px', maxWidth: '58ch' }}>
+            Anyone with one of these can read this report without signing in.
+            Turning a link off stops it working straight away.
+          </p>
+          {shares.map((row) => (
+            <div
+              key={row.share_token}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                gap: 16, padding: '10px 0', borderTop: '1px solid var(--pr-line, #e8e3da)',
+              }}
+            >
+              <div style={{ minWidth: 0, fontSize: 13.5 }}>
+                <div>
+                  Opened {row.access_count === 0
+                    ? 'no times yet'
+                    : `${row.access_count} ${row.access_count === 1 ? 'time' : 'times'}`}
+                </div>
+                <div style={{ opacity: 0.7, fontSize: 12.5, marginTop: 2 }}>
+                  Stops working on {fmtShareDate(row.expires_at)}
+                </div>
+              </div>
+              <button
+                className="btn btn-ghost"
+                type="button"
+                onClick={() => handleRevoke(row.share_token)}
+                disabled={revoking === row.share_token}
+                style={{ flexShrink: 0 }}
+              >
+                {revoking === row.share_token ? 'Turning off…' : 'Turn off link'}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
       <FeedbackPrompt
         type={FEEDBACK.REPORT}
         when={hasRead}

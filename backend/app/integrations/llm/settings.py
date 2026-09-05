@@ -26,11 +26,49 @@ _MODELS = {
 }
 
 
+def _env_with_dotenv_fallback() -> dict:
+    """`os.environ`, backfilled from the app's parsed settings.
+
+    THE reason this exists: pydantic-settings reads `.env` into the Settings
+    OBJECT and never exports it to the process environment. This module reads
+    `os.environ` directly (deliberately -- see the module docstring), so on a
+    machine whose keys live only in `.env`, every provider looked unconfigured
+    and the registry built with `mock` alone.
+
+    That does not fail. `mock` is the documented graceful fallback, so chat
+    answered founders with fabricated text ("Grounded answer from
+    mock-standard") and reported success. Worse, whether it happened depended
+    on IMPORT ORDER: something in `app.main`'s chain does populate os.environ,
+    so importing `app.main` first gave real providers and importing anything
+    that builds the container first gave the mock -- with no error either way.
+
+    Production is not affected (ECS puts real values in the environment before
+    the process starts), which is exactly why this could sit here unnoticed:
+    it only misfires where `.env` is the source of truth, i.e. local dev and
+    tests -- the two places people decide whether the product works.
+
+    Environment still WINS. This only fills gaps, so a deployment that
+    deliberately overrides a key keeps its override.
+    """
+    merged = dict(os.environ)
+    try:
+        from app.core.config import settings as _app_settings
+    except Exception:  # noqa: BLE001 -- config must never break provider wiring
+        return merged
+    for name in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY",
+                 "OPENAI_MODEL", "ANTHROPIC_MODEL", "GEMINI_MODEL"):
+        if not merged.get(name):
+            value = getattr(_app_settings, name, None)
+            if value:
+                merged[name] = str(value)
+    return merged
+
+
 class LLMSettings:
     """Snapshot of the LLM-related environment variables."""
 
     def __init__(self, env: dict | None = None):
-        e = env if env is not None else os.environ
+        e = env if env is not None else _env_with_dotenv_fallback()
         self.provider = e.get("ALLY_LLM_PROVIDER", "mock").lower()
         self.timeout = float(e.get("ALLY_LLM_TIMEOUT", "30"))
         self.max_retries = int(e.get("ALLY_LLM_MAX_RETRIES", "2"))

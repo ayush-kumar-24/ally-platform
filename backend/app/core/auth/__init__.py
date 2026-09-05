@@ -16,8 +16,13 @@ Two token worlds live here, kept deliberately separate:
 Import from the package, not the modules.
 """
 
-from app.core.auth.base import AuthError, AuthProvider, AuthUser
-from app.core.auth.dependencies import get_current_founder, get_upstream_identity
+from app.core.auth.base import AccountSuspendedError, AuthError, AuthProvider, AuthUser
+from app.core.auth.dependencies import (
+    get_current_founder,
+    get_upstream_identity,
+    is_account_active,
+    record_last_active,
+)
 from app.core.auth.factory import get_auth_provider
 from app.core.auth.session_store import get_session_store
 from app.core.auth.tokens import (
@@ -30,6 +35,7 @@ from app.core.auth.tokens import (
 )
 
 __all__ = [
+    "AccountSuspendedError",
     "AuthError",
     "AuthProvider",
     "AuthUser",
@@ -37,6 +43,8 @@ __all__ = [
     "get_current_founder",
     "get_upstream_identity",
     "get_session_store",
+    "is_account_active",
+    "record_last_active",
     "ACCESS",
     "REFRESH",
     "create_access_token",

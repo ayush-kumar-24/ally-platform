@@ -8,7 +8,7 @@
  * the founder acts on it.
  */
 
-import { get, post } from './api';
+import { del, get, post } from './api';
 
 /**
  * The report as a rendered HTML document — the same one the PDF is built from.
@@ -224,4 +224,27 @@ export function pillarList(facts) {
  */
 export function createShareLink(reportId) {
   return post(`/reports/${reportId}/share`, {});
+}
+
+/**
+ * Every live share link for this report, so a founder can see what is out there.
+ *
+ * Carries access_count and last_accessed_at, which is the part that matters:
+ * deciding whether to revoke a link is a different decision when it has been
+ * opened eleven times than when it has never been opened at all.
+ */
+export function listShareLinks(reportId) {
+  return get(`/reports/${reportId}/shares`);
+}
+
+/**
+ * Revoke one share link, immediately and permanently.
+ *
+ * This existed on the API from the start and nothing in the app ever called it,
+ * so a founder could publish a link to their own diagnosis -- readable by anyone
+ * holding it, no sign-in -- and then had no way to take it back for thirty days
+ * except emailing support.
+ */
+export function revokeShareLink(reportId, token) {
+  return del(`/reports/${reportId}/share/${encodeURIComponent(token)}`);
 }

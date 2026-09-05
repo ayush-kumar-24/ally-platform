@@ -850,10 +850,14 @@ class DiscoveryCalls(Base):
     founder_id: Mapped[int] = mapped_column(Integer, nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, server_default=text("'pending'::character varying"))
     scheduled_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False)
-    duration_minutes: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text('45'))
+    duration_minutes: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text('30'))
     timezone: Mapped[str] = mapped_column(String(100), nullable=False, server_default=text("'Asia/Kolkata'::character varying"))
     reminder_sent_24h: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text('false'))
     reminder_sent_1h: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text('false'))
+    #: Was the founder on a plan carrying Feature.PRIORITY_CALL at booking time?
+    #: Stamped once, never recomputed -- the queue needs to know what was true
+    #: when the request was made, not what the founder's plan says today.
+    is_priority: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text('false'))
     meeting_link: Mapped[Optional[str]] = mapped_column(String(500))
     goxml_host: Mapped[Optional[str]] = mapped_column(String(100))
     booking_source: Mapped[Optional[str]] = mapped_column(String(50))
@@ -982,7 +986,11 @@ class Notifications(Base):
 class PrivacyRequests(Base):
     __tablename__ = 'privacy_requests'
     __table_args__ = (
-        CheckConstraint("request_type::text = ANY (ARRAY['view_data'::character varying, 'download_data'::character varying, 'correct_data'::character varying, 'withdraw_consent'::character varying, 'restrict_processing'::character varying, 'portability'::character varying]::text[])", name='privacy_requests_request_type_check'),
+        # `delete_account` and `cancel_deletion` added by f2c7a91d4e83. Without them
+        # erasure, its cancellation and consent withdrawal all logged as
+        # `withdraw_consent`, so the audit trail could not answer "who asked to be
+        # deleted" -- the one question it exists to answer.
+        CheckConstraint("request_type::text = ANY (ARRAY['view_data'::character varying, 'download_data'::character varying, 'correct_data'::character varying, 'withdraw_consent'::character varying, 'restrict_processing'::character varying, 'portability'::character varying, 'delete_account'::character varying, 'cancel_deletion'::character varying]::text[])", name='privacy_requests_request_type_check'),
         CheckConstraint("status::text = ANY (ARRAY['pending'::character varying, 'in_progress'::character varying, 'completed'::character varying, 'rejected'::character varying]::text[])", name='privacy_requests_status_check'),
         ForeignKeyConstraint(['founder_id'], ['founders.founder_id'], name='privacy_requests_founder_id_fkey'),
         PrimaryKeyConstraint('request_id', name='privacy_requests_pkey'),

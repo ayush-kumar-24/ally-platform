@@ -116,14 +116,13 @@ def test_slots_returns_future_weekday_slots(founder_client):
     assert all(datetime.fromisoformat(s) > now for s in slots)
 
 
-def test_free_tier_cannot_book_without_paying(founder_client):
-    """Free includes no discovery calls (free_calls_per_month=0), so booking is a
-    402 rather than a 201.
+def test_requesting_a_call_is_not_blocked_by_the_paywall(founder_client):
+    """Requesting a call is free on every plan, and creates a REQUEST.
 
-    Worth pinning: this only became reachable when PLAN_ENFORCEMENT_ENABLED was
-    turned on. It means invited test users on Free cannot book a discovery call
-    at all -- correct per the catalog, and a real product consequence rather than
-    a test detail.
+    This used to be a 402: no plan includes a free call, so the entitlement gate
+    refused every founder and there was no way to pay past it -- checkout does
+    not exist. Discovery calls were unbookable by anyone. The gate now sits after
+    the team confirms, where payment actually happens.
     """
     from app.api.deps import get_founder_record
     founder = founder_client.get("/api/v1/profile").json()
@@ -132,19 +131,22 @@ def test_free_tier_cannot_book_without_paying(founder_client):
     try:
         when = (datetime.now(timezone.utc) + timedelta(days=2)).isoformat()
         r = founder_client.post("/api/v1/discovery/book", json={"scheduled_at": when})
-        assert r.status_code == 402, r.text
-        assert r.json()["error"] == "NoFreeCallsRemainingError"
+        assert r.status_code == 201, r.text
+        assert r.json()["status"] == "pending"
     finally:
         app.dependency_overrides.pop(get_founder_record, None)
 
 
-def test_book_creates_confirmed_call(founder_client):
+def test_book_creates_a_pending_request(founder_client):
     when = (datetime.now(timezone.utc) + timedelta(days=2)).isoformat()
     r = founder_client.post("/api/v1/discovery/book", json={"scheduled_at": when})
     assert r.status_code == 201, r.text
     body = r.json()
-    assert body["status"] == "confirmed"
-    assert body["meeting_link"] and body["booking_source"] == "stub"
+    # A request, not a booking. No calendar event exists until the team
+    # confirms -- the old flow created the meeting first and left orphans behind
+    # when the insert then failed.
+    assert body["status"] == "pending"
+    assert body["meeting_link"] is None
     call_id = body["call_id"]
 
     # confirmation read-back

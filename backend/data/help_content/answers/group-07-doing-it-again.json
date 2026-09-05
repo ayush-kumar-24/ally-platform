@@ -1,0 +1,57 @@
+{
+  "schema_version": "1.0",
+  "file": "group-07-doing-it-again",
+  "group": "doing-it-again",
+  "group_number": 7,
+  "group_title": "Doing it again",
+  "question_bank": "Founder Question Bank v3 — group 7 (questions 085-089)",
+  "created": "2026-09-05",
+  "content_rules": {
+    "voice": "Very simple, easy English. Short sentences. Common everyday words. No idioms. Friendly and warm, but plain.",
+    "answer_length": "About 120 words maximum. Short paragraphs with a blank line between them.",
+    "not_yet_never_no": "Re-diagnosis is answered as 'not available yet', never as a permanent no. Re-running it when a founder's business stage changes is intended but unbuilt.",
+    "no_tier_names": "Do not name plan tiers in this group. The names and prices are changing with the move to the Rs 199 entry tier, and an answer that names them would go stale on launch day."
+  },
+  "walk_log": {
+    "walked_on": "2026-09-05",
+    "environment": "local dev build against the Supabase database (NOT production RDS — see docs/PRODUCTION-RDS-CHECKS.md)",
+    "observed": [
+      "The lifetime limit is one COMPLETED diagnosis per account, and it is the same on every tier including the highest. An in-progress session a founder resumes is never blocked and never counts.",
+      "Support can lift it: the admin panel has a reset-diagnosis action, gated on its own capability and written to the audit log with the admin, the founder and the IP.",
+      "The reset only clears the counter and the lock. It does not delete the founder's existing report, so a reset founder keeps the old one.",
+      "Progress is tracked as actions completed against actions still open, alongside counts of sessions, conversations, reports and root causes found. There is no re-scoring of the founder over time, because there is only one diagnosis to score from."
+    ]
+  },
+  "answers": [
+    {"id": 85, "question": "Why can't I do another diagnosis?",
+     "answer": "There is one full diagnosis per account at the moment.\n\nIt is not meant as a monthly check-up. It goes deep once, builds your Founder DNA and your Business DNA, and finds the one cause sitting underneath. Running it again a few weeks later would mostly tell you the same thing, because the patterns it looks at do not move that fast.\n\nWe do intend to let you run it again when your business stage changes. That is not built yet.\n\nIf you have a real reason to need a second one now, please contact support. We look at those case by case.",
+     "answer_type": "walked", "status": "answered",
+     "links": ["/app/help"],
+     "verified": {"walked_on": "2026-09-05", "how": "The lifetime limit is one completed diagnosis on every tier. An admin reset exists and is used case by case."}},
+
+    {"id": 86, "question": "I'm paying for Pro. Surely I get another one?",
+     "answer": "No — and we would rather say so plainly than let you find out later. Every plan includes one diagnosis, including the highest one.\n\nWhat paying gives you is everything that keeps working after the report: your Founder DNA and Business DNA pages, your next steps, and Ally to talk to every day. It does not buy more diagnoses.\n\nIf that is not what you understood when you paid, please contact support and tell us. That is a fair complaint and we would want to hear it.",
+     "answer_type": "policy", "status": "answered",
+     "links": ["/app/help", "/app/billing"],
+     "verified": {"walked_on": "2026-09-05", "how": "The lifetime limit is identical across every tier. Agreed position: say so plainly rather than implying an exception."},
+     "note": "Deliberately names no tier. The question says 'Pro', which is the current catalog name, but tier names and prices change with the Rs 199 entry plan. This answer survives that."},
+
+    {"id": 87, "question": "Can I just pay for one more?",
+     "answer": "Not as something you can buy, no. There is no add-on for a second diagnosis on any plan.\n\nBut it is not a flat no either. If your situation has genuinely changed — you pivoted, you raised, the business is a different shape now — contact support and tell us what changed. We look at these one at a time, and we can reset it where it makes sense.\n\nIf we do, your first report stays. You do not lose it.",
+     "answer_type": "walked", "status": "answered",
+     "links": ["/app/help"],
+     "verified": {"walked_on": "2026-09-05", "how": "No purchasable add-on exists in the catalog. The admin reset clears only the counter and the lock; the existing report row is untouched, so the old report survives a reset."}},
+
+    {"id": 88, "question": "How am I supposed to tell whether anything improved?",
+     "answer": "Not by running the diagnosis again, since there is only one. What you track instead is what you did about it.\n\nYour report gives you priority actions. Those become your next steps, and Ally keeps count of how many you have finished against how many are still open. That count is the honest measure — the report told you what to change, and this tells you whether you changed it.\n\nGoals and Plan Your Day work the same way. Set the thing, then look back at what actually got done.\n\nYour report itself does not move. It is the baseline you are measuring against.",
+     "answer_type": "walked", "status": "answered",
+     "links": ["/app/next-steps", "/app/goals", "/app/plan"],
+     "verified": {"walked_on": "2026-09-05", "how": "The dashboard tracks actions completed against actions open, plus counts of sessions, conversations and reports. No metric re-scores the founder over time."}},
+
+    {"id": 89, "question": "Can I redo one part instead of the whole thing?",
+     "answer": "Not at the moment, sorry. The diagnosis works as one piece — your Founder DNA shapes how the business answers are read, so redoing one part on its own would not really hold together.\n\nIf a particular answer was wrong or rushed, the most useful thing is to open \"Discuss this with Ally\" from your report and tell it there. Ally will work with the fuller picture, even though the report itself stays as it was.\n\nAnd if a fact in your profile is simply wrong, you can ask us to correct that in Profile, then Privacy Center.",
+     "answer_type": "walked", "status": "answered",
+     "links": ["/app/report", "/app/ally-chat", "/app/profile"],
+     "verified": {"walked_on": "2026-09-05", "how": "No partial re-run exists — the only reset is the whole-diagnosis admin action. Founder DNA feeds the business scoring, so the parts are not independent."}}
+  ]
+}

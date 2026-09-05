@@ -33,6 +33,31 @@ from app.privacy.repository import PrivacyRepository
 # Answers are joined to their question text on purpose. A portability export has
 # to be intelligible to the person receiving it, and a bare `question_id` is not
 # -- it is a foreign key into a catalogue they cannot see.
+#: Sections a PORTABILITY export carries -- Art 20, which covers only data the
+#: founder *provided*, in a form another service could ingest. Everything else in
+#: `_EXPORT_SECTIONS` is either Ally's own analysis (reports, detected root causes,
+#: stage assessments, founder context and memory) or our operational record of the
+#: account (consents ledger, privacy requests, plans, notifications, token usage,
+#: session metadata). Those belong in the right-of-access copy, which is the whole
+#: file, and not in a bundle whose stated purpose is "take this elsewhere".
+#:
+#: The two buttons in the Privacy Center used to call one endpoint and hand back
+#: byte-identical files, so "Export for portability" was a second Download button
+#: wearing a different label.
+_PORTABILITY_SECTIONS: frozenset[str] = frozenset({
+    "founder_profile",
+    "settings",
+    "goals",
+    "tasks",
+    "diagnosis_answers",
+    "founder_dna_answers",
+    "current_problem_answers",
+    "conversations",
+    "messages",
+    "feedback",
+    "discovery_calls",
+})
+
 _EXPORT_SECTIONS: tuple[tuple[str, str], ...] = (
     ("founder_profile", "select * from founders where founder_id = :fid"),
     ("consents", "select * from founder_consents where founder_id = :fid"),
@@ -103,9 +128,12 @@ class SqlAlchemyPrivacyRepository(PrivacyRepository):
 
     # --- export ---------------------------------------------------------
 
-    def gather_export(self, founder_id: int, generated_at: datetime) -> ExportBundle:
+    def gather_export(self, founder_id: int, generated_at: datetime,
+                      kind: str = "access") -> ExportBundle:
         sections: dict = {}
         for label, sql in _EXPORT_SECTIONS:
+            if kind == "portability" and label not in _PORTABILITY_SECTIONS:
+                continue
             try:
                 rows = self.db.execute(text(sql), {"fid": founder_id}).mappings().all()
                 sections[label] = [dict(r) for r in rows]
@@ -115,7 +143,8 @@ class SqlAlchemyPrivacyRepository(PrivacyRepository):
                 # section is marked so the gap is visible rather than silent.
                 self.db.rollback()
                 sections[label] = {"unavailable": True}
-        return ExportBundle(founder_id=founder_id, generated_at=generated_at, sections=sections)
+        return ExportBundle(founder_id=founder_id, generated_at=generated_at,
+                            sections=sections, kind=kind)
 
     # --- state ----------------------------------------------------------
 

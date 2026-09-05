@@ -36,6 +36,29 @@ PLAIN_ENGLISH = (
     "learned English as a second language would read once and immediately understand."
 )
 
+#: What to do when the founder asks about the PRODUCT rather than their business.
+#:
+#: Ally holds a founder's diagnosis, not the account behind it -- no plan, no
+#: allowance, no billing, no idea where a button lives. It declined those
+#: questions already, correctly. What it did not do was recognise them as being
+#: about ITSELF: asked "how much does the plan cost and how do I cancel", it
+#: replied that this sounded like "a tool you're using" and suggested checking
+#: their pricing page. Their pricing page is ours. The founder was sent nowhere,
+#: by a product that could have named the two screens that answer it.
+#:
+#: So the boundary stays exactly where it was -- Ally still does not answer these
+#: -- and only the handoff changes. Naming the destination costs a sentence and
+#: is the difference between a dead end and an answer.
+_PRODUCT_QUESTIONS = (
+    " If the founder asks about Ally itself rather than their business -- pricing, "
+    "plans, their allowance, billing, refunds, account settings, or where to find "
+    "something in the app -- you do not have that information and must not guess at "
+    "it. Do not treat it as a question about some other company's product: it is "
+    "about this one. Say briefly that you do not have their account details, then "
+    "send them to the right place -- Profile for subscription and billing, and Help "
+    "& Support to message a person. Then return to what they were working on."
+)
+
 _GROUNDED_SYSTEM = (
     "You are Ally, a diagnostic co-pilot for startup founders. You answer using ONLY "
     "the grounded sections provided below -- the founder's diagnosis, their stored "
@@ -43,7 +66,8 @@ _GROUNDED_SYSTEM = (
     "findings, scores, sources or advice absent from these sections. Retrieved "
     "knowledge and the diagnostic map are SUPPORT for the diagnosis; if any source "
     "conflicts with the diagnosis, defer to the diagnosis. If the sections do not "
-    "contain the answer, say so plainly rather than guessing." + PLAIN_ENGLISH
+    "contain the answer, say so plainly rather than guessing."
+    + _PRODUCT_QUESTIONS + PLAIN_ENGLISH
 )
 
 _GROUNDED_STANDARD_V2 = PromptTemplate(
@@ -138,7 +162,8 @@ _GENERAL_CHAT_SYSTEM = (
     "plan (see 'Tasks on the founder's plan' below), recognise and reference it "
     "naturally -- e.g. connect 'I finished the pitch deck' to a matching task -- "
     "but never claim a task is done, in progress, or exists unless it is actually "
-    "listed there." + PLAIN_ENGLISH
+    "listed there."
+    + _PRODUCT_QUESTIONS + PLAIN_ENGLISH
 )
 
 _GENERAL_CHAT_STANDARD_V1 = PromptTemplate(
@@ -150,6 +175,7 @@ _GENERAL_CHAT_STANDARD_V1 = PromptTemplate(
     system_prompt=_GENERAL_CHAT_SYSTEM,
     user_prompt=(
         "Founder: {{founder_name}} (stage: {{stage_name}}).\n\n"
+        "== Who this founder is (from onboarding) ==\n{{founder_profile_block}}\n\n"
         "== Founder's diagnosis (if completed) ==\n{{diagnosis_block}}\n\n"
         "== Founder memory (prior context) ==\n{{memory_summary}}\n\n"
         "== Retrieved knowledge (support) ==\n{{retrieved_knowledge}}\n\n"
@@ -165,6 +191,7 @@ _GENERAL_CHAT_STANDARD_V1 = PromptTemplate(
     required_variables=(
         "founder_name",
         "stage_name",
+        "founder_profile_block",
         "diagnosis_block",
         "memory_summary",
         "retrieved_knowledge",

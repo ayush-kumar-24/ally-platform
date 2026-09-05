@@ -56,25 +56,40 @@ class ExportResponse(BaseModel):
     founder_id: int
     generated_at: datetime
     record_count: int
+    #: "access" or "portability" -- stated in the downloaded file so the founder,
+    #: and whoever they hand it to, knows which of the two exports this is.
+    kind: str
     sections: dict[str, Any]
     request: PrivacyActionResponse
 
     @classmethod
     def from_domain(cls, b: ExportBundle, a: PrivacyAction) -> "ExportResponse":
         return cls(founder_id=b.founder_id, generated_at=b.generated_at,
-                   record_count=b.record_count, sections=b.sections,
+                   record_count=b.record_count, kind=b.kind, sections=b.sections,
                    request=PrivacyActionResponse.from_domain(a))
+
+
+class DataCategoryResponse(BaseModel):
+    key: str
+    label: str
+    description: str
+    count: int
 
 
 class DataSummaryResponse(BaseModel):
     founder_id: int
     generated_at: datetime
     total_records: int
+    #: Grouped and named for the founder reading them -- what the Privacy Center
+    #: shows. `counts` below stays as the raw per-section breakdown.
+    categories: list[DataCategoryResponse]
     counts: dict[str, int]
     request: PrivacyActionResponse
 
     @classmethod
     def from_domain(cls, s: DataSummary, a: PrivacyAction) -> "DataSummaryResponse":
         return cls(founder_id=s.founder_id, generated_at=s.generated_at,
-                   total_records=s.total_records, counts=s.counts,
+                   total_records=s.total_records,
+                   categories=[DataCategoryResponse(**c) for c in s.categories],
+                   counts=s.counts,
                    request=PrivacyActionResponse.from_domain(a))

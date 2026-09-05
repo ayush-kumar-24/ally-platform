@@ -1,0 +1,76 @@
+{
+  "schema_version": "1.0",
+  "file": "group-09-compass-journey-achievements",
+  "group": "compass-journey-achievements",
+  "group_number": 9,
+  "group_title": "Compass, Journey, Achievements",
+  "question_bank": "Founder Question Bank v3 — group 9 (questions 108-116)",
+  "created": "2026-09-05",
+  "content_rules": {
+    "voice": "Very simple, easy English. Short sentences. Common everyday words. No idioms. Friendly and warm, but plain.",
+    "answer_length": "About 120 words maximum. Short paragraphs with a blank line between them.",
+    "bands_not_numbers": "Compass readings are bands, never percentages. Critical Gap / Needs Attention / Developing / Strong.",
+    "false_premises": "Two questions in this group describe things that are no longer in the product. Correct the premise gently rather than answering as if it were there."
+  },
+  "walk_log": {
+    "walked_on": "2026-09-05",
+    "environment": "local dev build against the Supabase database (NOT production RDS)",
+    "observed": [
+      "The Compass shows four readings under 'Where you're reading right now': Founder clarity, Dimensions scanned, Red flags, and Reports. Three of the four say 'From your latest diagnosis' underneath.",
+      "Founder clarity displays the overall band from the diagnosis. Dimensions scanned is the count of areas actually scored. Red flags is the count of areas below their line. Reports counts reports, with completed sessions as its subtext.",
+      "Below that: 'Your north star' (the founder's own Vision and top goal, or 'Not set yet'), 'What Ally would flag first', and 'Your five stones'.",
+      "Journey is not gated on a report or a plan. It is marked coming soon and opens an honest 'Coming soon' page.",
+      "Achievements unlock after 15 messages with Ally. The gate shows live progress, e.g. 'You're at 6 of 15 messages'."
+    ],
+    "notes": [
+      "The reading labelled 'Founder clarity' is sourced from the overall business-health band rather than anything founder-specific. The answer to 108 describes what it actually is rather than repeating the label back.",
+      "Ideation-stage founders should not get a business health score at all — the reasoning service suppresses it. Reports generated before that rule shipped still carry one, and the dashboard reads the report rather than re-applying the rule. So an older ideation founder may see a band where a new one would not."
+    ]
+  },
+  "answers": [
+    {"id": 108, "question": "What is this Compass page actually showing me?",
+     "answer": "It is the short version of your diagnosis, plus what you are aiming at.\n\nAt the top are four readings: your overall band, how many areas Ally scored, how many of those came out low enough to flag, and how many reports you have.\n\nUnder that is your north star — your Vision and your main goal, or a prompt to set them if you have not.\n\nThen what Ally would flag first, and the stages of your journey.\n\nIt is a summary, not a live dashboard. For the full picture, open your report.",
+     "answer_type": "walked", "status": "answered", "links": ["/app", "/app/report"],
+     "verified": {"walked_on": "2026-09-05", "how": "Read the live Compass for a founder with a completed report: four readings, north star, 'What Ally would flag first', and 'Your five stones'."}},
+
+    {"id": 109, "question": "What does \"Founder Clarity: Developing\" mean? Is that bad?",
+     "answer": "No, it is not bad. Developing is the middle-upper band and the most common one.\n\nThere are four: Critical Gap, Needs Attention, Developing, and Strong. Developing means things are reasonably solid — some gaps and blind spots, but nothing blocking you.\n\nIt is a word rather than a number on purpose. A number invites you to chase it, and moving from 61 to 64 would not mean anything real. Moving from Developing to Strong would.\n\nIt comes from your latest diagnosis. Your report explains what sits behind it.",
+     "answer_type": "walked", "status": "answered", "links": ["/app", "/app/report"],
+     "verified": {"walked_on": "2026-09-05", "how": "Band names and ranges read from the pillar reference data: Critical Gap 0-35, Needs Attention 36-55, Developing 56-75, Strong 76-100. The Compass renders the band word, never the score."}},
+
+    {"id": 110, "question": "It says 0 red flags. Does that mean nothing's wrong?",
+     "answer": "It means nothing came out low enough to be treated as urgent. That is genuinely good news, but it is not the same as nothing being wrong.\n\nA red flag is Ally saying one area is bad enough that it is probably holding the others back. Zero of them means no area crossed that line.\n\nYou can still have plenty to work on. Your report will name the root cause and your priority actions whether or not anything was flagged.\n\nSo read zero red flags as \"nothing is on fire\", not as \"nothing to do\".",
+     "answer_type": "walked", "status": "answered", "links": ["/app", "/app/report"],
+     "verified": {"walked_on": "2026-09-05", "how": "Red flags on the Compass is a count of pillars below their own threshold. The subtext reads 'None detected' at zero and 'Needs attention' otherwise."}},
+
+    {"id": 111, "question": "What is Journey? Why is it locked?",
+     "answer": "It is not locked — it is not built yet, and the page says so.\n\nJourney is meant to hold the path that shaped how you build: the decisions, lessons and turning points Ally picks up from your story over time. Open it today and you get an honest \"coming soon\" rather than a locked door.\n\nSo there is nothing you need to do to unlock it, and no plan that includes it yet. It will appear when it is ready.\n\nIn the meantime, your report and your Founder DNA page cover most of what Journey will eventually show.",
+     "answer_type": "walked", "status": "answered", "links": ["/app/journey", "/app/founder-dna", "/app/report"],
+     "verified": {"walked_on": "2026-09-05", "how": "The nav entry is flagged coming-soon rather than report-gated, and the page renders its own 'Coming soon' panel. Nothing gates it on a plan or a report."}},
+
+    {"id": 112, "question": "How do I unlock achievements?",
+     "answer": "By talking to Ally. Achievements open up after 15 messages.\n\nThe page shows you exactly where you are — for example \"You're at 6 of 15 messages\" — with a progress bar, so you are never guessing.\n\nIt works that way because achievements come from what Ally learns about you in conversation. Before there is enough of your story, they would not mean anything.\n\nThere is no payment involved and nothing to claim. Just carry on using Ally and it opens by itself.",
+     "answer_type": "walked", "status": "answered", "links": ["/app/achievements", "/app/ally-chat"],
+     "verified": {"walked_on": "2026-09-05", "how": "The unlock threshold is 15 messages, enforced server-side rather than in the UI. The gate renders live progress against it."}},
+
+    {"id": 113, "question": "My clarity number changed and I didn't do anything. Why?",
+     "answer": "Your band should not change on its own. It comes from your diagnosis, and your diagnosis does not get re-run or re-scored in the background.\n\nTwo things on the Compass do move without you doing anything to your diagnosis: the report count, and the number of sessions underneath it.\n\nIf the band itself genuinely changed — say from Developing to Needs Attention — that is not expected, and we would want to know. Please tell support what it said before and what it says now.\n\nEverything else on the page reflects the day you did your diagnosis.",
+     "answer_type": "walked", "status": "answered", "links": ["/app", "/app/help"],
+     "verified": {"walked_on": "2026-09-05", "how": "The Compass reads the stored report. Reports are frozen snapshots and nothing recomputes them, so the band is fixed while counts can change."}},
+
+    {"id": 114, "question": "What is \"AI sessions\" counting?",
+     "answer": "There is no AI sessions reading on the Compass, so this may be from an older version or another product — sorry for the confusion.\n\nWhat you will see is a Reports count, with the number of completed sessions written underneath it. A session means one full run of the diagnosis, so for most founders that number is one.\n\nThe other three readings are your overall band, how many areas Ally scored, and how many were flagged.\n\nIf you are looking at something that does say \"AI sessions\", please send us a screenshot — we would like to see where it is.",
+     "answer_type": "walked", "status": "answered", "links": ["/app", "/app/help"],
+     "verified": {"walked_on": "2026-09-05", "how": "'AI Sessions' exists only in the frontend's mock-data file, which no page imports for these readings. The live Compass shows Founder clarity, Dimensions scanned, Red flags and Reports."}},
+
+    {"id": 115, "question": "Do achievements get me anything, or are they just badges?",
+     "answer": "They are for you, not for us. There is no discount, no extra allowance and no unlock behind them.\n\nThey are a record of what you have actually done and what Ally has learned about you along the way. Founder work is long and quiet, and it is easy to forget how far you have come — that is what they are for.\n\nYou can add your own as well, and edit or remove any of them.\n\nIf you would rather they did something more, tell us. Nobody has decided that they never will.",
+     "answer_type": "walked", "status": "answered", "links": ["/app/achievements", "/app/feedback"],
+     "verified": {"walked_on": "2026-09-05", "how": "Achievements are founder-editable records with create, edit and delete. Nothing in the plan catalog or the feature gates references them."}},
+
+    {"id": 116, "question": "Is any of this live, or is it all from the day I did the diagnosis?",
+     "answer": "Mostly from the day you did your diagnosis, and the page says so — three of the four readings carry the line \"From your latest diagnosis\".\n\nWhat does move: your report count, your completed sessions, your Vision and goals when you edit them, and your tasks in Plan Your Day.\n\nWhat does not move: your band, the areas scored, and the red flags. Those are fixed to your diagnosis, and there is one diagnosis per account.\n\nSo treat the Compass as a summary you can come back to, and Plan Your Day as the part that tracks what you are doing now.",
+     "answer_type": "walked", "status": "answered", "links": ["/app", "/app/plan", "/app/goals"],
+     "verified": {"walked_on": "2026-09-05", "how": "Three readings render the subtext 'From your latest diagnosis'. The north-star panel reads live Vision and goals. Reports and sessions come from live counts."}}
+  ]
+}

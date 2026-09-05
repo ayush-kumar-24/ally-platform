@@ -1,57 +1,21 @@
-"""Admin & Operations module (Phase 12) -- an independent, repository-driven admin
-backend for internal GoXL operators.
+"""Admin & Operations.
 
-Composes existing data through read-only seams (AdminRepository) and owns only admin
-records (announcements, append-only audit). Role-gated (READ_ONLY / OPERATOR / ADMIN)
-via an email allowlist over the existing auth. Deterministic + testable offline
-(in-memory repos); a production adapter reads the DB + ai_chat stores.
+Everything here is the real, DB-backed Admin Panel -- `panel_service.py` (RBAC,
+users, credits, subscriptions, privacy requests, feedback, dashboard insights,
+health), `rbac.py` (PanelRole/Capability), `panel_audit.py` (persistent audit
+log), `users_db_repository.py`, `broadcasts.py`, `feature_flags.py`,
+`conversations.py`, `insights.py`, `health.py`.
 
-Modifies no existing module.
+The Phase 12 module that used to live here -- AdminService, an in-memory
+AdminRepository/AnnouncementRepository/AuditRepository, AdminUser/AdminRole --
+was a separate, parallel admin backend that returned placeholder data (nothing
+in it was DB-backed, so nothing it showed ever reflected reality) and every one
+of its capabilities was superseded by the panel above (see the Admin Panel
+Proposal's Phase 5). Removed entirely rather than left dead: the frontend
+(frontend/src/services/admin.js) never called any of its endpoints, confirmed
+before deletion.
+
+Nothing imports the bare `app.admin` package -- every real caller imports the
+specific submodule it needs (`app.admin.panel_service`, `app.admin.rbac`,
+etc.), so this file re-exports nothing.
 """
-
-from app.admin.audit import AuditRepository, InMemoryAuditRepository
-from app.admin.errors import (
-    AdminError,
-    AdminForbiddenError,
-    AdminFounderNotFoundError,
-    InvalidAnnouncementError,
-    InvalidSearchError,
-    UnauthorizedAdminError,
-)
-from app.admin.models import (
-    AdminRole,
-    AdminUser,
-    Announcement,
-    AuditEvent,
-    ConversationSummary,
-    FeedbackSummary,
-    FounderStatus,
-    FounderSummary,
-    SystemStats,
-    UsageMetrics,
-)
-from app.admin.permissions import AdminPermissionService, AdminRegistry
-from app.admin.repository import (
-    AdminRepository,
-    AnnouncementRepository,
-    InMemoryAdminRepository,
-    InMemoryAnnouncementRepository,
-)
-from app.admin.service import AdminService
-
-__all__ = [
-    # models
-    "AdminUser", "AdminRole", "FounderStatus", "FounderSummary", "ConversationSummary",
-    "FeedbackSummary", "UsageMetrics", "SystemStats", "Announcement", "AuditEvent",
-    # permissions
-    "AdminPermissionService", "AdminRegistry",
-    # repositories
-    "AdminRepository", "InMemoryAdminRepository",
-    "AnnouncementRepository", "InMemoryAnnouncementRepository",
-    "AuditRepository", "InMemoryAuditRepository",
-    # service
-    "AdminService",
-    # errors
-    "AdminError", "UnauthorizedAdminError", "AdminForbiddenError",
-    "AdminFounderNotFoundError", "InvalidAnnouncementError", "InvalidSearchError",
-]

@@ -991,10 +991,18 @@ export default function AllyChat() {
                 label={voice.status === 'transcribing' ? 'Transcribing…' : 'Listening…'}
               />
             )}
+            {/* Documents only. Images upload happily and Ally cannot read a
+                word of them -- LLMMessage.content is a plain string, so there
+                is no way to send a picture to the model at all. Offering them
+                in the picker produced the worst version of that: a successful
+                upload, a file chip in the thread, and then an assistant that
+                could not see it. Restore image types in the same change that
+                makes the transport multimodal. */}
             <input
               ref={fileInputRef}
               type="file"
-              aria-label="Attach a file or image"
+              accept=".pdf,.docx,.txt,.md,.csv,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,text/csv"
+              aria-label="Attach a document"
               tabIndex={-1}
               style={{ display: 'none' }}
               onChange={handleFileSelected}
@@ -1002,8 +1010,8 @@ export default function AllyChat() {
             <button
               className="ci-btn"
               type="button"
-              title="Attach a file or image"
-              aria-label="Attach a file or image"
+              title="Attach a document (PDF, Word, text, Markdown or CSV)"
+              aria-label="Attach a document"
               disabled={uploading || sending}
               onClick={handleAttachClick}
             >

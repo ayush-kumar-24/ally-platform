@@ -9,10 +9,14 @@
  *
  * Answers are checked against what the code actually does, not what the
  * product is meant to do eventually. Four of the originals were wrong -- the
- * worst claimed Pro "unlocks unlimited diagnoses", while every tier including
- * Pro is capped at diagnosis_lifetime_limit = 1 (backend/app/plans/catalog.py),
- * and described a two-tier ladder when Starter exists. A support page that
- * overstates a paid plan is worse than no support page.
+ * worst claimed Pro "unlocks unlimited diagnoses", while every tier is capped
+ * at diagnosis_lifetime_limit = 1 (backend/app/plans/catalog.py), and
+ * described a two-tier ladder that no longer matched the catalog. A support
+ * page that overstates a paid plan is worse than no support page.
+ *
+ * The plan answers below track MOCK_PLANS and COMPARE_ROWS (data/mockData.js,
+ * pages/Billing.jsx). If the ladder changes again, they change here too --
+ * there is no Free tier any more, and chat is a paid feature.
  *
  * `keywords` exist for the search only: the words a founder actually types
  * ("password", "stuck", "refund") are often in neither the question nor the
@@ -27,12 +31,12 @@ export const FAQS = [
   },
   {
     q: 'How do plans work?',
-    a: 'There are three: Free (₹0), Starter (₹450/month) and Pro (₹999/month). All three include the diagnosis, Founder DNA, Business DNA, reports and next steps. What changes is daily chat allowance (Free 8,000 tokens during the testing phase, Starter 6,000, Pro 8,000), free discovery calls per month (Free none, Starter 1, Pro 2), and voice inside Ally Chat plus Plan Your Day, which are paid features.',
-    keywords: 'pricing price cost subscription tiers free starter pro difference compare',
+    a: 'There are three: Starter (₹199/month), Plus (₹450/month) and Pro (₹999/month). All three include one adaptive diagnosis, your Clarity Report, voice in the diagnosis, and booking a discovery call at ₹300 per 30 minutes. Plus adds chat with Ally (3,500 tokens a day), voice in chat, your next 3 steps, Goals and Plan Your Day. Pro raises chat to 8,000 tokens a day and adds Ally recommending your steps, Vision, discussing the knowledge base, email reminders, Know My Energy and priority call booking.',
+    keywords: 'pricing price cost subscription tiers basic starter plus pro difference compare free',
   },
   {
     q: 'How many diagnoses do I get?',
-    a: 'One full diagnosis per account, on every plan including Pro — it is a deep one-time mapping, not something to re-run weekly. Upgrading raises your chat allowance and calls, not the diagnosis count. If you genuinely need a second run, contact support and we will look at it case by case.',
+    a: 'One full diagnosis per account, on every plan including Pro — it is a deep one-time mapping, not something to re-run weekly. Upgrading raises your chat allowance and unlocks features, not the diagnosis count. If you genuinely need a second run, contact support and we will look at it case by case.',
     keywords: 'again retake repeat second another limit once',
   },
   {
@@ -88,7 +92,7 @@ export const FAQS = [
   },
   {
     q: 'I have run out of chat for today',
-    a: 'Chat is metered by a daily token allowance that resets each day, so waiting until tomorrow restores it. Upgrading raises the allowance (see "How do plans work?"); it does not change the diagnosis, which every plan includes once.',
+    a: 'Chat is metered by a daily token allowance that resets each day, so waiting until tomorrow restores it — Plus gives 3,500 tokens a day and Pro 8,000. Upgrading raises the allowance; it does not change the diagnosis, which every plan includes once.',
     keywords: 'limit quota tokens allowance exhausted used up daily reset chat blocked',
   },
   {
@@ -103,7 +107,7 @@ export const FAQS = [
   },
   {
     q: 'Can I talk to a person?',
-    a: 'Yes. Use "Schedule assistance" on this page to book a discovery call — Starter includes one a month and Pro two — or email info@goxl.in and we will reply within one working day (Mon–Fri, 9 AM – 6 PM IST).',
+    a: 'Yes. Use "Schedule assistance" on this page to book a discovery call — every plan can book one at ₹300 per 30 minutes, and Pro gets priority on slots — or email info@goxl.in and we will reply within one working day (Mon–Fri, 9 AM – 6 PM IST).',
     keywords: 'human call phone speak team contact support real person meeting',
   },
 ];

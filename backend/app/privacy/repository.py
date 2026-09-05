@@ -19,8 +19,13 @@ from app.privacy.models import ExportBundle, PrivacyAction, PrivacyState
 
 class PrivacyRepository(abc.ABC):
     @abc.abstractmethod
-    def gather_export(self, founder_id: int, generated_at: datetime) -> ExportBundle:
-        """Assemble everything held about the founder."""
+    def gather_export(self, founder_id: int, generated_at: datetime,
+                      kind: str = "access") -> ExportBundle:
+        """Assemble what is held about the founder.
+
+        kind="access" is everything; kind="portability" is only the sections the
+        founder themselves provided.
+        """
 
     @abc.abstractmethod
     def get_state(self, founder_id: int) -> PrivacyState:
@@ -86,10 +91,11 @@ class InMemoryPrivacyRepository(PrivacyRepository):
         with self._lock:
             self._export = sections
 
-    def gather_export(self, founder_id: int, generated_at: datetime) -> ExportBundle:
+    def gather_export(self, founder_id: int, generated_at: datetime,
+                      kind: str = "access") -> ExportBundle:
         with self._lock:
             return ExportBundle(founder_id=founder_id, generated_at=generated_at,
-                                sections=dict(self._export))
+                                sections=dict(self._export), kind=kind)
 
     def get_state(self, founder_id: int) -> PrivacyState:
         with self._lock:

@@ -5,7 +5,7 @@ from itertools import count
 
 import pytest
 
-from app.admin.errors import AdminFounderNotFoundError, AdminForbiddenError
+from app.admin.errors import AdminFounderNotFoundError, AdminForbiddenError, InvalidSearchError
 from app.admin.panel_audit import AuditRecorder, InMemoryPanelAuditRepository
 from app.admin.panel_service import AdminPanelService
 from app.admin.rbac import Capability, PanelRole, capabilities_for, has_capability
@@ -222,6 +222,61 @@ def test_page_size_is_capped():
 def test_support_can_list_users():
     s, _, _ = build(_many())
     assert s.list_users(SUPPORT).total == 4
+
+
+# Dashboard metrics (Phase 2: Live now / Today / 7 days): AdminPanelService
+# used to carry a `dashboard_metrics` method + `insights` collaborator, but
+# nothing ever called it through the service -- GET /admin/metrics
+# (panel_router_v2.py) reads InsightsService directly, and is the only
+# caller (see container.py's insights_service()'s own note). Removed rather
+# than kept as a second, dead path to the same cards (Admin Panel Proposal
+# Phase 5); test_admin_insights.py still covers the metrics themselves.
+
+
+# --- health page (Phase 3) ---------------------------------------------------
+
+class _FakeHealth:
+    def __init__(self, report):
+        self._report = report
+        self.called = False
+
+    def check(self):
+        self.called = True
+        return self._report
+
+
+def test_system_health_delegates_to_the_checker():
+    from app.admin.panel_service import AdminPanelService
+    fake = _FakeHealth("a-report")
+    repo = InMemoryAdminUserRepository([user(1)])
+    credits = build_credit_service(InMemoryCreditRepository({1: 100}), clock=lambda: T0)
+    s = AdminPanelService(
+        repo, credits=credits,
+        audit=AuditRecorder(InMemoryPanelAuditRepository(), clock=lambda: T0,
+                            id_factory=lambda: "e-1"),
+        clock=lambda: T0, health=fake,
+    )
+    assert s.system_health(SUPER) == "a-report"
+    assert fake.called is True
+
+
+def test_system_health_readable_by_support():
+    from app.admin.panel_service import AdminPanelService
+    repo = InMemoryAdminUserRepository([user(1)])
+    credits = build_credit_service(InMemoryCreditRepository({1: 100}), clock=lambda: T0)
+    s = AdminPanelService(
+        repo, credits=credits,
+        audit=AuditRecorder(InMemoryPanelAuditRepository(), clock=lambda: T0,
+                            id_factory=lambda: "e-1"),
+        clock=lambda: T0, health=_FakeHealth([]),
+    )
+    s.system_health(SUPPORT)  # must not raise
+
+
+def test_system_health_unconfigured_reports_rather_than_crashes():
+    s, _, _ = build()  # no health collaborator
+    with pytest.raises(InvalidSearchError):
+        s.system_health(SUPER)
 
 
 # --- audit ------------------------------------------------------------------

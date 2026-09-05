@@ -60,12 +60,24 @@ class PrivacyService:
 
     # --- Art 15 + 20: access / portability --------------------------------
 
-    def export_data(self, founder_id: int) -> tuple[ExportBundle, PrivacyAction]:
-        """Assemble the founder's data now and log the disclosure."""
+    def export_data(self, founder_id: int,
+                    kind: str = "access") -> tuple[ExportBundle, PrivacyAction]:
+        """Assemble the founder's data now and log the disclosure.
+
+        `kind` picks which of the two rights is being exercised: "access" hands
+        back everything held, "portability" only what the founder provided. Both
+        were previously the same call logged as `portability`, so a right-of-access
+        download was recorded in the audit trail as a portability request.
+        """
+        if kind not in ("access", "portability"):
+            kind = "access"
         now = self._now()
-        bundle = self.repository.gather_export(founder_id, now)
+        bundle = self.repository.gather_export(founder_id, now, kind=kind)
         action = self.repository.log_request(
-            founder_id, request_type="portability", details="Self-service export downloaded",
+            founder_id,
+            request_type="portability" if kind == "portability" else "download_data",
+            details=("Self-service portability export downloaded" if kind == "portability"
+                     else "Self-service data export downloaded"),
             at=now, due_by=None)
         return bundle, action
 
@@ -100,7 +112,7 @@ class PrivacyService:
         new_state = self.repository.schedule_deletion(
             founder_id, requested_at=now, scheduled_at=scheduled)
         action = self.repository.log_request(
-            founder_id, request_type="withdraw_consent",
+            founder_id, request_type="delete_account",
             details=f"Account erasure requested; scheduled for {scheduled:%Y-%m-%d}",
             at=now, due_by=scheduled)
         return new_state, action
@@ -121,7 +133,7 @@ class PrivacyService:
         now = self._now()
         state = self.repository.cancel_deletion(founder_id)
         action = self.repository.log_request(
-            founder_id, request_type="withdraw_consent",
+            founder_id, request_type="cancel_deletion",
             details="Account deletion cancelled by the founder",
             at=now, due_by=None)
         return state, action

@@ -140,3 +140,39 @@ def backfill_report_pdfs(
     from app.api.v1.reports.pdf_delivery import backfill_pending_pdfs
 
     return backfill_pending_pdfs(db, limit=limit)
+
+
+@router.post(
+    "/check-health",
+    summary="Run the system health check and alert if it just turned red",
+)
+def check_health(
+    x_internal_secret: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Admin Panel Proposal Phase 3's other half: `GET /admin/health` (the
+    panel page) is pull-based and never itself alerts anyone -- this is the
+    push side. Same shape and same auth as the sweeps above: shared secret,
+    callable by whatever cron/EventBridge/pg_cron already runs them.
+
+    Alerts only on a green -> red transition (see HealthAlertService), so
+    running this every few minutes during a real outage sends one email, not
+    one every few minutes -- and the response always reports the true
+    current status regardless of whether an alert fired.
+    """
+    _verify_secret(x_internal_secret)
+
+    from app.core.container import container
+
+    report = container.health_checker(db).check()
+    alerted = container.health_alert_service().notify(report)
+
+    return {
+        "status": report.status.value,
+        "components": [
+            {"key": c.key, "label": c.label, "status": c.status.value, "detail": c.detail}
+            for c in report.components
+        ],
+        "checked_at": report.checked_at.isoformat(),
+        "alert_sent": alerted,
+    }

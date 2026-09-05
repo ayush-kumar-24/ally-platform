@@ -140,8 +140,12 @@ def attachments_block(entries: tuple[tuple[str, str, int, str | None, object], .
             )
         else:
             lines.append(
-                f"- {filename} ({attachment_type}, {kb} KB) -- uploaded, but its "
-                "contents cannot be read yet; you only know it exists."
+                f"- {filename} ({attachment_type}, {kb} KB) -- uploaded, but you "
+                "cannot read its contents; you only know it exists. Say so plainly "
+                "and move on. Do NOT ask the founder to upload it again or send a "
+                "clearer copy: nothing about this file can be read here, so a "
+                "second upload costs them their allowance and changes nothing. If "
+                "its contents matter, ask them to paste the relevant part as text."
             )
     return "\n".join(lines)
 

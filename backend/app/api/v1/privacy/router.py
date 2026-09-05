@@ -12,7 +12,9 @@ Every endpoint delegates to PrivacyService; no business logic here.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from typing import Literal
+
+from fastapi import APIRouter, Depends, Query
 
 from app.api.v1.privacy.dependencies import get_current_founder_id, get_privacy_service
 from app.api.v1.privacy.responses import (
@@ -35,12 +37,17 @@ class ConfirmationRequiredError(PrivacyError):
 
 
 @router.get("/export", response_model=ExportResponse,
-            summary="Download everything Ally holds about you (access + portability)")
+            summary="Download your data -- everything held (access), or only what you provided (portability)")
 def export_data(
+    kind: Literal["access", "portability"] = Query(
+        "access",
+        description=("access: everything Ally holds, including its own analysis of you. "
+                     "portability: only the data you provided, for taking to another service."),
+    ),
     founder_id: int = Depends(get_current_founder_id),
     service: PrivacyService = Depends(get_privacy_service),
 ) -> ExportResponse:
-    bundle, action = service.export_data(founder_id)
+    bundle, action = service.export_data(founder_id, kind=kind)
     return ExportResponse.from_domain(bundle, action)
 
 
@@ -68,7 +75,8 @@ def delete_account(
         state=PrivacyStateResponse.from_domain(state),
         request=PrivacyActionResponse.from_domain(action),
         message=(f"Account deletion scheduled for {state.deletion_scheduled_at:%d %b %Y}. "
-                 f"You have {DELETION_GRACE_DAYS} days to contact support if this was a mistake."),
+                 f"You have {DELETION_GRACE_DAYS} days to change your mind -- sign in again "
+                 f"before then and you can cancel it yourself."),
     )
 
 

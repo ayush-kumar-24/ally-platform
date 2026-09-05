@@ -39,7 +39,23 @@ def test_export_200(client):
     body = r.json()
     assert body["founder_id"] == 1 and body["record_count"] == 2
     assert set(body["sections"]) == {"founder_profile", "plans"}
+    assert body["request"]["request_type"] == "download_data"
+    assert body["kind"] == "access"
+
+
+def test_export_portability_is_a_different_request(client):
+    """?kind=portability exercises Art 20, not Art 15. The two buttons in the
+    Privacy Center used to call one endpoint and download identical files."""
+    r = client.http.get(f"{BASE}/export?kind=portability")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["kind"] == "portability"
     assert body["request"]["request_type"] == "portability"
+
+
+def test_export_rejects_an_unknown_kind(client):
+    r = client.http.get(f"{BASE}/export?kind=everything")
+    assert r.status_code == 422
 
 
 # --- DELETE /privacy/account ------------------------------------------------
@@ -116,7 +132,7 @@ def test_status_lists_history(client):
     body = client.http.get(f"{BASE}/status").json()
     assert body["total"] == 2
     assert body["state"]["processing_restricted"] is True
-    assert [r["request_type"] for r in body["requests"]] == ["restrict_processing", "portability"]
+    assert [r["request_type"] for r in body["requests"]] == ["restrict_processing", "download_data"]
 
 
 def test_founder_isolation(client):

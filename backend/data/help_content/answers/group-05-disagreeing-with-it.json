@@ -1,0 +1,65 @@
+{
+  "schema_version": "1.0",
+  "file": "group-05-disagreeing-with-it",
+  "group": "disagreeing-with-it",
+  "group_number": 5,
+  "group_title": "Disagreeing with it",
+  "question_bank": "Founder Question Bank v3 — group 5 (questions 073-078)",
+  "created": "2026-09-05",
+  "content_rules": {
+    "voice": "Very simple, easy English. Short sentences. Common everyday words. No idioms. Friendly and warm, but plain. Never make the founder feel silly for asking.",
+    "answer_length": "About 120 words maximum. Short paragraphs with a blank line between them.",
+    "stance": "A founder pushing back is a good outcome, not a problem to manage. Never defend the finding reflexively, never argue, always give a real route to a person. These are the answers most likely to decide whether someone stays."
+  },
+  "walk_log": {
+    "walked_on": "2026-09-05",
+    "environment": "local dev build against the production Supabase database",
+    "observed": [
+      "Every report ends with a 'Was this report useful?' prompt — a 1-5 rating with optional words. Re-answering updates the earlier answer rather than adding a second one.",
+      "The Feedback page offers five topics: Something is broken, I have an idea, Something confused me, Something worked well, Something else.",
+      "Feedback lands in the founder feedback table and surfaces in the admin panel, so a person does see it.",
+      "Factual corrections have a separate route: Profile > Privacy Center > Request data correction, which creates a reviewed request.",
+      "Help & Support gives info@goxl.in, hours Mon-Fri 9am-6pm IST, and states the aim of replying within one working day.",
+      "Discovery calls are booked from Help & Support or the Discovery call page."
+    ],
+    "deliberately_vague": "None of these answers states how many discovery calls a plan includes. Plan entitlements are changing with the move to the Rs 199 entry tier, so they are left to group 12 and written after pricing settles."
+  },
+  "answers": [
+    {"id": 73, "question": "I don't agree with what it says about me.",
+     "answer": "That is a fair thing to say, and we would much rather you said it to us than closed the tab.\n\nAlly works from one conversation. It can read you wrongly, especially if you were short of time or holding something back that day.\n\nTwo things help. At the end of your report there is \"Was this report useful?\" — say there what did not fit. And \"Discuss this with Ally\" lets you push back directly and ask why it reached that conclusion.\n\nIf it still feels wrong, tell us on the Feedback page. A founder saying \"this is not me\" is one of the most useful things we get.",
+     "answer_type": "walked", "status": "answered",
+     "links": ["/app/report", "/app/ally-chat", "/app/feedback"],
+     "verified": {"walked_on": "2026-09-05", "how": "Confirmed the rating prompt at the foot of a real report, the 'Discuss this with Ally' button, and that feedback reaches the admin queue."},
+     "note": "The wider question of how firmly we defend a finding is still open with the team (listed against question 64). This answer deliberately takes no position on that — it only gives the founder real routes."},
+
+    {"id": 74, "question": "This is factually wrong about my business. Fix it.",
+     "answer": "There are two different things here, and they take different routes.\n\nIf a fact about you is wrong — your name, your stage, something in your profile — go to Profile, then Privacy Center, and use \"Request data correction\". That reaches a person.\n\nIf it is the finding you disagree with rather than a fact, that is not a correction, it is a disagreement — and it is just as welcome. Use \"Was this report useful?\" at the end of your report, or the Feedback page.\n\nOne thing to know: your report is fixed at the day it was made, so a correction will not rewrite it.",
+     "answer_type": "walked", "status": "answered",
+     "links": ["/app/profile", "/app/report", "/app/feedback"],
+     "verified": {"walked_on": "2026-09-05", "how": "'Request data correction' is one of the seven Privacy Center actions and creates a reviewed request. Reports are stored as frozen snapshots and are not regenerated."}},
+
+    {"id": 75, "question": "It said something harsh. Is that deliberate?",
+     "answer": "Direct, yes. Harsh, no — and if it landed as harsh, we would want to know.\n\nAlly is built to say the real thing rather than the comfortable thing. A diagnosis that avoids the difficult part is not much use to anyone.\n\nBut there is a line between direct and unkind, and Ally is meant to stay on the right side of it. If something felt like a judgement on you rather than a read of your situation, please tell us on the Feedback page — \"Something confused me\" or \"Something else\" both work.\n\nIt is describing a moment, not deciding who you are.",
+     "answer_type": "walked", "status": "answered",
+     "links": ["/app/feedback"],
+     "verified": {"walked_on": "2026-09-05", "how": "Feedback topics confirmed on the Feedback page. Report tone shifts by session state, and under distress the report leads with acknowledgement before any business content."}},
+
+    {"id": 76, "question": "Can I get a second opinion from an actual human?",
+     "answer": "Yes. That is what a discovery call is for.\n\nYou can book one from Help & Support, or from the Discovery call page. It is a conversation with someone from our team who can go through your report with you and take your disagreement seriously.\n\nHow many calls are included depends on your plan.\n\nIf you only want a quick answer rather than a call, the Feedback page or a message to support works too, and a person reads those.",
+     "answer_type": "walked", "status": "answered",
+     "links": ["/app/discovery-call", "/app/help", "/app/feedback"],
+     "verified": {"walked_on": "2026-09-05", "how": "Booking is reachable from Help & Support and from the Discovery call page. Call allowances deliberately not stated here — they change with the new pricing."}},
+
+    {"id": 77, "question": "Who do I complain to if the report is bad?",
+     "answer": "Us, directly — and it does reach a person.\n\nThe quickest way is Help & Support, then \"Message support\". You can also use the Feedback page and pick \"Something else\".\n\nWe reply by email, usually within one working day. Our hours are Monday to Friday, 9am to 6pm IST.\n\nPlease include what the report said and what you think is wrong. That is far more useful to us than a rating, and complaints about findings get read carefully — they are how we learn the method is off.",
+     "answer_type": "walked", "status": "answered",
+     "links": ["/app/help", "/app/feedback"],
+     "verified": {"walked_on": "2026-09-05", "how": "Help & Support lists info@goxl.in, Mon-Fri 9am-6pm IST, and states the aim of a reply within one working day. Support messages post through the same pipeline as feedback and are tagged so the team can tell them apart."}},
+
+    {"id": 78, "question": "I rushed my answers and the report shows it. Can I redo it?",
+     "answer": "Not at the moment, and we know that is frustrating.\n\nThere is one diagnosis per account, so it cannot be run again today. Being able to redo it when your business stage changes is something we intend to add, but it is not available yet.\n\nWhat you can do now is open \"Discuss this with Ally\" from your report and give it the fuller answer you did not have time for. Ally will work with what you tell it there, even though the report itself will not change.\n\nIf the report is badly off because of it, contact support and we will look at it with you.",
+     "answer_type": "walked", "status": "answered",
+     "links": ["/app/report", "/app/ally-chat", "/app/help"],
+     "verified": {"walked_on": "2026-09-05", "how": "Agreed position: one completed diagnosis per account on every plan; re-diagnosis at a stage change is intended but unbuilt. Chat carries the founder's report and memory as context."}}
+  ]
+}

@@ -1,0 +1,667 @@
+{
+  "schema_version": "1.0",
+  "file": "account-settings-privacy",
+  "groups": [
+    "account-and-access",
+    "settings-and-preferences",
+    "data-rights"
+  ],
+  "question_bank": "Founder Question Bank v3 — groups 16, 22, 23 (questions 195-203, 257-279)",
+  "created": "2026-09-04",
+  "content_rules": {
+    "no_answer_from_memory": "Every answer is produced by performing the steps in `test` against production Ally. Nothing is written from source code, documentation, or recall. The live FAQ is wrong today because it was written from what was true at the time and never re-checked.",
+    "answer_length": "About 120 words maximum. Use short paragraphs with a blank line between them so the answer is easy to scan.",
+    "answers_point_somewhere": "Every answer names the destination in the product, as a link, not as prose describing where to click.",
+    "refuse_rather_than_improvise": "If the walk finds no answer, set status to `product_gap` and say so plainly. Never describe a feature that does not exist.",
+    "vocabulary": "Use the product's words, not the landing page's. Frameworks and Vision, never 'knowledge base' or 'vision board'. Eight stages, not four groups.",
+    "public_figures": "Only figures published on join.goxlally.ai may appear in an answer. Never quote a database count to a founder.",
+    "privacy_promise": "The approved wording is: 'Your data is encrypted, private, and never sold or shared with other founders.' Do not write 'accessible only to you'.",
+    "voice": "Very simple, easy English. Every founder must understand it, including those who do not read English quickly. Short sentences. Common everyday words. No idioms, no phrases like 'chase you' or 'keep an eye on'. No long or formal words. Friendly and warm, but plain. Say 'not yet, sorry' rather than 'this is not supported'. Never sound like an instruction manual and never make the founder feel silly for asking."
+  },
+  "status_values": {
+    "needs_walk": "Not yet tested. Answer is null until someone performs `test` on production.",
+    "answered": "Walked, answer written, `verified` populated.",
+    "product_gap": "Walked, and the honest answer is that the product does not do this. Answer says so and escalates.",
+    "blocked": "Cannot be answered until an open decision is made. `blocked_by` names it."
+  },
+  "answer_types": {
+    "walked": "Answer comes from performing the steps in production.",
+    "policy": "Answer is a stated position, not a product behaviour. Comes from the decisions log.",
+    "generated": "Answer must be rendered from the plan catalog at build time, never hand-written."
+  },
+  "test_accounts_needed": [
+    "One Free-tier founder with a completed diagnosis (most questions here).",
+    "One disposable Free account for the destructive walks — 276, 277 and the deletion path in 207/213. Do not run those on an account you need again."
+  ],
+  "answers": [
+    {
+      "id": 195,
+      "group": "account-and-access",
+      "question": "How do I change my profile photo?",
+      "answer": null,
+      "answer_type": "walked",
+      "status": "needs_walk",
+      "test": "Profile > Founder Identity. Upload a photo and save. Record: accepted file types, size limit, whether it appears immediately in the sidebar avatar, and what the error says when a file is rejected. Question 219 reports this failing in testing — capture the exact failure if it reproduces.",
+      "links": [
+        "/app/profile"
+      ],
+      "related": [
+        219
+      ],
+      "verified": null
+    },
+    {
+      "id": 196,
+      "group": "account-and-access",
+      "question": "Can I change the email on my account?",
+      "answer": null,
+      "answer_type": "walked",
+      "status": "needs_walk",
+      "test": "Profile > Founder Identity > Edit. Change the email and save. Critical: sign-in is by emailed code, so establish whether the NEW address receives the next sign-in code, or the old one still does. If changing the email would lock a founder out, that is the answer and it is urgent.",
+      "links": [
+        "/app/profile"
+      ],
+      "related": [
+        249,
+        252
+      ],
+      "verified": null
+    },
+    {
+      "id": 197,
+      "group": "account-and-access",
+      "question": "I can't log in. I've forgotten my password.",
+      "answer": null,
+      "answer_type": "walked",
+      "status": "needs_walk",
+      "test": "There is no password — sign-in is an emailed code. Walk the sign-in screen and record exactly what a founder sees, so the answer can correct the assumption in the question itself. This answer must work for someone who is signed OUT, so it cannot depend on anything behind the login.",
+      "links": [
+        "/guided/login"
+      ],
+      "related": [
+        249,
+        250,
+        251
+      ],
+      "verified": null,
+      "finding": "CANNOT BE TESTED LOCALLY. The local build has no Supabase, so the sign-in screen shows 'Continue (local development)' instead of the real flow. Production uses Supabase with an emailed code and Google/LinkedIn. Settings report password_set=false and login_method=social. This answer must be walked on the deployed site, signed out."
+    },
+    {
+      "id": 198,
+      "group": "account-and-access",
+      "question": "Can I use the same account on my phone and my laptop?",
+      "answer": null,
+      "answer_type": "walked",
+      "status": "needs_walk",
+      "test": "Sign in on a second device while the first session is open. Record whether both stay signed in or the first is ended, and whether an in-progress diagnosis is still resumable from the second device.",
+      "links": [],
+      "related": [
+        199,
+        202,
+        256
+      ],
+      "verified": null,
+      "finding": "CANNOT BE TESTED LOCALLY. Session behaviour differs under the dev auth provider. Needs the deployed site."
+    },
+    {
+      "id": 199,
+      "group": "account-and-access",
+      "question": "I share a laptop. How do I sign out everywhere?",
+      "answer": null,
+      "answer_type": "walked",
+      "status": "needs_walk",
+      "test": "Profile > Account > Sign out. Then check from the second device whether that session is also ended. If Sign out only ends the current session, say so plainly and name what a founder should do instead — this is a security answer and vagueness is not acceptable in it.",
+      "links": [
+        "/app/profile"
+      ],
+      "related": [
+        198,
+        254
+      ],
+      "verified": null,
+      "finding": "CANNOT BE TESTED LOCALLY. Same reason as 197/198. Needs the deployed site, with two real devices."
+    },
+    {
+      "id": 200,
+      "group": "account-and-access",
+      "question": "I run two businesses. Can I have both on one account?",
+      "answer": null,
+      "answer_type": "policy",
+      "status": "blocked",
+      "blocked_by": "open-decision: team and multi-business accounts (with the team)",
+      "test": "Do not walk this to a workaround. If the answer is no, it is a stated no, not a suggestion to make a second account with a different email.",
+      "links": [],
+      "related": [
+        157,
+        201
+      ],
+      "verified": null
+    },
+    {
+      "id": 201,
+      "group": "account-and-access",
+      "question": "Can I give my cofounder access?",
+      "answer": null,
+      "answer_type": "policy",
+      "status": "blocked",
+      "blocked_by": "open-decision: team and multi-business accounts (with the team)",
+      "test": "Same as 200. Note for the decision: the diagnosis is built around one founder's DNA, so shared access is not only a billing question.",
+      "links": [],
+      "related": [
+        31,
+        157,
+        200,
+        297
+      ],
+      "verified": null
+    },
+    {
+      "id": 202,
+      "group": "account-and-access",
+      "question": "Is there a mobile app?",
+      "answer": "No app yet, but Ally works in your phone's browser.\n\nJust open the site on your phone and sign in as usual. The menu moves to a button in the top left, and the pages fit the smaller screen.\n\nLong things like your report are easier to read on a laptop, so if you have one, use it for the report and your phone for quick check-ins.\n\nWe do not have an app in the app stores yet.",
+      "answer_type": "walked",
+      "status": "answered",
+      "test": "Open production Ally on a phone browser. Record what genuinely works and what does not — the answer is 'no app, and here is how well the site works on a phone', which is more useful than a flat no. Capture anything visibly broken for question 226.",
+      "links": [],
+      "related": [
+        226,
+        298
+      ],
+      "verified": {
+        "walked_on": "2026-09-04",
+        "environment": "local dev vs production database",
+        "plan": "free"
+      }
+    },
+    {
+      "id": 203,
+      "group": "account-and-access",
+      "question": "Which browsers does this work on?",
+      "answer": null,
+      "answer_type": "walked",
+      "status": "needs_walk",
+      "test": "Walk the diagnosis and Ally Chat in Chrome, Safari and Firefox. Voice input is the likely divergence — test the microphone in each and record which combinations fail, since question 106 depends on this.",
+      "links": [],
+      "related": [
+        106,
+        26
+      ],
+      "verified": null
+    },
+    {
+      "id": 257,
+      "group": "settings-and-preferences",
+      "question": "What does the notifications toggle actually control?",
+      "answer": "That switch controls the messages you see inside Ally. Things like reminders about your tasks, replies, and updates about your report. If you turn it off, those stop showing.\n\nIt does not send you anything outside the app. Ally does not send reminder emails, and there are no phone notifications yet. So if you close Ally, you will not hear from us. The only email we send is about discovery calls.\n\nFor now, the best way to see what is due is to open Plan Your Day. We know this is missing, and we want to add it.",
+      "answer_type": "walked",
+      "status": "product_gap",
+      "test": "Profile > Preferences > Notifications. The label says 'Report updates, replies and reminders'. Turn it off and establish what actually stops. Separately confirm whether anything reaches a founder when the app is CLOSED — if nothing does, the answer must say so, because the label implies otherwise.",
+      "links": [
+        "/app/profile"
+      ],
+      "related": [
+        140,
+        262,
+        263
+      ],
+      "verified": {
+        "walked_on": "2026-09-04",
+        "environment": "local dev vs production database",
+        "plan": "free"
+      }
+    },
+    {
+      "id": 258,
+      "group": "settings-and-preferences",
+      "question": "What is \"private mode\", and what happens to my data if I leave it off?",
+      "answer": null,
+      "answer_type": "policy",
+      "status": "blocked",
+      "blocked_by": "open-decision: what private mode really turns off",
+      "test": "Do not walk this into an improvised answer. The toggle reads 'keep business data anonymised in aggregate insights', which tells a founder their data feeds aggregate insights unless they opt out. Either that is true and the answer says what it means, or the label is wrong. This is the single most trust-sensitive item in the file.",
+      "links": [
+        "/app/profile"
+      ],
+      "related": [
+        206,
+        259,
+        215
+      ],
+      "verified": null
+    },
+    {
+      "id": 259,
+      "group": "settings-and-preferences",
+      "question": "What are these \"aggregate insights\" my business is going into?",
+      "answer": null,
+      "answer_type": "policy",
+      "status": "blocked",
+      "blocked_by": "open-decision: what private mode really turns off",
+      "test": "As 258. Answer only once the position is decided.",
+      "links": [
+        "/app/profile"
+      ],
+      "related": [
+        206,
+        258
+      ],
+      "verified": null
+    },
+    {
+      "id": 260,
+      "group": "settings-and-preferences",
+      "question": "Can I choose what time Ally reminds me?",
+      "answer": "Not yet, sorry.\n\nRight now, reminders only show inside Ally when something is due or late. You cannot pick a time like 8am.\n\nWhat you can do is set a time on the task itself in Plan Your Day. Ally uses that time to know when it is due.\n\nWe have started building a reminder time setting, but there is no screen for it yet. If this would help you, please tell us. It helps us decide what to build next.",
+      "answer_type": "walked",
+      "status": "product_gap",
+      "test": "Find the reminder time control in the founder-facing UI and set it. If the setting exists in the backend but has no screen a founder can reach, that is a product_gap and the answer says the time is not yet adjustable — do not describe a control that cannot be clicked.",
+      "links": [
+        "/app/profile",
+        "/app/plan"
+      ],
+      "related": [
+        134,
+        261
+      ],
+      "verified": {
+        "walked_on": "2026-09-04",
+        "environment": "local dev vs production database",
+        "plan": "free"
+      }
+    },
+    {
+      "id": 261,
+      "group": "settings-and-preferences",
+      "question": "Can I keep goal reminders but turn task reminders off?",
+      "answer": "Not yet. Right now it is all or nothing.\n\nThe Notifications switch in your Profile turns all in-app reminders on or off together. You cannot keep goal reminders and stop task reminders.\n\nWe have built the smaller controls behind the scenes, but there is no screen for them yet.\n\nFor now, you can leave notifications on and be careful about what you add to Plan Your Day. That is where most reminders come from.",
+      "answer_type": "walked",
+      "status": "product_gap",
+      "test": "Look for separate controls for task, meeting and goal reminders. Same rule as 260: if the granularity exists only in the backend, the honest answer is that reminders are currently all-or-nothing.",
+      "links": [
+        "/app/profile"
+      ],
+      "related": [
+        134,
+        260
+      ],
+      "verified": {
+        "walked_on": "2026-09-04",
+        "environment": "local dev vs production database",
+        "plan": "free"
+      }
+    },
+    {
+      "id": 262,
+      "group": "settings-and-preferences",
+      "question": "Will Ally email me, or only notify me inside the app?",
+      "answer": "Ally mostly talks to you inside the app. It reminds you while you are using it. It does not email you about tasks, goals or your report. So if Ally is closed, you will not hear from us.\n\nThe only email we send is for discovery calls. You will get a confirmation for those.\n\nSo please do not wait for us to remind you. Open Plan Your Day and everything will be there.\n\nMany people ask for this, and we would like to add it.",
+      "answer_type": "walked",
+      "status": "product_gap",
+      "test": "Over one full day with an overdue task and notifications ON, record every email received and every in-app nudge shown. State plainly whether Ally can reach a founder when the app is closed. Founders plan around this answer.",
+      "links": [
+        "/app/plan"
+      ],
+      "related": [
+        134,
+        137,
+        257,
+        263
+      ],
+      "verified": {
+        "walked_on": "2026-09-04",
+        "environment": "local dev vs production database",
+        "plan": "free"
+      }
+    },
+    {
+      "id": 263,
+      "group": "settings-and-preferences",
+      "question": "How do I stop all email from you?",
+      "answer": "There is very little to stop.\n\nWe do not send reminder emails, report emails, or marketing emails. The only email we send is about a discovery call you booked.\n\nYou will also get your sign-in code by email. We cannot stop that one, because it is how you log in.\n\nIf you get any other email from us, please send it to us. That would be a bug, not a setting, and we would want to fix it.",
+      "answer_type": "walked",
+      "status": "product_gap",
+      "test": "Establish which emails are transactional (sign-in codes cannot be turned off without losing access) and which are optional. Check for an unsubscribe link in whatever the account actually receives. The answer must separate the two, or a founder will unsubscribe from their own sign-in.",
+      "links": [
+        "/app/profile"
+      ],
+      "related": [
+        253,
+        257,
+        262
+      ],
+      "verified": {
+        "walked_on": "2026-09-04",
+        "environment": "local dev vs production database",
+        "plan": "free"
+      }
+    },
+    {
+      "id": 264,
+      "group": "settings-and-preferences",
+      "question": "Can I replay the tour later?",
+      "answer": "Yes, any time.\n\nGo to Profile and find Product tour under Preferences, then click Replay tour.\n\nThe tour walks you through the whole app in 14 short steps. It starts at your Compass and covers each section.\n\nYou do not have to finish it. There is a Skip button on every step, and you can stop whenever you like.",
+      "answer_type": "walked",
+      "status": "answered",
+      "test": "Profile > Preferences > Product tour > Replay tour. Confirm it runs, and record whether it covers the whole app or only the page it is launched from.",
+      "links": [
+        "/app/profile"
+      ],
+      "related": [
+        7,
+        10
+      ],
+      "verified": {
+        "walked_on": "2026-09-04",
+        "environment": "local dev vs production database",
+        "plan": "free"
+      }
+    },
+    {
+      "id": 265,
+      "group": "settings-and-preferences",
+      "question": "Does reduced motion change anything besides animations?",
+      "answer": "Yes, a little more than the name suggests.\n\nWhen you turn it on, Ally stops almost all movement. Things that used to slide, fade or pop will just appear. Long smooth scrolling stops too, so pages jump straight to where you asked to go.\n\nNothing is hidden and nothing stops working. You can still reach every page and every button. Only the movement changes.\n\nAlly also follows your device setting. If you have turned on 'Reduce motion' on your phone or computer, Ally is already calm and you do not need this switch.",
+      "answer_type": "walked",
+      "status": "answered",
+      "test": "Turn it on and walk the Compass, the diagnosis and Ally Chat. Confirm nothing becomes unreachable and no content is hidden rather than merely un-animated.",
+      "links": [
+        "/app/profile"
+      ],
+      "related": [
+        266,
+        267
+      ],
+      "verified": {
+        "walked_on": "2026-09-04",
+        "environment": "local dev vs production database",
+        "plan": "free"
+      },
+      "finding": "FIXED 2026-09-04. The switch used to save a value nothing read, so it changed nothing. Now services/motion.js stamps `data-reduced-motion` on <html>, animations.css flattens animation and transition durations under it, and the splash screen, product tour and Help & Support scroll all route through one `prefersReducedMotion()` helper that returns true for EITHER the device setting or the in-app switch. Verified live: with it on, 452 animated elements all report 0.01ms and none still animate; with it off, motion returns."
+    },
+    {
+      "id": 266,
+      "group": "settings-and-preferences",
+      "question": "Can I make the text bigger?",
+      "answer": null,
+      "answer_type": "walked",
+      "status": "needs_walk",
+      "test": "There is no in-product text-size control, so test browser zoom at 150% and 200% across the Compass, the report and Ally Chat. Record where layout breaks. The answer points to browser zoom and is honest about where it stops working.",
+      "links": [],
+      "related": [
+        226,
+        267
+      ],
+      "verified": null,
+      "finding": "NOT YET TESTED. There is no text-size control in Ally, so the answer is about browser zoom. Needs a walk at 150% and 200% across the Compass, the report and Ally Chat to record where the layout breaks, before anything is promised."
+    },
+    {
+      "id": 267,
+      "group": "settings-and-preferences",
+      "question": "Does this work with a screen reader, or by keyboard only?",
+      "answer": null,
+      "answer_type": "walked",
+      "status": "needs_walk",
+      "test": "Tab through sign-in, the diagnosis and the report with a screen reader running. Record what is reachable and what is not. Do not claim accessibility support that has not been demonstrated — an overstated answer here strands the person who most needed a true one.",
+      "links": [],
+      "related": [
+        265,
+        266
+      ],
+      "verified": null,
+      "finding": "NOT YET TESTED. Must not be answered from assumption -- an overstated accessibility claim strands exactly the person who needed a true one. Needs a real keyboard and screen-reader pass on the deployed site."
+    },
+    {
+      "id": 268,
+      "group": "settings-and-preferences",
+      "question": "Is there a dark mode?",
+      "answer": "No, not yet. Sorry.\n\nAlly has only a light theme. It will not change even if your phone or laptop is set to dark mode.\n\nYou can use a browser dark mode extension, but it usually makes your report and your Compass hard to read. So we do not suggest it.\n\nIf you want dark mode, please tell us. We are counting how many people ask for it.",
+      "answer_type": "walked",
+      "status": "product_gap",
+      "test": "Set the operating system to dark and load production Ally. Record whether the product follows it, ignores it, or renders partially. If there is no dark mode, say so and do not point at a browser workaround that produces an unreadable page.",
+      "links": [],
+      "related": [],
+      "verified": {
+        "walked_on": "2026-09-04",
+        "environment": "local dev vs production database",
+        "plan": "free"
+      }
+    },
+    {
+      "id": 269,
+      "group": "data-rights",
+      "question": "What's the difference between \"download my data\" and \"export for portability\"?",
+      "answer": "They give you two different files.\n\n'Download my data' gives you everything we hold. This includes what Ally worked out about you — your reports, the root causes it found, and what it remembers.\n\n'Export for portability' gives you only what you gave us. Your answers, goals, tasks, chats and profile. This one is for taking your data to another service.\n\nBoth are JSON files. Both download right away. Both are in Profile → Privacy Center.\n\nIf you just want to see everything, choose 'Download my data'.",
+      "answer_type": "walked",
+      "status": "answered",
+      "test": "Profile > Privacy Center. Run both. Compare the two files: format, contents, and whether either is meaningfully different from the other. If they produce the same thing, the answer says so — two buttons that do one job is a fair thing for a founder to be confused by.",
+      "links": [
+        "/app/profile"
+      ],
+      "related": [
+        212,
+        270
+      ],
+      "verified": {
+        "walked_on": "2026-09-04",
+        "environment": "local dev vs production database",
+        "plan": "free"
+      },
+      "note": "Answer rewritten on 2026-09-04 after the product changed the same day: the two exports now differ, and the summary is shown on the page instead of downloaded. Re-verified against the new behaviour."
+    },
+    {
+      "id": 270,
+      "group": "data-rights",
+      "question": "What does \"view data summary\" show me?",
+      "answer": "It shows how much data we hold for you, grouped by type. Your profile, your diagnosis, your reports, your chats with Ally, your goals and tasks, and your account records. It also shows the total and the date.\n\nIt shows on the screen. Nothing downloads.\n\nThis is only the count, not the data itself. To read the actual data, use 'Download my data' on the same page.",
+      "answer_type": "walked",
+      "status": "answered",
+      "test": "Run it and record the actual categories shown, in the product's own words. The answer should let a founder know whether it is worth clicking before they click it.",
+      "links": [
+        "/app/profile"
+      ],
+      "related": [
+        212,
+        269
+      ],
+      "verified": {
+        "walked_on": "2026-09-04",
+        "environment": "local dev vs production database",
+        "plan": "free"
+      },
+      "note": "Answer rewritten on 2026-09-04 after the product changed the same day: the two exports now differ, and the summary is shown on the page instead of downloaded. Re-verified against the new behaviour."
+    },
+    {
+      "id": 271,
+      "group": "data-rights",
+      "question": "I want a fact corrected. Will that change my report?",
+      "answer": null,
+      "answer_type": "walked",
+      "status": "needs_walk",
+      "test": "Submit a correction request and record what happens: is it immediate or reviewed, and does the existing report change? Cross-check against the settled position that a report is fixed at the moment it was made — if a correction cannot alter a generated report, the answer must say so up front rather than let a founder expect it.",
+      "links": [
+        "/app/profile"
+      ],
+      "related": [
+        69,
+        74,
+        279
+      ],
+      "verified": null
+    },
+    {
+      "id": 272,
+      "group": "data-rights",
+      "question": "What does \"restrict data processing\" stop, exactly?",
+      "answer": "It pauses Ally's AI.\n\nWhile it is on, you cannot chat with Ally or start a diagnosis. Both will stop and ask you to resume first.\n\nNothing is deleted. Your account stays open. Your report stays there. You can still read everything you already have.\n\nIt is a pause button, not a delete button.\n\nYou can turn it off any time. Go to Profile → Privacy Center and click Resume in the yellow box at the top.",
+      "answer_type": "walked",
+      "status": "answered",
+      "test": "Turn it on, then attempt a diagnosis, an Ally Chat message and a planning action. Record which are refused and what each refusal says. The banner claims 'Ally isn't generating new insights' — verify that is what actually happens.",
+      "links": [
+        "/app/profile"
+      ],
+      "related": [
+        211,
+        273,
+        275
+      ],
+      "verified": {
+        "walked_on": "2026-09-04",
+        "environment": "local dev vs production database",
+        "plan": "free"
+      }
+    },
+    {
+      "id": 273,
+      "group": "data-rights",
+      "question": "What's the difference between restricting processing and withdrawing consent?",
+      "answer": null,
+      "answer_type": "walked",
+      "status": "needs_approval",
+      "test": "BLOCKED PENDING APPROVAL. Answering this means actually withdrawing consent on an account, which changes real state in the production database. Not run. Needs a disposable account or explicit sign-off. Known so far: restricting processing is fully reversible and destroys nothing, and the product's own wording says withdrawal 'does not delete anything' and leaves the account active - but that has to be demonstrated, not repeated, before it is published.",
+      "links": [
+        "/app/profile"
+      ],
+      "related": [
+        272,
+        274
+      ],
+      "verified": null
+    },
+    {
+      "id": 274,
+      "group": "data-rights",
+      "question": "If I withdraw consent, do I lose my report?",
+      "answer": null,
+      "answer_type": "walked",
+      "status": "needs_approval",
+      "test": "BLOCKED PENDING APPROVAL. Answering this means actually withdrawing consent on an account, which changes real state in the production database. Not run. Needs a disposable account or explicit sign-off. Known so far: restricting processing is fully reversible and destroys nothing, and the product's own wording says withdrawal 'does not delete anything' and leaves the account active - but that has to be demonstrated, not repeated, before it is published.",
+      "links": [
+        "/app/profile"
+      ],
+      "related": [
+        79,
+        273,
+        276
+      ],
+      "verified": null
+    },
+    {
+      "id": 275,
+      "group": "data-rights",
+      "question": "I paused processing. How do I start it again?",
+      "answer": "Go to Profile → Privacy Center.\n\nWhen processing is paused, you will see a yellow box at the top with a Resume button. Click it and Ally starts working again.\n\nChat and the diagnosis come back right away. There is no waiting time, and nothing was lost while it was paused.",
+      "answer_type": "walked",
+      "status": "answered",
+      "test": "With processing restricted, confirm the amber banner and its Resume button appear, click Resume, and confirm normal function returns. Record how long it takes to take effect.",
+      "links": [
+        "/app/profile"
+      ],
+      "related": [
+        211,
+        272
+      ],
+      "verified": {
+        "walked_on": "2026-09-04",
+        "environment": "local dev vs production database",
+        "plan": "free"
+      }
+    },
+    {
+      "id": 276,
+      "group": "data-rights",
+      "question": "I scheduled deletion by mistake. Can I stop it?",
+      "answer": null,
+      "answer_type": "walked",
+      "status": "needs_walk",
+      "test": "DISPOSABLE ACCOUNT ONLY. Schedule deletion, then confirm the red banner names an erasure date and says to contact support before then. Establish whether there is any self-serve cancel; if there is not, the answer must give the support route and the deadline in the same breath.",
+      "links": [
+        "/app/profile"
+      ],
+      "related": [
+        207,
+        213,
+        277
+      ],
+      "verified": null,
+      "finding": "CORRECTION. An earlier note here claimed no UI existed for cancelling a scheduled deletion. That was wrong: DeletionPendingGate is mounted in PlatformLayout and puts a blocking modal in front of any founder who signs in with a deletion pending, offering 'Cancel deletion & continue'. The real defect was the copy - the Privacy Center banner and the API message both told founders to contact support for something they can do themselves in one click. Both were corrected on 2026-09-04."
+    },
+    {
+      "id": 277,
+      "group": "data-rights",
+      "question": "How long do I have to change my mind?",
+      "answer": "You have 30 days.\n\nWhen you ask us to delete your account, we show the exact date on your Privacy Center page. Until that date, your account works normally and nothing is removed.\n\nIf you change your mind, just sign in again before that date. We will ask if you want to cancel it. You can do this yourself — you do not need to email us.\n\nAfter that date, the deletion is final.",
+      "answer_type": "walked",
+      "status": "answered",
+      "test": "From the same walk as 276, record the exact recovery window shown on the banner. Quote the product's own figure — do not restate a number from anywhere else.",
+      "links": [
+        "/app/profile"
+      ],
+      "related": [
+        213,
+        276
+      ],
+      "verified": {
+        "walked_on": "2026-09-04",
+        "environment": "local dev vs production database",
+        "plan": "free"
+      }
+    },
+    {
+      "id": 278,
+      "group": "data-rights",
+      "question": "Is Ally actually DPDP and GDPR compliant, or just saying so?",
+      "answer": null,
+      "answer_type": "policy",
+      "status": "blocked",
+      "blocked_by": "open-decision: AI sub-processor disclosure",
+      "test": "Not a walk. The Privacy Center already asserts DPDP and GDPR; what the answer may claim is a legal position, not an observation. It also collides with the decision never to name the model — residency is settled and answerable, the processor is not.",
+      "links": [
+        "/privacy"
+      ],
+      "related": [
+        208,
+        209
+      ],
+      "verified": null
+    },
+    {
+      "id": 279,
+      "group": "data-rights",
+      "question": "You say requests are reviewed within 30 days. Why does it take that long?",
+      "answer": "Most things are not slow at all.\n\nDownloading your data and viewing your summary happen at once, as soon as you click.\n\nThe 30 days is the legal maximum for requests that a person has to check. In practice, that means data corrections.\n\nAccount deletion is different. We schedule it right away. Those 30 days are your time to change your mind, not a waiting line.\n\nIf something you expected to be instant is slow, please tell us.",
+      "answer_type": "walked",
+      "status": "answered",
+      "test": "Establish which of the seven actions are immediate and which are genuinely reviewed — the data export appears to be instant, so a blanket '30 days' over-promises delay on the fast ones. The answer should separate the two so a founder is not put off clicking something that returns in seconds.",
+      "links": [
+        "/app/profile"
+      ],
+      "related": [
+        269,
+        271
+      ],
+      "verified": {
+        "walked_on": "2026-09-04",
+        "environment": "local dev vs production database",
+        "plan": "free"
+      }
+    }
+  ],
+  "walk_log": {
+    "walked_on": "2026-09-04",
+    "environment": "local dev build (frontend :3000, backend :8000) running against the production Supabase database",
+    "account": "dev founder Rohan Mehta / e2e-resume-test@ally.local, founder_id 10756, Free plan",
+    "caveat": "Local config differs from the deployed site in one way that matters: EMAIL_HOST is unset locally, so email runs in stub mode. Claims about WHICH emails exist come from the code (only discovery-call notifications call send_email) and hold in any environment; whether mail is actually delivered must be re-checked on the deployed site.",
+    "not_run": "Consent withdrawal (273, 274) and account deletion (276) were not executed. Both change real account state in a production database and were deliberately left untested.",
+    "product_changes_made": [
+      "Split the two exports: access (everything held) vs portability (only what the founder provided). They previously returned identical files.",
+      "The audit trail now records which right was exercised, instead of logging every download as 'portability'.",
+      "'View data summary' now displays grouped, plain-language categories on the page instead of downloading a file of database table names.",
+      "Deletion-cancellation copy corrected in two places - the founder can cancel it themselves by signing in again.",
+      "Migration f2c7a91d4e83 written (NOT applied) to give account deletion and its cancellation their own audit labels.",
+      "Fixed the Reduced motion switch. It previously saved a preference that no code consumed, so turning it on did nothing at all -- the worst kind of dead control, because it was an accessibility one. Now applied app-wide via a data attribute plus CSS, and the in-app switch and the device setting both count."
+    ],
+    "migration_applied": "f2c7a91d4e83 applied 2026-09-04 along with the two migrations that had never run (per-stage question budget, monitor routing state). Verified after: all 8 stages now carry a budget, the monitor state and its scoring rule exist, and the 6 mislabelled audit rows split correctly into 2 delete_account, 2 cancel_deletion, 2 withdraw_consent.",
+    "performance_finding": "The Compass sits on 'Loading your Compass...' for a long time. Measured locally: called one at a time, /dashboard/overview takes ~4s and /dashboard/business-health ~1.6s; but the Compass fires about twelve calls at once and they then take 16-24s each. That matches the warning the backend logs at startup -- pool_size 5 + max_overflow 10 against a session-mode pooler limit of 15 -- and its own suggested fix, pointing DATABASE_URL at the transaction-mode pooler on port 6543. CAVEAT: measured from a laptop in India against the Supabase database, so each connection carries internet latency that production (same AWS region as the database) would not. Worth timing on the deployed site before concluding how bad it is, but the pool configuration warning is real in any environment. Relevant to questions 220 and 225."
+  }
+}

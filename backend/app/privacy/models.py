@@ -26,6 +26,11 @@ class ExportBundle:
     # section name -> rows. A section present with an empty list means "we hold
     # nothing here", which is materially different from the section being absent.
     sections: dict[str, Any] = field(default_factory=dict)
+    #: "access" (Art 15 -- everything we hold, including Ally's own analysis) or
+    #: "portability" (Art 20 -- only what the founder provided). Carried on the
+    #: bundle so the downloaded file states which of the two it is; a founder
+    #: handing the file to another service should not have to guess.
+    kind: str = "access"
 
     @property
     def record_count(self) -> int:
@@ -47,6 +52,69 @@ class DataSummary:
     @property
     def total_records(self) -> int:
         return sum(self.counts.values())
+
+    @property
+    def categories(self) -> list[dict]:
+        """The same counts, grouped and named for the person reading them.
+
+        `counts` is keyed by export section, which is keyed by database table:
+        `founder_memory_events: 24` is a true statement that tells a founder
+        nothing. This is the founder-facing view of the same numbers -- six
+        groups in the order someone would ask about them, each with a plain
+        sentence saying what it is.
+
+        Grouped here rather than in the UI so the Privacy Center, the help bot
+        and any future export cover-sheet all describe a founder's data with the
+        same words. Two surfaces free-handing their own category names is how
+        they end up disagreeing.
+        """
+        groups: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
+            ("profile", "Your profile and settings",
+             "Your name, contact details, stage, and how you have set Ally up.",
+             ("founder_profile", "settings", "plans")),
+            ("diagnosis", "Your diagnosis",
+             "The questions you answered, including Founder DNA and your current problem.",
+             ("diagnosis_sessions", "diagnosis_answers", "founder_dna_answers",
+              "current_problem_answers")),
+            ("analysis", "Your reports and what Ally worked out",
+             "Your reports, the root causes Ally identified, and what it remembers about you.",
+             ("reports", "detected_root_causes", "stage_assessments",
+              "founder_context", "founder_memory", "founder_memory_events")),
+            ("conversations", "Conversations with Ally",
+             "Every chat you have had with Ally, and the messages inside them.",
+             ("conversations", "messages")),
+            ("planning", "Goals and tasks",
+             "What you set yourself in Plan Your Day, Goals and Vision.",
+             ("goals", "tasks")),
+            ("account_record", "Your requests and account record",
+             "Calls you booked, feedback you sent, your consents, and requests like this one.",
+             ("discovery_calls", "feedback", "consents", "privacy_requests",
+              "notifications", "token_usage")),
+        )
+
+        out: list[dict] = []
+        grouped: set[str] = set()
+        for key, label, description, sections in groups:
+            grouped.update(sections)
+            out.append({
+                "key": key,
+                "label": label,
+                "description": description,
+                "count": sum(self.counts.get(s, 0) for s in sections),
+            })
+
+        # A section added to the export and not to a group above would otherwise
+        # vanish from the founder's view while still being held -- the one
+        # failure this whole feature exists to prevent. It surfaces instead.
+        ungrouped = sum(v for k, v in self.counts.items() if k not in grouped)
+        if ungrouped:
+            out.append({
+                "key": "other",
+                "label": "Other records",
+                "description": "Everything else Ally holds for your account.",
+                "count": ungrouped,
+            })
+        return out
 
 
 @dataclass(frozen=True)

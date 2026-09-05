@@ -178,14 +178,14 @@ def test_a_file_sent_as_media_is_not_described_as_unreadable():
     apologises for not seeing a picture it is looking at."""
     block = MediaBlock(MediaKind.IMAGE, "image/png", "AAAA", "Screenshot.png")
     text = attachments_block((("Screenshot.png", "image", 412_000, None, block),))
-    assert "cannot be read yet" not in text
+    assert "cannot read its contents" not in text
     assert "you only know it exists" not in text
     assert "look at" in text
 
 
 def test_a_file_with_neither_text_nor_media_is_still_named_only():
     text = attachments_block((("mystery.docx", "document", 4096, None, None),))
-    assert "cannot be read yet" in text
+    assert "cannot read its contents" in text
 
 
 def test_extracted_text_still_wins_over_everything():
@@ -283,11 +283,14 @@ def _img(n="shot.png", aid="a1", data=None):
 
 
 def test_image_upload_produces_media_on_the_window():
+    """The builder still works. It is the TRANSPORT that cannot carry an
+    image, which is why _DEFAULT_MEDIA_LIMIT is 0 -- so this asks for the
+    limit explicitly rather than relying on a default that is off."""
     att, data = _img()
-    w = _window((att,), {"a1": data})
+    w = _window((att,), {"a1": data}, media_limit=2)
     assert len(w.media) == 1
     assert w.media[0].kind is MediaKind.IMAGE
-    assert "cannot be read yet" not in w.attachments_text
+    assert "cannot read its contents" not in w.attachments_text
 
 
 def test_text_pdf_is_read_as_text_not_paid_for_as_pictures():
@@ -303,7 +306,7 @@ def test_text_pdf_is_read_as_text_not_paid_for_as_pictures():
 def test_scanned_pdf_falls_through_to_vision():
     data = scanned_pdf()
     att = FakeAttachment("a3", "calendar.pdf", AttachmentType.DOCUMENT, len(data), PDF)
-    w = _window((att,), {"a3": data})
+    w = _window((att,), {"a3": data}, media_limit=2)
     assert len(w.media) == 1
     assert w.media[0].kind is MediaKind.DOCUMENT
 
@@ -314,8 +317,8 @@ def test_media_is_capped_per_turn():
         att, data = _img(n=f"s{i}.png", aid=f"a{i}")
         items.append(att)
         content[f"a{i}"] = data
-    w = _window(tuple(items), content)
-    assert len(w.media) == 2                       # _DEFAULT_MEDIA_LIMIT
+    w = _window(tuple(items), content, media_limit=2)
+    assert len(w.media) == 2                       # the cap asked for above
 
 
 def test_the_cap_keeps_the_newest_files():
@@ -334,7 +337,7 @@ def test_media_limit_zero_restores_the_old_naming_only_behaviour():
     att, data = _img()
     w = _window((att,), {"a1": data}, media_limit=0)
     assert w.media == ()
-    assert "cannot be read yet" in w.attachments_text
+    assert "cannot read its contents" in w.attachments_text
 
 
 def test_unreadable_file_never_breaks_the_turn():

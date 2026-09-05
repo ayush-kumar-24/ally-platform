@@ -1,0 +1,66 @@
+{
+  "schema_version": "1.0",
+  "file": "group-06-getting-the-report-out",
+  "group": "getting-the-report-out",
+  "group_number": 6,
+  "group_title": "Getting the report out",
+  "question_bank": "Founder Question Bank v3 — group 6 (questions 079-084)",
+  "created": "2026-09-05",
+  "content_rules": {
+    "voice": "Very simple, easy English. Short sentences. Common everyday words. No idioms. Friendly and warm, but plain.",
+    "answer_length": "About 120 words maximum. Short paragraphs with a blank line between them.",
+    "sharing_honesty": "A share link is public. Say so plainly in every answer that touches sharing. A founder must never discover after the fact that a link they sent on needs no sign-in."
+  },
+  "walk_log": {
+    "walked_on": "2026-09-05",
+    "environment": "local dev build against the production Supabase database",
+    "observed": [
+      "Download PDF appears twice on the report document (top and bottom); Share appears once.",
+      "Share creates an unguessable token (24 random bytes) and copies the link to the clipboard.",
+      "The shared-report routes take no authentication at all — anyone holding the link can read the report without signing in.",
+      "Share links last 30 days. The default was raised from 24 hours because a day was too short to be useful.",
+      "Views are counted: the share row records an access count and the last time it was opened.",
+      "The PDF is rendered by a headless-Chromium sidecar from the same print HTML the screen uses, honouring the document's own page CSS and backgrounds, with fonts embedded in the file.",
+      "If the renderer is unreachable, the endpoint refuses honestly and queues the request rather than returning a different-looking fallback PDF."
+    ],
+    "product_gap_found": "The API can list a founder's share links and revoke one (GET /reports/{id}/shares, DELETE /reports/{id}/share/{token}), but NOTHING in the frontend calls either. A founder can create a public link to their own diagnosis and then has no way to turn it off. Answer 081 says so plainly and routes them to support."
+  },
+  "answers": [
+    {"id": 79, "question": "Can I download or share this?",
+     "answer": "Yes, both. The buttons are at the top of your report.\n\nDownload PDF saves a copy to your device. It is yours to keep, and it looks the same as the report on screen.\n\nShare creates a link and copies it to your clipboard. Anyone you send that link to can open the report without signing in.\n\nThere is also a full export of everything Ally holds about you in Profile, then Privacy Center, if it is the data you want rather than the document.",
+     "answer_type": "walked", "status": "answered",
+     "links": ["/app/report", "/app/profile"],
+     "verified": {"walked_on": "2026-09-05", "how": "Both buttons confirmed on a real report document. The share route requires no authentication."}},
+
+    {"id": 80, "question": "Does the PDF look the same as what I see on screen?",
+     "answer": "Yes. It is the same document, printed rather than rebuilt.\n\nThe PDF is made by rendering the exact same page, with the same layout, colours and fonts. The fonts are built into the file, so it looks right on whatever machine you open it on.\n\nIf the PDF is not ready the moment you ask for it, we will say so and prepare it, rather than hand you a rough version that looks finished. A missing file is easy to fix. A wrong one that looks fine is not.",
+     "answer_type": "walked", "status": "answered",
+     "links": ["/app/report"],
+     "verified": {"walked_on": "2026-09-05", "how": "The PDF is produced by a headless-Chromium sidecar from the same print HTML, with the document's own page CSS, backgrounds and base64-embedded fonts. The endpoint refuses rather than substituting a different renderer's output."}},
+
+    {"id": 81, "question": "If I share the link, can anyone open it?",
+     "answer": "Yes — and that is worth being clear about.\n\nThe link does not ask anyone to sign in. Whoever has it can read your report. The address itself is long and random, so nobody will find it by guessing, but it will work for anyone you send it to, and for anyone they pass it on to.\n\nIt stops working after 30 days.\n\nOne thing to know: there is currently no way to switch a link off yourself before then. If you need one cancelled early, contact support and we will do it for you.",
+     "answer_type": "walked", "status": "answered",
+     "links": ["/app/report", "/app/help"],
+     "verified": {"walked_on": "2026-09-05", "how": "The shared-report endpoints take no auth dependency. Tokens are 24 random bytes. TTL is 30 days. Revocation exists in the API but has no caller anywhere in the frontend."},
+     "finding": "PRODUCT GAP. Revoking a share is API-only. A founder who shares their diagnosis cannot un-share it from the product. This answer is honest about that and routes to support, but the button is small work and worth adding — the content being shared is a personal analysis of the founder, not a marketing page."},
+
+    {"id": 82, "question": "Can I send this to my investor or my board?",
+     "answer": "Yes, and the share link is made for exactly that.\n\nUse Share to create a link, or Download PDF if you would rather attach a file. Investors usually prefer the PDF.\n\nTwo things worth thinking about first. The report is honest about weaknesses as well as strengths, so read it through before you send it. And the Founder DNA part is personal — some founders share the business sections and keep that one back.\n\nA shared link works for 30 days, and anyone who has it can open it.",
+     "answer_type": "walked", "status": "answered",
+     "links": ["/app/report"],
+     "verified": {"walked_on": "2026-09-05", "how": "Share and Download PDF both confirmed. Report sections confirmed to include a personal Founder DNA section alongside the business analysis."}},
+
+    {"id": 83, "question": "Can I get it as something I can edit?",
+     "answer": "Not directly, sorry. The report comes as a PDF, which is fixed.\n\nIf you want the words in your own document, you can copy them from the report on screen and paste them wherever you like.\n\nIf it is the underlying information you want rather than the document, go to Profile, then Privacy Center, and use \"Download my data\". That gives you everything as a data file.\n\nThere is no Word or Google Docs version at the moment.",
+     "answer_type": "walked", "status": "answered",
+     "links": ["/app/report", "/app/profile"],
+     "verified": {"walked_on": "2026-09-05", "how": "PDF is the only document export. The privacy export produces JSON. No document-format conversion exists anywhere in the product."}},
+
+    {"id": 84, "question": "Can I print it?",
+     "answer": "Yes. The simplest way is to use Download PDF and print that — the layout is built for paper, so the pages break in sensible places.\n\nYou can also print straight from your browser while you are looking at the report.\n\nOne thing to keep in mind: if you are printing it to give to someone, the report includes personal parts about you as a founder, not only the business.",
+     "answer_type": "walked", "status": "answered",
+     "links": ["/app/report"],
+     "verified": {"walked_on": "2026-09-05", "how": "The print HTML carries its own @page CSS, which is what the PDF renderer honours, so paper layout is deliberate rather than incidental."}}
+  ]
+}

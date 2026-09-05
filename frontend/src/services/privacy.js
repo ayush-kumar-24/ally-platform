@@ -12,9 +12,19 @@
 
 import { del, get, post } from './api';
 
-/** GDPR Art 15 + 20 — everything we hold, served immediately. */
-export function exportData() {
-  return get('/privacy/export');
+/**
+ * Served immediately. Two distinct rights, two distinct files:
+ *
+ *   'access'      GDPR Art 15 — everything we hold, Ally's own analysis included
+ *                 (reports, detected root causes, memory, stage assessments).
+ *   'portability' GDPR Art 20 — only what the founder provided, so it can be
+ *                 handed to another service without carrying our inferences.
+ *
+ * These were one call returning byte-identical files, which made "Export for
+ * portability" a second Download button in a different coat.
+ */
+export function exportData(kind = 'access') {
+  return get(`/privacy/export?kind=${encodeURIComponent(kind)}`);
 }
 
 /**

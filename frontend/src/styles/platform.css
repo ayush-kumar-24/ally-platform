@@ -712,6 +712,14 @@
 .plan-card.popular .pc-price .amt{color:#fff}
 .pc-price .per{font-size:13px;color:#6c7a70;font-weight:600}
 .plan-card.popular .pc-price .per{color:#7d9488}
+/* Struck-through list price. Sits before the currency symbol and is baseline-
+   aligned with the amount rather than the row, so it reads as "was 600, now
+   450" instead of floating above it. Rendered only when the backend judged it
+   a real saving -- see mrp_inr in plans/catalog.py. */
+.pc-price .pc-mrp{font-family:var(--display-tight);font-size:18px;font-weight:700;
+  color:#9aa8a0;text-decoration:line-through;text-decoration-thickness:2px;
+  align-self:flex-end;margin-right:4px}
+.plan-card.popular .pc-price .pc-mrp{color:#7d9488}
 .pc-sub{font-size:11.5px;color:#6c7a70;margin:0 0 18px}
 .plan-card.popular .pc-sub{color:#7d9488}
 .pc-cta{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:12px;border-radius:12px;font-family:var(--display-tight);font-size:13.5px;font-weight:700;cursor:pointer;border:1px solid #d8cfc2;background:#fff;color:#1B4332;transition:.25s cubic-bezier(.2,.7,.2,1);min-height:46px}

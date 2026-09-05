@@ -1,6 +1,7 @@
 """Admin Panel endpoints -- transport only; every rule lives in AdminPanelService.
 
     GET    /admin/me                       caller's role + capabilities
+    GET    /admin/health                   database, AI provider, report engine, storage, error rate
     GET    /admin/users                    search / filter / sort / paginate
     GET    /admin/users/{id}               full detail
     PATCH  /admin/users/{id}               partial update (per-field authorization)
@@ -15,9 +16,10 @@
     PATCH  /admin/privacy-requests/{id}    resolve a queued request
     GET    /admin/audit-log               immutable audit trail
 
-Named /audit-log, not /audit: the Phase 12 admin router already owns GET /admin/audit
-and is registered first, so a second /audit here would be silently shadowed and never
-reached. Distinct paths keep both endpoints usable.
+Named /audit-log, not /audit: the Phase 12 admin router used to own GET /admin/audit
+and registered first, so a second /audit here would have been silently shadowed and
+never reached. That router is gone (Admin Panel Proposal Phase 5), but the name stays
+-- the frontend already calls /admin/audit-log (frontend/src/services/admin.js).
 
 Every route depends on `get_panel_admin`, so an unauthenticated or non-admin caller
 is rejected before any handler body runs. There is no route here without it.
@@ -48,6 +50,7 @@ from app.api.v1.admin.panel_responses import (
     CreditAdjustResponse,
     CreditLedgerResponse,
     CreditTransactionResponse,
+    HealthReportResponse,
     PrivacyRequestListResponse,
     PrivacyRequestResponse,
     UserDetailResponse,
@@ -77,6 +80,16 @@ class ConfirmationRequiredError(AppError):
 def whoami(admin: PanelAdmin = Depends(get_panel_admin)) -> WhoAmIResponse:
     return WhoAmIResponse(admin_id=admin.admin_id, email=admin.email,
                           role=admin.role.value, capabilities=capabilities_for(admin.role))
+
+
+@router.get("/health", response_model=HealthReportResponse,
+           summary="Database, AI provider, report engine, storage, error rate -- green/amber/red")
+def system_health(admin: PanelAdmin = Depends(get_panel_admin),
+                  service=Depends(get_panel_service)) -> HealthReportResponse:
+    """Read-only. Alerting on a red result is a separate, scheduled path --
+    see /internal/jobs/check-health -- so loading this page never itself
+    pages anyone."""
+    return HealthReportResponse.from_domain(service.system_health(admin))
 
 
 # --- users ------------------------------------------------------------------

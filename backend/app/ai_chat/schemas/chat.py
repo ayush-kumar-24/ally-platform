@@ -34,6 +34,11 @@ class ChatRequest:
     response_category: str = "general_chat"
     request_id: str | None = None
     actor: str = "founder"
+    #: Does this founder's plan include discussing the knowledge base with Ally
+    #: (Feature.KNOWLEDGE_CHAT, Rs 999)? Set by the route from the plan gate.
+    #: True by default so a caller that predates plan gating is unchanged; the
+    #: route is what narrows it, and it is never widened here.
+    knowledge_enabled: bool = True
 
 
 @dataclass(frozen=True)
@@ -71,6 +76,17 @@ class ConversationContextWindow:
     tasks_injected: bool = False
     # pre-formatted tasks block, same getattr convention as attachments_text.
     tasks_text: str = ""
+    profile_injected: bool = False
+    # What onboarding already established about this founder -- stage, industry,
+    # revenue, what they are building, the problem they arrived with. Same
+    # pre-formatted/getattr convention as the two above.
+    #
+    # Chat had every OTHER source (diagnosis, memory, retrieval, graph, files,
+    # tasks) and not this one, so Ally told a founder who had completed
+    # onboarding: "I don't have your problem statement, your target customer,
+    # your market size, or any product details... only the diagnosis came
+    # through." All of it was in `founders`, never put in the prompt.
+    profile_text: str = ""
     # Attachments the model will SEE rather than read about -- screenshots and
     # scanned PDFs, which have no text to extract. Carried separately from
     # attachments_text because it travels a different road: text becomes part of
