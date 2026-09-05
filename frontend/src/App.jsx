@@ -1,9 +1,10 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { useApp } from './context/AppContext';
-import { clearTokens, onAuthFailure } from './services/api';
+import { clearTokens, getAccessToken, onAuthFailure, resumeSession } from './services/api';
 import { startDevSession } from './services/auth';
-import { supabaseConfigured } from './services/supabaseConfig';
+import { setPresenceHint } from './services/presenceHint';
+import { supabaseConfigured, WAITLIST_URL } from './services/supabaseConfig';
 import { loadChunk } from './utils/loadChunk';
 import ErrorBoundary from './components/ErrorBoundary';
 import RequireAuth from './components/RequireAuth';
@@ -12,14 +13,12 @@ import SplashScreen from './components/SplashScreen';
 import Toast from './components/ui/Toast';
 import CookieBanner from './components/CookieBanner';
 
-/* Landing and Login stay in the main chunk: they are the two entry points, and
-   a lazy boundary on either would trade a 30 kB saving for a blank frame on the
-   very first paint. Everything below is behind a route the visitor navigates to,
-   so its chunk downloads while they are still reading the page before it. This
-   took the initial bundle from 827 kB to a fraction of that -- see the route
-   chunks in `npm run build`. */
-import LandingLayout from './layouts/LandingLayout';
-import LandingPage from './pages/LandingPage';
+/* Login stays in the main chunk: it is the entry point, and a lazy boundary on
+   it would trade a 30 kB saving for a blank frame on the very first paint.
+   Everything below is behind a route the visitor navigates to, so its chunk
+   downloads while they are still reading the page before it. This took the
+   initial bundle from 827 kB to a fraction of that -- see the route chunks in
+   `npm run build`. */
 import GuidedLayout from './layouts/GuidedLayout';
 import Login from './pages/guided/Login';
 import NotFound from './pages/NotFound';
@@ -93,6 +92,40 @@ function RouteFallback() {
   return <div style={{ minHeight: '100dvh', background: 'var(--color-forest-night, #06140d)' }} />;
 }
 
+/* The platform has no public page of its own any more. Its public face -- and
+   the only way to get an account -- is the waitlist at join.goxlally.ai, so the
+   root sends a founder with a session to their dashboard and everyone else to
+   the waitlist site. Someone who searched "GoXL Ally" and typed this domain
+   lands where they can actually do something. (The marketing landing that
+   used to live here duplicated join.goxlally.ai, and every one of its buttons
+   led to sign-in anyway.)
+
+   "No access token" is not "no session": the token lives 30 minutes, the
+   refresh cookie 30 days. A founder who was here yesterday and types the
+   domain again must not be bounced to a marketing site, so the cookie is
+   tried first -- the same resume RequireAuth does for /app -- and only a
+   genuine stranger is redirected. Sign-in itself stays at /guided/login,
+   reached from the invite email and the waitlist site's "Log in". */
+function HomeGate() {
+  const [status, setStatus] = useState(() => (getAccessToken() ? 'in' : 'checking'));
+
+  useEffect(() => {
+    if (status !== 'checking') return undefined;
+    let cancelled = false;
+    resumeSession().then((founder) => {
+      if (cancelled) return;
+      if (founder) setStatus('in');
+      else window.location.replace(WAITLIST_URL);
+    });
+    return () => { cancelled = true; };
+  }, [status]);
+
+  if (status === 'in') return <Navigate to="/app" replace />;
+  // One round-trip, then either the dashboard or another site: a blank frame,
+  // not a spinner, for the same reason RequireAuth gives.
+  return <RouteFallback />;
+}
+
 export default function App() {
   const { toast } = useApp();
   const [showSplash, setShowSplash] = useState(!splashAlreadyShown());
@@ -118,6 +151,7 @@ export default function App() {
         } catch { /* fall through to the real sign-out below */ }
       }
       clearTokens();
+      setPresenceHint('out');
       localStorage.removeItem('ally_founder');
       navigate('/guided/login', { replace: true });
     });
@@ -139,14 +173,8 @@ export default function App() {
       {showSplash && <SplashScreen onDone={handleSplashDone} />}
       <Suspense fallback={<RouteFallback />}>
         <Routes>
-          {/* ── Landing ── */}
-          <Route element={
-            <ErrorBoundary label="Landing" fallbackPath="/">
-              <LandingLayout />
-            </ErrorBoundary>
-          }>
-            <Route path="/" element={<LandingPage />} />
-          </Route>
+          {/* ── Root: dashboard or sign-in, never a page of its own ── */}
+          <Route path="/" element={<HomeGate />} />
 
           {/* ── Legal pages ── */}
           <Route path="/terms" element={

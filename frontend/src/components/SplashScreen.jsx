@@ -32,8 +32,8 @@ export default function SplashScreen({ onDone }) {
   }, [finish]);
 
   /* Seven seconds of fullscreen motion with no way to pause, stop or hide it
-     fails WCAG 2.2.2. ProductTour and LandingPage both already check this
-     query; this one blocked the whole app and did not. Skipped outright under
+     fails WCAG 2.2.2. ProductTour already checks this query; this one blocked
+     the whole app and did not. Skipped outright under
      reduced motion, and there is now a visible Skip control either way. */
   useEffect(() => {
     if (prefersReducedMotion()) finish();

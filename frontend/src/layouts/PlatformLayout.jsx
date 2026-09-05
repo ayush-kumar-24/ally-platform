@@ -1,5 +1,6 @@
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import DeletionPendingGate from '../components/DeletionPendingGate';
+import HelpWidget from '../components/HelpWidget';
 import { useApp } from '../context/AppContext';
 import { useState, useRef, useEffect } from 'react';
 import ProductTour from '../components/ProductTour';
@@ -246,9 +247,16 @@ export default function PlatformLayout() {
       <aside className={`sidebar${sidebarOpen ? ' open' : ''}`} aria-label="Primary">
         <div className="sb-head">
           <div className="sb-head-top">
+            {/* The lockup the marketing site uses: the Ally mark beside the
+                product's own name. The wide GoXL wordmark that was here named
+                the company, not the thing the founder is signed in to -- and
+                nothing else in the sidebar said "Ally" at all. */}
             <div className="sb-brand">
-              <img className="goxl-logo" src="/goxl-logo.svg" alt="GoXL" width="2515" height="755" decoding="async" />
-              <span className="sub">Consulting Solutions</span>
+              <img className="goxl-logo" src="/ally-logo-mark.png" alt="" width="512" height="512" decoding="async" />
+              <span className="sb-words">
+                <span className="mark">GoXL <i>Ally</i></span>
+                <span className="sub">by GoXL Entrepreneurship</span>
+              </span>
             </div>
             <button
               className="sb-toggle"
@@ -471,6 +479,8 @@ export default function PlatformLayout() {
           in rather than as a silent 403 somewhere deep in the product. */}
       <DeletionPendingGate />
       <ProductTour />
+      {/* Fixed-position, so it renders last and belongs to no column. */}
+      <HelpWidget />
     </div>
   );
 }

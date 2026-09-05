@@ -21,8 +21,10 @@ import AuthTransition from '../../components/AuthTransition';
 import { CURRENT_VERSIONS, flushPendingConsent, recordConsent, savePendingConsent } from '../../services/consents';
 import { sendEmailOtp, signInWithPassword, startDevSession, verifyOtpAndSetPassword } from '../../services/auth';
 import { get } from '../../services/api';
-import { supabaseConfigured } from '../../services/supabaseConfig';
+import { DEV_MOCK_CODE, devMockAuth, supabaseConfigured, WAITLIST_URL } from '../../services/supabaseConfig';
 import { firstSafe } from '../../utils/looksLikeToken';
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** Keep in step with the minimum length configured in the Supabase dashboard.
  *  Checking here too means a too-short password is caught before the round trip,
@@ -76,6 +78,9 @@ export default function Login() {
   const [notice, setNotice] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [cooldown, setCooldown] = useState(0);
+  // True when the address came in on the invite link (#email=…): this founder
+  // has been approved, so offering them the waitlist would only confuse.
+  const [fromInvite, setFromInvite] = useState(false);
   // Ref, not state: state updates are async, so two submits in the same tick
   // would both see `submitting === false` and both fire. The ref flips
   // synchronously.
@@ -86,6 +91,31 @@ export default function Login() {
     const timer = setTimeout(() => setCooldown((s) => s - 1), 1000);
     return () => clearTimeout(timer);
   }, [cooldown]);
+
+  /* Arriving from the approval email: its link is /guided/login#email=<addr>.
+     A fragment, not a query string -- it never reaches any server, so the
+     address is in no access log along the way. Read once, then removed from
+     the address bar so it does not linger in history or get re-applied on a
+     refresh. The founder still presses "Send me a code" themselves: nothing
+     in a URL may trigger an email, or a crafted link could spam any inbox. */
+  useEffect(() => {
+    const applyEmailFromHash = () => {
+      const match = /(?:^#|&)email=([^&]+)/.exec(window.location.hash);
+      if (!match) return;
+      let candidate = '';
+      try { candidate = decodeURIComponent(match[1]).trim(); } catch { /* not ours */ }
+      window.history.replaceState(null, '', window.location.pathname + window.location.search);
+      if (!EMAIL_RE.test(candidate)) return;
+      setEmail(candidate);
+      setStep('email');
+      setFromInvite(true);
+    };
+    applyEmailFromHash();
+    // Also when the link is followed while this page is already open: a
+    // fragment-only navigation does not remount the component.
+    window.addEventListener('hashchange', applyEmailFromHash);
+    return () => window.removeEventListener('hashchange', applyEmailFromHash);
+  }, []);
 
   const release = () => {
     inFlight.current = false;
@@ -189,7 +219,9 @@ export default function Login() {
     try {
       await sendEmailOtp(email);
       setCooldown(RESEND_COOLDOWN_SECONDS);
-      setNotice(`We sent a ${OTP_DISPLAY_LENGTH}-digit code to ${email.trim()}. It expires in a few minutes.`);
+      setNotice(devMockAuth
+        ? `Dev mock: no email is sent. The code is ${DEV_MOCK_CODE}.`
+        : `We sent a ${OTP_DISPLAY_LENGTH}-digit code to ${email.trim()}. It expires in a few minutes.`);
       if (!isResend) setStep('code');
       return true;
     } catch (err) {
@@ -369,8 +401,8 @@ export default function Login() {
       <div className="j-inner">
         <div className="j-avatar"><img src="/ally-logo.png" alt="" /></div>
         <div className="j-eye"><span className="lv"></span> GoXL &middot; Ally</div>
-        <h1 className="j-title">Meet Ally, your <em>founder DNA</em> engine.</h1>
-        <p className="j-sub">In about 20 minutes, Ally learns how you lead and finds what's really holding your business back. You'll leave with a clarity report and your next move.</p>
+        <h1 className="j-title">Meet Ally, your <em>Founder&rsquo;s Compass</em>.</h1>
+        <p className="j-sub">Your founder journey starts here &mdash; sign in, and Ally will find your next move.</p>
 
         {validationError && (
           <div className="consent-error" role="alert" id="consent-error">
@@ -415,11 +447,19 @@ export default function Login() {
                 Email me a code
               </button>
             </p>
+            {!fromInvite && (
+              <p className="auth-alt">
+                Don&rsquo;t have access yet?{' '}
+                <a className="auth-link-btn" href={WAITLIST_URL}>Join the waitlist</a>
+              </p>
+            )}
           </form>
         ) : step === 'email' ? (
           <form className="auth-form" onSubmit={handleSendCode} noValidate>
             <label className="auth-field">
-              <span className="auth-label">Email</span>
+              {/* One field on this step, so the caption only adds noise above the
+                  box; kept for screen readers. */}
+              <span className="auth-label sr-only">Email</span>
               <input className="auth-input" type="email" name="email" autoComplete="username"
                      inputMode="email" placeholder="you@company.com" value={email} autoFocus
                      disabled={submitting}
@@ -439,6 +479,12 @@ export default function Login() {
                 Sign in instead
               </button>
             </p>
+            {!fromInvite && (
+              <p className="auth-alt">
+                Don&rsquo;t have access yet?{' '}
+                <a className="auth-link-btn" href={WAITLIST_URL}>Join the waitlist</a>
+              </p>
+            )}
           </form>
         ) : (
           <form className="auth-form" onSubmit={handleVerify} noValidate>
@@ -502,6 +548,9 @@ export default function Login() {
           Private &amp; encrypted &middot; we never share your business.{' '}
           {!supabaseConfigured && (
             <span style={{ opacity: 0.7 }}>(Demo — Supabase not configured)</span>
+          )}
+          {devMockAuth && (
+            <span style={{ opacity: 0.7 }}>(Dev mock — the code is {DEV_MOCK_CODE})</span>
           )}
         </p>
       </div>
