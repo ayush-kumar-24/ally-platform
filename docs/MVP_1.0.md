@@ -1,6 +1,7 @@
 # Ally — MVP 1.0 Definition
 
 - **Status** — Finalized scope, pending build of the launch-critical fixes in §6
+- **Revision** — 2. Adds Decision 5 (no free tier; coupons are the acquisition mechanism) and the four open decisions it creates, in §9.
 - **Date** — 5 September 2026
 - **Product** — Ally, the Founder DNA Platform. An AI co-founder coach that diagnoses the *founder* first, then the business, then the root cause sitting at their intersection.
 - **Stack** — FastAPI + SQLAlchemy + Alembic on Supabase Postgres · Vite + React 19 + Tailwind + react-router · Backend on AWS App Runner/ECS Fargate, frontend on Vercel · Razorpay (INR) · Supabase Auth
@@ -12,11 +13,16 @@
 | # | Decision | Choice |
 |---|---|---|
 | 1 | Billing model | **Auto-renewing mandate.** Razorpay Subscriptions with a real mandate, a working cancel path, and a downgrade sweep on expiry. This is what the UI already promises the founder, so it is the model we make true rather than the promise we retract. |
-| 2 | Coupons | **Simple launch codes in 1.0.** Admin-created codes, percent or flat off, one redemption per founder, an expiry date. Not a full promotions engine. |
-| 3 | Feature scope | **Keep everything currently built.** Nothing shipped is pulled or flag-hidden. The work is to fix what is broken and finish what is mocked. |
+| 2 | Coupons | **Coupons are the acquisition mechanism, not a promo.** Admin-issued codes: percent off, flat off, or a 100% comp. One redemption per founder, an expiry, a redemption cap. Upgraded from "simple launch codes" by Decision 5 — see §5.3. |
+| 3 | Feature scope | **Keep everything currently built, and every feature must work.** Nothing shipped is pulled or flag-hidden. Nothing half-built ships visible. |
 | 4 | Access | **Waitlist-gated launch.** Signup stays approval-only; the gate is not lifted in 1.0. |
+| 5 | Free tier | **Nothing is free. Every founder pays something.** The Free trial tier is withdrawn from the ladder. Access is obtained by paying, or by redeeming a coupon — including a 100% comp that grants a plan outright. The coupon, not a trial, is what lets a founder start without paying full price. |
 
-Consequence of #3: MVP 1.0 is a *quality and correctness* release, not a feature-cut release. The surface is already wide, so the launch bar is that **every screen a founder can reach tells the truth**, and every rupee charged is charged correctly.
+Consequence of #3: MVP 1.0 is a *quality and correctness* release, not a feature-cut release. The surface is already wide, so the launch bar is that **every screen a founder can reach tells the truth**, every rupee charged is charged correctly, and **no feature a founder can see is unfinished** — that last clause makes Know My Energy (§1.5) and the discovery-call reminder scheduler (§1.6) required work, not optional.
+
+Consequence of #5, and it is the larger one: **the paywall moves from the end of the journey to the front of it.** Today a founder is diagnosed, reads the report, and only then meets a wall — Ally has proved itself before it asks for money. With no free tier the ask comes *before* the proof, which is precisely what the coupon exists to soften. It also changes what the waitlist is: approval stops meaning "you may sign up" and starts meaning "you may sign up, and here is your code."
+
+**Exactly where that paywall sits is not yet decided** (§9, Decision 1). The three candidate positions are marked in the journey diagram in §2, and the rest of this document is written to hold for any of them.
 
 ---
 
@@ -85,7 +91,7 @@ Legend: **Live** = built and working · **Fix** = built but has a launch-critica
 | Recommendations | Live | Pro |
 | Knowledge-graph chat | Live | Pro |
 | Email notifications | Live | Pro |
-| Know My Energy | **Finish** | Pro — declared in the catalog, founder-facing implementation incomplete |
+| Know My Energy | **Finish** | Pro — declared in the catalog, founder-facing implementation incomplete. **Required for 1.0** under Decision 3: it is sold on the pricing page, so it must work. |
 | Frameworks library + detail | Live | All |
 | Achievements | Live | All |
 | Journey timeline | Live | All |
@@ -115,7 +121,9 @@ Legend: **Live** = built and working · **Fix** = built but has a launch-critica
 | Razorpay checkout for a paid plan | **Fix** — one-time order, not a mandate |
 | Webhook-granted plans, idempotent, signature-verified | Live |
 | Recurring renewal / cancel / downgrade on expiry | **Build** — §5 |
-| Coupons | **Build** — §5 |
+| Coupons — percent, flat, and 100% comp | **Build** — §5.3 |
+| Withdraw the Free trial from the sold ladder | **Build** — §5.5. `free` is *retained* as the internal no-access identifier, not deleted |
+| Comp grant path — a ₹0 redemption that never touches the gateway | **Build** — §5.3. Razorpay cannot create a ₹0 order or mandate, so this cannot be a discounted checkout |
 | ₹300 / 120-credit top-up | **Build** — advertised by the API, no checkout path exists |
 
 ### 1.8 Admin
@@ -144,6 +152,7 @@ Full detail in §4. Live today: RBAC (3 roles), user search and detail, credit a
                         ┌──────────────────────────┐
                         │  Waitlist (external)     │
                         │  approval granted        │
+                        │  + coupon code issued    │
                         └────────────┬─────────────┘
                                      │
    ACQUIRE                           ▼
@@ -152,15 +161,35 @@ Full detail in §4. Live today: RBAC (3 roles), user search and detail, credit a
                         │  /guided/login           │
                         └────────────┬─────────────┘
                                      │
+                        ┄┄┄┄┄ PAYWALL — position A? ┄┄┄┄┄
+                                     │
    ORIENT                            ▼
-        ┌────────────────────────────────────────────────────┐
-        │  Expectation → Welcome → Consent → Ally intro      │
-        │  → Profile build → Tour → Summary → Validate       │
-        │  → Problem statement                               │
-        └────────────────────────┬───────────────────────────┘
+        ┌─────────────────────────────────────────────────────┐
+        │  Expectation → Welcome → Consent → Ally intro       │
+        │  → Profile build → Tour → Summary → Validate        │
+        │  → Problem statement                                │
+        └────────────────────────┬────────────────────────────┘
+                                 │
+                ┄┄┄┄┄┄┄ PAYWALL — position B? ┄┄┄┄┄┄┄
+                                 │
+   PAY OR REDEEM                 ▼
+        ┌─────────────────────────────────────────────────────┐
+        │  Pick a plan:  ₹199 Starter · ₹450 Plus · ₹999 Pro  │
+        │                                                     │
+        │  Enter a coupon ─┬─ percent / flat off              │
+        │                  │    ─► Razorpay mandate           │
+        │                  │                                  │
+        │                  └─ 100% comp                       │
+        │                       ─► server-side grant; the     │
+        │                          gateway is never called    │
+        │                          (₹0 orders are impossible) │
+        │                                                     │
+        │  NOTHING IS FREE. No plan is reachable without      │
+        │  a payment or a comp redemption.                    │
+        └────────────────────────┬────────────────────────────┘
                                  │
    DIAGNOSE                      ▼
-        ┌────────────────────────────────────────────────────┐
+        ┌─────────────────────────────────────────────────────┐
         │  Phase 1  Founder DNA journey    (who you are)      │
         │  Phase 2  Current Problem        (what hurts)       │
         │  Phase 3  Adaptive diagnosis     (why it hurts)     │
@@ -172,38 +201,50 @@ Full detail in §4. Live today: RBAC (3 roles), user search and detail, credit a
         │    confidence < 60   → keep gathering               │
         │    confidence 60–80  → confirm the hypothesis       │
         │    confidence ≥ 80   → generate the report          │
-        │    (or question budget for the stage is exhausted)  │
-        └────────────────────────┬───────────────────────────┘
+        │    (or the stage's question budget is exhausted)    │
+        └────────────────────────┬────────────────────────────┘
+                                 │
+                ┄┄┄┄┄┄┄ PAYWALL — position C? ┄┄┄┄┄┄┄
                                  │
    REVEAL                        ▼
-        ┌────────────────────────────────────────────────────┐
+        ┌─────────────────────────────────────────────────────┐
         │  Thinking → Clarity Report                          │
         │    · Clarity Score                                  │
         │    · Founder DNA (archetype + dimensions)           │
         │    · Business DNA (6 readiness pillars)             │
         │    · Root cause chain                               │
         │    · Next Steps                                     │
-        └────────────────────────┬───────────────────────────┘
+        └────────────────────────┬────────────────────────────┘
                                  │
-   MONETISE                      ▼
-        ┌────────────────────────────────────────────────────┐
-        │  Free trial hits a wall  ─────────────┐             │
-        │    · lifetime diagnosis cap reached   │             │
-        │    · daily token ceiling (429)        ├─► Pricing   │
-        │    · credit balance spent (402)       │   + coupon  │
-        │    · a Pro-only surface (403)         │   → pay     │
-        └───────────────────────────────────────┴─────────────┘
+   EXPAND                        ▼
+        ┌─────────────────────────────────────────────────────┐
+        │  A paying founder still meets ceilings ┐            │
+        │    · lifetime diagnosis cap reached    │            │
+        │    · daily token ceiling      (429)    ├─► upgrade  │
+        │    · credit balance spent     (402)    │   or top-up│
+        │    · a higher-tier surface    (403)    ┘            │
+        └────────────────────────┬────────────────────────────┘
                                  │
    RETAIN                        ▼
-        ┌────────────────────────────────────────────────────┐
-        │  Dashboard · Ally Chat · Plan Your Day · Goals       │
-        │  Vision · Recommendations · Frameworks · Journey     │
-        │  Discovery call with a human coach                   │
-        │  Clarity Score tracked over time                     │
-        └────────────────────────────────────────────────────┘
+        ┌─────────────────────────────────────────────────────┐
+        │  Dashboard · Ally Chat · Plan Your Day · Goals      │
+        │  Vision · Recommendations · Frameworks · Journey    │
+        │  Discovery call with a human coach                  │
+        │  Clarity Score tracked over time                    │
+        └────────────────────────┬────────────────────────────┘
+                                 │
+   LAPSE                         ▼
+        ┌─────────────────────────────────────────────────────┐
+        │  A subscription ends, or a comp period expires      │
+        │  ─► no active plan                                  │
+        │                                                     │
+        │  WHAT THEY STILL SEE IS UNDECIDED — §9, Decision 2  │
+        └─────────────────────────────────────────────────────┘
 ```
 
-**The monetisation logic.** Ally is deliberately not a free-forever product. The Free tier is a **one-month funded trial** — credits are granted once, never renewed, because a renewing free tier is an unbounded recurring cost per signup. The trial is sized to let a founder complete one full diagnosis, read the report it writes, and work in the product for a month. The upgrade moment is engineered: it arrives when the founder has already seen the diagnosis be right about them.
+**Reading the diagram.** The three `PAYWALL — position ?` markers are the open decision in §9. Exactly one becomes real and the other two disappear: everything above the chosen marker is reachable without paying, everything below it is not. The rest of this document is written to hold whichever is chosen.
+
+**The monetisation logic.** Ally is not a free product and no longer has a trial. Every founder pays, and the only route to a plan without paying full price is a coupon — a discount, or a 100% comp that grants the plan outright. This is a deliberate trade: a trial converts on *proof* (the founder has seen the diagnosis be right about them before they are asked for money), whereas a coupon converts on *permission* (the founder is asked before Ally has shown anything, and the code is what makes that ask reasonable). The consequence is that the coupon slate is no longer a marketing lever — it **is** the funnel, and a launch with no codes issued is a launch with no signups.
 
 **The pricing ladder reads as three sentences:**
 
@@ -228,6 +269,7 @@ Full detail in §4. Live today: RBAC (3 roles), user search and detail, credit a
 | 7 | Build the profile | `/guided/profile` | `PATCH /profile` | 4 sections, branching by path |
 | 8 | Stage tour, summary, validate | `/guided/tour`, `/summary`, `/validate` | `GET /profile`, `/progress` | Real stage label, never a fallback |
 | 9 | State the problem | `/guided/problem` | — | Hands off to the real engine |
+| **P** | **Pay, or redeem a coupon** | `/app/billing` | `POST /coupons/validate`, `POST /payments/checkout` *or* `POST /coupons/redeem` | **Step position not yet decided (§9-1).** It sits at A (before step 5), B (here), or C (before step 14). Everything after it is unreachable without an active plan. |
 | 10 | **Phase 1 — Founder DNA** | `/app/founder-dna-journey` | `POST /diagnosis/*` | `/diagnosis/start` 409s until this completes |
 | 11 | **Phase 2 — Current Problem** | `/app/current-problem` | — | Reached from Phase 1, not linked directly |
 | 12 | **Phase 3 — Diagnosis** | `/app/diagnosis` | `POST /diagnosis/start`, `/answer`, `GET /current` | Resumable across reloads; server holds the session |
@@ -244,7 +286,9 @@ Full detail in §4. Live today: RBAC (3 roles), user search and detail, credit a
 5. Hitting a ceiling produces an honest, actionable wall: **429** daily limit, **402** credits spent *or trial lapsed* (the two are distinguished by date and worded differently), **403** the feature is on a higher tier.
 6. Every wall routes to `/app/billing`.
 
-### 3.3 Upgrade — the paid path (target state, §5)
+### 3.3 Getting a plan — the two paths (target state, §5)
+
+**Path 1 — pay (with or without a discount code)**
 
 | # | Step | API |
 |---|---|---|
@@ -255,7 +299,19 @@ Full detail in §4. Live today: RBAC (3 roles), user search and detail, credit a
 | 5 | Backend grants the plan **from the signed webhook only** | `POST /webhooks/razorpay` |
 | 6 | Credits granted, entitlements widen immediately | — |
 | 7 | Month 2 onward: auto-charge, credits renew, ledger row appended | `subscription.charged` |
-| 8 | Cancel → access continues to period end, then downgrades to Free | `POST /payments/subscription/cancel` + expiry sweep |
+| 8 | Cancel → access continues to period end, then the plan lapses | `POST /payments/subscription/cancel` + expiry sweep |
+
+**Path 2 — redeem a 100% comp**
+
+| # | Step | API |
+|---|---|---|
+| 1 | Enter the comp code | `POST /coupons/validate` → `{ final_inr: 0, comp: true }` |
+| 2 | Redeem — **the gateway is never called** | `POST /coupons/redeem` |
+| 3 | Server grants the plan directly, writes the redemption row and an audit entry, in one transaction | — |
+| 4 | Comp period is stamped with an explicit end date | — |
+| 5 | At period end the founder lapses — **no mandate exists, so nothing auto-charges** | expiry sweep |
+
+The asymmetry in step 5 is the whole risk of this model: a comped founder is a **manual re-conversion**, not a renewal. See §9, Decision 3.
 
 ### 3.4 Discovery call
 
@@ -347,14 +403,15 @@ A founder pays through `POST /payments/checkout`, which creates a **one-time Raz
           ├─ subscription.activated ─► grant plan · grant credits · set current_period_end
           ├─ subscription.charged   ─► extend period · renew credits · append ledger row
           ├─ payment.failed         ─► mark retrying · notify founder · admin queue
-          ├─ subscription.halted    ─► dunning exhausted → downgrade to Free
+          ├─ subscription.halted    ─► dunning exhausted → lapse (§9-2)
           └─ subscription.cancelled ─► mark cancel_at_period_end
           │
           ▼
   Nightly sweep  POST /internal/jobs/expire-subscriptions
           │
           └─ every subscription past current_period_end and not renewed
-             ─► founders.plan_type = 'free' · entitlements narrow · founder emailed
+             ─► plan_type = 'free', which now means NO ACCESS (§5.5)
+                · entitlements narrow · data retained · founder emailed
 ```
 
 **Rules that must hold:**
@@ -362,13 +419,23 @@ A founder pays through `POST /payments/checkout`, which creates a **one-time Raz
 1. A plan is granted **only** from a signature-verified webhook. Never from a redirect, never from a client call.
 2. Every webhook handler is idempotent — Razorpay retries anything that is not a 2xx, and a double grant is a double month.
 3. Cancellation is **at period end**, never immediate. The founder paid for the month.
-4. Downgrade narrows entitlements but **never deletes data**. A founder who returns finds their reports, goals and history intact.
+4. Downgrade narrows entitlements but **never deletes data**. A founder who returns finds their reports, goals and history intact. Under Decision 5 the downgrade target is the no-access state, not a trial — see §5.5 and §9-2.
 5. Credits expire before they renew at a period boundary — an unused allowance must not roll over.
 6. A credit-grant failure must not roll back a plan grant already committed; it is logged loudly and reconciled.
 
-### 5.3 Coupon flow — launch codes
+### 5.3 Coupon flow — the acquisition mechanism
 
-**Model.** A coupon is: a code, a type (`percent` or `flat`), a value, an optional tier restriction, an expiry date, a maximum total redemption count, and a one-redemption-per-founder rule. Redemptions are recorded in their own append-only table.
+Decision 5 makes this the way founders get in, not a discount on the way in. Every code is admin-issued; nothing self-serve generates one.
+
+**Model.** A coupon is: a code, a type, a value, an optional tier restriction, an optional binding to a single email, an expiry date, a maximum total redemption count, and a one-redemption-per-founder rule. Redemptions are recorded in their own append-only table.
+
+| Type | Effect | Path |
+|---|---|---|
+| `percent` | N% off the first charge | Gateway — discounted mandate |
+| `flat` | ₹N off the first charge | Gateway — discounted mandate |
+| `comp` | **100% — the plan is granted outright for a stated period** | **Server-side grant; the gateway is never called** |
+
+**Why `comp` is a different code path, not a 100% discount.** Razorpay cannot create an order or a mandate for ₹0. A comp therefore cannot be expressed as a discounted checkout — it has to be a direct grant. That makes it the most sensitive surface in the product: it hands out paid plans with no payment. It is admin-issued only, always capped, always expiring, always audited, and never generated by anything a founder controls.
 
 ```
   Founder enters a code on the pricing page
@@ -384,30 +451,66 @@ A founder pays through `POST /payments/checkout`, which creates a **one-time Raz
           └─ valid ─► { discount_inr, final_inr, label }
           │
           ▼
-  POST /payments/checkout  { tier, coupon_code }
+  Server RE-VALIDATES and recomputes. The browser's number is never trusted.
           │
-          ▼
-  Server RE-VALIDATES the coupon and recomputes the price.
-  The browser's number is never trusted.
+          ├─ final > ₹0  ──► POST /payments/checkout { tier, coupon_code }
+          │                     │
+          │                     ▼
+          │                  Razorpay subscription at the discounted amount
+          │                     │
+          │                     ▼
+          │                  subscription.activated ─► grant + redemption row,
+          │                                            in one transaction
           │
-          ▼
-  Razorpay subscription created with the discounted amount
-          │
-          ▼
-  On subscription.activated: redemption row written, atomically with the grant
+          └─ final = ₹0  ──► POST /coupons/redeem { code }
+                                │   (gateway NOT called — ₹0 is impossible)
+                                ▼
+                             grant plan + redemption row + audit row,
+                             in one transaction, with an explicit
+                             comp_expires_at
+                                │
+                                ▼
+                             NO MANDATE EXISTS. Nothing will auto-charge.
 ```
 
 **Rules that must hold:**
 
 1. The discount is computed **server-side at checkout**, re-validated at the moment the order is created. A client-supplied price is ignored entirely.
 2. The redemption is written in the same transaction as the grant, so a code cannot be spent twice by two concurrent checkouts.
-3. A coupon applies to the **first charge only** in 1.0. Recurring discounts are post-launch — they need Razorpay plan-level offers and a different model.
-4. A code that would make the total ₹0 is rejected at creation. Free access is granted by admin, not by checkout.
+3. A discount coupon applies to the **first charge only** in 1.0. Recurring discounts are post-launch — they need Razorpay plan-level offers and a different model.
+4. **A ₹0 total never reaches the gateway.** It routes to the comp grant path instead. (This reverses the rule written before Decision 5, which rejected ₹0 codes outright — comps are now a product requirement.)
 5. Codes are case-insensitive on input, stored uppercase.
+6. A comp grant carries an explicit end date from the moment it is issued. A comp with no end date is not issuable except through the indefinite-comp path, if §9 Decision 3 authorises one.
+7. Comp issuance and redemption both write to the admin audit log, with the issuing admin named. Every free plan in the system must be traceable to a person who authorised it.
+8. A code bound to an email may be redeemed only by that email's founder account. This is what makes waitlist-approval issuance safe at scale.
 
 ### 5.4 Top-up
 
-`GET /plans` already advertises a **₹300 / 120-credit** top-up. There is no way to buy it — `/payments/checkout` accepts only a `PlanTier`. For 1.0 either build the top-up checkout path or stop advertising it. **Recommendation: build it.** It is the Free tier's natural exit and the smallest possible first payment.
+`GET /plans` already advertises a **₹300 / 120-credit** top-up. There is no way to buy it — `/payments/checkout` accepts only a `PlanTier`. For 1.0 either build the top-up checkout path or stop advertising it. **Recommendation: build it.** Under Decision 5 it is the smallest possible first payment in the product — the cheapest way for a founder to pay *something* — and the natural landing spot for anyone who exhausts a comped month.
+
+---
+
+### 5.5 Withdrawing the Free tier
+
+**Do not delete the tier. Redefine it.**
+
+`get_plan()` already resolves any unknown, missing or malformed `plan_type` to `free`, deliberately failing *closed* so that a typo grants the least rather than the most. If `free` is redefined from "trial tier" to "**no active subscription, no access**", that existing fallback becomes genuinely safe instead of accidentally generous, and every call site keeps working while granting less.
+
+Deleting the tier instead would mean migrating every `founders.plan_type` row, changing the CHECK constraint on two tables, and finding a new fallback for `get_plan()` — a large, risky change that buys nothing a redefinition does not.
+
+So:
+
+| Change | Detail |
+|---|---|
+| `PLANS[FREE].features` | → empty, or whatever §9 Decision 2 settles for the lapsed state |
+| `signup_credits` | 1,431 → 0 |
+| `monthly_credits`, both daily ceilings | → 0 |
+| `sold_plans()` | Free already excluded — no change |
+| Pricing page | Free column removed; three paid tiers plus the coupon field |
+| Copy everywhere | No "free", "trial", or "one month free" language survives. `PLANS[FREE].tagline` currently reads "One month free. See what Ally finds." |
+| Expiry sweep target | A lapsed subscription lands on `free`, which now means no access |
+
+**This also resolves P0-5.** The problem was never that Free was mis-sized; it is that Free was a funded trial at all. Decision 5 removes the tier from the ladder, so there is no ceiling left to rebalance — only a lapsed state to define.
 
 ---
 
@@ -419,10 +522,13 @@ A founder pays through `POST /payments/checkout`, which creates a **one-time Raz
 |---|---|---|---|
 | P0-1 | **No recurring billing.** One-time order; `subscriptions.expires_at` written and never read. Paid tiers never lapse. | `app/payments/service.py:139-145` | Razorpay Subscriptions + the four webhook events + nightly expiry sweep (§5.2) |
 | P0-2 | **Billing page states a false renewal date and a fake cancel.** Hardcoded "August 1, 2026"; Cancel confirm handler is `setCancelModal(false)`. Status view reads `MOCK_PLANS`. | `frontend/src/pages/Billing.jsx:566, 599, 617, 581` | Wire to the real subscription API; real cancel; delete the mock fallback from the status view |
-| P0-3 | **No coupon system exists.** Zero occurrences repo-wide. | — | Build §5.3 |
+| P0-3 | **No coupon system exists.** Zero occurrences repo-wide. Under Decision 5 this is no longer a promo feature — it is the only way a founder gets in without paying full price, so **it is the funnel**. | — | Build §5.3, including the `comp` grant path |
 | P0-4 | **Top-up advertised, unpurchasable.** | `app/api/v1/plans/router.py:48` vs `payments/router.py` | Add the top-up checkout path |
-| P0-5 | **Free tier is sized for internal testing, not launch.** 8,000 tokens/day — *above* Plus (3,500) and level with Pro. Free also carries Vision, Recommendations and Knowledge chat, all ₹999 features. | `app/plans/catalog.py:222-260`, flagged in the file's own comments | Resize Free to the launch ladder and narrow its feature set, in one change, before the gate opens |
+| P0-5 | **The Free tier must be withdrawn** (Decision 5). It is currently a funded trial sized for internal testing — 8,000 tokens/day, *above* Plus (3,500) and level with Pro, carrying three ₹999 surfaces. | `app/plans/catalog.py:222-260`, flagged in the file's own comments | §5.5 — redefine `free` as the no-access state rather than deleting the tier. Supersedes the earlier "resize it" fix. |
 | P0-6 | **No scheduler in production.** Discovery reminders, the account-deletion sweep, report reconciliation and partition creation are all endpoints nothing calls. | `webhooks/internal_jobs.py` | EventBridge (or pg_cron) hitting the internal endpoints with `INTERNAL_JOBS_SECRET` |
+| P0-8 | **No comp grant path.** A ₹0 redemption cannot go through Razorpay, so "some founders get a plan free" is currently unimplementable by any route. | — | §5.3 — `POST /coupons/redeem`, transactional grant + redemption + audit, admin-issued codes only |
+| P0-9 | **No lapsed state exists.** Today "downgrade" means moving to Free, which grants a full trial's worth of access. Once Free means no-access, every expiry, cancellation and comp exit lands there — and what a lapsed founder can still see is **undecided** (§9-2). | `app/plans/catalog.py`, expiry sweep | Define the state, then build it. Blocking: the sweep in P0-1 has nowhere correct to land until this is settled |
+| P0-10 | **Paywall position is undecided** (§9-1) and gates the onboarding build. Positions A, B and C imply different screens, different drop-off, and different LLM cost exposure for non-payers. | §2 diagram | Product decision required before the onboarding and billing work can be sequenced |
 | P0-7 | **`RAZORPAY_*` keys absent from `.env.example`.** A deploy that forgets them silently disables payments — `payments_configured` returns false and checkout 500s. | `backend/.env.example` | Document all three keys; assert at startup in production |
 
 ### P1 — must be right at launch
@@ -448,9 +554,11 @@ A founder pays through `POST /payments/checkout`, which creates a **one-time Raz
 ### Exit criteria — 1.0 ships when all of these are true
 
 - [ ] A real card is charged, renews on the second cycle, and can be cancelled from inside the product
-- [ ] A cancelled subscription downgrades to Free at period end, automatically, with data intact
+- [ ] A cancelled subscription lapses at period end, automatically, with data intact
 - [ ] A launch code applies a server-computed discount and cannot be redeemed twice
-- [ ] Free's ladder is resized and no free founder holds a Pro-only surface
+- [ ] A 100% comp code grants a plan without touching the gateway, is capped, expires, and appears in the audit log naming the admin who issued it
+- [ ] No route into the product is reachable without an active plan, from whichever paywall position §9-1 settles on
+- [ ] The Free tier is withdrawn: no "free" or "trial" copy survives anywhere in the product, and a lapsed founder lands in the defined state rather than on a trial's worth of access
 - [ ] The scheduler is live and every internal job has run successfully at least once in production
 - [ ] `MANUAL_QA_CHECKLIST.md` passes end to end on production, on desktop and at 375px
 - [ ] Zero console errors and zero 5xx across a full founder journey
@@ -460,7 +568,7 @@ A founder pays through `POST /payments/checkout`, which creates a **one-time Raz
 
 ## 7. What is included in MVP 1.0
 
-**Everything currently built, made correct** — per Decision #3. Concretely:
+**Everything currently built, made correct, and every feature working** — per Decision #3. Nothing ships visible-but-unfinished, which makes Know My Energy and the discovery-reminder scheduler required rather than optional. Concretely:
 
 1. **Access** — waitlist-gated email + OTP + password auth, backend session tokens, rotation, logout.
 2. **Onboarding** — the full guided flow through consent, profile, stage and problem statement.
@@ -468,7 +576,7 @@ A founder pays through `POST /payments/checkout`, which creates a **one-time Raz
 4. **The outputs** — Clarity Report with a Clarity Score, Founder DNA, Business DNA across six readiness pillars, root-cause chain, Next Steps.
 5. **The workspace** — Dashboard, Ally Chat (grounded, streaming, attachments, voice), Plan Your Day, Goals, Next Steps, Vision, Recommendations, Knowledge chat, Frameworks, Achievements, Journey, Notifications, Help assistant, Profile, Settings, Feedback.
 6. **Discovery calls** — live Google Calendar slots, request-and-confirm booking, priority lead time for Pro, confirmation and reminder emails.
-7. **Money** — the four-tier ladder (Free trial · ₹199 Starter · ₹450 Plus · ₹999 Pro), credits with lazy settlement, daily token ceilings, server-side entitlements, **auto-renewing Razorpay subscriptions**, **launch coupon codes**, and the ₹300 top-up.
+7. **Money** — the three-tier paid ladder (₹199 Starter · ₹450 Plus · ₹999 Pro) with **no free tier**, credits with lazy settlement, daily token ceilings, server-side entitlements, **auto-renewing Razorpay subscriptions**, the **coupon system including 100% comps**, and the ₹300 top-up.
 8. **Admin** — the full panel with three-role RBAC, plus the coupon, subscription and failed-payment additions in §4.3, all audited.
 9. **Trust** — export, restrict, withdraw, 30-day scheduled deletion, Terms, Privacy, Sentry.
 10. **Operations** — a live scheduler, a written migration runbook, and reconciliation alerting.
@@ -515,18 +623,71 @@ A founder pays through `POST /payments/checkout`, which creates a **one-time Raz
 ### 8.4 Explicitly **not** on the roadmap
 
 - Lifting the waitlist to open public signup — a separate go-to-market decision, not an engineering one.
-- A permanently free tier. Free is a funded one-month trial and stays one.
+- A free tier of any kind, permanent or trial. Decision 5 withdrew it; the coupon is the only route to a plan below list price.
 - Qdrant. The implementation uses pgvector and that divergence from the original PRD is treated as intentional and settled.
 
 ---
 
-## 9. Open decisions the product side still owes
+## 9. Open decisions
+
+Decision 5 (no free tier) is locked. Four consequences of it are **deliberately not yet decided** and are recorded here with their options, so the build can proceed on everything that does not depend on them. Decisions 1–3 are on the critical path: the onboarding, billing and expiry work cannot be finished without them.
+
+### 9-1. Where the paywall sits — **blocks P0-10**
+
+The candidate positions are marked in the §2 diagram.
+
+| Option | What it means | For | Against |
+|---|---|---|---|
+| **A — at signup** | Pay or redeem immediately after waitlist approval, before onboarding | Simplest to build and explain; zero free compute given away | The coldest possible ask; onboarding drop-off becomes revenue drop-off |
+| **B — after onboarding, before diagnosis** | Founder completes profile, stage and problem statement, sees what Ally will do, then pays | They have invested effort and understand the offer; the expensive part (~24,400 unmetered tokens per diagnosis) is never spent on a non-payer | Some drop-off is simply deferred, not recovered |
+| **C — after diagnosis, before the report** | Answer everything, then pay to unlock the Clarity Report | Highest conversion — the founder wants the answer they can already feel is coming | Funds every non-payer's full diagnosis; reads as bait-and-switch to some founders |
+
+**Owner:** Product · **Note:** whichever is chosen, every route below it must fail closed server-side, not merely be hidden in the UI.
+
+### 9-2. What a founder with no active plan can see — **blocks P0-9**
+
+Applies to three populations at once: never paid, lapsed after paying, and a comp that ended.
+
+| Option | What it means | For | Against |
+|---|---|---|---|
+| **Past reports read-only** | Keep what they already paid for; everything else paywalled | Best reason to come back; never destroys purchased work | More surface to keep correct in a state nobody tests often |
+| **Full lockout** | Nothing until they pay again | Strongest renewal pressure | A founder who paid ₹999 loses access to their own diagnosis — reads as punitive |
+| **Dashboard + report, no AI surfaces** | Shell, Clarity Score and report stay; anything costing a model call is locked | More product visible, so upgrade prompts land better | The largest of the three to build and keep honest |
+
+**Owner:** Product · **Note:** whatever is chosen, **no founder data is ever deleted on lapse.** Access narrows; the record stays.
+
+### 9-3. What happens when a 100% comp ends — **blocks P0-1's sweep semantics**
+
+A comped founder never authorised a mandate, because no charge ever happened. There is nothing to auto-renew.
+
+| Option | What it means | For | Against |
+|---|---|---|---|
+| **Lapse, then prompt to pay** | Comp runs N cycles, founder lapses, must actively pay | Honest; no billing surprise; no mandate needed | Every comp renewal is a manual conversion you have to earn |
+| **Take a mandate at redemption** | Authorise a mandate even at ₹0 (via a ₹1 authorisation and refund) so cycle N+1 charges automatically | Far better retention; turns comps into real subscriptions | A genuine e-mandate compliance path, and a founder who may not expect the charge |
+| **Indefinite comp** | Some codes never expire; revocable from the panel | Necessary for advisors, partners and design partners | Dangerous as anything other than a small, named list |
+
+**Owner:** Product / Finance · **Note:** these are not exclusive — the likely answer is a default plus a small indefinite list, but the default must be chosen.
+
+### 9-4. Existing Free-tier founders — **no action taken pending this**
+
+Today's testers hold `plan_type='free'` with the testing-phase allowance. When Free is redefined to no-access (§5.5) they lose access **at that moment** unless something is done first.
+
+| Option | For | Against |
+|---|---|---|
+| **Issue comp codes before the switch** | Nobody loses access unannounced; doubles as the first live test of the comp path | Requires the coupon system to ship before the ladder flips — an ordering constraint on the release |
+| **Grandfather them** | Simplest for the testers | A permanent second class of account to reason about in every gate, forever |
+| **Lapse them with everyone else** | Cleanest model | May cost you the testers currently giving feedback |
+
+**Owner:** Product · **Status:** explicitly deferred — **do nothing until this is decided.** The ordering constraint is the thing to watch: if comp codes are the answer, the coupon system must ship before Free is withdrawn, not with it.
+
+### 9-5. Carried over from before Decision 5
 
 | # | Decision | Owner | Blocks |
 |---|---|---|---|
-| 1 | Free-tier launch sizing — exact daily ceiling, credit grant and feature set | Product | P0-5 |
-| 2 | Free discovery calls per tier — or drop the claim from Pro's positioning | Product | P1-1 |
-| 3 | Launch coupon slate — which codes, what discount, what expiry | Product / GTM | P0-3 |
-| 4 | Sign-off on the confidence-formula weights | Viraj | Engine calibration |
-| 5 | "Core questions expected per stage" and the minimum-question floor | Product | Confidence coverage denominator |
-| 6 | Whether `business_dimensions` (empty, superseded by `readiness_pillars`) is dropped | Team | Schema hygiene |
+| a | Free discovery calls per tier — or drop the claim from Pro's positioning | Product | P1-1 |
+| b | Launch coupon slate — which codes, what discount, how many comps, what expiry | Product / GTM | P0-3 |
+| c | Sign-off on the confidence-formula weights | Viraj | Engine calibration |
+| d | "Core questions expected per stage" and the minimum-question floor | Product | Confidence coverage denominator |
+| e | Whether `business_dimensions` (empty, superseded by `readiness_pillars`) is dropped | Team | Schema hygiene |
+
+*(The former Decision 1, "Free-tier launch sizing", is closed: Decision 5 withdraws the tier, so there is no ladder left to size — only the lapsed state in 9-2 to define.)*
