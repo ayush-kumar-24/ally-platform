@@ -100,11 +100,23 @@ export default function Login() {
      in a URL may trigger an email, or a crafted link could spam any inbox. */
   useEffect(() => {
     const applyEmailFromHash = () => {
-      const match = /(?:^#|&)email=([^&]+)/.exec(window.location.hash);
-      if (!match) return;
+      // index.html moves the fragment into sessionStorage before any script
+      // runs (so analytics never sees the address); this is the hand-off.
+      // The fragment path remains for an in-page hash navigation, which the
+      // inline guard does not run for.
+      let raw = '';
+      try {
+        raw = window.sessionStorage.getItem('ally_invite_email') || '';
+        if (raw) window.sessionStorage.removeItem('ally_invite_email');
+      } catch { /* storage blocked */ }
+      if (!raw) {
+        const match = /(?:^#|&)email=([^&]+)/.exec(window.location.hash);
+        if (!match) return;
+        raw = match[1];
+        window.history.replaceState(null, '', window.location.pathname + window.location.search);
+      }
       let candidate = '';
-      try { candidate = decodeURIComponent(match[1]).trim(); } catch { /* not ours */ }
-      window.history.replaceState(null, '', window.location.pathname + window.location.search);
+      try { candidate = decodeURIComponent(raw).trim(); } catch { /* not ours */ }
       if (!EMAIL_RE.test(candidate)) return;
       setEmail(candidate);
       setStep('email');
