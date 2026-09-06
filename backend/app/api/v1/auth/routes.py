@@ -146,7 +146,7 @@ def _incoming_refresh_token(request: Request, payload) -> str:
     response_model=SessionResponse,
     dependencies=[Depends(session_rate_limit)],
 )
-async def start_session(
+def start_session(
     request: Request,
     response: Response,
     identity: AuthUser = Depends(get_upstream_identity),
@@ -195,7 +195,7 @@ async def start_session(
     response_model=TokenPair,
     dependencies=[Depends(refresh_rate_limit)],
 )
-async def refresh_session(
+def refresh_session(
     request: Request,
     response: Response,
     payload: RefreshRequest | None = None,
@@ -230,7 +230,7 @@ async def refresh_session(
     response_model=SessionResponse,
     dependencies=[Depends(resume_rate_limit)],
 )
-async def resume_session(
+def resume_session(
     request: Request,
     response: Response,
     payload: RefreshRequest | None = None,
@@ -268,7 +268,7 @@ async def resume_session(
 
 
 @router.post("/logout", status_code=status.HTTP_200_OK)
-async def logout(
+def logout(
     request: Request,
     response: Response,
     payload: LogoutRequest | None = None,
