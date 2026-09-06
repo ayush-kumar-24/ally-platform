@@ -59,16 +59,9 @@ notifications, feedback, webhooks, …) plus `GET /api/v1/health` which pings th
 **Engine/session:** [app/db/session.py](../app/db/session.py) — one module-level `engine`,
 `SessionLocal`, `Base`, and the `get_db()` FastAPI dependency (yield + close).
 
-⚠️ Pool size is derived from which pooler `DATABASE_URL` names: **2 + 4** against the
-session-mode pooler (`:5432`), which allows only **15 client connections total, shared by
-everything**, and **10 + 10** against the transaction-mode one (`:6543`), which is not
-subject to that ceiling. Higher numbers in session mode caused a real outage with just two
-local processes. Context in `DEPLOY_AWS.md`.
-
-⚠️ A route that takes `db: Session` is **`def`, never `async def`** — the Session is the
-synchronous one, so an `async def` route runs its blocking queries on the event loop and
-stalls every other request in the process. Enforced by
-`tests/test_routes_do_not_block_the_event_loop.py`.
+⚠️ Pool size is deliberately tiny (`DB_POOL_SIZE=2`, `DB_POOL_MAX_OVERFLOW=3`). Supabase's
+session-mode pooler allows only **15 client connections total, shared by everything**.
+Higher numbers caused a real outage with just two local processes. Context in `DEPLOY_AWS.md`.
 
 ⚠️ `app/db/session.py` and `app/core/auth/*` are treated as protected — ask before changing them.
 

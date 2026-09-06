@@ -445,15 +445,6 @@ class Founders(Base):
     updated_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True), server_default=text('now()'))
     tour_seen_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
     stage_id: Mapped[Optional[int]] = mapped_column(Integer)
-    # Added by the add_admin_panel_tables migration and, until now, present in
-    # the database but absent from this model -- which is why the two things
-    # that read them (the suspension check and the last-seen stamp, in
-    # app/core/auth/dependencies.py) went through raw SQL and cost their own
-    # round trips. Verified against the production schema: status is NOT NULL,
-    # last_active_at is nullable. Mapping them lets the founder row the request
-    # already loads answer both questions.
-    status: Mapped[Optional[str]] = mapped_column(String(20), server_default=text("'active'::character varying"))
-    last_active_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
 
     industry_mapped: Mapped[Optional['Industries']] = relationship('Industries', back_populates='founders')
     stage: Mapped[Optional['FounderStages']] = relationship('FounderStages', back_populates='founders')

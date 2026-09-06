@@ -20,10 +20,8 @@ from app.core.auth.base import AccountSuspendedError, AuthError, AuthProvider, A
 from app.core.auth.dependencies import (
     get_current_founder,
     get_upstream_identity,
-    founder_row_for_request,
     is_account_active,
     record_last_active,
-    stamp_last_active,
 )
 from app.core.auth.factory import get_auth_provider
 from app.core.auth.session_store import get_session_store
@@ -45,9 +43,7 @@ __all__ = [
     "get_current_founder",
     "get_upstream_identity",
     "get_session_store",
-    "founder_row_for_request",
     "is_account_active",
-    "stamp_last_active",
     "record_last_active",
     "ACCESS",
     "REFRESH",
