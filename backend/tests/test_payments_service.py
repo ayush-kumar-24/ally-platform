@@ -13,6 +13,8 @@ import hmac
 import json
 from datetime import datetime, timezone
 
+import pathlib
+
 import pytest
 
 from app.credits.models import CreditOperation
@@ -242,6 +244,64 @@ def test_captured_payment_grants_the_plan_and_credits():
     # remembered to edit two places. This number moved once already when the
     # Rs 450 tier's daily ceiling changed and its credit grant had to follow.
     assert credits.grants[0]["amount"] == PLANS[PlanTier.STARTER].monthly_credits
+
+
+def test_basic_is_recorded_as_a_one_time_subscription_with_no_expiry():
+    """The Rs 199 tier buys one diagnosis, not a month, so its subscription row
+    must say so. It shipped once claiming billing_cycle='monthly' with an expiry
+    30 days out -- untrue, and load-bearing the moment anything enforces expiry.
+
+    The plan_type written here is also what broke Basic outright: `subscriptions`
+    is INSERTed before the plan is granted, and its CHECK constraint did not list
+    'basic', so a captured Rs 199 payment failed on this row and never reached
+    grant_plan. See migration b4d927f1a6c8."""
+    service, repo, _ = _service()
+    service.start_checkout(42, PlanTier.BASIC)
+
+    body = _captured_event(order_id="order_1", payment_id="pay_1", tier="basic")
+    result = service.handle_webhook(body=body, signature=_sign(body))
+
+    assert result.outcome == WebhookOutcome.CAPTURED
+    assert repo.plans_granted == [(42, "basic")]
+    sub = repo.subscriptions_created[0]
+    assert sub["plan_type"] == "basic"
+    assert sub["billing_cycle"] == "one_time"
+    assert sub["expires_at"] is None
+
+
+def test_recurring_plans_still_get_a_monthly_cycle_and_an_expiry():
+    """The one-time path must not have quietly changed Plus and Pro."""
+    service, repo, _ = _service()
+    service.start_checkout(42, PlanTier.PRO)
+
+    body = _captured_event(order_id="order_1", payment_id="pay_1", tier="pro")
+    service.handle_webhook(body=body, signature=_sign(body))
+
+    sub = repo.subscriptions_created[0]
+    assert sub["plan_type"] == "pro"
+    assert sub["billing_cycle"] == "monthly"
+    assert sub["expires_at"] is not None
+
+
+def test_every_sold_tier_is_writable_to_the_subscriptions_table():
+    """A guard for the class of bug b4d927f1a6c8 fixed: a tier the catalog sells
+    but the database's CHECK constraint rejects is invisible until someone pays.
+    The constraint lists tier names, so the catalog and the migration must agree
+    -- assert against the constraint's own list rather than a copy of it."""
+    from app.plans.catalog import sold_plans
+
+    migration = (
+        pathlib.Path(__file__).resolve().parents[1]
+        / "alembic" / "versions"
+        / "2026_09_06_0700-b4d927f1a6c8_allow_basic_and_one_time_subscriptions.py"
+    ).read_text()
+    permitted = migration.split("_PLAN_NEW = (", 1)[1].split(")", 1)[0]
+
+    for plan in sold_plans():
+        assert f'"{plan.tier.value}"' in permitted, (
+            f"catalog sells {plan.name} as tier {plan.tier.value!r}, which "
+            "subscriptions_plan_type_check would reject"
+        )
 
 
 def test_captured_payment_is_idempotent_on_retry():

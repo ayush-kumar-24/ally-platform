@@ -333,7 +333,7 @@ class Founders(Base):
         # emotional_state is a jsonb array (multi-select); CHECK restricts elements to the allowed feelings.
         CheckConstraint("""emotional_state IS NULL OR (jsonb_typeof(emotional_state) = 'array' AND emotional_state <@ '["excited","inspired","confident","curious","overwhelmed","stuck","determined","hopeful"]'::jsonb)""", name='founders_emotional_state_check'),
         CheckConstraint("experience_level::text = ANY (ARRAY['first_time'::character varying, 'one_company'::character varying, 'serial'::character varying, 'investor'::character varying, 'mentor'::character varying, 'executive'::character varying]::text[])", name='founders_experience_level_check'),
-        CheckConstraint("plan_type::text = ANY (ARRAY['free'::character varying, 'starter'::character varying, 'pro'::character varying, 'enterprise'::character varying]::text[])", name='founders_plan_type_check'),
+        CheckConstraint("plan_type::text = ANY (ARRAY['free'::character varying, 'basic'::character varying, 'starter'::character varying, 'pro'::character varying, 'enterprise'::character varying]::text[])", name='founders_plan_type_check'),
         CheckConstraint("team_size::text = ANY (ARRAY['solo'::character varying, '2_5'::character varying, '6_10'::character varying, '11_25'::character varying, '26_50'::character varying, '50_plus'::character varying]::text[])", name='founders_team_size_check'),
         CheckConstraint("working_relationship::text = ANY (ARRAY['coach'::character varying, 'cofounder'::character varying, 'strategist'::character varying, 'accountability'::character varying, 'brainstorm'::character varying, 'research'::character varying]::text[])", name='founders_working_relationship_check'),
         ForeignKeyConstraint(['industry_mapped_id'], ['industries.industry_id'], name='founders_industry_mapped_id_fkey'),
@@ -1095,8 +1095,8 @@ class RootCauses(Base):
 class Subscriptions(Base):
     __tablename__ = 'subscriptions'
     __table_args__ = (
-        CheckConstraint("billing_cycle::text = ANY (ARRAY['monthly'::character varying, 'annual'::character varying]::text[])", name='subscriptions_billing_cycle_check'),
-        CheckConstraint("plan_type::text = ANY (ARRAY['free'::character varying, 'starter'::character varying, 'pro'::character varying, 'enterprise'::character varying]::text[])", name='subscriptions_plan_type_check'),
+        CheckConstraint("billing_cycle::text = ANY (ARRAY['monthly'::character varying, 'annual'::character varying, 'one_time'::character varying]::text[])", name='subscriptions_billing_cycle_check'),
+        CheckConstraint("plan_type::text = ANY (ARRAY['free'::character varying, 'basic'::character varying, 'starter'::character varying, 'pro'::character varying, 'enterprise'::character varying]::text[])", name='subscriptions_plan_type_check'),
         CheckConstraint("status::text = ANY (ARRAY['active'::character varying, 'cancelled'::character varying, 'expired'::character varying, 'paused'::character varying, 'trial'::character varying]::text[])", name='subscriptions_status_check'),
         ForeignKeyConstraint(['founder_id'], ['founders.founder_id'], name='subscriptions_founder_id_fkey'),
         PrimaryKeyConstraint('subscription_id', name='subscriptions_pkey'),
