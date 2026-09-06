@@ -1,7 +1,7 @@
 {
-  "name": "Ally — Founder DNA Platform by GoXL",
+  "name": "GoXL Ally",
   "short_name": "Ally",
-  "description": "AI that diagnoses the founder first, then the business.",
+  "description": "The Founder’s Compass, by GoXL.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

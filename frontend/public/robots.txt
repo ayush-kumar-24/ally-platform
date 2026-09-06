@@ -1,18 +1,8 @@
-# goxlally.ai -- Ally, by GoXL Consulting Solutions Pvt. Ltd.
-# All crawlers are welcome on every path. No exclusions.
+# app.goxlally.ai -- the GoXL Ally product, for founders who have been let in.
+# The public site is www.goxlally.ai; that is what search engines should show.
+# Crawling stays allowed so that every page's noindex is actually seen and the
+# old entries for this domain drop out of the index. Nothing here is listed.
 
 User-agent: *
 Allow: /
-
-# Named individually so a verifier looking for its own agent finds an explicit
-# rule rather than falling through to the wildcard.
-User-agent: Amazonbot
-Allow: /
-
-User-agent: Googlebot
-Allow: /
-
-User-agent: bingbot
-Allow: /
-
-Sitemap: https://www.goxlally.ai/sitemap.xml
+Disallow: /api/
