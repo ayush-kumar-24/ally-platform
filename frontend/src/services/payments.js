@@ -37,8 +37,20 @@ const CHECKOUT_JS_URL = 'https://checkout.razorpay.com/v1/checkout.js';
  * @returns {Promise<{payment_id:number, order_id:string, amount_paise:number,
  *                    currency:string, key_id:string}>}
  */
-export function startCheckout(tier) {
-  return post('/payments/checkout', { tier });
+export function startCheckout(tier, couponCode = null) {
+  // A code, never a price. The backend prices the plan from its own catalog;
+  // anything the browser sent would be a number a founder could edit.
+  return post('/payments/checkout',
+    couponCode ? { tier, coupon_code: couponCode } : { tier });
+}
+
+/**
+ * Price a code without claiming it. Reserves nothing, so a founder can try a
+ * code, think, and try again — but a capped code can still be gone by the time
+ * they press Pay, and checkout re-checks it then.
+ */
+export function validateCoupon(tier, code) {
+  return post('/payments/coupons/validate', { tier, code });
 }
 
 // Checkout.js is loaded on demand rather than from index.html: it is a

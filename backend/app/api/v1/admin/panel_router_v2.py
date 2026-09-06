@@ -414,3 +414,219 @@ def reconcile_usage(admin: PanelAdmin = Depends(get_panel_admin),
     service.audit.record(admin=admin, action="usage.reconcile", resource="unbilled_usage",
                          old_value=before, new_value=result)
     return {"before": before, "result": result, "after": recon.pending()}
+
+
+# --- coupons ----------------------------------------------------------------
+#
+# Creating a coupon decides what founders pay, so it sits behind
+# MODIFY_SUBSCRIPTION -- the same capability that already gates changing a
+# founder's plan by hand, and Super Admin only. Reading the list is VIEW_USERS,
+# because "how many of the first 100 are left" is a question support gets asked
+# and can answer without being able to mint discounts.
+#
+# There is no DELETE. A redeemed coupon is a financial record: deactivating it
+# stops further use and keeps the history that explains a discounted payment.
+
+_MAX_BULK_CODES = 200
+
+
+class CouponCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    code: str = Field(min_length=3, max_length=40)
+    description: str | None = Field(default=None, max_length=500)
+    discount_type: str = Field(pattern="^(percent|fixed)$")
+    discount_value: int = Field(ge=1)
+    applies_to: list[str] | None = None
+    max_redemptions: int | None = Field(default=None, ge=1)
+    max_per_founder: int = Field(default=1, ge=1)
+    valid_from: datetime | None = None
+    # Required, with no default. Every coupon expires at a moment somebody
+    # chose; a discount with no end date is one nobody remembers to switch off.
+    valid_until: datetime
+
+
+class CouponUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    description: str | None = Field(default=None, max_length=500)
+    max_redemptions: int | None = Field(default=None, ge=1)
+    max_per_founder: int | None = Field(default=None, ge=1)
+    valid_until: datetime | None = None
+    is_active: bool | None = None
+
+
+class CouponBulkRequest(BaseModel):
+    """Generate N unique single-use codes under a shared prefix -- the shape you
+    want for partners or influencers, where each recipient gets their own code.
+    The "first 100 customers" case is the opposite shape: ONE code with
+    max_redemptions=100, created through the endpoint above."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    prefix: str = Field(min_length=2, max_length=20)
+    count: int = Field(ge=1, le=_MAX_BULK_CODES)
+    discount_type: str = Field(pattern="^(percent|fixed)$")
+    discount_value: int = Field(ge=1)
+    applies_to: list[str] | None = None
+    valid_until: datetime
+    description: str | None = Field(default=None, max_length=500)
+
+
+def _coupon_repo(db: Session):
+    from app.coupons.repository import CouponRepository
+    return CouponRepository(db)
+
+
+@router.get("/coupons", response_model=dict, summary="List coupons with usage")
+def list_coupons(include_inactive: bool = Query(default=True),
+                 limit: int = Query(default=100, ge=1, le=500),
+                 offset: int = Query(default=0, ge=0),
+                 admin: PanelAdmin = Depends(get_panel_admin),
+                 db: Session = Depends(get_db)) -> dict:
+    require(admin.role, Capability.VIEW_USERS)
+    rows = _coupon_repo(db).list_with_usage(
+        include_inactive=include_inactive, limit=limit, offset=offset)
+    return {"coupons": [_coupon_row(r) for r in rows]}
+
+
+@router.post("/coupons", response_model=dict, status_code=201,
+             summary="Create a coupon (Super Admin only)")
+def create_coupon(payload: CouponCreateRequest,
+                  admin: PanelAdmin = Depends(get_panel_admin),
+                  db: Session = Depends(get_db)) -> dict:
+    require(admin.role, Capability.MODIFY_SUBSCRIPTION)
+    from app.coupons.service import normalise
+
+    _validate_discount(payload.discount_type, payload.discount_value)
+    _validate_tiers(payload.applies_to)
+    code = normalise(payload.code)
+    repo = _coupon_repo(db)
+    if repo.get_by_code(code) is not None:
+        raise AppError(f"A coupon with the code {code} already exists.", status_code=409)
+
+    coupon_id = repo.create(
+        code=code, description=payload.description, discount_type=payload.discount_type,
+        discount_value=payload.discount_value, applies_to=payload.applies_to,
+        max_redemptions=payload.max_redemptions, max_per_founder=payload.max_per_founder,
+        valid_from=payload.valid_from, valid_until=payload.valid_until,
+        admin_id=admin.admin_id)
+    logger.info("admin: coupon created", extra={"admin_id": admin.admin_id, "code": code,
+                                                "coupon_id": coupon_id})
+    return {"coupon_id": coupon_id, "code": code}
+
+
+@router.post("/coupons/bulk", response_model=dict, status_code=201,
+             summary="Generate unique single-use codes (Super Admin only)")
+def bulk_coupons(payload: CouponBulkRequest,
+                 admin: PanelAdmin = Depends(get_panel_admin),
+                 db: Session = Depends(get_db)) -> dict:
+    require(admin.role, Capability.MODIFY_SUBSCRIPTION)
+    import secrets
+
+    from app.coupons.service import normalise
+
+    _validate_discount(payload.discount_type, payload.discount_value)
+    _validate_tiers(payload.applies_to)
+    repo = _coupon_repo(db)
+    prefix = normalise(payload.prefix)
+
+    # Unambiguous alphabet: no O/0, no I/1. These get read aloud and copied off
+    # screenshots, and a code nobody can transcribe is a support ticket.
+    alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+    created: list[str] = []
+    for _ in range(payload.count):
+        for _attempt in range(5):
+            code = f"{prefix}-{''.join(secrets.choice(alphabet) for _ in range(6))}"
+            if repo.get_by_code(code) is None:
+                repo.create(code=code, description=payload.description,
+                            discount_type=payload.discount_type,
+                            discount_value=payload.discount_value,
+                            applies_to=payload.applies_to, max_redemptions=1,
+                            max_per_founder=1, valid_from=None,
+                            valid_until=payload.valid_until, admin_id=admin.admin_id)
+                created.append(code)
+                break
+    logger.info("admin: coupons generated", extra={"admin_id": admin.admin_id,
+                                                   "count": len(created), "prefix": prefix})
+    return {"created": len(created), "codes": created}
+
+
+@router.patch("/coupons/{coupon_id}", response_model=dict,
+              summary="Deactivate, extend or re-cap a coupon (Super Admin only)")
+def update_coupon(coupon_id: int, payload: CouponUpdateRequest,
+                  admin: PanelAdmin = Depends(get_panel_admin),
+                  db: Session = Depends(get_db)) -> dict:
+    require(admin.role, Capability.MODIFY_SUBSCRIPTION)
+    repo = _coupon_repo(db)
+    if repo.get_by_id(coupon_id) is None:
+        raise AppError(f"No coupon with id {coupon_id}.", status_code=404)
+    changed = repo.update(coupon_id, **payload.model_dump(exclude_none=True))
+    logger.info("admin: coupon updated", extra={"admin_id": admin.admin_id,
+                                                "coupon_id": coupon_id, "changed": changed})
+    return {"coupon_id": coupon_id, "updated": changed}
+
+
+@router.get("/coupons/{coupon_id}/redemptions", response_model=dict,
+            summary="Who redeemed a coupon and when")
+def coupon_redemptions(coupon_id: int, limit: int = Query(default=200, ge=1, le=1000),
+                       admin: PanelAdmin = Depends(get_panel_admin),
+                       db: Session = Depends(get_db)) -> dict:
+    require(admin.role, Capability.VIEW_USERS)
+    repo = _coupon_repo(db)
+    if repo.get_by_id(coupon_id) is None:
+        raise AppError(f"No coupon with id {coupon_id}.", status_code=404)
+    rows = repo.redemptions_for(coupon_id, limit=limit)
+    return {"redemptions": [
+        {"redemption_id": r["redemption_id"], "founder_id": r["founder_id"],
+         "email": r["email"], "full_name": r["full_name"], "payment_id": r["payment_id"],
+         "status": r["status"], "discount_inr": int(r["discount_inr"]),
+         "created_at": r["created_at"].isoformat() if r["created_at"] else None,
+         "confirmed_at": r["confirmed_at"].isoformat() if r["confirmed_at"] else None}
+        for r in rows]}
+
+
+def _validate_discount(discount_type: str, value: int) -> None:
+    """99, not 100. Razorpay cannot create an order for zero, so a free coupon
+    would need a second, gateway-free grant path; one path is worth more than
+    the feature. The database CHECK enforces the same bound -- this exists to
+    give the admin a sentence instead of a constraint violation."""
+    if discount_type == "percent" and not 1 <= value <= 99:
+        raise AppError("A percentage discount must be between 1 and 99. "
+                       "A 100% coupon can't be charged through Razorpay.",
+                       status_code=422)
+
+
+def _validate_tiers(applies_to: list[str] | None) -> None:
+    if not applies_to:
+        return
+    from app.plans.catalog import PLANS, PlanTier
+    for value in applies_to:
+        try:
+            tier = PlanTier(value)
+        except ValueError:
+            raise AppError(f"Unknown plan tier {value!r}.", status_code=422) from None
+        if not PLANS[tier].is_paid:
+            raise AppError(f"{PLANS[tier].name} is free -- a coupon cannot apply to it.",
+                           status_code=422)
+
+
+def _coupon_row(r: dict) -> dict:
+    confirmed = int(r["confirmed_count"] or 0)
+    pending = int(r["pending_count"] or 0)
+    cap = r["max_redemptions"]
+    return {
+        "coupon_id": r["coupon_id"], "code": r["code"], "description": r["description"],
+        "discount_type": r["discount_type"], "discount_value": int(r["discount_value"]),
+        "applies_to": list(r["applies_to"]) if r["applies_to"] else None,
+        "max_redemptions": cap, "max_per_founder": int(r["max_per_founder"]),
+        "valid_from": r["valid_from"].isoformat() if r["valid_from"] else None,
+        "valid_until": r["valid_until"].isoformat() if r["valid_until"] else None,
+        "is_active": bool(r["is_active"]),
+        "confirmed_count": confirmed,
+        # In-flight checkouts. Shown separately so "3 of 100 used" and "and 2
+        # people are paying right now" are not the same number.
+        "pending_count": pending,
+        "remaining": None if cap is None else max(0, cap - confirmed - pending),
+        "discount_given_inr": int(r["discount_given_inr"] or 0),
+    }

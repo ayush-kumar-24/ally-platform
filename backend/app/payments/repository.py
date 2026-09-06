@@ -22,20 +22,47 @@ class PaymentRepository:
 
     def create_pending(
         self, *, founder_id: int, amount_inr: int, currency: str, gateway: str,
-        gateway_order_id: str,
+        gateway_order_id: str, coupon_id: int | None = None,
+        list_amount_inr: int | None = None, discount_inr: int | None = None,
+        commit: bool = True,
     ) -> int:
+        """`amount_inr` is always what the gateway was asked to charge.
+
+        `list_amount_inr`/`discount_inr` are the audit trail behind it and are
+        NULL on an undiscounted payment rather than a redundant copy -- so
+        "was this discounted?" is answerable by the column being set, not by
+        comparing two numbers and hoping the catalog has not moved since.
+
+        `commit=False` lets the caller keep the coupon reservation in the same
+        transaction as this row: a slot must never be claimed against a payment
+        that rolled back. See PaymentService.start_checkout.
+        """
         payment_id = self.db.execute(
             text(
                 "INSERT INTO payments "
-                "(founder_id, amount_inr, currency, status, payment_gateway, gateway_order_id) "
-                "VALUES (:fid, :amt, :cur, 'pending', :gw, :goid) "
+                "(founder_id, amount_inr, currency, status, payment_gateway, "
+                " gateway_order_id, coupon_id, list_amount_inr, discount_inr) "
+                "VALUES (:fid, :amt, :cur, 'pending', :gw, :goid, :cid, :list, :disc) "
                 "RETURNING payment_id"
             ),
             {"fid": founder_id, "amt": amount_inr, "cur": currency, "gw": gateway,
-             "goid": gateway_order_id},
+             "goid": gateway_order_id, "cid": coupon_id, "list": list_amount_inr,
+             "disc": discount_inr},
         ).scalar()
-        self.db.commit()
+        if commit:
+            self.db.commit()
         return payment_id
+
+    def attach_coupon(self, payment_id: int, *, coupon_id: int, discount_inr: int) -> None:
+        """Point the payment at the coupon that discounted it, and commit the
+        payment + reservation together. Called only after CouponService.reserve
+        has claimed the slot in this same transaction."""
+        self.db.execute(
+            text("UPDATE payments SET coupon_id = :cid, discount_inr = :disc "
+                 "WHERE payment_id = :pid"),
+            {"cid": coupon_id, "disc": discount_inr, "pid": payment_id},
+        )
+        self.db.commit()
 
     def get_by_gateway_order_id(self, gateway_order_id: str) -> PaymentRecord | None:
         row = self.db.execute(
