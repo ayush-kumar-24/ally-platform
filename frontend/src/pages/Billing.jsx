@@ -382,6 +382,13 @@ function CheckoutView({ plan, onBack, onPaid }) {
               <button type="button" className="bl-link-btn" onClick={createOrder}>
                 Try again
               </button>
+              {/* The backend logs every failed checkout under this id, so a
+                  founder who emails "it didn't work" can quote the one thing
+                  that finds the exact log line -- without which the message
+                  above is all anyone has to go on. */}
+              {orderError.data?.request_id && (
+                <small className="bl-pay-ref">Reference: {orderError.data.request_id}</small>
+              )}
             </div>
           )}
 
