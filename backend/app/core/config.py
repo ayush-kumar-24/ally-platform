@@ -403,6 +403,18 @@ class Settings(BaseSettings):
     def privacy_alert_emails(self) -> list[str]:
         return [e.strip() for e in self.PRIVACY_ALERT_EMAILS.split(",") if e.strip()]
 
+    #: Who is told when a founder writes to us -- Help & Support, the help
+    #: widget, or the Feedback page.
+    #:
+    #: Falls back to PRIVACY_ALERT_EMAILS and then EMAIL_REPLY_TO, so this can
+    #: stay unset until the team wants support mail split out. It must never
+    #: resolve to nobody: the product tells the founder a person will reply.
+    SUPPORT_ALERT_EMAILS: str = ""
+
+    @property
+    def support_alert_emails(self) -> list[str]:
+        return [e.strip() for e in self.SUPPORT_ALERT_EMAILS.split(",") if e.strip()]
+
     # --- CORS ---
     CORS_ORIGINS: str = "http://localhost:3000"
 

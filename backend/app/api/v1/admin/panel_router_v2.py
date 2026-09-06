@@ -33,6 +33,9 @@ from __future__ import annotations
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.admin.broadcasts import Audience, Severity
@@ -47,6 +50,7 @@ from app.api.v1.admin.panel_dependencies import (
 from app.api.v1.admin.panel_schemas import ConfirmRequest
 from app.core.container import container
 from app.credits.models import CreditOperation
+from app.core.logger import logger
 from app.db.session import get_db
 from app.middleware.error_handler import AppError
 
@@ -202,6 +206,46 @@ def feedback_stats(feedback_type: str | None = Query(default=None, max_length=30
     stats = service.feedback_stats(admin, feedback_type=feedback_type)
     return {"total": stats.total, "rated_count": stats.rated_count,
             "average_rating": stats.average_rating, "by_type": stats.by_type}
+
+
+# --- support bot misses (read-only) -----------------------------------------
+
+@router.get("/support-misses", response_model=dict,
+            summary="Questions the help bot could not answer")
+def list_support_misses(limit: int = Query(default=100, ge=1, le=500),
+                        admin: PanelAdmin = Depends(get_panel_admin),
+                        db: Session = Depends(get_db)) -> dict:
+    """Grouped by question, most-asked first.
+
+    Grouped rather than listed: fifteen founders asking the same thing is one
+    answer to write, and a flat list buries that under whatever was asked most
+    recently. `founders` counts distinct people, not repeats -- one founder
+    trying the same phrasing five times is not five founders wanting it.
+
+    VIEW_USERS, not a new capability. This is aggregate product feedback about
+    our own help content, at the same tier as the rest of the read-only panel.
+    """
+    require(admin.role, Capability.VIEW_USERS)
+    try:
+        rows = db.execute(text("""
+            select question,
+                   count(*)                  as times_asked,
+                   count(distinct founder_id) as founders,
+                   max(asked_at)             as last_asked,
+                   max(reason)               as reason
+              from support_bot_misses
+             group by question
+             order by times_asked desc, last_asked desc
+             limit :limit
+        """), {"limit": limit}).fetchall()
+    except SQLAlchemyError:
+        # Table absent on a target that has not run the migration. An empty
+        # panel is a better answer than a 500 on a read-only review screen.
+        logger.warning("support_bot_misses unavailable", exc_info=True)
+        return {"total": 0, "items": []}
+    return {"total": len(rows), "items": [
+        {"question": r[0], "times_asked": r[1], "founders": r[2],
+         "last_asked": r[3], "reason": r[4]} for r in rows]}
 
 
 # --- report regeneration ----------------------------------------------------

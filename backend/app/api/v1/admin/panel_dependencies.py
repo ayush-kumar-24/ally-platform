@@ -19,7 +19,7 @@ from app.admin.errors import UnauthorizedAdminError
 from app.admin.rbac import PanelRole
 from app.api.deps import get_founder_record
 from app.core.container import container
-from app.db.session import get_db
+from app.db.session import get_db, set_admin_rls_context
 from app.models import Founder
 
 
@@ -57,10 +57,36 @@ class PanelRegistry:
         return self._by_email.get((email or "").lower())
 
 
-def get_panel_admin(founder: Founder = Depends(get_founder_record)) -> PanelAdmin:
+def get_panel_admin(
+    founder: Founder = Depends(get_founder_record),
+    db: Session = Depends(get_db),
+) -> PanelAdmin:
     role = container.panel_registry().resolve(founder.email)
     if role is None:
         raise UnauthorizedAdminError()
+
+    # WIDEN RLS TO THE WHOLE ESTATE -- the one place in a request path where
+    # that is correct.
+    #
+    # `get_founder_record` has already pinned this session to the ADMIN's own
+    # founder_id via set_founder_rls_context. Every founder-scoped table
+    # (privacy_requests, founder_feedback, founders, discovery_calls...) carries
+    # the policy `founder_id = get_founder_id() OR app.current_admin`, so
+    # without this line an admin querying the review queues sees only their OWN
+    # rows and an empty panel looks like an empty queue. Silently. That is the
+    # worst possible failure for a screen whose entire job is to prove somebody
+    # is watching.
+    #
+    # Not observable in local development, which connects as a BYPASSRLS
+    # superuser and therefore never exercises the policy -- it only appears in
+    # production, where the app runs as `ally_app`.
+    #
+    # AFTER the role check, never before: this is the privilege escalation that
+    # the allowlist above authorises, so it must be unreachable by anyone the
+    # allowlist rejected. It is set with is_local = true, so it dies with the
+    # transaction and cannot leak to whoever gets this pooled connection next.
+    set_admin_rls_context(db)
+
     return PanelAdmin(admin_id=founder.founder_id, email=founder.email, role=role)
 
 

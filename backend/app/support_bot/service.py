@@ -44,7 +44,7 @@ from app.support_bot.prompts import (
     answer_user_prompt,
     routing_user_prompt,
 )
-from app.support_bot.repository import SupportContentRepository
+from app.support_bot.repository import SupportContentRepository, SupportMissRepository
 from app.support_bot.schemas import AnswerRef, FaqEntry, SupportReply
 
 #: Per call. Routing returns a few numbers; answering is capped at ~120 words by
@@ -99,9 +99,11 @@ def _parse_ids(text: str) -> list[int]:
 
 
 class SupportBotService:
-    def __init__(self, db: Session, repository: SupportContentRepository | None = None):
+    def __init__(self, db: Session, repository: SupportContentRepository | None = None,
+                 misses: SupportMissRepository | None = None):
         self.db = db
         self.repo = repository or SupportContentRepository(db)
+        self.misses = misses or SupportMissRepository(db)
 
     # --- public -----------------------------------------------------------
 
@@ -131,6 +133,8 @@ class SupportBotService:
         if not self.repo.is_available():
             # Content not loaded -- a fresh clone, or RDS before the SQL is run.
             logger.warning("support bot asked but content table is unavailable")
+            self.misses.record(founder_id=founder_id, question=question,
+                               reason="content_unavailable")
             return SupportReply(answer=UNAVAILABLE_REPLY, answered=False,
                                 escalate=True, reason="content_unavailable")
 
@@ -181,6 +185,11 @@ class SupportBotService:
                 answered=True, sources=tuple(hits), links=hits[0].links,
                 reason="keyword_verbatim_degraded")
 
+        # KEPT, NOT DISCARDED. This is the list of questions founders ask that
+        # our help content does not answer -- the only honest guide to which
+        # answer to write next. It used to be thrown away here without even a
+        # log line.
+        self.misses.record(founder_id=founder_id, question=question, reason="no_match")
         return SupportReply(answer=NO_MATCH_REPLY, answered=False,
                             escalate=True, reason="no_match")
 
