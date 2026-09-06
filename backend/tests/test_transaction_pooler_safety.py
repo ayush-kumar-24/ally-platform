@@ -18,11 +18,12 @@ on the same port) has two properties the session-mode pooler does not:
 Both are asserted here rather than left to a deploy going wrong.
 """
 
-import importlib
+import pathlib
 
 import pytest
 
 from app.core.config import Settings
+from app.db.session import connect_args_for
 
 SESSION_URL = "postgresql+psycopg://u:p@aws-0-ap-south-1.pooler.supabase.com:5432/postgres"
 TRANSACTION_URL = "postgresql+psycopg://u:p@aws-0-ap-south-1.pooler.supabase.com:6543/postgres"
@@ -55,33 +56,26 @@ def test_an_explicit_pool_size_is_never_overridden():
 
 @pytest.mark.parametrize(
     "url,expected",
-    [(TRANSACTION_URL, {"prepare_threshold": None}), (SESSION_URL, {})],
+    [
+        (TRANSACTION_URL, {"prepare_threshold": None}),
+        (SESSION_URL, {}),
+        # Other drivers have no server-side prepares to turn off. sqlite is
+        # what the tests themselves run on, so this is not hypothetical.
+        ("sqlite:///./test.db", {}),
+        ("postgresql://u:p@host:6543/postgres", {}),
+    ],
 )
-def test_prepared_statements_are_off_only_on_the_transaction_pooler(monkeypatch, url, expected):
-    """The engine's connect_args, built from the URL at import time."""
-    import app.core.config as config_module
-
-    monkeypatch.setattr(config_module, "settings", _settings(url))
-
-    import app.db.session as session_module
-
-    monkeypatch.setattr(session_module, "settings", _settings(url))
-    reloaded = importlib.reload(session_module)
-    try:
-        assert reloaded._connect_args == expected
-    finally:
-        # Leave the module bound to the real settings for the rest of the run.
-        monkeypatch.undo()
-        importlib.reload(session_module)
+def test_prepared_statements_are_off_only_on_the_transaction_pooler(url, expected):
+    """The exact kwargs the engine is built with, as a function of the URL."""
+    assert connect_args_for(url) == expected
 
 
 def test_rls_context_is_transaction_local_not_session_state():
     """`set_config(..., true)` -- the `true` is what keeps it off the pooled
     connection once the transaction ends. A plain SET here would leak one
     founder's RLS context to whoever got that backend connection next."""
-    source = (importlib.import_module("app.db.session").__file__)
-    with open(source) as fh:
-        text = fh.read()
+    source = pathlib.Path(__file__).resolve().parents[1] / "app" / "db" / "session.py"
+    text = source.read_text()
 
     assert "set_config(" in text
     assert "'app.current_founder_uuid', " in text

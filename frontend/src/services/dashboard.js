@@ -37,21 +37,6 @@ export function getOverview() {
   return get('/dashboard/overview');
 }
 
-/**
- * Everything the dashboard needs, in one call.
- *
- * Each source resolves to null on failure rather than rejecting, so one missing
- * piece dims one card instead of blanking the page. The caller can tell "no data
- * yet" (`available: false`) from "could not load" (`null`).
- *
- * `onPart(key, value)` fires as each source lands, so the page can paint each
- * card the moment ITS data arrives instead of waiting for all six. Awaiting the
- * returned promise still gives the whole object, for callers that want that.
- * The three states a caller reads are deliberately distinct: `undefined` means
- * still in flight, `null` means the request failed, and a value means it
- * answered -- which is what lets a card show a placeholder rather than an
- * "you have nothing yet" empty state it cannot yet stand behind.
- */
 /** The founder's real plan, credits and daily token usage. */
 export function getMyPlan() {
   return get('/plans/me');
@@ -84,6 +69,22 @@ const SOURCES = {
   plan: getMyPlan,
 };
 
+/**
+ * Everything the dashboard needs, in one call.
+ *
+ * Each source resolves to null on failure rather than rejecting, so one missing
+ * piece dims one card instead of blanking the page. The caller can tell "no data
+ * yet" (`available: false`) from "could not load" (`null`).
+ *
+ * `onPart(key, value)` fires as each source lands, so the page can paint each
+ * card the moment ITS data arrives instead of waiting for all of them.
+ * Awaiting the returned promise still gives the whole object, for callers
+ * that want that.
+ * The three states a caller reads are deliberately distinct: `undefined` means
+ * still in flight, `null` means the request failed, and a value means it
+ * answered -- which is what lets a card show a placeholder rather than an
+ * "you have nothing yet" empty state it cannot yet stand behind.
+ */
 export function loadDashboard(onPart) {
   return Promise.all(
     Object.entries(SOURCES).map(([key, fetchOne]) =>

@@ -1,7 +1,7 @@
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import Session, sessionmaker, declarative_base
 
-from app.core.config import settings
+from app.core.config import is_transaction_pooler, settings
 
 # Supabase's pooler allows 15 client connections in session mode, shared by
 # every process that talks to it -- and this app can run as more than one
@@ -21,6 +21,7 @@ from app.core.config import settings
 # really do run concurrently, so the pool is what bounds concurrency instead
 # of the event loop accidentally doing it. pool_recycle keeps connections from
 # going stale behind the pooler, which closes idle ones.
+#
 # Transaction mode does NOT support prepared statements -- Supabase's own
 # connecting-to-postgres guide says so outright, and the dedicated PgBouncer
 # pooler on the same port is the same story. psycopg3 does not know that: it
@@ -36,9 +37,16 @@ from app.core.config import settings
 # the parse-plan reuse a repeated query would get, which is why it is tied to
 # the pooler mode rather than set unconditionally: session mode supports
 # prepared statements and keeps them.
-_connect_args = {}
-if settings.uses_transaction_pooler and "+psycopg" in settings.DATABASE_URL:
-    _connect_args["prepare_threshold"] = None
+# A plain function of the URL, so the rule can be asserted without reloading
+# this module -- a reload rebinds Base, SessionLocal and engine, which every
+# other module is already holding references to.
+def connect_args_for(url: str) -> dict:
+    """psycopg connect() kwargs this URL implies. Empty for every other driver
+    (sqlite in the tests, psycopg2) -- prepare_threshold is psycopg3's."""
+    if is_transaction_pooler(url) and "+psycopg" in url:
+        return {"prepare_threshold": None}
+    return {}
+
 
 engine = create_engine(
     settings.DATABASE_URL,
@@ -47,7 +55,7 @@ engine = create_engine(
     max_overflow=settings.DB_POOL_MAX_OVERFLOW,
     pool_timeout=settings.DB_POOL_TIMEOUT,
     pool_recycle=1800,
-    connect_args=_connect_args,
+    connect_args=connect_args_for(settings.DATABASE_URL),
 )
 
 # This Session is SYNCHRONOUS, and that decides how routes must be declared:

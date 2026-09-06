@@ -1,6 +1,15 @@
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Supabase's transaction-mode pooler listens on 6543; the session-mode one (and
+# a direct connection) on 5432. Both the pool sizing and the engine's
+# connect_args turn on this one fact, so it lives in one place.
+TRANSACTION_POOLER_PORT = ":6543"
+
+
+def is_transaction_pooler(url: str | None) -> bool:
+    return TRANSACTION_POOLER_PORT in (url or "")
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
@@ -642,12 +651,11 @@ class Settings(BaseSettings):
             return stage_budget
         return max(1, self.MAX_DIAGNOSIS_QUESTIONS)
 
-    # Supabase's transaction-mode pooler listens on 6543; the session-mode one
-    # (and a direct connection) on 5432. main.py checks the same marker when it
-    # decides whether the 15-connection ceiling applies to this deploy.
+    # main.py checks this when it decides whether the session-mode pooler's
+    # 15-connection ceiling applies to this deploy.
     @property
     def uses_transaction_pooler(self) -> bool:
-        return ":6543" in (self.DATABASE_URL or "")
+        return is_transaction_pooler(self.DATABASE_URL)
 
     @model_validator(mode="after")
     def _size_the_pool_for_the_pooler(self) -> "Settings":
