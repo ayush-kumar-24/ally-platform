@@ -318,6 +318,21 @@ class Settings(BaseSettings):
     # Auto-generating a Google Meet link also needs Workspace -- personal Gmail
     # rejects it ("Invalid conference type value"). When off, the booking is a
     # plain event and the meeting link comes from GOXL_MEETING_URL.
+    # The Workspace user the service account acts AS, e.g. calls@goxl.in.
+    #
+    # A bare service account has its own empty calendar. It can write to a
+    # calendar shared with it, but it CANNOT create a Meet conference or invite
+    # attendees -- both need a real Workspace identity. Setting this makes the
+    # client impersonate that user (domain-wide delegation).
+    #
+    # Requires a Workspace admin to authorise the service account's client ID
+    # for https://www.googleapis.com/auth/calendar in
+    # Admin console > Security > API controls > Domain-wide delegation.
+    #
+    # Leave empty and everything still works, minus per-call Meet links and
+    # attendee invites -- the shared GOXL_MEETING_URL room is used instead.
+    GOOGLE_CALENDAR_DELEGATED_USER: str = ""
+
     GOOGLE_CALENDAR_CREATE_MEET: bool = False
     # A permanent video-room link (Google Meet / Zoom) used for every discovery
     # call when auto-Meet is off. Recommended for the personal-Gmail setup.
