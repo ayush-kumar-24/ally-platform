@@ -119,6 +119,16 @@ def ensure_founder_with_status(
                 "c": signup_credits,
             },
         ).scalar()
+        # New founders wait for a human to let them in. Done here rather than by
+        # changing `create_founder_on_signup`'s default: that function is a
+        # security boundary (migration 7c4f0f1a9d2e) and rewriting it to carry a
+        # product policy would put two unrelated concerns in one place that is
+        # awkward to change safely. Same transaction as the insert, so a founder
+        # is never briefly active between the two statements.
+        db.execute(
+            text("UPDATE founders SET status = 'pending' WHERE founder_id = :fid"),
+            {"fid": founder_id},
+        )
         db.commit()
     except DatabaseError as exc:
         # e.g. the token's subject has no auth.users row. A real Supabase token

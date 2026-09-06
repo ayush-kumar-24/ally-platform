@@ -179,6 +179,10 @@ async def start_session(
         # `founder is not None` reported true for every returning login, and for
         # dev identities that provisioning explicitly never touches.
         provisioned=created,
+        # Defaults to active when there is no row at all (dev identities), which
+        # is what those identities have always effectively been.
+        account_status=(getattr(founder, "status", None) or "active")
+        if founder is not None else "active",
     )
 
 

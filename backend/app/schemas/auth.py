@@ -38,6 +38,20 @@ class SessionResponse(TokenPair):
             "founders that had existed for days."
         ),
     )
+    account_status: str = Field(
+        default="active",
+        description=(
+            "Whether this account may use the product: 'active', 'pending' while "
+            "it waits for approval, or one of 'inactive'/'suspended'/'banned'. "
+            "Sign-in still succeeds and still returns tokens for a pending "
+            "account -- the tokens are genuinely valid, there is simply nothing "
+            "the founder may do with them yet -- so the frontend reads this to "
+            "send them to the waiting screen instead of into the app, where "
+            "every call would 403. Enforcement is server-side regardless (see "
+            "api/deps.py: assert_account_usable); this field is what makes the "
+            "refusal explicable rather than a wall of failed requests."
+        ),
+    )
 
 
 class RefreshRequest(BaseModel):

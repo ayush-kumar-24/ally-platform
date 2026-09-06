@@ -34,6 +34,8 @@ from app.admin.users_models import (
     UserSummary,
 )
 from app.admin.users_repository import AdminUserRepository
+from app.core.logger import logger
+from app.services.approval_email import send_approval_email
 from app.credits.models import CreditOperation, CreditTransaction
 from app.credits.service import CreditService
 
@@ -150,6 +152,22 @@ class AdminPanelService:
             admin=admin, action=f"user.{status.value}", resource=f"founder:{founder_id}",
             target_user_id=founder_id, ip_address=ip, reason=reason,
             old_value=before.status.value, new_value=status.value)
+
+        # Approval is this transition and only this one: a founder who has been
+        # waiting is now let in, and nobody has told them yet. Emailing on any
+        # other move to ACTIVE would send "your account is ready" to someone
+        # being un-suspended, who never asked and already knows.
+        #
+        # Deliberately after the audit record and outside its failure path: the
+        # approval is already true whether or not the mail leaves, and losing an
+        # email must never cost the record of who approved whom.
+        if before.status == UserStatus.PENDING and status == UserStatus.ACTIVE:
+            try:
+                send_approval_email(to=after.email, full_name=after.full_name)
+            except Exception as exc:  # noqa: BLE001 -- the approval stands regardless
+                logger.warning("approval email failed to send",
+                               extra={"founder_id": founder_id, "error": str(exc)})
+
         return after
 
     def reset_diagnosis(self, admin, founder_id: int, *, ip: str | None = None) -> int:

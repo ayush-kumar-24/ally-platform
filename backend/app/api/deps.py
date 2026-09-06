@@ -25,6 +25,65 @@ class InvalidFounderIdentityError(AppError):
         super().__init__(message, status_code=status.HTTP_400_BAD_REQUEST)
 
 
+class AccountPendingApprovalError(AppError):
+    """Signed in successfully, but the account has not been approved yet.
+
+    403 and not 401: the token is perfectly valid and re-authenticating changes
+    nothing, so the frontend must not treat this as a session problem and try to
+    refresh. It is a state only a human on our side can move.
+    """
+
+    def __init__(self, message: str = (
+        "Your account is awaiting approval. We'll email you as soon as it's ready."
+    )):
+        super().__init__(message, status_code=status.HTTP_403_FORBIDDEN)
+
+
+class AccountNotActiveError(AppError):
+    """Suspended, banned or deactivated -- signed in, but not permitted.
+
+    Deliberately one error for all three rather than three that name the state:
+    a banned account learning it is banned rather than merely inactive gains
+    nothing legitimate and tells someone probing exactly where they stand. The
+    admin panel and the audit log carry the real reason.
+    """
+
+    def __init__(self, message: str = (
+        "This account is not currently active. Contact info@goxl.in if you think "
+        "this is a mistake."
+    )):
+        super().__init__(message, status_code=status.HTTP_403_FORBIDDEN)
+
+
+#: The only status permitted to use the product. Everything else -- 'pending'
+#: awaiting approval, and the three the admin panel can set -- is refused by
+#: `get_founder_record` below.
+ACTIVE_STATUS = "active"
+
+
+def assert_account_usable(founder: Founder) -> None:
+    """Refuse a founder whose account is not active.
+
+    This is the enforcement half of a column that had none. `founders.status`
+    has existed since the admin panel shipped, with an endpoint to set it and an
+    audit trail behind it, but nothing outside that panel ever read it -- so
+    "suspend" and "ban" wrote a string and the founder carried on with full
+    access. Everything authenticated resolves through `get_founder_record`, so
+    checking here covers the whole API rather than the routes someone remembered.
+
+    A missing or NULL status reads as active on purpose. The column is nullable
+    in some environments (see users_db_repository's optional-column handling),
+    and failing closed on absence would lock out every founder the moment this
+    deploys somewhere the column was never backfilled.
+    """
+    current = (getattr(founder, "status", None) or ACTIVE_STATUS)
+    if current == ACTIVE_STATUS:
+        return
+    if current == "pending":
+        raise AccountPendingApprovalError()
+    raise AccountNotActiveError()
+
+
 def get_founder_record(
     auth_user: AuthUser = Depends(get_current_founder),
     db: Session = Depends(get_db),
@@ -43,6 +102,9 @@ def get_founder_record(
       created by the `create_founder_on_signup` database function at signup, and
       `founders.user_id` is a FK to `auth.users`, so a row cannot be conjured
       for an identity that Supabase Auth does not know about.
+    - 403: the row exists and the token is fine, but the account is not active --
+      awaiting approval, or suspended/banned by an admin. See
+      `assert_account_usable`.
     """
     try:
         user_uuid = UUID(str(auth_user.id))
@@ -54,6 +116,10 @@ def get_founder_record(
     founder = founder_repository.get_by_user_id(db, user_uuid)
     if founder is None:
         raise FounderNotFoundError()
+
+    # Every authenticated route in the API resolves through here, so this is the
+    # one place that has to ask whether the account is allowed to be used at all.
+    assert_account_usable(founder)
 
     return founder
 

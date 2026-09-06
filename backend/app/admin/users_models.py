@@ -9,6 +9,12 @@ from typing import Any
 
 
 class UserStatus(str, Enum):
+    #: Signed up, waiting for someone on our side to let them in. The state
+    #: every new founder starts in -- see migration c1f5a83d70b2. Approving is
+    #: setting this to ACTIVE, which is why there is no separate "approve"
+    #: endpoint: one column answers "may this person use the product", and the
+    #: existing status change already carries the RBAC check and audit trail.
+    PENDING = "pending"
     ACTIVE = "active"
     INACTIVE = "inactive"
     SUSPENDED = "suspended"
