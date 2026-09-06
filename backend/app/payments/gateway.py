@@ -25,7 +25,23 @@ RAZORPAY_API_BASE = "https://api.razorpay.com/v1"
 class PaymentGatewayError(Exception):
     """Any failure talking to the gateway. There is usually no fallback --
     a founder cannot pay through anything else -- so callers surface this as
-    a clear "try again" rather than swallowing it."""
+    a clear "try again" rather than swallowing it.
+
+    `status_code` and `gateway_message` carry what Razorpay actually said
+    (its HTTP status and the `error.description` from its JSON body) when
+    there is one. They exist for the log line, never for the founder: a
+    401 "Authentication failed" means the key id/secret on the server are
+    wrong or mismatched, a 400 names the bad field, and neither is anything
+    a founder can act on -- but both are exactly what whoever reads the
+    backend log needs, and the plain `str(exc)` used to say only
+    "Client error '401 Unauthorized' for url ...".
+    """
+
+    def __init__(self, message: str, *, status_code: int | None = None,
+                 gateway_message: str | None = None):
+        super().__init__(message)
+        self.status_code = status_code
+        self.gateway_message = gateway_message
 
 
 @dataclass(frozen=True)
@@ -50,6 +66,20 @@ class PaymentGateway(Protocol):
     ) -> bool: ...
 
     def verify_webhook_signature(self, *, body: bytes, signature: str) -> bool: ...
+
+
+def _error_description(resp: httpx.Response) -> str | None:
+    """Razorpay's error body is `{"error": {"code": ..., "description": ...}}`.
+    Read defensively: a gateway outage can answer with an HTML page or an
+    empty body, and a diagnostic helper must never be the thing that throws."""
+    try:
+        error = resp.json().get("error") or {}
+    except ValueError:
+        return None
+    if not isinstance(error, dict):
+        return None
+    parts = [str(error[k]) for k in ("code", "description") if error.get(k)]
+    return " ".join(parts) or None
 
 
 class RazorpayGateway:
@@ -100,6 +130,14 @@ class RazorpayGateway:
                 },
             )
             resp.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            status_code = exc.response.status_code
+            gateway_message = _error_description(exc.response)
+            raise PaymentGatewayError(
+                f"razorpay: order creation failed: HTTP {status_code}"
+                + (f": {gateway_message}" if gateway_message else ""),
+                status_code=status_code, gateway_message=gateway_message,
+            ) from exc
         except httpx.HTTPError as exc:
             raise PaymentGatewayError(f"razorpay: order creation failed: {exc}") from exc
 

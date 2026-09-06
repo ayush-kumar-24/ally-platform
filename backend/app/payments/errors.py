@@ -21,6 +21,25 @@ class PaymentsNotConfiguredError(PaymentError):
                          status_code=status.HTTP_503_SERVICE_UNAVAILABLE)
 
 
+class PaymentGatewayUnavailableError(PaymentError):
+    """Razorpay refused or failed to create the order. 502, not 500: the
+    request itself was fine and nothing in this backend broke -- the upstream
+    provider said no (or nothing). Without this, the gateway's own
+    PaymentGatewayError (a plain Exception, deliberately -- app.payments.gateway
+    knows nothing about HTTP responses) fell through to the unhandled-exception
+    handler and the founder read "Something went wrong. We've logged it." for
+    what is, from where they sit, "the payment provider is not answering right
+    now". The message stays founder-facing on purpose: the *reason* (a 401 from
+    a wrong key, a 400 naming a field) is in the log line, never in the body."""
+
+    def __init__(self):
+        super().__init__(
+            "Our payment provider couldn't create this order. Please try again in a "
+            "moment, or email info@goxl.in if it keeps happening.",
+            status_code=status.HTTP_502_BAD_GATEWAY,
+        )
+
+
 class InvalidCheckoutError(PaymentError):
     def __init__(self, reason: str):
         super().__init__(f"Cannot start checkout: {reason}.", status_code=422)

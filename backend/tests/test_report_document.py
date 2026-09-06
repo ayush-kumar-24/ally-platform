@@ -211,29 +211,81 @@ def test_missing_insights_entirely_still_renders(narrative):
 
 # --- share links must always resolve -----------------------------------------
 
-def test_share_url_uses_the_site_origin_when_configured(monkeypatch):
+def test_share_url_ignores_public_app_url(monkeypatch):
+    """THE REGRESSION GUARD. PUBLIC_APP_URL must never shape a share link.
+
+    This test used to assert the opposite, and that is exactly how sharing
+    broke. PUBLIC_APP_URL is set to the MARKETING site (goxlally.ai) rather than
+    the app, so `<PUBLIC_APP_URL>/r/<token>` sent every recipient to a 404 page
+    on a static site.
+
+    The `/r/` rewrite itself was never the problem -- it lives in vercel.json and
+    works, verified against production. The host was wrong, not the path.
+
+    PUBLIC_APP_URL still has a real job (bouncing a founder back to /app/plan
+    after the calendar OAuth redirect, where the same wrong value is a separate
+    live bug). It just has nothing to do with shares.
+    """
     from app.api.v1.reports import routes
     from app.core.config import settings
 
     monkeypatch.setattr(settings, "PUBLIC_APP_URL", "https://goxlally.ai/")
+    monkeypatch.setattr(settings, "SHARE_LINK_BASE_URL", "")
+    monkeypatch.setattr(settings, "PUBLIC_API_URL", "")
     url = routes.share_url_for("tok123", _FakeRequest("https://api.goxlally.ai/"))
-    assert url == "https://goxlally.ai/r/tok123"
+    assert url == "https://api.goxlally.ai/api/v1/reports/shared/tok123/view"
+    assert "/r/tok123" not in url
 
 
-def test_share_url_falls_back_to_a_path_this_api_actually_serves(monkeypatch):
-    """`/r/<token>` is a Vercel rewrite, not a backend route.
+def test_share_url_defaults_to_a_path_this_api_actually_serves(monkeypatch):
+    """With nothing configured, the link must still resolve.
 
-    With PUBLIC_APP_URL unset the pretty path would be built against the API
-    host, where it 404s -- so the fallback must be the endpoint this service
-    really exposes, even though it is uglier.
+    The default is the endpoint this service really exposes -- longer than
+    `/r/<token>`, and it works with no CDN rewrite, no second domain and no
+    configuration at all.
     """
     from app.api.v1.reports import routes
     from app.core.config import settings
 
     monkeypatch.setattr(settings, "PUBLIC_APP_URL", "")
+    monkeypatch.setattr(settings, "SHARE_LINK_BASE_URL", "")
+    monkeypatch.setattr(settings, "PUBLIC_API_URL", "")
     url = routes.share_url_for("tok123", _FakeRequest("https://api.goxlally.ai/"))
     assert url == "https://api.goxlally.ai/api/v1/reports/shared/tok123/view"
-    assert "/r/tok123" not in url
+
+
+def test_share_url_prefers_public_api_url_over_the_request_origin(monkeypatch):
+    """Behind a proxy that rewrites Host, the request's own origin is wrong.
+
+    PUBLIC_API_URL is how the API is told its real public address, so a link
+    built inside it points somewhere a visitor can actually reach.
+    """
+    from app.api.v1.reports import routes
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "PUBLIC_APP_URL", "")
+    monkeypatch.setattr(settings, "SHARE_LINK_BASE_URL", "")
+    monkeypatch.setattr(settings, "PUBLIC_API_URL", "https://app.goxlally.ai/")
+    url = routes.share_url_for("tok123", _FakeRequest("http://10.0.1.7:8000/"))
+    assert url == "https://app.goxlally.ai/api/v1/reports/shared/tok123/view"
+
+
+def test_share_url_uses_the_pretty_path_only_when_opted_into(monkeypatch):
+    """SHARE_LINK_BASE_URL is opt-in, and means "a rewrite really exists here".
+
+    In production this should be https://app.goxlally.ai, where the vercel.json
+    /r/:token rewrite is live and verified. It is opt-in rather than inferred
+    because pointing it at an origin WITHOUT that rewrite produces links that
+    look perfect and 404 -- exactly the failure this whole change is undoing.
+    """
+    from app.api.v1.reports import routes
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "PUBLIC_APP_URL", "")
+    monkeypatch.setattr(settings, "PUBLIC_API_URL", "")
+    monkeypatch.setattr(settings, "SHARE_LINK_BASE_URL", "https://app.goxlally.ai/")
+    url = routes.share_url_for("tok123", _FakeRequest("https://api.goxlally.ai/"))
+    assert url == "https://app.goxlally.ai/r/tok123"
 
 
 class _FakeRequest:

@@ -1,4 +1,18 @@
-"""Domain tests for the Settings module (Phase 11). In-memory repo, deterministic."""
+"""Domain tests for the Settings module. In-memory repo, deterministic.
+
+The module used to own two sections, reminders and security. Both have shrunk:
+
+* the four reminder settings (reminder_time, daily_reminders, task_reminders,
+  goal_reminders) were removed on 2026-09-05 by team decision -- they validated,
+  persisted and were read by nothing, and none was reachable in the UI;
+* `session_timeout_minutes` went the same day, for the same reason plus a
+  sharper one: a security setting that silently does nothing is a false
+  assurance.
+
+What remains is `login_notifications`, which now has a real consumer in
+app/services/login_notifications.py. The tests below cover that, and pin the
+removals so neither setting quietly comes back without a consumer.
+"""
 
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
@@ -6,10 +20,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from app.settings import (
-    DEFAULT_REMINDER_TIME,
-    DEFAULT_SESSION_TIMEOUT_MINUTES,
     InMemorySettingsRepository,
-    InvalidSettingError,
     SettingsService,
     build_settings_service,
 )
@@ -37,8 +48,6 @@ def svc(repo=None):
 def test_get_creates_defaults_on_first_access():
     s = svc().get_settings(1)
     assert s.founder_id == 1
-    assert s.reminders.reminder_time == DEFAULT_REMINDER_TIME and s.reminders.daily_reminders is True
-    assert s.security.session_timeout_minutes == DEFAULT_SESSION_TIMEOUT_MINUTES
     assert s.security.login_notifications is True
     assert s.created_at == s.updated_at == T0
 
@@ -50,48 +59,48 @@ def test_get_is_idempotent():
     assert first == second                                   # no second create, same timestamps
 
 
-# --- partial updates --------------------------------------------------------
+# --- updates ----------------------------------------------------------------
 
 
-def test_update_reminders_partial_preserves_others():
+def test_update_security_touches_updated_at():
     service = svc()
     service.get_settings(1)
-    updated = service.update_reminders(1, reminder_time="07:30", daily_reminders=False)
-    assert updated.reminders.reminder_time == "07:30" and updated.reminders.daily_reminders is False
-    assert updated.reminders.task_reminders is True         # untouched
+    updated = service.update_security(1, login_notifications=False)
+    assert updated.security.login_notifications is False
     assert updated.updated_at > updated.created_at
 
 
-def test_update_security_partial():
+def test_update_with_nothing_sent_changes_nothing():
+    """A PATCH carrying no fields must not flip anything -- partial means
+    partial, including the empty case."""
     service = svc()
-    updated = service.update_security(1, session_timeout_minutes=30)
-    assert updated.security.session_timeout_minutes == 30
-    assert updated.security.login_notifications is True      # untouched
+    before = service.get_settings(1)
+    after = service.update_security(1)
+    assert after.security == before.security
 
 
 def test_updates_persist_across_reads():
     service = svc()
-    service.update_reminders(1, goal_reminders=False)
-    assert service.get_settings(1).reminders.goal_reminders is False
+    service.update_security(1, login_notifications=False)
+    assert service.get_settings(1).security.login_notifications is False
 
 
-# --- validation -------------------------------------------------------------
+# --- the removals stay removed ----------------------------------------------
 
 
-@pytest.mark.parametrize("bad", ["9:00", "25:00", "12:60", "noon", "", "0900"])
-def test_invalid_reminder_time_rejected(bad):
-    with pytest.raises(InvalidSettingError):
-        svc().update_reminders(1, reminder_time=bad)
+def test_reminder_settings_are_gone():
+    """Removed 2026-09-05 by team decision: four settings that validated,
+    persisted and were read by nothing. The section went with them."""
+    service = svc()
+    assert not hasattr(service, "update_reminders")
+    assert not hasattr(service.get_settings(1), "reminders")
 
 
-@pytest.mark.parametrize("bad", [0, 4, 1441, -10])
-def test_invalid_session_timeout_rejected(bad):
-    with pytest.raises(InvalidSettingError):
-        svc().update_security(1, session_timeout_minutes=bad)
-
-
-def test_valid_reminder_time_accepted():
-    assert svc().update_reminders(1, reminder_time="23:59").reminders.reminder_time == "23:59"
+def test_session_timeout_is_gone():
+    """Removed the same day. A founder choosing 5 minutes got the same 30-day
+    session as everyone else, because nothing consulted the number."""
+    with pytest.raises(TypeError):
+        svc().update_security(1, session_timeout_minutes=30)
 
 
 # --- reset ------------------------------------------------------------------
@@ -99,11 +108,13 @@ def test_valid_reminder_time_accepted():
 
 def test_reset_restores_defaults():
     service = svc()
-    service.update_reminders(1, reminder_time="06:00", daily_reminders=False)
-    service.update_security(1, session_timeout_minutes=15)
+    service.update_security(1, login_notifications=False)
     reset = service.reset_defaults(1)
-    assert reset.reminders.reminder_time == DEFAULT_REMINDER_TIME and reset.reminders.daily_reminders is True
-    assert reset.security.session_timeout_minutes == DEFAULT_SESSION_TIMEOUT_MINUTES
+    assert reset.security.login_notifications is True
+
+
+def test_reset_on_a_founder_with_no_row_creates_one():
+    assert svc().reset_defaults(99).founder_id == 99
 
 
 # --- isolation + determinism + concurrency ----------------------------------
@@ -111,18 +122,17 @@ def test_reset_restores_defaults():
 
 def test_founder_isolation():
     service = svc()
-    service.update_reminders(1, reminder_time="05:00")
+    service.update_security(1, login_notifications=False)
     service.get_settings(2)
-    assert service.get_settings(1).reminders.reminder_time == "05:00"
-    assert service.get_settings(2).reminders.reminder_time == DEFAULT_REMINDER_TIME
+    assert service.get_settings(1).security.login_notifications is False
+    assert service.get_settings(2).security.login_notifications is True
 
 
 def test_deterministic_execution():
     def run():
         service = svc()
         service.get_settings(1)
-        service.update_reminders(1, reminder_time="08:15")
-        return service.update_security(1, session_timeout_minutes=45)
+        return service.update_security(1, login_notifications=False)
     assert run() == run()
 
 
@@ -130,9 +140,9 @@ def test_concurrent_updates_across_founders():
     service = build_settings_service(InMemorySettingsRepository(), now=StepClock())
 
     def update(founder):
-        return service.update_security(founder, session_timeout_minutes=30).founder_id
+        return service.update_security(founder, login_notifications=False).founder_id
 
     with ThreadPoolExecutor(max_workers=8) as pool:
         ids = list(pool.map(update, range(1, 25)))
     assert sorted(ids) == list(range(1, 25))
-    assert all(service.get_settings(f).security.session_timeout_minutes == 30 for f in range(1, 25))
+    assert all(service.get_settings(f).security.login_notifications is False for f in range(1, 25))

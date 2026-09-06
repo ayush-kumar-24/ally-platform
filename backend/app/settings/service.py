@@ -14,8 +14,7 @@ from typing import Callable
 
 from app.settings.defaults import default_settings
 from app.settings.repository import SettingsRepository
-from app.settings.schemas import ReminderPreferences, SecurityPreferences, SettingsSnapshot
-from app.settings.validators import validate_reminder_time, validate_session_timeout
+from app.settings.schemas import SecurityPreferences, SettingsSnapshot
 
 
 class SettingsService:
@@ -34,35 +33,13 @@ class SettingsService:
 
     # --- partial section updates -----------------------------------------
 
-    def update_reminders(
-        self, founder_id: int, *, daily_reminders: bool | None = None,
-        reminder_time: str | None = None, task_reminders: bool | None = None,
-        meeting_reminders: bool | None = None, goal_reminders: bool | None = None,
-    ) -> SettingsSnapshot:
-        if reminder_time is not None:
-            validate_reminder_time(reminder_time)
-        current = self.get_settings(founder_id)
-        r = current.reminders
-        new_reminders = ReminderPreferences(
-            daily_reminders=r.daily_reminders if daily_reminders is None else daily_reminders,
-            reminder_time=r.reminder_time if reminder_time is None else reminder_time,
-            task_reminders=r.task_reminders if task_reminders is None else task_reminders,
-            meeting_reminders=r.meeting_reminders if meeting_reminders is None else meeting_reminders,
-            goal_reminders=r.goal_reminders if goal_reminders is None else goal_reminders,
-        )
-        return self._save(replace(current, reminders=new_reminders, updated_at=self._now()))
-
     def update_security(
-        self, founder_id: int, *, session_timeout_minutes: int | None = None,
+        self, founder_id: int, *,
         login_notifications: bool | None = None,
     ) -> SettingsSnapshot:
-        if session_timeout_minutes is not None:
-            validate_session_timeout(session_timeout_minutes)
         current = self.get_settings(founder_id)
         s = current.security
         new_security = SecurityPreferences(
-            session_timeout_minutes=(s.session_timeout_minutes if session_timeout_minutes is None
-                                     else session_timeout_minutes),
             login_notifications=(s.login_notifications if login_notifications is None
                                  else login_notifications),
         )

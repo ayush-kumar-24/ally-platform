@@ -6,9 +6,12 @@ only -- no collision with the existing settings router. Every endpoint delegates
 SettingsService; no business logic here.
 
     GET   /settings/preferences   full settings (creates defaults on first access)
-    PATCH /settings/reminders     partial reminder-preferences update
     PATCH /settings/security      partial app-security-preferences update
     POST  /settings/reset         reset to defaults
+
+PATCH /settings/reminders was removed on 2026-09-05 along with the four reminder
+settings it wrote -- none of them was read by anything. See
+app/settings/schemas.py.
 """
 
 from __future__ import annotations
@@ -17,9 +20,8 @@ from fastapi import APIRouter, Depends
 
 from app.api.deps import get_founder_record
 from app.api.v1.settings.dependencies import get_settings_service
-from app.api.v1.settings.preferences_schemas import RemindersUpdate, SecurityPrefsUpdate
+from app.api.v1.settings.preferences_schemas import SecurityPrefsUpdate
 from app.api.v1.settings.responses import (
-    RemindersResponse,
     SecurityPrefsResponse,
     SettingsPreferencesResponse,
 )
@@ -36,17 +38,6 @@ def get_preferences(
     service: SettingsService = Depends(get_settings_service),
 ) -> SettingsPreferencesResponse:
     return SettingsPreferencesResponse.from_domain(service.get_settings(founder.founder_id))
-
-
-@router.patch("/reminders", response_model=RemindersResponse,
-              summary="Update reminder preferences (partial)")
-def update_reminders(
-    payload: RemindersUpdate,
-    founder: Founder = Depends(get_founder_record),
-    service: SettingsService = Depends(get_settings_service),
-) -> RemindersResponse:
-    snapshot = service.update_reminders(founder.founder_id, **payload.model_dump(exclude_unset=True))
-    return RemindersResponse.from_domain(snapshot.reminders)
 
 
 @router.patch("/security", response_model=SecurityPrefsResponse,

@@ -44,8 +44,13 @@ export function EmptyState({ title = 'Nothing here', hint }) {
  * `busy` disables both buttons while the action is in flight so the dialog cannot
  * be dismissed or re-fired mid-request.
  */
+// `busy` means an action is in flight -- the button says "Working…" and Cancel
+// locks. `disabled` means the action is not yet valid, e.g. a required reason
+// has not been typed. They are different states and were being conflated: a
+// dialog waiting for input said "Working…" while nothing was happening.
 export function ConfirmDialog({ open, title, body, confirmLabel = 'Confirm',
-                                danger = false, busy = false, onConfirm, onCancel }) {
+                                danger = false, busy = false, disabled = false,
+                                onConfirm, onCancel }) {
   const confirmRef = useRef(null);
 
   useEffect(() => {
@@ -74,7 +79,7 @@ export function ConfirmDialog({ open, title, body, confirmLabel = 'Confirm',
             ref={confirmRef}
             className={`adm-btn ${danger ? 'adm-btn--danger' : 'adm-btn--primary'}`}
             onClick={onConfirm}
-            disabled={busy}
+            disabled={busy || disabled}
             type="button"
           >
             {busy ? 'Working…' : confirmLabel}

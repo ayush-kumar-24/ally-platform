@@ -181,12 +181,19 @@
     {
       "id": 100,
       "question": "Can I ask Ally about legal, tax or investment decisions?",
-      "answer": null,
-      "answer_type": "policy",
-      "status": "open_for_team",
-      "blocked_by": "No boundary exists anywhere. Checked the prompt library, the knowledge base and the grounding prompts — nothing states what Ally may or may not advise on. The prompts forbid inventing findings, which is a different thing. This needs writing from scratch and is a legal position as much as a product one.",
-      "links": [],
-      "verified": null
+      "answer": "You can ask, and Ally will help where it is about your business.\n\nMoney, pricing, hiring, a contract you are unsure about, whether to raise -- these are founder questions and Ally will think them through with you.\n\nWhat it will not do is act as your lawyer, your accountant or your investment adviser. It is a decision-support tool, not professional advice, and for anything with legal or tax consequences you need someone qualified who knows your situation.\n\nAlly also stays on its subject. Ask it for a recipe or advice about your relationship and it will politely say that is not what it is for.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/terms",
+        "/app/ally-chat"
+      ],
+      "verified": {
+        "walked_on": "2026-09-06",
+        "how": "Team position, 2026-09-06: Ally is bounded to founder and business content and will not answer irrelevant subjects. The professional-advice limit is Terms section 2, which states plainly that the Platform is a decision-support tool and does not constitute legal, financial or management consulting advice."
+      },
+      "note": "Team decision, 2026-09-06.",
+      "finding": "The subject boundary is now a stated POLICY but is not yet enforced in the prompts. Nothing in the prompt library, knowledge base or grounding prompts tells Ally to decline off-topic questions. Worth adding a line to _PRODUCT_QUESTIONS' neighbours so the behaviour matches the answer."
     },
     {
       "id": 101,

@@ -186,3 +186,29 @@
   text-align: inherit;
 }
 .adm-sort-btn:hover { text-decoration: underline; }
+
+/* ── Discovery call queue ──────────────────────────────────────────────────
+ *
+ * The queue is read at a glance before anyone clicks anything: who asked, when
+ * they want it, and how soon that is. `adm-warn` exists so "Today" and
+ * "Tomorrow" separate themselves from "In 9 days" without a second column.
+ */
+.adm-check {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 13px; color: var(--adm-ink); user-select: none;
+}
+.adm-dim { color: var(--adm-muted); font-size: 12px; }
+.adm-warn { color: var(--adm-warn); font-weight: 600; }
+/* The founder's own words about why they want the call. Wraps rather than
+   truncates -- it is the whole basis for saying yes or no. */
+.adm-wrap { white-space: normal; max-width: 34ch; line-height: 1.45; }
+.adm-tag {
+  display: inline-block; margin-top: 4px; padding: 1px 7px;
+  border: 1px solid var(--adm-accent); border-radius: 999px;
+  color: var(--adm-accent); font-size: 11px; font-weight: 600;
+}
+.adm-textarea {
+  width: 100%; margin-top: 10px; padding: 9px 11px; font: inherit;
+  border: 1px solid var(--adm-line); border-radius: 8px;
+  background: #fff; color: var(--adm-ink); resize: vertical;
+}

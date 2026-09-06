@@ -1,0 +1,224 @@
+{
+  "schema_version": "1.0",
+  "file": "group-22-settings-and-preferences",
+  "group": "settings-and-preferences",
+  "group_number": 22,
+  "group_title": "Settings and preferences",
+  "question_bank": "Founder Question Bank v3 -- group 22 (questions 257-268)",
+  "created": "2026-09-05",
+  "supersedes": "The 257-268 entries in account-settings-privacy.json, which were placeholders. This file is canonical for group 22.",
+  "content_rules": {
+    "voice": "Very simple, easy English. Short sentences. Common everyday words. No idioms. Friendly and warm, but plain.",
+    "answer_length": "About 120 words maximum. Short paragraphs with a blank line between them.",
+    "never_name_the_model": "No vendor, no model, anywhere.",
+    "group_specific": "Four of these settings do nothing. Say so. A founder who flips a switch, sees no change and is told by the help bot that it works will trust nothing else on the page.",
+    "never_describe_a_dead_setting_as_working": "in_app_all persists and is read by nothing. reminder_time, task_reminders, goal_reminders, meeting_reminders, daily_reminders, session_timeout_minutes and login_notifications persist, are read by nothing, and are not surfaced in the UI at all. private_mode was removed on 2026-09-05."
+  },
+  "walk_log": {
+    "walked_on": "2026-09-05",
+    "environment": "local dev build (backend :8000, frontend :3000), the Profile page walked in a browser, plus live PATCH calls against the settings API.",
+    "observed": [
+      "Profile > Preferences has exactly four switches: Call reminders by email, Notifications, Reduced motion, Private mode -- plus a Replay tour button.",
+      "REAL AND WORKING: Reduced motion. Saved server-side, applied app-wide on load, and it also follows the device's own 'reduce motion' setting.",
+      "REAL AND WORKING: the email switch (notification_preferences.email_reminders). Its one consumer is discovery_notifications.py, gating the 24h and 1h reminders before a discovery call.",
+      "DEAD: Notifications (in_app_all). Persists. No consumer anywhere in backend or frontend.",
+      "DEAD: Private mode. Persists. No consumer anywhere. Its label claims 'keep business data anonymised in aggregate insights' -- there are no aggregate insights in the product.",
+      "DEAD AND UNREACHABLE: the whole reminder preferences model -- daily_reminders, reminder_time (default 09:00), task_reminders, meeting_reminders, goal_reminders. Live PATCH to /settings/reminders returned 200 and persisted 07:30 with task reminders off. No code reads any of them, and no screen shows them.",
+      "The discovery-call reminder job is never run: nothing calls send_due_reminders. The internal jobs webhook has deletions, report reconciliation, PDF backfill and health -- no reminders. So even the one real email flag currently gates emails that never send.",
+      "The only email the product actually sends to a founder is a discovery call booking confirmation, which is transactional and always sent.",
+      "Accessibility audit of the Profile page: 1 main, 1 nav, 1 h1, a skip link, every image has alt text, every form field is labelled. The only failures were the four switches, which had no accessible name and no state. FIXED in this session.",
+      "Text sizing: of 107 sampled elements, only 7 responded to a change in root font size. The app is almost entirely px, so a browser's text-size setting does very little. Full page zoom works normally.",
+      "No dark theme: zero prefers-color-scheme colour rules are loaded, and the root carries no data-theme."
+    ],
+    "findings": [
+      "FIXED IN THIS SESSION -- A MARKETING OPT-OUT WAS SWITCHING OFF PAID CALL REMINDERS. The switch read 'Renewal reminder / Get notified about new features and offers'. It is wired to email_reminders, whose only consumer gates the 24h and 1h reminders for a discovery call. A founder declining marketing was silently turning off the reminders for a call they had paid Rs 199 for. Relabelled to 'Call reminders by email / Reminders before a discovery call you have booked'. If marketing email is ever sent, it needs its own flag.",
+      "FIXED IN THIS SESSION -- THE FOUR SWITCHES WERE INVISIBLE TO A SCREEN READER. They were bare buttons with no text and no aria-label, so a screen reader announced 'button' four times with no name and no on/off state. Added role=switch, aria-checked and aria-label to all four. Verified live: the page now has zero unnamed controls.",
+      "PRIVATE MODE REMOVED, AND THE TEAM SETTLED WHAT SITS BEHIND IT. The switch read 'Keep business data anonymised in aggregate insights' and nothing read it, so it controlled nothing -- removed from the Profile page and the settings schema on 2026-09-05. The wording was NOT invented, though: it traces to Terms section 4 and Privacy Policy sections 3(c) and 6, which permit anonymised aggregated use to improve GoXL's models. On 2026-09-05 the team confirmed those clauses are the intended position, so answers 206, 258, 259 and 283 now say plainly that your own writing is never trained on while anonymous aggregate may be used. Founders have no opt-out from the aggregate use, and the removed switch never gave them one.",
+      "AN ENTIRE SETTINGS MODULE IS DEAD. daily_reminders, reminder_time, task_reminders, meeting_reminders, goal_reminders, session_timeout_minutes and login_notifications all validate, persist and read back through a working API, and not one of them is read by anything. None are surfaced in the UI either. Seven settings, zero effect. Questions 260 and 261 are about two of them.",
+      "THE REMINDER JOB IS NOT SCHEDULED. Nothing calls send_due_reminders, so discovery call reminders never fire even for founders who want them. Answer 262 therefore says the booking confirmation is the only email we send, which is currently true.",
+      "NO DARK MODE AND ALMOST NO TEXT SCALING. Neither is a defect, but both are asked and both answers are 'no'. The px-everywhere styling is the reason a browser text-size setting does nothing; page zoom is the honest workaround to recommend."
+    ]
+  },
+  "answers": [
+    {
+      "id": 257,
+      "question": "What does the notifications toggle actually control?",
+      "answer": "There is no notifications switch on your Profile any more. We took it out.\n\nIt did not do anything. There are no in-app notifications for it to turn off, so whichever way you set it, Ally behaved the same. Rather than leave a switch that does nothing, we removed it.\n\nWhat does reach you has not changed. Ally shows anything overdue when you open it, and if you have connected a calendar, your tasks are on there with proper reminders.\n\nWhen there is something real to switch off, the switch will come back.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/profile"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Hidden on 2026-09-05 and verified live: the Preferences card now shows two switches, Call reminders by email and Reduced motion, both of which genuinely work."
+      },
+      "note": "Team decision, 2026-09-05."
+    },
+    {
+      "id": 258,
+      "question": "What is \"private mode\", and what happens to my data if I leave it off?",
+      "answer": "There is no private mode any more. We removed it, because it did nothing.\n\nThe switch claimed to keep your business data anonymised in aggregate insights. Nothing read it, so turning it on or off changed absolutely nothing about how your data was handled. A privacy control that does not control anything is worse than not having one, so it is gone.\n\nWhat is actually true: your own answers, report and conversations are never used to train anything and are never in any searchable index. We may use anonymous, combined information -- patterns across many founders, with nothing traceable to you -- to improve Ally.\n\nThat applies to everybody. It was never something the switch changed.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/profile",
+        "/privacy",
+        "/terms"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Removed from the Profile page and the settings schema on 2026-09-05 and verified live -- the page now shows two switches and the words 'private mode' and 'aggregate insights' appear nowhere on it. The data position is the team's settled one, matching Terms section 4 and Privacy Policy sections 3(c) and 6."
+      },
+      "note": "REWRITTEN after the team settled the aggregate-data question on 2026-09-05. An earlier draft said the data 'was never going into anything of the kind', which was true of the switch but not of the Terms. The honest version separates the two: the switch was empty, and the aggregate use is real but anonymous."
+    },
+    {
+      "id": 259,
+      "question": "What are these \"aggregate insights\" my business is going into?",
+      "answer": "It means patterns, not your business.\n\nOur Terms allow us to use anonymous, combined information to improve Ally -- things like which kinds of problem tend to sit underneath which symptoms, across many founders at once. Nothing in it can be traced back to you, your company or anything you wrote.\n\nYour own material is never part of that. Your answers, your report and your conversations are not used to train anything, and are not in any searchable index.\n\nThe switch that used to mention this has been removed, because it did not actually control anything. The full wording is in our Terms and Privacy Policy.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/profile",
+        "/privacy",
+        "/terms"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Team's settled position, 2026-09-05: the Terms and Privacy Policy are the authority. Terms section 4, Privacy Policy sections 3(c) and 6. Separately verified in code that no founder-owned table carries an embedding column, so founder text is never vectorised."
+      },
+      "note": "REWRITTEN. An earlier draft said aggregate insights did not exist, which was true of the product but contradicted our own Terms. The team's call was that the Terms are right."
+    },
+    {
+      "id": 260,
+      "question": "Can I choose what time Ally reminds me?",
+      "answer": "No, there is no reminder time to set. Ally does not send timed reminders at all.\n\nWhat you can control is your calendar. Connect it from Plan Your Day and your tasks go in with a reminder half an hour before, which you can then move around in your own calendar however you like.\n\nA task with a date but no time is put at 9 in the morning, so the reminder lands early in the day rather than late the night before.\n\nIf you would like Ally itself to remind you at a time you choose, tell us. We are keeping a list.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/plan"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "The reminder settings were removed from the product on 2026-09-05 (team decision) -- they persisted and nothing read them. The 9am default described here is the calendar sync's own default hour, which is real and working."
+      },
+      "note": "Team decision, 2026-09-05. Was 'not yet'; now it is a plain no."
+    },
+    {
+      "id": 261,
+      "question": "Can I keep goal reminders but turn task reminders off?",
+      "answer": "No. Goals and tasks do not send reminders, so there is nothing to separate.\n\nThe only reminder switch in Ally is on your Profile -- \"Call reminders by email\" -- and it covers reminders before a discovery call you have booked.\n\nWhat goals and tasks do instead is show up when you open Ally, and go into your calendar if you have connected one. If you want those quieter, your calendar is the place to change it.\n\nIf separate reminders would be useful, tell us which ones you would actually want.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/profile"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "The separate task_reminders and goal_reminders flags were removed on 2026-09-05 (team decision) -- neither was read by anything and neither was reachable in the UI. The email switch on Profile is now the only reminder control that exists."
+      },
+      "note": "Team decision, 2026-09-05."
+    },
+    {
+      "id": 262,
+      "question": "Will Ally email me, or only notify me inside the app?",
+      "answer": "Almost everything happens inside the app. We send very little email.\n\nThere are two. When you book a discovery call, you get an email confirming the time with the joining link. And if your account is opened from a device you have not used before, we let you know.\n\nThat is all. No daily emails, no weekly summaries, no marketing.\n\nIf you have connected a calendar, your task reminders come from your calendar rather than from us.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/discovery-call"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "The only two founder-facing emails in the product are the discovery call booking confirmation and, as of 2026-09-05, the new-device sign-in notice. Call reminders exist and are now schedulable, and no marketing email exists anywhere."
+      }
+    },
+    {
+      "id": 263,
+      "question": "How do I stop all email from you?",
+      "answer": "There is very little to stop, but here is what there is.\n\nGo to Profile, then Preferences, and turn off \"Call reminders by email\". That covers reminders before a discovery call.\n\nTwo we would rather you kept. The confirmation when you book a call, because it has the joining link and losing it costs you the call. And the note when your account is opened from a new device, because that is the one that tells you if somebody else is in your account.\n\nWe send no marketing email at all, so there is no newsletter to leave.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/profile"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Verified: the email switch gates only the discovery call reminders. The booking confirmation is transactional. The new-device notice respects the login_notifications preference, which is on by default."
+      }
+    },
+    {
+      "id": 264,
+      "question": "Can I replay the tour later?",
+      "answer": "Yes, any time.\n\nGo to Profile and find Product tour under Preferences, then click Replay tour.\n\nThe tour walks you through the whole app in 14 short steps. It starts at your Compass and covers each section.\n\nYou do not have to finish it. There is a Skip button on every step, and you can stop whenever you like.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/profile"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Walked: the Replay tour control sits under Preferences on the Profile page and restarts the 14-step guided tour."
+      }
+    },
+    {
+      "id": 265,
+      "question": "Does reduced motion change anything besides animations?",
+      "answer": "Yes, a little more than the name suggests.\n\nWhen you turn it on, Ally stops almost all movement. Things that used to slide, fade or pop will just appear. Long smooth scrolling stops too, so pages jump straight to where you asked to go.\n\nNothing is hidden and nothing stops working. You can still reach every page and every button. Only the movement changes.\n\nAlly also follows your device setting. If you have turned on 'Reduce motion' on your phone or computer, Ally is already calm and you do not need this switch.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/profile"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Tested live earlier in this workstream: turning it on flattened 452 animated elements and turning it off restored them. The device's own preference is honoured on load."
+      }
+    },
+    {
+      "id": 266,
+      "question": "Can I make the text bigger?",
+      "answer": "Use your browser's zoom. On Windows hold Ctrl and press the plus key, and on a Mac hold Command and press plus. Ctrl or Command with zero puts it back.\n\nThat scales the whole page, and Ally is built to reflow properly when you do, so nothing runs off the side.\n\nBeing straight with you: your browser's separate \"text size only\" setting will not do much in Ally at the moment. Most of our text is set at a fixed size, so that control mostly passes it by. Zoom is the one that works.\n\nWe know, and it is on our list.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/help"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Measured: of 107 sampled elements, only 7 changed when the root font size was doubled. The app is almost entirely px-based, so text-only scaling has little effect. Page zoom scales everything and the layout reflows without overflow."
+      },
+      "finding": "Text-only scaling is close to a no-op because the styling is px-based throughout. Not a blocker, but it is an accessibility gap and the answer admits it rather than dodging."
+    },
+    {
+      "id": 267,
+      "question": "Does this work with a screen reader, or by keyboard only?",
+      "answer": "Mostly yes, and we have just made one part better.\n\nEvery page has a proper heading, a skip link so you can jump past the menu, labels on every field, and descriptions on every image. You can move through the app with the Tab key and use buttons with Enter or Space.\n\nUntil today the four switches on your Profile were announced as just \"button\", with no name and no on-or-off state. That is fixed. They now say what they are and whether they are on.\n\nWe have not had Ally formally tested for accessibility. If something does not work for you, please tell us and we will fix it.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/help"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Audited the Profile page live: 1 main, 1 nav, 1 h1, a skip link present, zero images without alt, zero unlabelled form fields. The only failures were the four switches, fixed in this session and re-verified -- the page now reports zero unnamed controls."
+      },
+      "note": "Deliberately does not claim WCAG conformance. Nothing has been formally audited, so the answer says what was checked and admits what was not."
+    },
+    {
+      "id": 268,
+      "question": "Is there a dark mode?",
+      "answer": "Not yet. Ally is light only at the moment.\n\nIf you have your phone or computer set to dark, Ally will not follow it. There is no switch hidden anywhere either, so you are not missing it.\n\nWhat we do have is reduced motion, under Preferences on your Profile, which helps if the movement rather than the brightness is the problem.\n\nQuite a few people have asked for dark mode. If you would use it, tell us on the Feedback page. It genuinely helps us decide what to build next.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/profile",
+        "/app/feedback"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Confirmed: zero prefers-color-scheme colour rules are loaded on the app's pages, and the root element carries no data-theme. There is no dark stylesheet to switch to."
+      }
+    }
+  ]
+}

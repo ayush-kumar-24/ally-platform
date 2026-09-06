@@ -66,6 +66,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
+from app.core.config import settings
+
 #: How many LLM tokens one credit represents. Round and explainable on an invoice.
 TOKENS_PER_CREDIT = 1_000
 
@@ -75,8 +77,40 @@ TOKENS_PER_CREDIT = 1_000
 SOURCE_CHAT = "chat"
 SOURCE_PLANNING = "planning"
 
-#: Price of one discovery call once a founder's free allowance is used up.
+#: Price of one 30-minute discovery call. Flat, on every plan, however many you
+#: book.
+#:
+#: No tier includes a free call, so this is not an overflow price for founders
+#: who have used an allowance up -- it is simply what a call costs. There is no
+#: cap on how many a founder may request; the limit is the team's own
+#: availability, which the slot list already reflects.
+#:
+#: Raised from 199 to 300 on 2026-09-05. The two were previously the same number
+#: as the entry plan, which was its own problem: a founder who had heard "Rs 199"
+#: had no way to know whether they were buying a month of Ally or a single call.
+#: They are now plainly different things at plainly different prices.
+#:
+#: The duration this buys is settings.DISCOVERY_CALL_DURATION_MINUTES (30). If
+#: that ever changes, this number should be revisited with it -- and so should
+#: help answers 143 to 149, which quote both.
 CALL_PRICE_INR = 300
+
+#: BILLING CYCLE, settled by the team 2026-09-06 and NOT yet modelled here.
+#:
+#: `price_inr` on every tier below is a monthly figure, because that is all this
+#: catalog has ever expressed. Two of the three plans are genuinely monthly --
+#: Plus and Pro renew until cancelled, and pay for twelve months and you get two
+#: free. Starter is not: Rs 199 is paid ONCE and buys a single month, with no
+#: renewal.
+#:
+#: Nothing enforces that difference. There is no billing cycle field, no annual
+#: option and no non-renewing tier, because checkout was never built -- so the
+#: distinction lives only in the help answers and on the plans page today.
+#: Whoever wires Razorpay owns making the code agree with it: Starter must not
+#: create a recurring mandate, and Plus and Pro need an annual option at ten
+#: months' price.
+#:
+#: GST is included in every price shown. Prices are inclusive, not exclusive.
 
 #: How far ahead a founder can see bookable slots, by whether they hold
 #: Feature.PRIORITY_CALL. Pro sees the grid from tomorrow; everyone else waits
@@ -235,6 +269,45 @@ class Plan:
         return feature in self.features
 
 
+#: What Free carries WHILE WE ARE STILL TESTING.
+#:
+#: Nearly the whole product, and deliberately so: Vision, recommendations and the
+#: knowledge base were ungated before paid tiers existed, so gating them now would
+#: take away what our own testers are currently using. It stops short of voice
+#: chat and Know My Energy (paid on purpose since before this change) and of the
+#: two Rs 999 perks that are scarce rather than merely paid -- an inbox we send
+#: to, and a place ahead of paying founders in the call queue.
+#:
+#: Parenthesised deliberately: set `-` binds tighter than `|`, so without these
+#: brackets the subtraction applies only to the frozenset beside it and
+#: VOICE_CHAT survives from _WORKSPACE -- silently handing Free a paid feature.
+_FREE_TESTING = (_BASE | _WORKSPACE | frozenset({
+    Feature.VISION,
+    Feature.RECOMMENDATIONS,
+    Feature.KNOWLEDGE_CHAT,
+})) - frozenset({Feature.VOICE_CHAT})
+
+#: What Free carries AT PUBLIC LAUNCH: nothing.
+#:
+#: There is no free plan once we launch. Free stops being a tier anyone uses and
+#: becomes the state a founder is in before they have chosen one -- they can sign
+#: in, and the app sends them to the plans page. Empty rather than `_BASE`,
+#: because _BASE is the diagnosis and the report, and that is precisely what the
+#: Rs 199 plan sells.
+#:
+#: Every gate reads this through `Plan.includes`, so emptying it here closes
+#: every feature at once rather than leaving one route ungated because somebody
+#: forgot it.
+_FREE_AT_LAUNCH: frozenset[Feature] = frozenset()
+
+#: Settings, not a constant, so launch day is a deploy toggle rather than a
+#: release. Read once at import: a plan catalog that changed shape mid-process
+#: would gate two requests differently for the same founder.
+_FREE_FEATURES = _FREE_AT_LAUNCH if settings.PUBLIC_LAUNCH else _FREE_TESTING
+_FREE_TAGLINE = ("Choose a plan to begin." if settings.PUBLIC_LAUNCH
+                 else "One month free. See what Ally finds.")
+
+
 PLANS: dict[PlanTier, Plan] = {
     PlanTier.FREE: Plan(
         tier=PlanTier.FREE,
@@ -258,12 +331,8 @@ PLANS: dict[PlanTier, Plan] = {
         # these brackets the subtraction applies only to the frozenset beside it
         # and VOICE_CHAT survives from _WORKSPACE -- silently handing Free a paid
         # feature.
-        features=(_BASE | _WORKSPACE | frozenset({
-            Feature.VISION,
-            Feature.RECOMMENDATIONS,
-            Feature.KNOWLEDGE_CHAT,
-        })) - frozenset({Feature.VOICE_CHAT}),
-        tagline="One month free. See what Ally finds.",
+        features=_FREE_FEATURES,
+        tagline=_FREE_TAGLINE,
     ),
     PlanTier.BASIC: Plan(
         tier=PlanTier.BASIC,

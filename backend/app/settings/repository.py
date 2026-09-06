@@ -11,11 +11,7 @@ from __future__ import annotations
 import abc
 import threading
 
-from app.settings.schemas import (
-    ReminderPreferences,
-    SecurityPreferences,
-    SettingsSnapshot,
-)
+from app.settings.schemas import SecurityPreferences, SettingsSnapshot
 
 
 class SettingsRepository(abc.ABC):
@@ -86,10 +82,9 @@ def _to_snapshot(row) -> SettingsSnapshot:
         founder_id=row.founder_id,
         reminders=ReminderPreferences(
             daily_reminders=row.daily_reminders, reminder_time=row.reminder_time,
-            task_reminders=row.task_reminders, meeting_reminders=row.meeting_reminders,
+            task_reminders=row.task_reminders,
             goal_reminders=row.goal_reminders),
         security=SecurityPreferences(
-            session_timeout_minutes=row.session_timeout_minutes,
             login_notifications=row.login_notifications),
         created_at=row.created_at, updated_at=row.updated_at,
     )
@@ -100,8 +95,7 @@ def _to_columns(s: SettingsSnapshot) -> dict:
         "founder_id": s.founder_id,
         "created_at": s.created_at, "updated_at": s.updated_at,
         "daily_reminders": s.reminders.daily_reminders, "reminder_time": s.reminders.reminder_time,
-        "task_reminders": s.reminders.task_reminders, "meeting_reminders": s.reminders.meeting_reminders,
+        "task_reminders": s.reminders.task_reminders,
         "goal_reminders": s.reminders.goal_reminders,
-        "session_timeout_minutes": s.security.session_timeout_minutes,
         "login_notifications": s.security.login_notifications,
     }

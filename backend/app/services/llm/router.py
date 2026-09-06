@@ -28,10 +28,19 @@ class LLMTask:
     FIRST_IMPRESSION = "first_impression"
     FOUNDER_DNA_DIMENSION_RESOLUTION = "founder_dna_dimension_resolution"
 
+    #: The help bot's two calls: pick which published answers fit the founder's
+    #: question, then write a reply from ONLY those answers. Deliberately its own
+    #: task rather than reusing a chat one -- it answers questions about the
+    #: PRODUCT from approved content, never about the founder's business, so it
+    #: wants different wiring and may want a cheaper model later.
+    SUPPORT_ROUTING = "support_routing"
+    SUPPORT_ANSWER = "support_answer"
+
     ALL = (
         ANSWER_INTERPRETATION, NEXT_QUESTION_SELECTION, DISTRESS_DETECTION,
         DIAGNOSIS_REASONING, ANSWER_CONSISTENCY, ARCHETYPE_ASSIGNMENT, REPORT_NARRATIVE,
         FIRST_IMPRESSION, FOUNDER_DNA_DIMENSION_RESOLUTION,
+        SUPPORT_ROUTING, SUPPORT_ANSWER,
     )
 
 

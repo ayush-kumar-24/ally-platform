@@ -21,9 +21,10 @@ from app.credits.models import CreditOperation
 from app.payments.errors import (
     InvalidCheckoutError,
     InvalidWebhookSignatureError,
+    PaymentGatewayUnavailableError,
     PaymentsNotConfiguredError,
 )
-from app.payments.gateway import GatewayOrder
+from app.payments.gateway import GatewayOrder, PaymentGatewayError
 from app.payments.models import WebhookOutcome
 from app.payments.service import PaymentService
 from app.plans.catalog import PLANS, PlanTier
@@ -197,6 +198,22 @@ def test_checkout_creates_a_pending_payment_and_a_real_order():
     assert payment.founder_id == 42
     assert payment.status == "pending"
     assert payment.amount_inr == price
+
+
+def test_checkout_gateway_failure_is_a_502_and_records_no_payment():
+    """Razorpay refusing the order (wrong keys, a bad field, an outage) is
+    the provider's answer, not this backend breaking: a 502 with a plain
+    message, never the generic 500 -- and no pending row, since there is no
+    order for it to point at."""
+    gateway = FakeGateway(raise_on_create=PaymentGatewayError(
+        "razorpay: order creation failed: HTTP 401: Authentication failed",
+        status_code=401, gateway_message="Authentication failed"))
+    service, repo, _ = _service(gateway=gateway)
+    with pytest.raises(PaymentGatewayUnavailableError) as info:
+        service.start_checkout(42, PlanTier.STARTER)
+    assert info.value.status_code == 502
+    assert isinstance(info.value.__cause__, PaymentGatewayError)
+    assert repo._payments == {}
 
 
 def test_checkout_carries_founder_and_plan_in_the_order_notes():

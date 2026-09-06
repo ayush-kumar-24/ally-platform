@@ -156,8 +156,12 @@ class TestPlanGate:
         for dep in (get_founder_record, get_db, get_planning_service):
             app.dependency_overrides.pop(dep, None)
 
-    @pytest.mark.parametrize("plan_type", ["free", "starter", "pro"])
-    def test_every_current_tier_is_allowed(self, plan_type):
+    # The tiers that actually include Plan Your Day. "free" is not here because
+    # at public launch Free is empty by design (settings.PUBLIC_LAUNCH), and
+    # "basic" (the Rs 199 plan) is the diagnosis and report only -- it does not
+    # carry the workspace, so its refusal is correct rather than a regression.
+    @pytest.mark.parametrize("plan_type", ["starter", "pro"])
+    def test_every_paid_tier_reaches_the_gate(self, plan_type):
         """Free included: Plan Your Day is temporarily in the Free feature set for
         the testing phase, so no tier is refused today."""
         try:

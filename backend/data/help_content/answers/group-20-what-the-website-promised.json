@@ -1,0 +1,203 @@
+{
+  "schema_version": "1.0",
+  "file": "group-20-what-the-website-promised",
+  "group": "what-the-website-promised",
+  "group_number": 20,
+  "group_title": "What the website promised",
+  "question_bank": "Founder Question Bank v3 -- group 20 (questions 238-248)",
+  "created": "2026-09-05",
+  "content_rules": {
+    "voice": "Very simple, easy English. Short sentences. Common everyday words. No idioms. Friendly and warm, but plain.",
+    "answer_length": "About 120 words maximum. Short paragraphs with a blank line between them.",
+    "never_name_the_model": "No vendor, no model, anywhere.",
+    "group_specific": "This group was written against the OLD join.goxlally.ai page. That page is retired and the landing page now lives on goxlally.ai, where five of these eleven claims no longer appear. Where a promise is gone, say so plainly and answer the worry underneath it -- founders who read the old page will still arrive with the question.",
+    "never_defend_a_claim_we_dropped": "If the site no longer says it, do not argue that it was fine. Say it was an older version, then give the true answer."
+  },
+  "walk_log": {
+    "walked_on": "2026-09-05",
+    "environment": "The live landing page at https://goxlally.ai, its Our Story page (/about.html) and the sample dashboard it embeds (/ally-dashboard.html), plus the local dev build against the Supabase database.",
+    "observed": [
+      "join.goxlally.ai is retired ON PURPOSE -- the landing page was merged into the main goxlally.ai domain. Confirmed by the founder. Not a defect.",
+      "STILL ON THE PAGE: '100+ entrepreneurial dimensions, 10,000+ founder case studies, 25,000+ founder problems' (question 238); 'Three things to focus on first' (241); 'Your data is encrypted, private and accessible only to you' (246); and the timings under HOW ALLY WORKS -- onboarding under 5 minutes, adaptive diagnosis 20 to 30 minutes, resumable (247, 248).",
+      "GONE FROM THE PAGE, so the premise of the question no longer holds: any founder health score promise (239), any diagnosis confidence readout (240), the term 'Clarity Method' (242), the term 'Clarity Report' (243), a 'see a sample report' link (244), and the phrase 'no sales call' (245). The merge dropped all six.",
+      "The site DOES have a sample: an embedded, static demo dashboard at /ally-dashboard.html, titled 'Ally -- Founder Platform (Sample)', showing a made-up founder (Priya Sharma, Loopcart). It is a Compass page only. There is no sample report anywhere.",
+      "Our Story exists at /about.html and explains why Ally was built. It names no people and states no credentials -- so group 19's finding stands, narrowed: the 'why' is public, the 'who' is not.",
+      "The app's own report page title is literally 'Clarity report - Ally - GoXL', so both names are live at once (question 243).",
+      "Confidence IS shown to founders, on the report, as a band: High, Moderate or Early. Never as a number, and never in chat.",
+      "Question budgets read from founder_stages: Ideation 14, Validation 20, Prototype/MVP 24, Early Traction 30, Growth/Scaling 30, Expansion 32, Maturity 32, Exit 30. Founder DNA is capped at 16 questions.",
+      "Encryption that IS verified: all traffic is HTTPS, and stored calendar tokens are encrypted with a Fernet key whose absence disables the feature rather than falling back to plaintext (app/core/config.py, app/calendar_sync/crypto.py).",
+      "Encryption that is NOT verified: at-rest encryption on production RDS and S3. Nothing in the repo proves it and the production checks doc did not cover it. Answer 246 therefore does not claim it."
+    ],
+    "findings": [
+      "THE SAMPLE DASHBOARD ON THE HOMEPAGE SELLS TWO THINGS THAT DO NOT EXIST. Its sidebar reads: 'Ally Plus -- Unlock deeper diagnosis, unlimited chat and Founder MRI.' There is no 'Founder MRI' feature anywhere in the product. And 'unlimited chat' is the opposite of true: Plus is capped at 3,500 tokens a day, which measured against real usage is two or three messages. This is the single most expensive sentence on the site -- it is the upgrade pitch, shown to someone deciding whether to pay.",
+      "THE SAMPLE DASHBOARD USES A CLARITY BAND THAT DOES NOT EXIST. It shows 'FOUNDER CLARITY: Forming'. The real bands are Critical Gap, Needs Attention, Developing and Strong. A founder who sees 'Forming' on the site and never sees it in the product will assume something is missing from their account.",
+      "THE PRIVACY PROMISE IS STILL WRONG, AND IT IS THE LAST THING READ BEFORE SIGN-UP. 'Your data is encrypted, private and accessible only to you' sits directly above the registration form. Support and above can read a founder's conversations and report. Answers 204, 210 and 246 all say so plainly. Suggested replacement, true and nearly as strong: 'Your data is encrypted, private and never sold or shared with other founders.'",
+      "AT-REST ENCRYPTION IS UNVERIFIED. Answer 246 talks about encryption because the site does. It deliberately claims only what was checked -- HTTPS in transit, and encrypted calendar tokens. Whether production RDS and the S3 buckets are encrypted at rest has not been confirmed from here. Added as Check 6 in docs/PRODUCTION-RDS-CHECKS.md; confirm before this answer ships.",
+      "NO SAMPLE REPORT EXISTS. Nothing on the site links to one now, so nothing is broken -- but question 244 is a fair ask from someone about to pay, and the answer is currently 'no'. A single well-made anonymised sample would do more for conversion than most of the page. Team decision.",
+      "Our Story still prints 'join.goxlally.ai -- early access is open' as plain text under its call to action. The button beside it correctly points at /#early-access, so nobody is 404'd by clicking -- but it reads as the address to type. One-line fix."
+    ]
+  },
+  "answers": [
+    {
+      "id": 238,
+      "question": "The site says 100+ dimensions. My report covers six areas. Which is it?",
+      "answer": "Both are true, and it is a fair thing to ask.\n\nThe six areas are how your findings are laid out so the report can be read: Founder Readiness, Market Clarity, Revenue Maturity, Product & Execution, Team & Leadership, and Strategic Clarity.\n\nUnderneath them sit more than a hundred smaller things Ally can look at. Founder DNA alone covers 15. Business DNA has its own set, and which ones apply depends on your stage.\n\nSo the six are the shelves, not the contents. If everything assessed was printed one by one, the report would be a spreadsheet, and you would not read it.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/report"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "The '100+ entrepreneurial dimensions' claim is still on the live page and matches what the product does. Founder DNA's 15 dimensions are in the enum; the six pillars are the report's organising structure."
+      }
+    },
+    {
+      "id": 239,
+      "question": "Where is the founder health score the homepage promised me?",
+      "answer": "Your Compass page has it. It is called Founder Clarity, and it is a word rather than a number.\n\nBusiness health sits next to it, in the same style.\n\nIf yours is empty, there are two likely reasons. You may not have finished a diagnosis yet. Or you are at Ideation stage, where we deliberately do not publish a business health reading, because there is not yet enough business to measure honestly.\n\nA made-up number would be worse than a blank. That gap is on purpose.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "The live page no longer promises a health score, so the premise is retired -- but the Compass genuinely shows Founder Clarity as a band, and ideation-stage reports deliberately publish no business health figure. Consistent with answer 40."
+      },
+      "note": "Premise gone from the current site. Kept and answered because founders who read the older page will still ask."
+    },
+    {
+      "id": 240,
+      "question": "The demo showed a diagnosis confidence figure. Where's mine?",
+      "answer": "It is on your report, not in the chat.\n\nNear the top you will see a line like \"Ally's finding - High confidence\". There are three levels: High, Moderate and Early.\n\nIf it says Early, your report also opens with a short note about certainty, explaining that Ally did not get quite enough to be sure.\n\nWe show it as a word on purpose. A number invites you to argue with the number instead of reading the finding.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/report"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "The current sample dashboard shows no confidence readout at all, so the premise is retired. Confidence genuinely appears on the report as a band -- verified by opening a real report. Consistent with answers 47 and 48."
+      }
+    },
+    {
+      "id": 241,
+      "question": "It said three priority actions. I got a different number.",
+      "answer": "Three is what the website shows as an example, not a promise.\n\nYour report gives you what your diagnosis actually supports. For most founders that is two or three. It is never a long list.\n\nThat is deliberate. A list of ten things to fix is the same as no list, because you will do none of them.\n\nIf you got fewer than you expected, it usually means Ally found one thing sitting underneath the rest, and would rather you did that one properly.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/report",
+        "/app/recommendations"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "'Three things to focus on first' is still on the live page, shown as an illustration alongside made-up examples. The real count comes from the diagnosis. Consistent with answer 129."
+      }
+    },
+    {
+      "id": 242,
+      "question": "What is the \"Clarity Method\"? Is it something you invented?",
+      "answer": "That is not a name we use any more, so if you saw it, it was an older version of the site.\n\nWhat sits behind Ally is our own framework, built deliberately rather than borrowed. Six areas, more than a hundred things underneath them, and a set of rules that traces what you told us back to the one cause sitting underneath.\n\nIt came out of real founder work: more than 10,000 founder case studies, and 25,000 founder problems traced back to what caused them.\n\nSo: made by us, but not made up.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/help"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "The term 'Clarity Method' appears nowhere on the live site. The framework description matches answer 34 and the landing page's own corpus figures."
+      }
+    },
+    {
+      "id": 243,
+      "question": "The site calls it a Clarity Report. Inside it's just \"report\". Same thing?",
+      "answer": "Same thing. One document, two names, and that is our untidiness rather than yours.\n\nInside Ally the page is called Report, and the browser tab still says \"Clarity report\". They are the same document, built from the same diagnosis.\n\nThere is only ever one report per account, so there is nothing to mix up. Whatever it is called, it is the one you are looking at.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/report"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Walked it: the app's own page title is literally 'Clarity report - Ally - GoXL' while the sidebar says Report. The term no longer appears on the live marketing site."
+      }
+    },
+    {
+      "id": 244,
+      "question": "Can I see a sample report before I sign up?",
+      "answer": "No, and we have decided not to make one.\n\nThere is a sample of the app on our website, so you can look around and see how it is laid out. But there is no sample report, and there will not be.\n\nThe reason is that a report only means anything with a real founder's answers behind it. A made-up one would look impressive and tell you nothing about whether it would be useful to you -- and it would set an expectation your own report might not match, because yours is about your business, not a tidy invented one.\n\nIf you want a proper sense of it before deciding, ask support and we will talk you through what is in one.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/help"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Team decision 2026-09-05: no sample report will be produced. The site's embedded sample dashboard (/ally-dashboard.html) remains and is what the answer points at."
+      },
+      "note": "Team decision, 2026-09-05."
+    },
+    {
+      "id": 245,
+      "question": "It says \"no sales call\". So what is the discovery call?",
+      "answer": "The current site does not make that claim, so it may have been an older version.\n\nEither way, here is the plain answer. A discovery call is 30 minutes with someone from our team, and it costs Rs 300. It is not included free on any plan.\n\nIt is not a pitch. There is nothing to upsell you to on the call, because the plans are on the website and you can read them yourself.\n\nThe useful version is you bringing something specific: your report, a decision you are stuck on, or a finding you disagree with.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/discovery-call"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "The phrase 'no sales call' appears nowhere on the live site. Call price and shape match the team's decision of 2026-09-05: Rs 300 per 30-minute call, on every plan."
+      },
+      "note": "Price set by the team on 2026-09-05. Raised from Rs 199 so it is not confused with the Rs 199 monthly Starter plan."
+    },
+    {
+      "id": 246,
+      "question": "It says private and encrypted. Encrypted how, and from whom?",
+      "answer": "Encrypted on the way to us, and encrypted where it is stored.\n\nEverything between you and Ally travels over an encrypted connection, so nobody in between can read it. Where it is stored, it is encrypted there too. Connected accounts like your calendar have their keys encrypted separately, and if that encryption is not available the feature switches itself off rather than storing anything in the clear.\n\nNow the part the word \"encrypted\" can hide.\n\nEncrypted from outsiders, yes. Not from us. A small number of people at GoXL can open your account to help with a support problem. They can read. They cannot edit.\n\nIt is never sold, and never shown to other founders.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/profile",
+        "/privacy"
+      ],
+      "verified": {
+        "walked_on": "2026-09-06",
+        "how": "Verified in the repo: all traffic is HTTPS, and calendar tokens are encrypted with a key whose absence disables the feature rather than falling back to plaintext. Encryption at rest confirmed by the team on 2026-09-06 -- it is in place, matching the Privacy Policy section 8 claim of AES-256. Staff read access (VIEW_CHATS, VIEW_REPORTS) is real and has no write counterpart anywhere."
+      },
+      "note": "Team decision, 2026-09-06. The at-rest half was previously withheld because it could not be verified from the codebase while the Privacy Policy already claimed it publicly. The team has confirmed it is in place, so the answer now matches the policy."
+    },
+    {
+      "id": 247,
+      "question": "What should I have ready before I start?",
+      "answer": "Nothing you have to look up. That is rather the point.\n\nIt helps to have a rough sense of three things: what stage you are at, roughly how much money is coming in and from how many customers, and what is actually stuck right now.\n\nYou do not need documents, exact figures, or anything to upload. Ally asks in plain language, and approximate answers are fine.\n\nWhat does matter is being honest rather than tidy. A polished answer gets you a polished report about a business that does not exist.\n\nSet aside about half an hour, somewhere you can think.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/guided/profile"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Walked the guided flow: nothing in onboarding or the diagnosis requires a document, an exact figure, or a registered company. Consistent with answers 13, 25 and 214."
+      }
+    },
+    {
+      "id": 248,
+      "question": "How long does the whole thing take, start to finish?",
+      "answer": "About 30 to 40 minutes, and you can stop whenever you like.\n\nSetting up your profile takes under five minutes. Founder DNA is up to 16 questions. The diagnosis itself is between 14 and 32 questions, depending on your stage -- early-stage founders get fewer, because there is less business to ask about.\n\nThen the report is built for you. That usually takes under a minute.\n\nNothing has to be done in one sitting. Every answer is saved as you send it, so you can close the tab and come back.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/guided/profile",
+        "/app/diagnosis"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Question budgets read from founder_stages: 14 at Ideation up to 32 at Expansion and Maturity. Founder DNA is capped at 16. The site's own 'under 5 minutes' onboarding and '20 to 30 minutes, resumable' diagnosis match this."
+      }
+    }
+  ]
+}

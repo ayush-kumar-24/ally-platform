@@ -152,27 +152,52 @@ def _section(narrative, key: str) -> SectionOut | None:
 
 
 def share_url_for(token: str, request: Request) -> str:
-    """The public URL for a share token.
+    """The public URL for a share token. It must resolve, above all else.
 
-    `/r/<token>` is a REWRITE on the Vercel frontend (see frontend/vercel.json),
-    not a route on this backend -- so it only resolves against the site's own
-    origin. Building it against the API host instead produces a link that 404s,
-    which is the worst possible outcome for a feature whose entire job is to
-    hand someone a working URL.
+    THIS USED TO BUILD `<PUBLIC_APP_URL>/r/<token>` AND THAT BROKE EVERY SHARE
+    LINK -- not because the path was wrong, but because PUBLIC_APP_URL points at
+    the MARKETING SITE (goxlally.ai) rather than the app (app.goxlally.ai).
 
-    So the pretty path is used only when PUBLIC_APP_URL says where the site
-    lives. Without it we fall back to this API's own endpoint, which is uglier
-    but always resolves. A link that works beats a link that looks right.
+    `/r/:token` is a rewrite declared in frontend/vercel.json, and it works --
+    verified against production: app.goxlally.ai/r/<anything> returns this API's
+    own "This shared report is not available." So the rewrite was never the
+    problem. The host was. Links went to goxlally.ai/r/<token>, which redirects
+    to www and lands on the marketing site's 404 page, and the founder sees a
+    dead link for a feature whose entire job is handing someone a working URL.
 
-    The fallback is reversed out of the route table rather than written as a
-    literal, so it follows the router if this module is ever remounted under a
-    different prefix. A hardcoded "/api/v1/..." would keep returning 200s from
-    url_path_for's point of view while silently pointing at nothing.
+    PUBLIC_APP_URL is deliberately NOT consulted here any more. It has its own
+    job -- bouncing a founder back to /app/plan after the calendar OAuth dance --
+    and quietly borrowing it for a second purpose is how one wrong value broke
+    two unrelated features at once. (It broke that one too: the calendar callback
+    returns founders to goxlally.ai/app/plan, which also 404s.)
+
+    THE DEFAULT IS THE DIRECT API URL, which needs no rewrite, no second domain
+    and no configuration. Longer than /r/<token>, and it resolves wherever this
+    service is reachable.
+
+    SET SHARE_LINK_BASE_URL=https://app.goxlally.ai IN PRODUCTION to get the
+    pretty path back, since that rewrite genuinely exists there. It is opt-in
+    rather than inferred because the failure mode is silent: a base URL whose
+    rewrite is missing produces links that look perfect and 404, and nothing in
+    this codebase can detect that.
+
+    The path is reversed out of the route table rather than written as a literal,
+    so it follows the router if this module is ever remounted under a different
+    prefix. A hardcoded "/api/v1/..." would keep looking correct while pointing
+    at nothing.
     """
-    site = (settings.PUBLIC_APP_URL or "").strip().rstrip("/")
-    if site:
-        return f"{site}/r/{token}"
     path = request.app.url_path_for("shared_report_page", token=token)
+
+    pretty = (settings.SHARE_LINK_BASE_URL or "").strip().rstrip("/")
+    if pretty:
+        return f"{pretty}/r/{token}"
+
+    base = (settings.PUBLIC_API_URL or "").strip().rstrip("/")
+    if base:
+        return f"{base}{path}"
+    # Last resort: the origin this very request arrived on. Correct whenever the
+    # API is reached directly, and wrong only behind a proxy that rewrites Host
+    # without forwarding it -- which is exactly what PUBLIC_API_URL is for.
     return f"{str(request.base_url).rstrip('/')}{path}"
 
 

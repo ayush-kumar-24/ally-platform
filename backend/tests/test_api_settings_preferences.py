@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.api.deps import get_founder_record
 from app.api.v1.settings.dependencies import get_settings_service
-from app.settings import DEFAULT_SESSION_TIMEOUT_MINUTES, build_settings_service
+from app.settings import build_settings_service
 
 BASE = "/api/v1/settings"
 
@@ -34,49 +34,57 @@ def test_get_preferences_creates_defaults(client):
     assert r.status_code == 200
     body = r.json()
     assert body["founder_id"] == 1
-    assert body["reminders"]["reminder_time"] == "09:00"
-    assert body["security"]["session_timeout_minutes"] == DEFAULT_SESSION_TIMEOUT_MINUTES
-
-
-def test_patch_reminders(client):
-    r = client.http.patch(f"{BASE}/reminders", json={"reminder_time": "07:30", "daily_reminders": False})
-    assert r.status_code == 200 and r.json()["reminder_time"] == "07:30"
-    assert client.http.get(f"{BASE}/preferences").json()["reminders"]["daily_reminders"] is False
+    assert body["security"]["login_notifications"] is True
+    assert "reminders" not in body      # removed 2026-09-05
 
 
 def test_patch_security(client):
-    r = client.http.patch(f"{BASE}/security", json={"session_timeout_minutes": 30})
-    assert r.status_code == 200 and r.json()["session_timeout_minutes"] == 30
+    r = client.http.patch(f"{BASE}/security", json={"login_notifications": False})
+    assert r.status_code == 200 and r.json()["login_notifications"] is False
 
 
 def test_reset_endpoint(client):
-    client.http.patch(f"{BASE}/reminders", json={"reminder_time": "06:00"})
-    client.http.patch(f"{BASE}/security", json={"session_timeout_minutes": 15})
+    client.http.patch(f"{BASE}/security", json={"login_notifications": False})
     r = client.http.post(f"{BASE}/reset")
     assert r.status_code == 200
-    assert r.json()["reminders"]["reminder_time"] == "09:00"
-    assert r.json()["security"]["session_timeout_minutes"] == DEFAULT_SESSION_TIMEOUT_MINUTES
+    assert r.json()["security"]["login_notifications"] is True
 
 
-def test_invalid_reminder_time_422(client):
-    assert client.http.patch(f"{BASE}/reminders", json={"reminder_time": "99:99"}).status_code == 422
+def test_retired_session_timeout_rejected_422(client):
+    """session_timeout_minutes was removed on 2026-09-05 -- it had no consumer and
+    no effect, so a founder setting it got a false assurance. `extra="forbid"`
+    means a client still sending it now gets a clear 422 rather than silently
+    writing a value nothing reads."""
+    assert client.http.patch(f"{BASE}/security", json={"session_timeout_minutes": 30}).status_code == 422
 
 
-def test_invalid_session_timeout_422(client):
-    assert client.http.patch(f"{BASE}/security", json={"session_timeout_minutes": 0}).status_code == 422
+def test_retired_meeting_reminders_rejected_422(client):
+    """Same, for meeting_reminders -- it duplicated the Profile page's own
+    "Call reminders by email" switch, which is the one that actually works."""
+    assert client.http.patch(f"{BASE}/security", json={"meeting_reminders": False}).status_code == 422
 
 
 def test_unknown_field_rejected_422(client):
-    assert client.http.patch(f"{BASE}/reminders", json={"nope": True}).status_code == 422
+    assert client.http.patch(f"{BASE}/security", json={"nope": True}).status_code == 422
+
+
+def test_retired_reminders_endpoint_is_gone(client):
+    """PATCH /settings/reminders went with the four reminder settings it wrote
+    on 2026-09-05 -- none of them was read by anything.
+
+    404, not 405: the path itself no longer exists on any method, rather than
+    existing and refusing PATCH."""
+    assert client.http.patch(f"{BASE}/reminders", json={"reminder_time": "07:30"}).status_code == 404
 
 
 def test_founder_isolation(client):
-    client.http.patch(f"{BASE}/reminders", json={"reminder_time": "05:00"})     # founder 1
+    client.http.patch(f"{BASE}/security", json={"login_notifications": False})   # founder 1
     client.founder["id"] = 2
     body = client.http.get(f"{BASE}/preferences").json()
-    assert body["founder_id"] == 2 and body["reminders"]["reminder_time"] == "09:00"   # fresh defaults
+    # Founder 2 gets fresh defaults, untouched by founder 1's change.
+    assert body["founder_id"] == 2 and body["security"]["login_notifications"] is True
 
 
 def test_error_shape_consistent(client):
-    r = client.http.patch(f"{BASE}/reminders", json={"reminder_time": "bad"})
+    r = client.http.patch(f"{BASE}/security", json={"login_notifications": "maybe"})
     assert r.status_code == 422 and set(r.json()) >= {"error", "message", "request_id"}

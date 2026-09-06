@@ -168,3 +168,40 @@ WARNING share_link_rejected  reason=report_inactive  route=view  share_id=… re
 ```
 
 Deploying that first would make Check 1 unnecessary next time.
+
+## Check 6 — is the data encrypted at rest?
+
+Not SQL. This is an AWS console / CLI check, and it is here because a **support
+answer depends on it**.
+
+Our landing page tells founders "your data is encrypted". The help answer for
+"encrypted how, and from whom?" (question 246) currently claims only what could
+be verified from the repo: HTTPS in transit, and calendar tokens encrypted with a
+key whose absence disables the feature rather than falling back to plaintext.
+
+It does **not** claim encryption at rest, because nothing here proves it.
+
+```bash
+# The database
+aws rds describe-db-instances \
+  --query 'DBInstances[].{id:DBInstanceIdentifier,encrypted:StorageEncrypted,kms:KmsKeyId,region:AvailabilityZone}'
+
+# The buckets holding report PDFs and chat attachments
+aws s3api get-bucket-encryption --bucket <report-bucket>
+aws s3api get-bucket-encryption --bucket <attachment-bucket>
+```
+
+**If `StorageEncrypted` is true and both buckets return a rule**, tell us and the
+answer gets one stronger sentence: *"and it is encrypted where it is stored, not
+only while it travels."*
+
+**If either is false**, that is worth knowing before someone asks rather than
+after. An unencrypted RDS instance cannot be encrypted in place — it needs a
+snapshot, an encrypted restore and a cutover — so the sooner it is known, the
+cheaper it is.
+
+While you are there, please also confirm **which region the RDS instance is in**.
+Answer 208 tells founders their data is stored in India. The load balancer and
+the Supabase project are both ap-south-1, but production RDS has never been
+checked from here, and a data residency claim is one of the few things worth
+being certain about.

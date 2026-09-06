@@ -73,6 +73,32 @@ def test_create_order_raises_on_gateway_error_response():
         _gateway(handler).create_order(amount_paise=100, currency="INR", receipt="r1", notes={})
 
 
+def test_create_order_error_carries_razorpays_status_and_description():
+    """What the backend log must say when checkout fails in an environment:
+    a 401 here means the configured key id/secret are wrong or mismatched,
+    which no amount of retrying fixes. `str(exc)` used to say only
+    "Client error '401 Unauthorized' for url ..."."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(401, json={"error": {"code": "BAD_REQUEST_ERROR",
+                                                   "description": "Authentication failed"}})
+
+    with pytest.raises(PaymentGatewayError) as info:
+        _gateway(handler).create_order(amount_paise=100, currency="INR", receipt="r1", notes={})
+    assert info.value.status_code == 401
+    assert info.value.gateway_message == "BAD_REQUEST_ERROR Authentication failed"
+    assert "401" in str(info.value) and "Authentication failed" in str(info.value)
+
+
+def test_create_order_error_survives_a_non_json_error_body():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(502, text="<html>Bad Gateway</html>")
+
+    with pytest.raises(PaymentGatewayError) as info:
+        _gateway(handler).create_order(amount_paise=100, currency="INR", receipt="r1", notes={})
+    assert info.value.status_code == 502
+    assert info.value.gateway_message is None
+
+
 def test_create_order_raises_on_network_failure():
     def handler(request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("connection refused", request=request)

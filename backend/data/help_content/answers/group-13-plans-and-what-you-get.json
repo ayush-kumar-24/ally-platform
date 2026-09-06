@@ -1,0 +1,176 @@
+{
+  "schema_version": "1.0",
+  "file": "group-13-plans-and-what-you-get",
+  "group": "plans-and-what-you-get",
+  "group_number": 13,
+  "group_title": "Plans and what you get",
+  "question_bank": "Founder Question Bank v3 — group 13 (questions 150-159)",
+  "created": "2026-09-05",
+  "content_rules": {
+    "voice": "Very simple, easy English. Short sentences. Common everyday words. No idioms. Friendly and warm, but plain.",
+    "answer_length": "About 120 words maximum. Short paragraphs with a blank line between them.",
+    "generated_not_written": "Anything numeric in this group — prices, credits, daily ceilings — must be rendered from the plan catalog at build time, never typed into an answer. Prices move; a stale number here is worse than no number. Where an answer needs a figure, it points the founder at their billing page instead.",
+    "display_names": "Founders see Free, Starter, Plus and Pro. The internal tier keys do not match those names (BASIC is shown as 'Starter' and STARTER is shown as 'Plus'), so never expose a tier key in an answer."
+  },
+  "walk_log": {
+    "walked_on": "2026-09-05",
+    "environment": "local dev build against the Supabase database (NOT production RDS)",
+    "ladder_as_it_stands": {
+      "Free (Rs 0)": "Diagnosis, report, call booking, Ally chat, Next steps, Goals, Plan Your Day, plus Vision, Recommendations and knowledge chat. No voice in chat. A testing-phase tier: the catalog says in as many words that it is to be resized at public launch.",
+      "Starter (Rs 199)": "The diagnosis and the Clarity Report it writes. Nothing else — no chat at all, and the daily chat ceiling is zero rather than small, deliberately, so it never reads as an allowance a founder could spend.",
+      "Plus (Rs 499)": "Adds the working surfaces: Ally chat with voice, Next steps, Goals and Plan Your Day.",
+      "Pro (Rs 999)": "Adds Vision, Recommendations, knowledge chat, email notifications, priority in the call queue, and Know My Energy (declared but not yet built)."
+    },
+    "observed": [
+      "No plan includes a free discovery call. Every tier reads free_calls_per_month = 0.",
+      "Free currently out-grants Plus on three features and on the daily chat ceiling. The catalog documents this as deliberate and temporary: those features were ungated before paid tiers existed, and gating them now would take them away from the people testing the product.",
+      "Know My Energy is declared against Pro so the gate and the pricing page are correct in advance, but the founder-facing feature does not exist yet."
+    ]
+  },
+  "answers": [
+    {
+      "id": 150,
+      "question": "What do I get if I upgrade?",
+      "answer": "It depends which plan you move to — they add different kinds of thing.\n\nStarter gives you the diagnosis and the Clarity Report it writes. That is the honest answer of what is wrong and what to do about it.\n\nPlus adds the part where you work on it: talking to Ally, your Next steps, Goals and Plan Your Day.\n\nPro adds the standing-advisor pieces — Vision, Recommendations, asking Ally about our wider knowledge, email updates, and priority when you ask for a call.\n\nYour billing page shows what you are on now and exactly what changes.",
+      "answer_type": "generated",
+      "status": "answered",
+      "links": [
+        "/app/billing"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Feature bundles read from the plan catalog: base (diagnosis, report, call booking), workspace (chat, voice in chat, next steps, goals, planning), advisor (vision, recommendations, knowledge chat, email notifications, priority calls, Know My Energy)."
+      },
+      "note": "Deliberately names no prices. They are rendered from the catalog on the billing page, and printing them here would put a second copy in the world that goes stale."
+    },
+    {
+      "id": 151,
+      "question": "What's actually different between Free, Starter and Pro?",
+      "answer": "There are four plans now, not three — Free, Starter, Plus and Pro.\n\nThe simplest way to see it is what each one lets you do.\n\nEvery plan gives you the diagnosis and your report, and lets you request a discovery call.\n\nStarter stops there. It is the diagnosis and the report, and nothing else.\n\nPlus adds the working part: Ally chat, Next steps, Goals and Plan Your Day.\n\nPro adds the rest — Vision, Recommendations, asking Ally about our wider knowledge, email updates, and priority when you request a call.\n\nYour billing page lays it out side by side with the prices.",
+      "answer_type": "generated",
+      "status": "answered",
+      "links": [
+        "/app/billing"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Four tiers confirmed in the catalog. The question named the old three-tier ladder, so the answer corrects it gently rather than answering a question about plans that no longer exist."
+      }
+    },
+    {
+      "id": 152,
+      "question": "If Free already gives me the diagnosis and the report, why would I pay?",
+      "answer": "There is no free plan, so this does not come up any more.\n\nAlly starts at Starter, Rs 199. You pay it once and it buys you a month -- nothing renews. That gives you the diagnosis and the Clarity Report it writes: the honest read of what is actually wrong and what to do about it.\n\nIf you saw a free plan mentioned somewhere, that was during our testing period and it has ended.\n\nWhat you are paying for is the diagnosis, not access to a chat window. That is the part that takes half an hour of your time and gives you something you can act on.",
+      "answer_type": "walked",
+      "status": "answered_pending_product_change",
+      "links": [
+        "/app/billing"
+      ],
+      "verified": {
+        "walked_on": "2026-09-06",
+        "how": "Team decision 2026-09-06. Starter: Rs 199 paid ONCE, buying one month -- it does not auto-renew. Plus (Rs 499) and Pro (Rs 999) are monthly subscriptions, with 12 months for the price of 10 if paid annually. A discovery call is Rs 300 per 30 minutes on any plan. GST is included in every price shown."
+      },
+      "note": "HELD until PUBLIC_LAUNCH is on -- describes the paid-only launch state. REVISED 2026-09-06: Starter is a one-off payment for a month, not a monthly subscription. The 2026-09-05 draft said it renewed monthly."
+    },
+    {
+      "id": 153,
+      "question": "Why does Free get more chat per day than Starter?",
+      "answer": "It does not any more -- there is no free plan.\n\nHere is the honest shape of it now. Starter is Rs 199, paid once for a month. It is the diagnosis and your report, and it does not include chatting with Ally.\n\nChat starts at Plus, Rs 499 a month, which also gives you Goals, Next steps and Plan Your Day. Pro, at Rs 999 a month, gives you more of it each day.\n\nSo the ladder is: Starter tells you what is wrong. Plus is where you work on it with Ally. If you know you want to talk things through, start at Plus.",
+      "answer_type": "walked",
+      "status": "answered_pending_product_change",
+      "links": [
+        "/app/billing"
+      ],
+      "verified": {
+        "walked_on": "2026-09-06",
+        "how": "Team decision 2026-09-06. Starter: Rs 199 paid ONCE, buying one month -- it does not auto-renew. Plus (Rs 499) and Pro (Rs 999) are monthly subscriptions, with 12 months for the price of 10 if paid annually. A discovery call is Rs 300 per 30 minutes on any plan. GST is included in every price shown."
+      },
+      "note": "HELD until PUBLIC_LAUNCH is on -- describes the paid-only launch state. REVISED 2026-09-06: Starter is a one-off payment for a month, not a monthly subscription. The 2026-09-05 draft said it renewed monthly."
+    },
+    {
+      "id": 154,
+      "question": "How long does Free last?",
+      "answer": "There is no free plan, so there is nothing to run out.\n\nWe had one during our testing period and it has ended. Ally now starts at Starter, Rs 199 for one month.\n\nStarter is a one-off payment. You are not signing up to anything and nothing renews -- when the month is up, it is up. Plus and Pro are monthly plans that do renew, until you cancel.\n\nIf you were using Ally free while we were testing, thank you -- and please get in touch if anything about your account looks wrong.",
+      "answer_type": "walked",
+      "status": "answered_pending_product_change",
+      "links": [
+        "/app/billing"
+      ],
+      "verified": {
+        "walked_on": "2026-09-06",
+        "how": "Team decision 2026-09-06. Starter: Rs 199 paid ONCE, buying one month -- it does not auto-renew. Plus (Rs 499) and Pro (Rs 999) are monthly subscriptions, with 12 months for the price of 10 if paid annually. A discovery call is Rs 300 per 30 minutes on any plan. GST is included in every price shown."
+      },
+      "note": "HELD until PUBLIC_LAUNCH is on -- describes the paid-only launch state. REVISED 2026-09-06: Starter is a one-off payment for a month, not a monthly subscription. The 2026-09-05 draft said it renewed monthly."
+    },
+    {
+      "id": 155,
+      "question": "What happens at the end of my free month?",
+      "answer": "There is no free month, so nothing ends that way.\n\nAlly starts at Starter, Rs 199 for one month, paid once. Plus and Pro are monthly and renew until you cancel.\n\nIf you were on our free testing plan, that period has finished. Your data is untouched -- your report, your Founder DNA and everything else are exactly where you left them. Choosing a plan opens them again.\n\nNothing is deleted because you did not pick a plan straight away.",
+      "answer_type": "walked",
+      "status": "answered_pending_product_change",
+      "links": [
+        "/app/billing"
+      ],
+      "verified": {
+        "walked_on": "2026-09-06",
+        "how": "Team decision 2026-09-06. Starter: Rs 199 paid ONCE, buying one month -- it does not auto-renew. Plus (Rs 499) and Pro (Rs 999) are monthly subscriptions, with 12 months for the price of 10 if paid annually. A discovery call is Rs 300 per 30 minutes on any plan. GST is included in every price shown."
+      },
+      "note": "HELD until PUBLIC_LAUNCH is on -- describes the paid-only launch state. REVISED 2026-09-06: Starter is a one-off payment for a month, not a monthly subscription. The 2026-09-05 draft said it renewed monthly."
+    },
+    {
+      "id": 156,
+      "question": "What exactly is locked on my plan right now, and why?",
+      "answer": "Your billing page is the honest answer — it shows your plan and what it includes, rather than making you work it out.\n\nBroadly: everyone gets the diagnosis, the report, and the ability to request a call. Talking to Ally, your Next steps, Goals and Plan Your Day come with Plus. Vision, Recommendations, asking Ally about our wider knowledge, email updates and priority calls come with Pro.\n\nTwo things are worth saying plainly. Nothing is locked to make you upgrade mid-task — the gates sit at whole features, not inside them. And a locked page tells you it is locked rather than quietly doing less.",
+      "answer_type": "generated",
+      "status": "answered",
+      "links": [
+        "/app/billing"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Gating is per-feature and enforced server-side; the UI mirrors it. Locked navigation items are marked rather than hidden."
+      }
+    },
+    {
+      "id": 157,
+      "question": "Is there a plan for two founders, or a whole team?",
+      "answer": "No. Every plan is for one founder and one business.\n\nThere is no team plan, no shared account and no second seat. Two founders means two accounts, each with their own diagnosis.\n\nThat is not only a billing decision. The diagnosis is built around one founder -- how you think, how you decide, where you get stuck -- so a shared login would give you a report about neither of you.\n\nIf you and your cofounder both want one, the honest answer is to do it separately and then compare. Reading the two side by side tends to be the interesting part.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/billing"
+      ],
+      "verified": {
+        "walked_on": "2026-09-06",
+        "how": "Team decision 2026-09-06: team, cofounder and multi-business accounts are not available. Confirmed in the product: one account is one founder and one business throughout -- profile, diagnosis, report and goals."
+      },
+      "note": "Team decision, 2026-09-06."
+    },
+    {
+      "id": 158,
+      "question": "Is there a discount for very early-stage founders or students?",
+      "answer": null,
+      "answer_type": "policy",
+      "status": "open_for_team",
+      "blocked_by": "With the team. No discount mechanism exists in the catalog at all -- not a coupon, not a reduced tier, not a student rate. Adding one is a build as well as a decision, so 'we might' is not an answer that can be given yet.",
+      "links": [],
+      "verified": null
+    },
+    {
+      "id": 159,
+      "question": "Do you do an annual plan?",
+      "answer": "Yes. Pay for a year and you get two months free.\n\nChoose 12 months on Plus or Pro and you pay for ten. It works out to the same plan, two months cheaper.\n\nStarter works differently -- it is a one-off payment for a month, not a subscription, so there is nothing to buy a year of.\n\nGST is included in every price you see, so the figure on the plans page is the figure you pay.",
+      "answer_type": "walked",
+      "status": "answered_pending_product_change",
+      "links": [
+        "/app/billing"
+      ],
+      "verified": {
+        "walked_on": "2026-09-06",
+        "how": "Team decision 2026-09-06: annual billing is 12 months for the price of 10. GST is included in all plan prices."
+      },
+      "note": "HELD until annual billing is built. See the finding.",
+      "finding": "Annual billing does not exist in the catalog. Every tier is priced monthly and nothing supports a 12-month cycle or a 2-month discount. This answer describes a policy the product cannot yet honour -- it must not publish until annual billing is actually built."
+    }
+  ]
+}

@@ -40,6 +40,23 @@ def _service():
 
     Prefers the key file (GOOGLE_CALENDAR_CREDENTIALS_FILE); falls back to inline
     JSON (GOOGLE_CALENDAR_CREDENTIALS_JSON).
+
+    DOMAIN-WIDE DELEGATION. A bare service account is its own identity with its
+    own (empty) calendar. It can be granted access to a shared calendar and will
+    happily create events there -- which is why the stub-to-real switch appears
+    to work -- but two things it CANNOT do that way:
+
+      * create a Google Meet conference on the event, and
+      * invite attendees, so Google never emails the founder an invite.
+
+    Both require acting AS a Workspace user, which is what `.with_subject()`
+    does: the service account impersonates GOOGLE_CALENDAR_DELEGATED_USER after
+    a Workspace admin authorises its client ID for these scopes.
+
+    Without the delegated user set, this still builds a working client -- the
+    booking flow keeps functioning with the shared GOXL_MEETING_URL room and no
+    attendee invites, exactly as it does today. It is a capability upgrade, not
+    a precondition, so a missing setting must not take discovery calls down.
     """
     from google.oauth2 import service_account
     from googleapiclient.discovery import build
@@ -51,6 +68,21 @@ def _service():
     else:
         info = json.loads(settings.GOOGLE_CALENDAR_CREDENTIALS_JSON)
         creds = service_account.Credentials.from_service_account_info(info, scopes=_CALENDAR_SCOPES)
+
+    subject = (settings.GOOGLE_CALENDAR_DELEGATED_USER or "").strip()
+    if subject:
+        # Raises if the Workspace admin has not authorised this client id for
+        # _CALENDAR_SCOPES. Loud on purpose: a silent fall-through to the
+        # unimpersonated account would look identical right up to the point a
+        # founder gets a call with no Meet link and no invite.
+        creds = creds.with_subject(subject)
+        logger.info("calendar client impersonating workspace user",
+                    extra={"path": subject})
+    else:
+        logger.info("calendar client using the service account directly -- no "
+                    "per-call Meet links and no attendee invites; set "
+                    "GOOGLE_CALENDAR_DELEGATED_USER to enable both")
+
     return build("calendar", "v3", credentials=creds, cache_discovery=False)
 
 

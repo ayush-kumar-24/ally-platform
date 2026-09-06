@@ -17,7 +17,11 @@ from fastapi.testclient import TestClient
 from app.api.deps import get_founder_record
 from app.api.v1.payments.router import get_payment_service
 from app.main import app
-from app.payments.errors import InvalidCheckoutError, PaymentsNotConfiguredError
+from app.payments.errors import (
+    InvalidCheckoutError,
+    PaymentGatewayUnavailableError,
+    PaymentsNotConfiguredError,
+)
 from app.payments.models import CheckoutSession
 
 BASE = "/api/v1/payments"
@@ -95,6 +99,16 @@ def test_checkout_reports_503_when_payments_are_not_configured(client):
     _use(FakeService(raises=PaymentsNotConfiguredError()))
     r = client.http.post(f"{BASE}/checkout", json={"tier": "starter"})
     assert r.status_code == 503
+
+
+def test_checkout_reports_502_when_the_gateway_refuses_the_order(client):
+    _use(FakeService(raises=PaymentGatewayUnavailableError()))
+    r = client.http.post(f"{BASE}/checkout", json={"tier": "starter"})
+    assert r.status_code == 502
+    body = r.json()
+    assert body["error"] == "PaymentGatewayUnavailableError"
+    assert "payment provider" in body["message"]
+    assert body["request_id"]
 
 
 def test_checkout_reports_422_for_the_free_plan(client):

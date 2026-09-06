@@ -1,0 +1,189 @@
+{
+  "schema_version": "1.0",
+  "file": "group-24-ownership-and-the-long-term",
+  "group": "ownership-and-the-long-term",
+  "group_number": 24,
+  "group_title": "Ownership and the long term",
+  "question_bank": "Founder Question Bank v3 -- group 24 (questions 280-289)",
+  "created": "2026-09-05",
+  "content_rules": {
+    "voice": "Very simple, easy English. Short sentences. Common everyday words. No idioms. Friendly and warm, but plain.",
+    "answer_length": "About 120 words maximum. Short paragraphs with a blank line between them.",
+    "never_name_the_model": "No vendor, no model, anywhere.",
+    "group_specific": "Every one of these maps to a numbered clause in the published Terms. The answer's job is to say what the clause means in plain words -- never to soften it, and never to promise something it does not say.",
+    "cite_the_clause_in_verified_not_in_the_answer": "A founder does not want 'see clause 6'. Record which clause each answer rests on in `verified`, so anyone maintaining these can check them, and keep the answer itself readable."
+  },
+  "walk_log": {
+    "walked_on": "2026-09-05",
+    "environment": "The published Terms of Service (v1.0, effective 1 July 2026) and Privacy Policy, both read in full from the running app.",
+    "observed": [
+      "Terms section 1: you must be at least 18.",
+      "Terms section 2: the Platform is a decision-support tool and does NOT constitute professional legal, financial or management consulting advice; the founder remains solely responsible for business decisions made on it.",
+      "Terms section 3: sign-in is email + one-time code + password; GoXL may suspend or terminate accounts that violate the Terms.",
+      "Terms section 4: 'You retain full ownership of all business information, diagnostic inputs, and data you provide'. GoXL gets a limited, non-exclusive, royalty-free licence to process it solely to deliver the service. No selling or sharing for advertising or marketing.",
+      "Terms section 5 lists prohibited conduct, including submitting false or fraudulent business information.",
+      "Terms section 6: the Platform, its models, report FORMATS, design and technology are GoXL's property. The founder gets a limited, non-transferable licence to use the Platform 'for your personal or internal business purposes only'.",
+      "Terms section 7: provided AS IS with no warranties as to accuracy; total aggregate liability capped at what the founder paid GoXL in the preceding three months; no indirect or consequential damages.",
+      "Terms section 8: either party may terminate at any time; sections 4, 6, 7 and 9 survive.",
+      "Terms section 9: governed by the laws of India, exclusive jurisdiction of the courts of Bangalore, Karnataka.",
+      "Terms section 10: GoXL may update the Terms; material changes notified via the Platform or email; continued use constitutes acceptance.",
+      "THERE IS NO ASSIGNMENT, MERGER OR SUCCESSOR CLAUSE anywhere in the Terms, and nothing in either document says what happens to founder data if GoXL is acquired or shuts down."
+    ],
+    "findings": [
+      "THE TERMS AND THE PRIVACY POLICY BOTH SAY WE USE ANONYMISED AGGREGATED DATA TO IMPROVE OUR AI MODELS. Terms section 4: 'Anonymised, aggregated insights may be used internally to improve our AI models.' Privacy Policy section 3(c) lists it as a legitimate interest, and section 6 says such data 'may be retained indefinitely to improve our AI models.' Help answer 206 said flatly that data is 'not used to train any AI model -- not ours, and not anyone else's.' That is a direct contradiction between two shipped documents and a shipped support answer. Answer 206 has been rewritten to draw the line the documents actually draw: YOUR writing is never used to train anything and is never in a searchable index (both verified in code), while anonymised aggregate data that cannot be traced to you is something the Terms permit. Nothing in the product does it today.",
+      "NOTHING SAYS WHAT HAPPENS IF GOXL IS ACQUIRED OR SHUTS DOWN. Question 285 has no answer in the Terms, the Privacy Policy or anywhere else. It is a standard clause and its absence is conspicuous to exactly the sort of founder who reads terms before paying. Left unanswered rather than invented.",
+      "'PERSONAL OR INTERNAL BUSINESS PURPOSES ONLY' IS NARROWER THAN FOUNDERS WILL ASSUME. Terms section 6 licenses use of the Platform that way. A founder putting a page of their report into an investor deck, or quoting it to their own client, is arguably outside it -- and those are the two things founders most want to do with a report they paid for. Section 4 says they own their data, so the CONTENT is theirs; it is the report as a GoXL-formatted document that is licensed. Questions 281 and 282 are answered to that distinction, but it deserves an explicit sentence in the Terms rather than an inference."
+    ]
+  },
+  "answers": [
+    {
+      "id": 280,
+      "question": "Who owns my report -- me, or GoXL?",
+      "answer": "The contents are yours. The format is ours.\n\nEverything you put in -- your answers, your business information, what you told Ally -- you own outright. Our terms say so plainly, and we only get permission to use it to run the service for you.\n\nWhat belongs to us is the thing around it: the framework, the way the report is laid out, and the platform itself.\n\nIn practice this matters less than it sounds. It is your report, you can download it, keep it and read it forever. If you want to use it in something you are sending outside your business, see the next answer.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/terms",
+        "/app/report"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Terms section 4 ('You retain full ownership of all business information, diagnostic inputs, and data you provide') read against section 6 (the Platform, its models, report formats and design are GoXL's property)."
+      }
+    },
+    {
+      "id": 281,
+      "question": "Can I use what Ally gives me commercially -- in a pitch, in an investor deck?",
+      "answer": "Yes. It is your report and your business -- use it however you like.\n\nPut it in an investor deck, take it into a board meeting, share the whole thing or a single page. That is your call, and we are not going to tell you what to do with a document about your own company.\n\nOne practical thought rather than a rule: a report reads as a report. In a deck it usually lands better if you take the finding and put it in your own words and your own slides. But that is a presentation opinion, not a restriction.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/report"
+      ],
+      "verified": {
+        "walked_on": "2026-09-06",
+        "how": "Team decision 2026-09-06: a founder's use of their own report is their personal choice. Terms section 4 already gives the founder full ownership of their business information and diagnostic inputs."
+      },
+      "note": "Team decision, 2026-09-06. Earlier drafts hedged on Terms section 6's 'internal business purposes only'. The team's position is that the report is the founder's to use, so the hedge is gone."
+    },
+    {
+      "id": 282,
+      "question": "Can I quote Ally's report to a client of mine?",
+      "answer": "Yes, go ahead.\n\nThe findings are about your business, so quoting them to a client is entirely your call. Share a line, a section, or the whole report if it helps.\n\nThe one thing that is different is reselling. Using Ally as part of a service you charge clients for -- running diagnoses for them, packaging the reports as your own product -- needs a conversation with us first. That is not a no, it just is not automatic.\n\nWrite to info@goxl.in if that is what you have in mind.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/terms",
+        "/app/help"
+      ],
+      "verified": {
+        "walked_on": "2026-09-06",
+        "how": "Team decision 2026-09-06. Terms section 5(f) still prohibits reselling or sublicensing access without prior written consent, which is a different thing from a founder quoting their own report."
+      },
+      "note": "Team decision, 2026-09-06."
+    },
+    {
+      "id": 283,
+      "question": "What are you allowed to do with what I write?",
+      "answer": "Use it to run Ally for you, and to make Ally better in a way that is not about you.\n\nOur terms give us a limited licence to process your data solely to deliver the service -- to build your report, to let Ally answer you properly, and to keep your account working.\n\nWe do not sell it. We do not rent it. We do not share it with anyone for advertising or marketing.\n\nWe also use anonymous, combined information -- patterns across many founders, with nothing that could point back to you -- to improve Ally. Your own writing is never used to train anything, and is never in any searchable index.\n\nIt is all in the Terms if you want the full wording.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/terms",
+        "/privacy"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Terms section 4. The aggregate half is the team's settled position as of 2026-09-05 and matches Privacy Policy sections 3(c) and 6. Consistent with answer 206."
+      },
+      "note": "Team decision, 2026-09-05."
+    },
+    {
+      "id": 284,
+      "question": "Can you close my account? On what grounds?",
+      "answer": "We can, and the grounds are in our terms rather than at our whim.\n\nThe short version: breaking the rules. Trying to get into someone else's account, deliberately giving false business information, scraping or reverse-engineering the platform, reselling access, or using Ally for something unlawful.\n\nWe are not going to close your account for disagreeing with your report, complaining, or asking for a refund.\n\nIf we ever did suspend an account, you would be able to ask why and get a straight answer at info@goxl.in.\n\nIn practice this has not happened, and the clause exists for the obvious cases rather than the borderline ones.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/terms",
+        "/app/help"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Terms section 3 (suspend or terminate accounts that violate the Terms) and section 5 (the list of prohibited conduct). Section 8 covers termination and what survives it."
+      }
+    },
+    {
+      "id": 285,
+      "question": "What happens to my report if GoXL shuts down or gets bought?",
+      "answer": null,
+      "answer_type": "policy",
+      "status": "retired",
+      "links": [],
+      "verified": {
+        "walked_on": "2026-09-06",
+        "how": "Retired by team decision 2026-09-06."
+      },
+      "note": "RETIRED, not unanswered. The team's position is that this is not a question to put in front of founders at launch. It stays in the bank with its id so nobody re-adds it by accident, and is excluded from the export. If a founder does ask, support answers it individually."
+    },
+    {
+      "id": 286,
+      "question": "You changed the terms. Do I have to accept?",
+      "answer": "Not by signing anything. Carrying on using Ally is what counts as accepting.\n\nWhen something important changes, we tell you -- through the app or by email -- before it takes effect. For the Privacy Policy that is at least seven days' notice.\n\nIf you are not happy with a change, the honest options are to tell us, or to stop using Ally and delete your account. There is no way to stay on the old terms.\n\nThe date and version are always at the top of the Terms page, so you can see what you are on.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/terms",
+        "/privacy"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Terms section 10 (material changes notified via the Platform or email; continued use constitutes acceptance; version and effective date shown at the top). Privacy Policy section 11 specifies at least 7 days' notice."
+      }
+    },
+    {
+      "id": 287,
+      "question": "Is there a minimum age?",
+      "answer": "Yes. You need to be at least 18.\n\nOur terms require it, and you also have to be able to enter into an agreement for yourself or for your business.\n\nThere is no separate account type for anyone younger, and no plans for one.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/terms"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Terms section 1: at least 18 years old, with the legal authority to enter the agreement."
+      }
+    },
+    {
+      "id": 288,
+      "question": "If something goes wrong, whose law applies and where?",
+      "answer": "Indian law, and the courts in Bangalore.\n\nOur terms say any dispute is governed by the laws of India, and that the courts of Bangalore, Karnataka have exclusive jurisdiction.\n\nBefore anything reaches a court, both sides are expected to try to sort it out properly first. If it is still unresolved after 30 days, then it can go further.\n\nFor anything short of that -- a complaint, a bill you think is wrong, a report you are unhappy with -- write to info@goxl.in. Almost everything is settled there.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/terms",
+        "/app/help"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Terms section 9: governed by the laws of India, good-faith negotiation first, exclusive jurisdiction of the courts of Bangalore, Karnataka if unresolved within 30 days."
+      }
+    },
+    {
+      "id": 289,
+      "question": "Can I rely on Ally's advice? Are you liable if it's wrong?",
+      "answer": "Use it to think with. Do not use it as professional advice, and the decision stays yours.\n\nOur terms are direct about this: Ally is a decision-support tool, not legal, financial or management consulting advice, and you remain responsible for what you decide.\n\nOn liability, they are equally direct. Ally is provided as is, with no guarantee that everything it produces is accurate, and if you ever did have a claim against us it is capped at what you have paid us in the previous three months.\n\nWe would rather you knew that up front than found it in a clause later.\n\nIf Ally gets something wrong about your business, please tell us. That is worth fixing.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/terms",
+        "/app/feedback"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Terms section 2 (decision-support tool, not professional advice, founder solely responsible) and section 7 (AS IS, no warranties as to accuracy, liability capped at three months' fees, no indirect damages)."
+      }
+    }
+  ]
+}

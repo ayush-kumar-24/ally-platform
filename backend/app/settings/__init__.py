@@ -17,8 +17,6 @@ The service is deterministic and repository-driven, so it is testable fully offl
 """
 
 from app.settings.defaults import (
-    DEFAULT_REMINDER_TIME,
-    DEFAULT_SESSION_TIMEOUT_MINUTES,
     default_settings,
 )
 from app.settings.errors import InvalidSettingError, SettingsError, SettingsNotFoundError
@@ -28,7 +26,6 @@ from app.settings.repository import (
     SqlAlchemySettingsRepository,
 )
 from app.settings.schemas import (
-    ReminderPreferences,
     SecurityPreferences,
     SettingsSnapshot,
 )
@@ -36,7 +33,6 @@ from app.settings.service import SettingsService, build_settings_service
 
 __all__ = [
     "SettingsSnapshot",
-    "ReminderPreferences",
     "SecurityPreferences",
     "SettingsRepository",
     "InMemorySettingsRepository",
@@ -44,8 +40,6 @@ __all__ = [
     "SettingsService",
     "build_settings_service",
     "default_settings",
-    "DEFAULT_REMINDER_TIME",
-    "DEFAULT_SESSION_TIMEOUT_MINUTES",
     "SettingsError",
     "InvalidSettingError",
     "SettingsNotFoundError",

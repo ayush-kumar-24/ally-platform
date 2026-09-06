@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
-import { FAQS, searchFaqs } from '../data/faqs';
+import { searchFaqs } from '../data/faqs';
 import { ApiError } from '../services/api';
 import { FEEDBACK, submitFeedback } from '../services/feedback';
+import { askSupport } from '../services/support';
 import { IconClose, IconMessageSquare, IconSend } from '../utils/icons';
 
 /**
@@ -15,14 +16,23 @@ import { IconClose, IconMessageSquare, IconSend } from '../utils/icons';
  * email instead. This puts the same answers one click away, in the shape
  * people expect to ask a question in: a conversation.
  *
- * It is a conversation over data/faqs.js, and it says so. It is NOT wired to
- * Ally's model, for a reason worth keeping: chat is metered against the
- * founder's daily token allowance (8,000 on Free), and spending that on "how
- * do I upgrade" would charge them for a question the product should answer for
- * free. So it matches what they type against the help answers, and when it has
- * nothing it hands over -- to support, or to Ally for anything about their
- * actual business. Wiring a real model in later means one backend endpoint
- * that is metered separately, and replacing `answerFor` below.
+ * It asks POST /support/ask, which matches the question against 277 published
+ * help answers by meaning and composes a reply from the ones it picked and
+ * nothing else. It cannot invent: when nothing fits, it says so and hands over
+ * to a person rather than reaching for a plausible answer about billing or data
+ * deletion.
+ *
+ * STILL NOT METERED, and that reason has not changed: Ally chat charges the
+ * founder's daily token allowance, and spending it on "how do I upgrade" would
+ * charge them for a question the product should answer for free. /support/ask
+ * runs unmetered and is rate-limited per founder instead.
+ *
+ * data/faqs.js REMAINS, as the fallback. The content lives in a table loaded by
+ * a SQL script rather than a migration, so a healthy deployment can be running
+ * without it -- and the model can be down, and the request can time out. In any
+ * of those cases `answerFor` answers from the local list, which is shorter and
+ * keyword-matched but always there. A help widget showing an error is worse
+ * than one quietly answering from sixteen entries.
  *
  * Hidden on /app/help itself, where it would sit on top of the same content.
  */
@@ -84,25 +94,61 @@ export default function HelpWidget() {
     [],
   );
 
-  /* Ask, and answer. Shared by the input and every chip. */
-  const ask = useCallback((raw) => {
+  /* Ask, and answer. Shared by the input and every chip.
+   *
+   * Asks the backend first: it matches against all 277 published help answers
+   * by MEANING, using the same content the Help page reads, and composes a
+   * reply from the answers it picked and nothing else. That is the difference
+   * that matters here -- the local list below is a keyword match over 16
+   * entries, so "I can't get in" finds nothing while the backend routes it
+   * straight to the password answer.
+   *
+   * FALLS BACK TO THE LOCAL LIST, always. The content lives in a table loaded
+   * by a SQL script rather than a migration, so a healthy deployment can be
+   * running without it; the model can be unreachable; the request can time
+   * out. None of that should leave a founder looking at an error inside the
+   * help widget, of all places. `answerFor` stays exactly as it was and takes
+   * over whenever the call does not come back usable.
+   *
+   * Not metered. Ally chat charges a founder's daily token allowance; charging
+   * someone to ask how to cancel would be indefensible, so /support/ask is
+   * unmetered and rate-limited per founder instead. */
+  const ask = useCallback(async (raw) => {
     const text = raw.trim();
     if (!text) return;
     setDraft('');
     setMessages((prev) => [...prev, { id: nextId(), from: 'you', text }]);
     setThinking(true);
-
     clearTimeout(replyTimer.current);
-    replyTimer.current = setTimeout(() => {
+
+    const localReply = () => {
       const result = answerFor(text);
-      setThinking(false);
-      setMessages((prev) => [
-        ...prev,
-        result.miss
-          ? { id: nextId(), from: 'bot', miss: true, text: "I don't have an answer for that one in the help guide. Send it to our team and we'll reply by email — or ask Ally, if it's about your business rather than the product." }
-          : { id: nextId(), from: 'bot', text: result.faq.a, related: result.related.map((f) => f.q) },
-      ]);
-    }, REPLY_DELAY_MS);
+      return result.miss
+        ? { id: nextId(), from: 'bot', miss: true, text: "I don't have an answer for that one in the help guide. Send it to our team and we'll reply by email — or ask Ally, if it's about your business rather than the product." }
+        : { id: nextId(), from: 'bot', text: result.faq.a, related: result.related.map((f) => f.q) };
+    };
+
+    let reply = null;
+    try {
+      const res = await askSupport(text);
+      if (res?.answer) {
+        reply = {
+          id: nextId(),
+          from: 'bot',
+          text: res.answer,
+          // `escalate` is the backend saying it would rather hand over than
+          // guess. Rendered the same as a local miss, so the "message our
+          // team" affordance appears in exactly the cases it should.
+          miss: Boolean(res.escalate),
+          links: res.links || [],
+        };
+      }
+    } catch {
+      /* offline, 5xx, timeout -- the local list answers instead */
+    }
+
+    setThinking(false);
+    setMessages((prev) => [...prev, reply || localReply()]);
   }, []);
 
   // Close on Escape and on a click outside. Escape leaves full screen first,
@@ -205,9 +251,18 @@ export default function HelpWidget() {
           <span className="hw-avatar" aria-hidden="true"><RobotIcon /></span>
           <div>
             <div className="hw-title">{composing ? 'Message support' : 'Help assistant'}</div>
-            <div className="hw-sub">
-              {composing ? 'We reply by email' : `Answers from Ally's help guide · ${FAQS.length} topics`}
-            </div>
+            {/* The assistant subtitle used to read "Answers from Ally's help
+                guide · N topics". Removed: a topic count is a fact about our
+                content library, not about whether we can answer the question
+                somebody is holding -- and it was actively misleading, because
+                it counted whichever source happened to be answering. A founder
+                who saw "16 topics" and then got "I don't have an answer" read
+                the number as the reason, which it never was.
+
+                `composing` keeps its subtitle: "we reply by email" tells
+                someone about to type a message what happens next, which is
+                worth the line. */}
+            {composing && <div className="hw-sub">We reply by email</div>}
           </div>
         </div>
         <div className="hw-head-actions">

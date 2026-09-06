@@ -118,6 +118,21 @@ class Settings(BaseSettings):
     # a specific environment genuinely needs it off.
     PLAN_ENFORCEMENT_ENABLED: bool = True
 
+    # --- Public launch -------------------------------------------------------
+    # Nothing is free once we launch. Until then Free carries almost the whole
+    # product, because the people using it are our own testers and gating them
+    # out mid-test would be worse than leaving it open.
+    #
+    # Flipping this to True empties the Free tier: a founder without a paid plan
+    # gets no product features and is sent to the plans page to choose one. It is
+    # a switch rather than a code change so launch day is a deploy setting, not a
+    # release, and so it can be put back inside a minute if something is wrong.
+    #
+    # BEFORE FLIPPING IT: move the existing testers onto a real plan, or they
+    # lose access at the same moment everyone else does. One UPDATE on
+    # founders.plan_type -- see docs/PUBLIC-LAUNCH-CHECKLIST.md.
+    PUBLIC_LAUNCH: bool = False
+
     # Founder-archetype assignment via LLM. Off => the deterministic lexical
     # match, which its own docstring calls a heuristic. The LLM chooses from the
     # same seeded catalogue and falls back to the lexical engine on any failure.
@@ -303,6 +318,21 @@ class Settings(BaseSettings):
     # Auto-generating a Google Meet link also needs Workspace -- personal Gmail
     # rejects it ("Invalid conference type value"). When off, the booking is a
     # plain event and the meeting link comes from GOXL_MEETING_URL.
+    # The Workspace user the service account acts AS, e.g. calls@goxl.in.
+    #
+    # A bare service account has its own empty calendar. It can write to a
+    # calendar shared with it, but it CANNOT create a Meet conference or invite
+    # attendees -- both need a real Workspace identity. Setting this makes the
+    # client impersonate that user (domain-wide delegation).
+    #
+    # Requires a Workspace admin to authorise the service account's client ID
+    # for https://www.googleapis.com/auth/calendar in
+    # Admin console > Security > API controls > Domain-wide delegation.
+    #
+    # Leave empty and everything still works, minus per-call Meet links and
+    # attendee invites -- the shared GOXL_MEETING_URL room is used instead.
+    GOOGLE_CALENDAR_DELEGATED_USER: str = ""
+
     GOOGLE_CALENDAR_CREATE_MEET: bool = False
     # A permanent video-room link (Google Meet / Zoom) used for every discovery
     # call when auto-Meet is off. Recommended for the personal-Gmail setup.
@@ -353,11 +383,46 @@ class Settings(BaseSettings):
     # network namespace. Without that sidecar every PDF download 503s forever.
     GOTENBERG_URL: str = "http://localhost:3000"
 
-    # Public origin used to build shareable links. Empty falls back to the
-    # request's own base URL, which behind the Vercel proxy is the API host --
-    # correct but wrong-looking in a link a founder sends to an investor. Set
-    # this to the site people actually visit (e.g. https://goxlally.ai).
+    # Where the FOUNDER-FACING APP lives. MUST be https://app.goxlally.ai.
+    #
+    # Used to send a founder back into the app after an external redirect that
+    # cannot carry a session -- today the Google Calendar OAuth callback, which
+    # lands on this API and has to bounce to /app/plan.
+    #
+    # PRODUCTION HAS THIS SET TO THE MARKETING SITE (https://goxlally.ai) AND
+    # THAT IS A LIVE BUG. goxlally.ai has no /app/* routes, so every founder who
+    # connects a calendar is redirected to a 404 -- the connection saves first,
+    # so it "works" while looking broken at the last step. Verified:
+    #   goxlally.ai/app/plan     -> 404
+    #   app.goxlally.ai/app/plan -> 200
+    #
+    # It also used to build share links, which is how one wrong value broke two
+    # unrelated features. Shares no longer read it; see SHARE_LINK_BASE_URL.
     PUBLIC_APP_URL: str = ""
+
+    # This API's own public origin, e.g. https://api.goxlally.ai.
+    #
+    # Only needed to build absolute links back to this API from inside it, share
+    # links being the one that matters. Empty falls back to the origin the
+    # request arrived on -- right when the API is reached directly, wrong behind
+    # a proxy that rewrites Host without forwarding it, which is exactly the
+    # Vercel /api/* rewrite this app sits behind.
+    PUBLIC_API_URL: str = ""
+
+    # OPT-IN pretty share links: https://<this>/r/<token>.
+    #
+    # SET THIS TO https://app.goxlally.ai IN PRODUCTION. The rewrite genuinely
+    # exists there (frontend/vercel.json maps /r/:token to this API's
+    # /reports/shared/{token}/view), and it is verified working -- requesting
+    # app.goxlally.ai/r/<garbage> returns this API's own error, not the SPA.
+    #
+    # Empty means share links use the direct API URL: longer, and it resolves
+    # with no rewrite at all.
+    #
+    # Opt-in rather than inferred because the failure mode is silent. A base URL
+    # whose rewrite is missing produces links that look perfect and 404, and
+    # nothing here can detect the difference.
+    SHARE_LINK_BASE_URL: str = ""
 
     # --- Payments (Razorpay) ---
     # Until both key settings are set, app.payments refuses to create a real

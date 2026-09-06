@@ -10,7 +10,7 @@
     "no_answer_from_memory": "Every answer is produced by walking the real screens. Nothing is written from source code or recall.",
     "voice": "Very simple, easy English. Short sentences. Common everyday words. No idioms. Friendly and warm, but plain. Say 'not yet, sorry' rather than 'this is not supported'. Never make the founder feel silly for asking.",
     "answer_length": "About 120 words maximum. Short paragraphs with a blank line between them.",
-    "pricing": "There is no free plan. Entry is Rs 199 one-time; Rs 450 and Rs 999 are the monthly plans."
+    "pricing": "There is no free plan. Entry is Rs 199 one-time; Rs 499 and Rs 999 are the monthly plans."
   },
   "walk_log": {
     "walked_on": "2026-09-05",

@@ -71,6 +71,7 @@ const AdminUserDetail = lazy(() => loadChunk(() => import('./pages/admin/AdminUs
 const AdminAuditLog = lazy(() => loadChunk(() => import('./pages/admin/AdminAuditLog')));
 const AdminSystem = lazy(() => loadChunk(() => import('./pages/admin/AdminSystem')));
 const AdminUsage = lazy(() => loadChunk(() => import('./pages/admin/AdminUsage')));
+const AdminCalls = lazy(() => loadChunk(() => import('./pages/admin/AdminCalls')));
 
 /* Show splash only once per session (won't replay on route changes).
    Wrapped because storage access throws outright -- not returns null -- in
@@ -265,6 +266,7 @@ export default function App() {
             <Route path="users" element={<AdminUsers />} />
             <Route path="users/:id" element={<AdminUserDetail />} />
             <Route path="usage" element={<AdminUsage />} />
+            <Route path="calls" element={<AdminCalls />} />
             <Route path="audit" element={<AdminAuditLog />} />
             <Route path="system" element={<AdminSystem />} />
           </Route>

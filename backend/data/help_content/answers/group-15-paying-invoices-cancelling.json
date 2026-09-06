@@ -1,0 +1,202 @@
+{
+  "schema_version": "1.0",
+  "file": "group-15-paying-invoices-cancelling",
+  "group": "paying-invoices-cancelling",
+  "group_number": 15,
+  "group_title": "Paying, invoices, cancelling",
+  "question_bank": "Founder Question Bank v3 -- group 15 (questions 180-194)",
+  "created": "2026-09-06",
+  "content_rules": {
+    "voice": "Very simple, easy English. Short sentences. Common everyday words. No idioms. Friendly and warm, but plain.",
+    "answer_length": "About 120 words maximum. Short paragraphs with a blank line between them.",
+    "never_name_the_model": "No vendor, no model, anywhere.",
+    "group_specific": "Money answers must be exact. A vague answer about a charge is worse than no answer, because a founder will act on it and then feel misled. Where the mechanics depend on checkout, which is not built, the question stays unanswered rather than guessing at how it will behave."
+  },
+  "walk_log": {
+    "walked_on": "2026-09-06",
+    "environment": "Team pricing decisions of 2026-09-06, read against the plan catalog. Checkout itself does not exist, so nothing here could be walked in the product.",
+    "observed": [
+      "Starter Rs 199 is paid ONCE for one month and does not renew. Plus Rs 499 and Pro Rs 999 are monthly and renew until cancelled. Twelve months paid up front costs ten.",
+      "A discovery call is Rs 300 per 30 minutes on every plan, with no included allowance.",
+      "GST is included in every price shown -- the figures are inclusive, not exclusive.",
+      "Refunds: none on Starter. On Plus and Pro, within 7 days of payment, on request.",
+      "Users are India-based only for now, so paying from outside India is out of scope.",
+      "Checkout is not built: the billing screen waits two seconds and reports success without taking a payment.",
+      "The catalog has no billing-cycle field, no annual option and no non-renewing tier, so none of the above is enforced in code yet."
+    ],
+    "findings": [
+      "THE PRICING POLICY IS AHEAD OF THE CODE, AND THAT GAP IS NOW THE RISK. The team has settled a one-off Starter, monthly Plus and Pro, a 12-for-10 annual option, inclusive GST and a 7-day refund window. The catalog expresses exactly one of those -- a monthly price per tier. Whoever wires Razorpay owns making the code agree: Starter must not create a recurring mandate, Plus and Pro need an annual option, and the refund window needs a record of the payment date to run from.",
+      "ELEVEN OF THE FIFTEEN QUESTIONS STILL CANNOT BE ANSWERED, and all eleven are about mechanics rather than policy -- what happens when a card is charged, what a founder can pay with, what cancelling does mid-cycle. They unblock together, the day checkout works. This group should be finished and re-walked in one sitting at that point, not answered piecemeal.",
+      "THE REFUND WINDOW NEEDS SOMETHING TO MEASURE FROM. 'Within 7 days of payment' requires a stored payment date and a way for support to see it. Nothing records one today, because nothing takes a payment. Worth building into the checkout work rather than bolting on afterwards."
+    ]
+  },
+  "answers": [
+    {
+      "id": 180,
+      "question": "Is my card charged automatically?",
+      "answer": null,
+      "answer_type": "policy",
+      "status": "open_for_team",
+      "links": [],
+      "verified": null,
+      "blocked_by": "Checkout is not built. The billing screen waits two seconds and shows success, so any answer about how a payment behaves would be a promise we cannot keep. Writeable the day Razorpay is wired. The answer also differs by plan now: Starter is a one-off payment and must never set up a recurring charge, while Plus and Pro renew monthly. That distinction has to be true in the payment flow before it can be described here."
+    },
+    {
+      "id": 181,
+      "question": "How do I cancel?",
+      "answer": null,
+      "answer_type": "policy",
+      "status": "open_for_team",
+      "links": [],
+      "verified": null,
+      "blocked_by": "Checkout is not built. The billing screen waits two seconds and shows success, so any answer about how a payment behaves would be a promise we cannot keep. Writeable the day Razorpay is wired. There is no cancel path in the product and no decision on whether cancelling is self-serve or a support request."
+    },
+    {
+      "id": 182,
+      "question": "Is GST included in the price?",
+      "answer": "Yes. Every price you see already includes GST.\n\nRs 199 for Starter, Rs 499 for Plus, Rs 999 for Pro and Rs 300 for a discovery call are all final figures. Nothing is added at checkout, so the number on the plans page is the number that leaves your account.\n\nIf you need a GST invoice for your business, ask us at info@goxl.in and we will sort it out.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/billing"
+      ],
+      "verified": {
+        "walked_on": "2026-09-06",
+        "how": "Team decision 2026-09-06: GST is included in all plan prices. Prices are inclusive, not exclusive."
+      },
+      "note": "Team decision, 2026-09-06."
+    },
+    {
+      "id": 183,
+      "question": "Can I get a GST invoice in my company's name?",
+      "answer": null,
+      "answer_type": "policy",
+      "status": "open_for_team",
+      "links": [],
+      "verified": null,
+      "blocked_by": "Not decided. GST is confirmed as included in the price, but whether we issue a GST invoice in a company's name -- and how a founder supplies their GSTIN -- has not been settled, and no invoicing exists in the product. Answer 182 currently points founders at support for this."
+    },
+    {
+      "id": 184,
+      "question": "What can I pay with? Is UPI supported?",
+      "answer": null,
+      "answer_type": "policy",
+      "status": "open_for_team",
+      "links": [],
+      "verified": null,
+      "blocked_by": "Checkout is not built. The billing screen waits two seconds and shows success, so any answer about how a payment behaves would be a promise we cannot keep. Writeable the day Razorpay is wired. Which methods are enabled is a Razorpay configuration choice nobody has made yet."
+    },
+    {
+      "id": 185,
+      "question": "Can I pay from outside India?",
+      "answer": null,
+      "answer_type": "policy",
+      "status": "retired",
+      "links": [],
+      "verified": null,
+      "blocked_by": null,
+      "note": "RETIRED by team decision 2026-09-06: Ally is taking users in India only for now, so this is not a question to put in front of founders. Kept in the bank with its id so it is not re-added by accident, and excluded from the export. Revisit if the product ever opens beyond India."
+    },
+    {
+      "id": 186,
+      "question": "Do you store my card details?",
+      "answer": null,
+      "answer_type": "policy",
+      "status": "open_for_team",
+      "links": [],
+      "verified": null,
+      "blocked_by": "Checkout is not built. The billing screen waits two seconds and shows success, so any answer about how a payment behaves would be a promise we cannot keep. Writeable the day Razorpay is wired. The true answer will be that the payment provider holds them and we do not, but that must not be stated before the integration exists and has been checked."
+    },
+    {
+      "id": 187,
+      "question": "If I cancel, do I keep access until the end of the month?",
+      "answer": null,
+      "answer_type": "policy",
+      "status": "open_for_team",
+      "links": [],
+      "verified": null,
+      "blocked_by": "Checkout is not built. The billing screen waits two seconds and shows success, so any answer about how a payment behaves would be a promise we cannot keep. Writeable the day Razorpay is wired. Whether a cancelled plan lapses at period end or immediately is a product decision that has not been made, and there is no cancel path to check it against."
+    },
+    {
+      "id": 188,
+      "question": "If I downgrade, what happens to my report and my data?",
+      "answer": "Nothing is deleted. Ever, for this reason.\n\nYour report, your Founder DNA, your goals, your tasks and your past conversations all stay exactly where they are. Moving to a smaller plan changes what you can do next -- it never takes away what you already have.\n\nWhat does change is access to some features. If you move down from Plus to Starter, for example, you keep your report but you stop being able to chat with Ally.\n\nMove back up later and everything is where you left it.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/billing",
+        "/app/report"
+      ],
+      "verified": {
+        "walked_on": "2026-09-06",
+        "how": "Consistent with how the product already behaves: plan features gate new actions, and nothing in the codebase deletes founder data on a plan change. Verified there is no downgrade cleanup path anywhere."
+      }
+    },
+    {
+      "id": 189,
+      "question": "Can I get a refund if the report wasn't useful?",
+      "answer": "It depends which plan you are on, and we would rather be plain about it.\n\nOn Plus and Pro, yes -- within 7 days of your payment. Write to info@goxl.in and ask, and we will refund you. After 7 days we do not give refunds.\n\nOn Starter, at Rs 199, there is no refund. It is a one-off payment for the diagnosis and your report, and once the report is written the work is done.\n\nIf the report is wrong about your business -- not just unwelcome, but factually wrong -- tell us regardless of the plan or the timing. That is worth fixing.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/help"
+      ],
+      "verified": {
+        "walked_on": "2026-09-06",
+        "how": "Team decision 2026-09-06: no refund on Starter; Plus and Pro refundable within 7 days of payment on request, none after."
+      },
+      "note": "Team decision, 2026-09-06.",
+      "finding": "The 7-day window needs a stored payment date to run from, and support needs to be able to see it. Nothing records one today because nothing takes a payment. Build it into the checkout work."
+    },
+    {
+      "id": 190,
+      "question": "Can I pause my subscription instead of cancelling?",
+      "answer": null,
+      "answer_type": "policy",
+      "status": "open_for_team",
+      "links": [],
+      "verified": null,
+      "blocked_by": "Not decided, and there is no subscription machinery to pause. Follows the cancel decision in 181 and 187."
+    },
+    {
+      "id": 191,
+      "question": "I upgraded but the feature is still locked.",
+      "answer": null,
+      "answer_type": "policy",
+      "status": "open_for_team",
+      "links": [],
+      "verified": null,
+      "blocked_by": "Checkout is not built. The billing screen waits two seconds and shows success, so any answer about how a payment behaves would be a promise we cannot keep. Writeable the day Razorpay is wired. Nobody can upgrade yet, so this failure cannot happen or be reproduced."
+    },
+    {
+      "id": 192,
+      "question": "Money left my account and nothing happened.",
+      "answer": null,
+      "answer_type": "policy",
+      "status": "open_for_team",
+      "links": [],
+      "verified": null,
+      "blocked_by": "Checkout is not built. The billing screen waits two seconds and shows success, so any answer about how a payment behaves would be a promise we cannot keep. Writeable the day Razorpay is wired. This is the most important answer in the group and the one least safe to guess at. It needs the real payment and reconciliation flow before a word of it is written."
+    },
+    {
+      "id": 193,
+      "question": "Can I switch plans mid-month? Do I pay the difference?",
+      "answer": null,
+      "answer_type": "policy",
+      "status": "open_for_team",
+      "links": [],
+      "verified": null,
+      "blocked_by": "Checkout is not built. The billing screen waits two seconds and shows success, so any answer about how a payment behaves would be a promise we cannot keep. Writeable the day Razorpay is wired. Proration is a billing decision nobody has made, and Starter being a one-off rather than a subscription complicates it."
+    },
+    {
+      "id": 194,
+      "question": "These are introductory prices. What happens when they go up?",
+      "answer": null,
+      "answer_type": "policy",
+      "status": "open_for_team",
+      "links": [],
+      "verified": null,
+      "blocked_by": "Not decided. Whether early founders keep their price, and for how long, is a commercial commitment the team has to make deliberately -- it is the kind of promise that is very hard to walk back once a support answer has made it."
+    }
+  ]
+}

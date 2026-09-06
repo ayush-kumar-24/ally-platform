@@ -32,14 +32,25 @@ class AccountSettingsUpdate(BaseModel):
 class NotificationPreferencesRead(BaseModel):
     """The known notification toggles (stored in founders.notification_preferences).
 
-    reduced_motion / private_mode live here too rather than on a new table:
-    live-reported bug was ALL FOUR profile-page toggles (Notifications,
-    Renewal reminder, Reduced motion, Private mode) being local React state
-    only -- no backend call, not even localStorage, so every one reset to its
-    default on reload. This is the one JSONB column on `founders` that
-    already existed for exactly this shape of thing (a small set of named
-    booleans), and `extra="allow"` below already tolerated unknown keys
-    before this change, so widening it here needs no migration.
+    reduced_motion lives here too rather than on a new table: live-reported bug
+    was ALL FOUR profile-page toggles being local React state only -- no backend
+    call, not even localStorage, so every one reset to its default on reload.
+    This is the one JSONB column on `founders` that already existed for exactly
+    this shape of thing (a small set of named booleans), and `extra="allow"`
+    below already tolerated unknown keys before this change, so widening it here
+    needed no migration.
+
+    REMOVED 2026-09-05: `private_mode`. Its switch was labelled "Keep business
+    data anonymised in aggregate insights", which told a founder two things --
+    that their business data goes into aggregate insights by default, and that
+    this switch anonymises it. Neither was true. Nothing anywhere read the flag,
+    and there are no aggregate insights in the product. A privacy control that
+    does nothing is worse than no control, and a description of a data use we do
+    not have is worse again, so it is gone rather than reworded.
+
+    `extra="allow"` means the key already stored on existing founder rows is
+    simply carried through and ignored. No migration, and nothing to clean up
+    unless someone wants the rows tidy.
     """
 
     model_config = ConfigDict(extra="allow")  # keep any custom keys the client stored
@@ -48,7 +59,6 @@ class NotificationPreferencesRead(BaseModel):
     email_reminders: bool = True
     email_report_ready: bool = True
     reduced_motion: bool = False
-    private_mode: bool = True
 
 
 class NotificationPreferencesUpdate(BaseModel):
@@ -60,7 +70,10 @@ class NotificationPreferencesUpdate(BaseModel):
     email_reminders: bool | None = None
     email_report_ready: bool | None = None
     reduced_motion: bool | None = None
-    private_mode: bool | None = None
+    # private_mode removed -- see NotificationPreferencesRead. `extra="forbid"`
+    # means a client still sending it now gets a 422 rather than silently
+    # writing a flag nothing reads; the only client that ever sent it was the
+    # profile switch, removed in the same change.
 
 
 # --- Security ---------------------------------------------------------------

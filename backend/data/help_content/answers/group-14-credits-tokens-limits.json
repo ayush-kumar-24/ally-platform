@@ -1,0 +1,316 @@
+{
+  "schema_version": "1.0",
+  "file": "group-14-credits-tokens-limits",
+  "group": "credits-tokens-limits",
+  "group_number": 14,
+  "group_title": "Credits, tokens and limits",
+  "question_bank": "Founder Question Bank v3 — group 14 (questions 160-179)",
+  "created": "2026-09-05",
+  "content_rules": {
+    "voice": "Very simple, easy English. Short sentences. Common everyday words. No idioms. Friendly and warm, but plain.",
+    "answer_length": "About 120 words maximum. Short paragraphs with a blank line between them.",
+    "generated_not_written": "No plan-specific number appears in any answer here — not a credit count, not a daily ceiling, not a price. They differ per tier and they move. Every answer points at the billing page, which renders them from the catalog. The one constant that is safe to state is the shape of things: a typical message and reply costs two or three credits.",
+    "translate_to_messages": "Founders do not think in tokens. Where a quantity has to be described, describe it in messages."
+  },
+  "walk_log": {
+    "walked_on": "2026-09-05",
+    "environment": "local dev build against the Supabase database (NOT production RDS)",
+    "observed": [
+      "One credit is 1,000 tokens. A measured chat exchange is about 2,400 tokens, so a typical message and reply costs roughly two and a half credits.",
+      "There are two separate walls, and a founder can meet either first: a DAILY token ceiling, and the monthly CREDIT balance. They produce different refusals.",
+      "The day rolls over at midnight India time. It is a period key rather than a scheduled job, so there is nothing to wait for — a new date is simply a new counter.",
+      "Credits sit in two buckets. Plan credits expire at renewal; credits granted by hand do not. Spending drains the expiring bucket first, so the one with a deadline is used before the one without.",
+      "Chat and planning meter separately, so exhausting one cannot disable the other. Planning's counter reads zero in practice: adding a task needs no model call.",
+      "The diagnosis is unmetered by design — a founder must never hit a wall mid-assessment. It is bounded by count instead: one per account.",
+      "Reading an attached file comes out of the chat allowance, and the billing panel says so in as many words.",
+      "Usage lives in Profile > Subscription and billing: today's chat usage against the daily allowance, and diagnoses used against the lifetime limit."
+    ]
+  },
+  "answers": [
+    {
+      "id": 160,
+      "question": "What is a credit?",
+      "answer": "A credit is how we measure your conversations with Ally.\n\nA typical message and its reply costs about two or three credits. A long question, a detailed answer, or one where Ally reads a file you attached will cost more.\n\nYour plan comes with a number of credits each month, and they refresh with it. Your billing page shows how many you have left.\n\nYou do not have to manage them day to day. For most founders they simply last the month.",
+      "answer_type": "generated",
+      "status": "answered",
+      "links": [
+        "/app/billing"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "One credit is 1,000 tokens; a measured exchange is about 2,400 tokens."
+      }
+    },
+    {
+      "id": 161,
+      "question": "What's the difference between a credit and a token?",
+      "answer": "A token is how AI systems measure text — very roughly, a word and a bit. A credit is our unit, and one credit is a thousand tokens.\n\nYou will mostly see credits, because they are a size worth thinking about. Tokens turn up in your daily allowance.\n\nIf you would rather not think about either: a message and reply is about two or three credits, and your billing page shows what is left.",
+      "answer_type": "generated",
+      "status": "answered",
+      "links": [
+        "/app/billing"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "TOKENS_PER_CREDIT is 1,000. Daily ceilings are expressed in tokens; plan allowances in credits."
+      }
+    },
+    {
+      "id": 162,
+      "question": "Why are you measuring me in tokens? I don't know what a token is.",
+      "answer": "That is fair — most people have no reason to know.\n\nThe honest reason is that tokens are what the AI itself charges by, so it is the only measure that does not quietly misprice things. If we counted whole messages instead, a one-word question and a two-page one would cost the same, and one of those would be subsidising the other.\n\nYou should not have to care, though. Your billing page shows what is left without you doing any arithmetic, and a typical message costs two or three credits.",
+      "answer_type": "generated",
+      "status": "answered",
+      "links": [
+        "/app/billing"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Metering is token-based end to end; credits are the presentation layer over it."
+      }
+    },
+    {
+      "id": 163,
+      "question": "Why did one message cost more than another?",
+      "answer": "Because length is what costs, not the number of messages.\n\nA short question with a short answer costs little. A long question, a reply that goes into detail, or one where Ally had to read a document you attached all cost more.\n\nAttaching a file is the biggest single jump. Ally has to read it before it can answer, and that reading is part of the cost.\n\nSo if you are making an allowance last, shorter and more specific questions go a good deal further.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/ally-chat"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Both the message and the reply are metered, and extracted attachment text is added to the prompt before the model sees it."
+      }
+    },
+    {
+      "id": 164,
+      "question": "Where do I see how much I have left?",
+      "answer": "Go to Profile and look at Subscription and billing.\n\nIt shows your plan, how much of today's allowance you have used, and how many diagnoses you have used.\n\nTwo different things are worth telling apart there. Your daily allowance starts again each day. Your monthly credits refresh when your plan does.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/billing",
+        "/app/profile"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "The panel renders 'Talk to Ally — n / limit today' and 'AI Business Diagnosis — n / 1 lifetime'."
+      }
+    },
+    {
+      "id": 165,
+      "question": "Where do I see what I've used this month?",
+      "answer": "The same place — Profile, then Subscription and billing.\n\nIt shows today's usage against your daily allowance, and where you are against your plan's credits.\n\nWhat it does not show is a message-by-message breakdown. If a large amount went somewhere and you want to know where, ask support and we can look it up for you.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/billing"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Usage is stored per day and per source. No per-message statement is exposed to founders."
+      }
+    },
+    {
+      "id": 166,
+      "question": "I still have credits but it says I've hit my limit. Which is it?",
+      "answer": "Both are true. They are two different limits and you can meet either one first.\n\nYour daily allowance caps how much you can use in a single day. Your credits are the monthly total.\n\nIf you hit the daily one, your credits are untouched and still waiting — you carry on tomorrow.\n\nIf you hit the credit one, the month's allowance is spent.\n\nWe know having two is confusing. Your billing page shows both, so you can see which one stopped you.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/billing"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "The daily ceiling and the credit balance are separate gates producing different refusals."
+      }
+    },
+    {
+      "id": 167,
+      "question": "When does the daily limit reset, and in which timezone?",
+      "answer": "At midnight, India time.\n\nIt used to roll over at midnight UTC, which meant founders here got their allowance back at half past five in the morning. Someone who ran out at nine in the evening was told to wait for midnight, and then found nothing there until dawn. That is fixed.\n\nThere is no job to wait for either. The moment the date changes, the new day's allowance is simply there.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/billing"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "USAGE_RESET_TIMEZONE is Asia/Kolkata. Usage is keyed by local date rather than reset by a scheduled job, so a new day is a new counter."
+      }
+    },
+    {
+      "id": 168,
+      "question": "Do my credits expire?",
+      "answer": "The ones that come with your plan do. They are for that month and do not stack up.\n\nAny credits we have added to your account by hand — to make up for a problem, say — do not expire. Those stay until you use them.\n\nWhen you spend, the expiring ones go first. That is deliberate: the credits with a deadline get used before the ones without, so you do not lose an allowance while sitting on a gift.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/billing"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Two buckets: plan credits expire at renewal, granted credits do not. Deductions drain the monthly bucket first."
+      }
+    },
+    {
+      "id": 169,
+      "question": "I'm on Free — do I get credits again next month?",
+      "answer": "There is no free plan any more, so there is no monthly free grant.\n\nCredits come with a paid plan. Plus gives you 105 a month and Pro gives you 240, and those refresh each month when the plan renews.\n\nStarter has no credits, because it does not include chatting with Ally -- it is the diagnosis and your report, for a one-off Rs 199.\n\nAnything you have already used Ally for is unaffected. Credits control new conversations, never access to what you already have.",
+      "answer_type": "walked",
+      "status": "answered_pending_product_change",
+      "links": [
+        "/app/billing"
+      ],
+      "verified": {
+        "walked_on": "2026-09-06",
+        "how": "Team decision 2026-09-06. Starter: Rs 199 paid ONCE, buying one month -- it does not auto-renew. Plus (Rs 499) and Pro (Rs 999) are monthly subscriptions, with 12 months for the price of 10 if paid annually. A discovery call is Rs 300 per 30 minutes on any plan. GST is included in every price shown."
+      },
+      "note": "HELD until PUBLIC_LAUNCH is on -- describes the paid-only launch state. REVISED 2026-09-06: Starter is a one-off payment for a month, not a monthly subscription. The 2026-09-05 draft said it renewed monthly."
+    },
+    {
+      "id": 170,
+      "question": "Do unused messages carry over?",
+      "answer": "No. Your monthly credits are for that month and start fresh at each renewal.\n\nYour daily allowance works the same way — it does not build up if you skip a day.\n\nSo there is no benefit to saving them. If there is something you have been meaning to ask Ally, asking is free in the sense that holding back does not buy you anything later.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/billing"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Plan credits expire at the renewal boundary; the daily counter is keyed by date and does not accumulate."
+      }
+    },
+    {
+      "id": 171,
+      "question": "I've run out of messages. What now?",
+      "answer": "It depends which limit you reached, and your billing page shows which.\n\nIf it was the daily one, nothing is lost. You carry on tomorrow with a full day's allowance.\n\nIf it was your monthly credits, the options are to wait for your renewal or move to a plan with a larger allowance.\n\nOne thing that is never affected: your report, your Founder DNA and everything already in your account stay exactly where they are. Running out stops new conversations, not access to what you have.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/billing"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Both refusals block new chat only. Nothing already stored becomes unreachable."
+      }
+    },
+    {
+      "id": 172,
+      "question": "Can I buy more without subscribing?",
+      "answer": "Not at the moment, sorry. There is no way to buy a one-off top-up of credits on its own.\n\nIf you need more, the way to get it today is a plan with a larger monthly allowance. Your billing page shows what each one includes.\n\nA top-up is something we have considered rather than something we offer. If it is what you actually want, please tell us — knowing that people are asking is what moves it up the list.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/billing",
+        "/app/feedback"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "A top-up price and credit amount exist as constants but there is no purchase path anywhere in the product, and checkout is not built."
+      }
+    },
+    {
+      "id": 173,
+      "question": "Does the diagnosis eat into my allowance?",
+      "answer": "No, not at all. The diagnosis is not metered.\n\nThat is deliberate. Nobody should hit a wall halfway through answering questions about their own business, so it is limited by count instead — one per account — rather than by how much you use.\n\nAnswer at whatever length you like. Longer, more honest answers make the report better and cost you nothing.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/diagnosis"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "The diagnosis is deliberately absent from the metered sources and bounded by a lifetime count instead."
+      }
+    },
+    {
+      "id": 174,
+      "question": "Does generating the report cost me anything?",
+      "answer": "No. The report comes with the diagnosis, and neither is metered.\n\nDownloading it as a PDF, sharing it, and coming back to read it again months later are all free too.\n\nThe only thing that uses your allowance is talking to Ally in chat.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/report"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Report generation, PDF export and share links are outside the metered path entirely."
+      }
+    },
+    {
+      "id": 175,
+      "question": "Does uploading a file cost credits?",
+      "answer": "Yes. Ally has to read the file before it can answer, and that reading comes out of your chat allowance.\n\nA long document costs more than a short one.\n\nIf you are watching your allowance, it helps to say which part matters. \"Look at the pricing section\" is cheaper than attaching forty pages and asking what Ally thinks — and it usually gets you a better answer as well.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/ally-chat",
+        "/app/billing"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Extracted attachment text is added to the prompt and metered with the message. The billing panel states this explicitly."
+      }
+    },
+    {
+      "id": 176,
+      "question": "Chat has run out. Can I still plan my day?",
+      "answer": "Yes. Planning is not affected by your chat allowance at all.\n\nAdding tasks, setting times, ticking things off and looking at your goals do not use it, because none of them need Ally to think about anything.\n\nSo even with chat completely used up for the day, your plan still works normally. That is on purpose — running out of one part of Ally should never take the rest down with it.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/plan"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Chat and planning meter separately by source. Planning's counter reads zero because adding a task is deterministic and makes no model call."
+      }
+    },
+    {
+      "id": 177,
+      "question": "Does Plan Your Day have its own limit?",
+      "answer": "In practice, no. Planning does not use up anything today.\n\nThere is a separate budget set aside for it, kept apart from chat so that running out of one can never disable the other. Nothing currently draws on it, because adding and completing tasks does not need Ally to think.\n\nSo plan as much as you like. The only thing your allowance limits is talking to Ally.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/plan"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "planning has its own metered source; the counter is zero in practice. The budget exists so reminder or notification model work has somewhere to land later without a schema change."
+      }
+    },
+    {
+      "id": 178,
+      "question": "Roughly how many messages a day does my plan give me?",
+      "answer": "It depends on your plan and on how long your messages are, so the real answer is on your billing page rather than here.\n\nAs a rough guide, a typical message and reply costs two or three credits. Long questions, detailed answers and attached documents cost more.\n\nYour billing page shows today's usage against your allowance, so after a day or two of normal use you will have a much better sense of it than any number we could print.",
+      "answer_type": "generated",
+      "status": "answered",
+      "links": [
+        "/app/billing"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Deliberately no per-plan figure: daily ceilings differ by tier and are changing with the new pricing."
+      }
+    },
+    {
+      "id": 179,
+      "question": "Can I see what a message will cost before I send it?",
+      "answer": "No, and it is a fair thing to want.\n\nThe cost depends on how long your message is and how long Ally's reply turns out to be, and the reply does not exist until it has been written. So there is nothing honest we could show you beforehand.\n\nWhat you can do is watch the running total on your billing page, which updates as you go.\n\nIf a rough \"this will cost about this much\" would genuinely help you, tell us.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/billing",
+        "/app/feedback"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Metering happens after the model replies, since output tokens are part of the cost. No pre-flight estimate exists."
+      }
+    }
+  ]
+}
