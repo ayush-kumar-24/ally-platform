@@ -24,6 +24,14 @@ engine = create_engine(
     pool_recycle=1800,
 )
 
+# This Session is SYNCHRONOUS, and that decides how routes must be declared:
+# a FastAPI route that takes one is `def`, never `async def`. An `async def`
+# route runs ON the event loop, so each of its queries blocks every other
+# request in the process for the duration of a network round trip to the
+# database; a `def` route runs in the threadpool and blocks only itself. This
+# is enforced by tests/test_routes_do_not_block_the_event_loop.py, which has
+# the full story -- it was found through the founder dashboard, whose six
+# parallel requests were executing strictly one after another.
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()

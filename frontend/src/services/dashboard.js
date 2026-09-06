@@ -47,6 +47,14 @@ export function getOverview() {
  * Each source resolves to null on failure rather than rejecting, so one missing
  * piece dims one card instead of blanking the page. The caller can tell "no data
  * yet" (`available: false`) from "could not load" (`null`).
+ *
+ * `onPart(key, value)` fires as each source lands, so the page can paint each
+ * card the moment ITS data arrives instead of waiting for all six. Awaiting the
+ * returned promise still gives the whole object, for callers that want that.
+ * The three states a caller reads are deliberately distinct: `undefined` means
+ * still in flight, `null` means the request failed, and a value means it
+ * answered -- which is what lets a card show a placeholder rather than an
+ * "you have nothing yet" empty state it cannot yet stand behind.
  */
 /** The founder's real plan, credits and daily token usage. */
 export function getMyPlan() {
@@ -67,16 +75,26 @@ export function markTourSeen() {
   return post('/dashboard/tour-seen', {}).catch(() => null);
 }
 
-export async function loadDashboard() {
-  const [profile, health, progress, summary, overview, plan] = await Promise.all([
-    getProfile().catch(() => null),
-    getBusinessHealth().catch(() => null),
-    getProfileProgress().catch(() => null),
-    getIntelligenceSummary().catch(() => null),
-    getOverview().catch(() => null),
-    getMyPlan().catch(() => null),
-  ]);
-  return { profile, health, progress, summary, overview, plan };
+const SOURCES = {
+  profile: getProfile,
+  health: getBusinessHealth,
+  progress: getProfileProgress,
+  summary: getIntelligenceSummary,
+  overview: getOverview,
+  plan: getMyPlan,
+};
+
+export function loadDashboard(onPart) {
+  return Promise.all(
+    Object.entries(SOURCES).map(([key, fetchOne]) =>
+      fetchOne()
+        .catch(() => null)
+        .then((value) => {
+          onPart?.(key, value);
+          return [key, value];
+        })
+    )
+  ).then(Object.fromEntries);
 }
 
 /** "14 JUL" / "Today" / "3d ago" — dates as a person reads them. */
