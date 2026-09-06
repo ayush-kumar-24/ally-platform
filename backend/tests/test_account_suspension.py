@@ -29,7 +29,6 @@ from app.core.auth.dependencies import is_account_active
 from app.core.config import settings
 from app.db.session import get_db
 from app.main import app
-from app.models import Founder
 
 BASE = "/api/v1/auth"
 COOKIE = "ally_refresh_token"
@@ -37,35 +36,12 @@ COOKIE = "ally_refresh_token"
 
 # --- a scriptable stand-in for a SQLAlchemy Session -------------------------
 
-class _Scalars:
-    """`get_by()` reads rows as db.execute(stmt).scalars().first()."""
-
-    def __init__(self, row):
-        self._row = row
-
-    def first(self):
-        return self._row
-
-    def all(self):
-        return [self._row] if self._row is not None else []
-
-
 class _Result:
     def __init__(self, value):
         self._value = value
 
     def scalar(self):
         return self._value
-
-    def scalars(self):
-        # The protected-route path no longer runs a bare `SELECT status`: it
-        # loads the founder row once and reads status off it (see
-        # founder_row_for_request). A canned status therefore has to be
-        # servable as a row as well as as a scalar. `/auth/refresh` and
-        # `/auth/resume` still take the scalar path via is_account_active.
-        if self._value is None:
-            return _Scalars(None)
-        return _Scalars(Founder(user_id="fake", status=self._value))
 
     def scalar_one_or_none(self):
         # `/refresh` and `/resume` check SqlSessionStore.is_revoked on this
@@ -88,7 +64,6 @@ class FakeStatusSession:
         self.raise_on_execute = raise_on_execute
         self.rolled_back = False
         self.executed = False
-        self._info = {}
 
     def execute(self, *args, **kwargs):
         self.executed = True
@@ -101,15 +76,6 @@ class FakeStatusSession:
 
     def commit(self):
         pass
-
-    # The founder row is loaded inside a transaction so the RLS `set_config`
-    # rides along with it; the real Session answers this.
-    def in_transaction(self):
-        return False
-
-    @property
-    def info(self):
-        return self._info
 
 
 # --- unit: is_account_active -------------------------------------------------

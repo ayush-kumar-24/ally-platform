@@ -203,7 +203,7 @@ def share_url_for(token: str, request: Request) -> str:
 
 # --- founder-scoped endpoints ----------------------------------------------
 @router.get("/shared/{token}", response_model=SharedReportView)
-def shared_report(token: str, db: Session = Depends(get_db)) -> SharedReportView:
+async def shared_report(token: str, db: Session = Depends(get_db)) -> SharedReportView:
     """PUBLIC. Strict subset: headings + prose only."""
     _share, report = _resolve_share_or_404(db, token, route="json")
     narrative = _build_narrative(db, report)
@@ -215,7 +215,7 @@ def shared_report(token: str, db: Session = Depends(get_db)) -> SharedReportView
 
 
 @router.get("/shared/{token}/view", response_class=HTMLResponse)
-def shared_report_page(token: str, db: Session = Depends(get_db)) -> HTMLResponse:
+async def shared_report_page(token: str, db: Session = Depends(get_db)) -> HTMLResponse:
     """PUBLIC. The shared report as a readable page.
 
     The share link used to point at the JSON endpoint above, so whoever a founder
@@ -260,7 +260,7 @@ def shared_report_page(token: str, db: Session = Depends(get_db)) -> HTMLRespons
 
 
 @router.get("/{report_id}", response_model=ReportView)
-def full_report(
+async def full_report(
     report_id: int,
     founder: Founder = Depends(get_founder_record),
     db: Session = Depends(get_db),
@@ -279,21 +279,21 @@ def full_report(
 
 
 @router.get("/{report_id}/founder-dna", response_model=SectionSlice)
-def founder_dna(report_id: int, founder: Founder = Depends(get_founder_record),
+async def founder_dna(report_id: int, founder: Founder = Depends(get_founder_record),
                       db: Session = Depends(get_db)) -> SectionSlice:
     n = _build_narrative(db, _owned_report(db, founder, report_id))
     return SectionSlice(report_id=report_id, section=_section(n, "founder_dna"))
 
 
 @router.get("/{report_id}/business-dna", response_model=SectionSlice)
-def business_dna(report_id: int, founder: Founder = Depends(get_founder_record),
+async def business_dna(report_id: int, founder: Founder = Depends(get_founder_record),
                        db: Session = Depends(get_db)) -> SectionSlice:
     n = _build_narrative(db, _owned_report(db, founder, report_id))
     return SectionSlice(report_id=report_id, section=_section(n, "business_dna"))
 
 
 @router.get("/{report_id}/insights", response_model=InsightsView)
-def insights(report_id: int, founder: Founder = Depends(get_founder_record),
+async def insights(report_id: int, founder: Founder = Depends(get_founder_record),
                    db: Session = Depends(get_db)) -> InsightsView:
     n = _build_narrative(db, _owned_report(db, founder, report_id))
     return InsightsView(
@@ -304,14 +304,14 @@ def insights(report_id: int, founder: Founder = Depends(get_founder_record),
 
 
 @router.get("/{report_id}/recommendations", response_model=SectionSlice)
-def recommendations(report_id: int, founder: Founder = Depends(get_founder_record),
+async def recommendations(report_id: int, founder: Founder = Depends(get_founder_record),
                           db: Session = Depends(get_db)) -> SectionSlice:
     n = _build_narrative(db, _owned_report(db, founder, report_id))
     return SectionSlice(report_id=report_id, section=_section(n, "priority_actions"))
 
 
 @router.get("/{report_id}/document", response_class=HTMLResponse)
-def report_document(
+async def report_document(
     report_id: int,
     founder: Founder = Depends(get_founder_record),
     db: Session = Depends(get_db),
@@ -339,7 +339,7 @@ def report_document(
 
 
 @router.post("/{report_id}/export")
-def export_pdf(report_id: int, founder: Founder = Depends(get_founder_record),
+async def export_pdf(report_id: int, founder: Founder = Depends(get_founder_record),
                      db: Session = Depends(get_db)) -> Response:
     """The founder's report as a PDF -- or an honest "not yet", never a substitute.
 
@@ -384,7 +384,7 @@ def export_pdf(report_id: int, founder: Founder = Depends(get_founder_record),
 
 
 @router.post("/{report_id}/share", response_model=ShareCreated, status_code=status.HTTP_201_CREATED)
-def share_report(
+async def share_report(
     report_id: int, request: Request,
     founder: Founder = Depends(get_founder_record),
     db: Session = Depends(get_db),
@@ -401,7 +401,7 @@ def share_report(
 
 
 @router.get("/{report_id}/shares", response_model=list[ShareOut])
-def list_shares(
+async def list_shares(
     report_id: int,
     founder: Founder = Depends(get_founder_record),
     db: Session = Depends(get_db),
@@ -423,7 +423,7 @@ def list_shares(
 
 
 @router.delete("/{report_id}/share/{token}", status_code=status.HTTP_204_NO_CONTENT)
-def revoke_share(
+async def revoke_share(
     report_id: int, token: str,
     founder: Founder = Depends(get_founder_record),
     db: Session = Depends(get_db),

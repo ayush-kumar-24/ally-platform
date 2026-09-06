@@ -73,7 +73,7 @@ async def read_account(founder: Founder = Depends(get_founder_record)):
 
 
 @router.patch("/account", response_model=AccountSettingsRead)
-def update_account(
+async def update_account(
     payload: AccountSettingsUpdate,
     founder: Founder = Depends(get_founder_record),
     db: Session = Depends(get_db),
@@ -89,7 +89,7 @@ async def read_notifications(founder: Founder = Depends(get_founder_record)):
 
 
 @router.patch("/notifications", response_model=NotificationPreferencesRead)
-def update_notifications(
+async def update_notifications(
     payload: NotificationPreferencesUpdate,
     founder: Founder = Depends(get_founder_record),
     db: Session = Depends(get_db),
@@ -112,7 +112,7 @@ async def read_security(auth_user: AuthUser = Depends(get_current_founder)):
 # --- privacy center (data rights) ------------------------------------------
 
 @router.post("/privacy", response_model=PrivacyRequestRead, status_code=status.HTTP_201_CREATED)
-def submit_privacy_request(
+async def submit_privacy_request(
     payload: PrivacyRequestCreate,
     background: BackgroundTasks,
     founder: Founder = Depends(get_founder_record),
@@ -178,7 +178,7 @@ def submit_privacy_request(
 
 
 @router.get("/privacy", response_model=PrivacyRequestListResponse)
-def list_privacy_requests(
+async def list_privacy_requests(
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     founder: Founder = Depends(get_founder_record),

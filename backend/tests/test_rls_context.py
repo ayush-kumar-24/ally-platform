@@ -2,7 +2,6 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 from app.api import deps as api_deps
-from app.models import Founder
 from app.db.session import _apply_rls_context, set_founder_rls_context
 from app.services import provisioning
 
@@ -75,71 +74,28 @@ def test_provisioning_sets_context_before_founder_lookup(monkeypatch):
 
 
 def test_api_dependency_sets_context_before_founder_lookup(monkeypatch):
-    """The founder row is now loaded once per request, in the auth dependency
-    (founder_row_for_request), and get_founder_record reads it back off the
-    request rather than re-querying. The ordering guarantee this test exists
-    for is unchanged and still load-bearing: the RLS `set_config` must be in
-    place BEFORE the first query touches founders, or the lookup runs with no
-    founder context. What is new -- and asserted here too -- is that exactly
-    ONE lookup happens per request."""
-    from app.core.auth import dependencies as auth_deps
-
     events = []
-    founder = Founder(user_id=FOUNDER_UUID)
+    founder = object()
     db = MagicMock()
-    request = SimpleNamespace(state=SimpleNamespace())
+
     auth_user = SimpleNamespace(id=FOUNDER_UUID)
 
-    monkeypatch.setattr(
-        auth_deps,
-        "set_founder_rls_context",
-        lambda db, founder_uuid: events.append(("context", founder_uuid)),
-    )
     monkeypatch.setattr(
         api_deps,
         "set_founder_rls_context",
         lambda db, founder_uuid: events.append(("context", founder_uuid)),
     )
+
     monkeypatch.setattr(
         api_deps.founder_repository,
         "get_by_user_id",
         lambda db, user_uuid: events.append(("lookup", str(user_uuid))) or founder,
     )
 
-    result = api_deps.get_founder_record(request, auth_user=auth_user, db=db)
+    result = api_deps.get_founder_record(auth_user=auth_user, db=db)
 
     assert result is founder
     assert events == [
         ("context", FOUNDER_UUID),
         ("lookup", FOUNDER_UUID),
     ]
-
-
-def test_the_founder_row_is_loaded_once_per_request(monkeypatch):
-    """The whole point of the change: get_current_founder loads the row to
-    check the account is not suspended, and get_founder_record reuses it. Two
-    lookups here would mean the second round trip came back."""
-    from app.core.auth import dependencies as auth_deps
-
-    lookups = []
-    founder = Founder(user_id=FOUNDER_UUID, status="active")
-    db = MagicMock()
-    request = SimpleNamespace(state=SimpleNamespace())
-
-    monkeypatch.setattr(auth_deps, "set_founder_rls_context", lambda db, uuid: None)
-    monkeypatch.setattr(api_deps, "set_founder_rls_context", lambda db, uuid: None)
-    monkeypatch.setattr(
-        api_deps.founder_repository,
-        "get_by_user_id",
-        lambda db, user_uuid: lookups.append(str(user_uuid)) or founder,
-    )
-
-    row = auth_deps.founder_row_for_request(request, db, FOUNDER_UUID)
-    assert row is founder
-    assert auth_deps._row_is_active(row) is True
-
-    again = api_deps.get_founder_record(
-        request, auth_user=SimpleNamespace(id=FOUNDER_UUID), db=db
-    )
-    assert again is founder
-    assert lookups == [FOUNDER_UUID]
