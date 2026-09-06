@@ -23,6 +23,9 @@ const LINKS = [
   // tier as seeing users, and hiding it from people who can read it but
   // not action it is how a request sits unnoticed for a month.
   { to: '/admin/privacy', label: 'Privacy', capability: 'view_users' },
+  // view_users, not modify_subscription: support is asked how many of a
+  // capped code are left, and can answer without being able to mint one.
+  { to: '/admin/coupons', label: 'Coupons', capability: 'view_users' },
   { to: '/admin/audit', label: 'Audit Log', capability: 'view_audit' },
   { to: '/admin/system', label: 'System', capability: 'view_users' },
 ];
