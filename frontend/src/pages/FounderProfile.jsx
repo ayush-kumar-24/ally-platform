@@ -427,13 +427,11 @@ export default function FounderProfile() {
     notifications: 'in_app_all',
     renewal: 'email_reminders',
     reducedMotion: 'reduced_motion',
-    privateMode: 'private_mode',
   };
   const [switches, setSwitches] = useState({
     renewal: true,
     notifications: true,
     reducedMotion: false,
-    privateMode: true
   });
   const [switchesLoaded, setSwitchesLoaded] = useState(false);
 
@@ -449,7 +447,6 @@ export default function FounderProfile() {
           notifications: prefs.in_app_all ?? true,
           renewal: prefs.email_reminders ?? true,
           reducedMotion: prefs.reduced_motion ?? false,
-          privateMode: prefs.private_mode ?? true,
         });
       })
       .catch(() => { /* leave the defaults -- a stale-but-sane UI beats a broken one */ })
@@ -1084,7 +1081,15 @@ export default function FounderProfile() {
             in the codebase. Removed rather than wired up: not a real feature
             for this product. */}
 
-        {/* Renewal Reminder Switch Row */}
+        {/* Email reminders switch.
+            WAS "Renewal reminder / Get notified about new features and offers",
+            which described a marketing opt-in. It is wired to
+            notification_preferences.email_reminders -- the ONLY consumer of which
+            is app/services/discovery_notifications.py, gating the 24h and 1h
+            reminders for a discovery call. So a founder declining "offers" was
+            silently switching off the reminders for a discovery call they had paid for
+            for. Relabelled to what it actually controls. If marketing email is
+            ever sent, it needs its own flag -- not this one. */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--bd)', paddingTop: '20px' }}>
           <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
             <div
@@ -1105,9 +1110,9 @@ export default function FounderProfile() {
               </svg>
             </div>
             <div style={{ textAlign: 'left' }}>
-              <div style={{ fontSize: '13px', fontWeight: 650, color: 'var(--ink, #16241c)' }}>Renewal reminder</div>
+              <div style={{ fontSize: '13px', fontWeight: 650, color: 'var(--ink, #16241c)' }}>Call reminders by email</div>
               <div style={{ fontSize: '11px', color: 'var(--muted-2)', marginTop: '2px' }}>
-                Get notified about new features and offers
+                Reminders before a discovery call you have booked
               </div>
             </div>
           </div>
@@ -1115,6 +1120,9 @@ export default function FounderProfile() {
             className={`pr-switch${switches.renewal ? ' on' : ''}`}
             onClick={() => toggleSwitch('renewal')}
             type="button"
+            role="switch"
+            aria-checked={switches.renewal}
+            aria-label="Call reminders by email"
           />
         </div>
       </div>
@@ -1126,17 +1134,23 @@ export default function FounderProfile() {
       </div>
 
       <div className="pr-card stagger d4">
-        <div className="pr-settings-row">
-          <div className="pr-settings-info">
-            <span className="pr-settings-title">Notifications</span>
-            <span className="pr-settings-desc">Report updates, replies and reminders</span>
-          </div>
-          <button
-            className={`pr-switch${switches.notifications ? ' on' : ''}`}
-            onClick={() => toggleSwitch('notifications')}
-            type="button"
-          />
-        </div>
+        {/* HIDDEN 2026-09-05: the "Notifications" switch, described as
+            "Report updates, replies and reminders".
+
+            It is wired to notification_preferences.in_app_all, which persists
+            correctly and which NOTHING reads -- there are no in-app
+            notifications for it to turn off, so flipping it changed nothing
+            whichever way it was set. A visible switch that does nothing teaches
+            founders that our settings are decorative, which is expensive on a
+            page whose whole job is letting them change something.
+
+            Hidden rather than deleted: the flag, the API and the stored value
+            are all still there and still correct, so when in-app notifications
+            exist this becomes a matter of deleting this comment. Until then
+            help answer 257 tells founders the truth about it.
+
+            The state and toggle handler are deliberately left in place too --
+            they cost nothing and keep the switch a one-line restore. */}
 
         <div className="pr-settings-row">
           <div className="pr-settings-info">
@@ -1147,20 +1161,22 @@ export default function FounderProfile() {
             className={`pr-switch${switches.reducedMotion ? ' on' : ''}`}
             onClick={() => toggleSwitch('reducedMotion')}
             type="button"
+            role="switch"
+            aria-checked={switches.reducedMotion}
+            aria-label="Reduced motion"
           />
         </div>
 
-        <div className="pr-settings-row">
-          <div className="pr-settings-info">
-            <span className="pr-settings-title">Private mode</span>
-            <span className="pr-settings-desc">Keep business data anonymised in aggregate insights</span>
-          </div>
-          <button
-            className={`pr-switch${switches.privateMode ? ' on' : ''}`}
-            onClick={() => toggleSwitch('privateMode')}
-            type="button"
-          />
-        </div>
+        {/* REMOVED 2026-09-05: the "Private mode" switch, which read
+            "Keep business data anonymised in aggregate insights".
+            That sentence told a founder their business data goes into aggregate
+            insights by default and that this switch anonymises it. Neither was
+            true: nothing anywhere read the flag, and there are no aggregate
+            insights in the product. Removed rather than reworded -- a privacy
+            control that does nothing is worse than no control, and describing a
+            data use we do not have is worse again. If aggregate insights are
+            ever built, the opt-out goes in the privacy policy BEFORE it goes on
+            this page. */}
 
         <div className="pr-settings-row">
           <div className="pr-settings-info">

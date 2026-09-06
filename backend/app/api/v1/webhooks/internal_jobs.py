@@ -176,3 +176,37 @@ def check_health(
         "checked_at": report.checked_at.isoformat(),
         "alert_sent": alerted,
     }
+
+
+@router.post(
+    "/send-call-reminders",
+    summary="Send any due 24h / 1h discovery-call reminders",
+)
+def send_call_reminders(
+    x_internal_secret: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> dict:
+    """The consumer side of `send_due_reminders`, which had no caller at all.
+
+    The reminder logic has existed since discovery calls shipped and nothing
+    ever ran it, so the 24h and 1h reminders have never fired for anybody --
+    including founders who paid for the call. Same shape and same auth as the
+    sweeps above, so whatever cron / EventBridge / pg_cron already runs them
+    can run this too.
+
+    **Call this every 15 minutes.** The windows are "within 24h" and "within
+    1h", and each call carries a `reminder_sent_24h` / `reminder_sent_1h` flag
+    that is set once, so running it more often is harmless (idempotent) and
+    running it rarely means a founder gets the 1h reminder late or not at all.
+
+    Note this does nothing useful until EMAIL_HOST is configured -- send_email
+    runs in stub mode until then, logging instead of sending. The response
+    reports `email_configured` so a scheduler's logs make that obvious rather
+    than showing a cheerful zero.
+    """
+    _verify_secret(x_internal_secret)
+
+    from app.services.discovery_notifications import send_due_reminders
+
+    result = send_due_reminders(db)
+    return {**result, "email_configured": settings.email_enabled}

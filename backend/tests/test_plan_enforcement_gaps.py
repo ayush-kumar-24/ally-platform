@@ -15,6 +15,7 @@ from app.plans import (
     build_entitlement_service,
     period_month,
 )
+from app.plans.catalog import CALL_PRICE_INR
 from app.plans.reconciliation import (
     InMemoryReconciliationRepository,
     ReconciliationService,
@@ -75,7 +76,10 @@ def test_no_tier_can_claim_a_free_call():
     for tier in PlanTier:
         with pytest.raises(NoFreeCallsRemainingError) as exc:
             s.consume_free_call(UID, tier)
-        assert exc.value.price == 300, tier
+        # Read the constant rather than repeating the number: this assertion
+        # was left on Rs 300 when the price moved to Rs 199, so the test failed
+        # for a change it was meant to be indifferent to.
+        assert exc.value.price == CALL_PRICE_INR, tier
 
 
 def test_concurrent_bookings_cannot_both_take_the_last_free_call():

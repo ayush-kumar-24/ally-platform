@@ -1,0 +1,167 @@
+{
+  "schema_version": "1.0",
+  "file": "group-16-account-and-access",
+  "group": "account-and-access",
+  "group_number": 16,
+  "group_title": "Account and access",
+  "question_bank": "Founder Question Bank v3 -- group 16 (questions 195-203)",
+  "created": "2026-09-05",
+  "supersedes": "The 195-203 entries in account-settings-privacy.json. This file is canonical for group 16.",
+  "content_rules": {
+    "voice": "Very simple, easy English. Short sentences. Common everyday words. No idioms. Friendly and warm, but plain.",
+    "answer_length": "About 120 words maximum. Short paragraphs with a blank line between them.",
+    "never_name_the_model": "No vendor, no model, anywhere.",
+    "group_specific": "Practical questions with practical answers. Where the product cannot do something, say so and give the nearest real remedy -- never 'not yet' on its own."
+  },
+  "walk_log": {
+    "walked_on": "2026-09-05",
+    "environment": "local dev build, plus the auth and profile endpoints exercised directly.",
+    "observed": [
+      "Avatar upload accepts PNG, JPEG and WEBP up to 5MB. Live test: PNG returned 201, GIF was refused with a message naming the accepted types. HEIC is neither accepted server-side nor offered by the file picker.",
+      "The founder CANNOT change their own email. /settings/account accepts preferred_language and nothing else; the schema states email and plan are owned by auth and billing.",
+      "Password reset is the email + one-time code path: enter your email, receive an 8-digit code, enter it and choose a new password. Resend unlocks after 60 seconds.",
+      "Sessions are per browser. Signing in on a second device does not disturb the first -- each gets its own refresh token.",
+      "LOGOUT REVOKES ONE TOKEN, NOT ALL OF THEM. /auth/logout decodes the presented refresh token and revokes that single jti. The revoked_tokens table is keyed by jti alone -- it has no founder_id column -- so there is no query that could revoke every session for one founder. 'Sign out everywhere' is not merely unbuilt; the data model cannot currently express it.",
+      "Access tokens are not individually tracked and stay valid until they expire (30 minutes). Revoking the refresh token is what actually ends a session.",
+      "Frontend is React 19 on Vite 8, built for baseline-widely-available browsers -- current Chrome, Edge, Firefox and Safari. No legacy build and no polyfill bundle."
+    ],
+    "findings": [
+      "'SIGN OUT EVERYWHERE' CANNOT BE BUILT WITHOUT A SCHEMA CHANGE, and it is the security control founders actually ask for. revoked_tokens is keyed by jti with no founder_id, so nothing -- not the founder, not support, not an admin -- can end another device's session. A founder who has lost a laptop has no remedy but to wait out the 30-day refresh window. This is the control worth having INSTEAD of the session_timeout_minutes setting removed earlier today: it needs a founder_id column on revoked_tokens (or a per-founder token generation counter), and it closes a real hole rather than a decorative one.",
+      "CHANGING YOUR OWN EMAIL IS NOT POSSIBLE, by design, and there is no in-product route to ask. The answer sends founders to info@goxl.in. Doing it by hand is defensible for a value that proves account ownership, but a founder who mistyped their address at signup cannot even reach us from inside the account -- they are signed in as an address they do not own. Worth a 'request an email change' action in the Privacy Center alongside the correction request that already exists."
+    ]
+  },
+  "answers": [
+    {
+      "id": 195,
+      "question": "How do I change my profile photo?",
+      "answer": "Go to Profile and click your picture, then choose a new one.\n\nIt accepts PNG, JPEG and WEBP, up to 5MB. The new photo replaces the old one straight away -- there is nothing to save.\n\nOne thing that catches people out: iPhones save photos as HEIC by default, and that is not accepted yet. If your photo will not upload, that is almost always why. Open it and export it as JPEG, or change Settings, then Camera, then Formats to \"Most Compatible\" so new photos are saved as JPEG.\n\nIf it still will not go, tell us what kind of file it is.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/profile"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Live test: PNG upload returned 201 with a stored avatar URL; a GIF was refused with a clear message naming the accepted types. One photo per founder -- a new upload replaces the old."
+      },
+      "note": "Same HEIC gap recorded against question 219. The picker's accept list means iPhone photos are greyed out in the file chooser with no error to read."
+    },
+    {
+      "id": 196,
+      "question": "Can I change the email on my account?",
+      "answer": "Not yourself, but we can do it. Write to info@goxl.in.\n\nTell us the address you have now and the one you want, and send it from an address we can recognise.\n\nWe do it by hand on purpose. Your email is what proves the account is yours, so it is not something a form should change quietly.\n\nIf you have only just signed up and have not done anything yet, the simpler route is to sign up again with the right address and tell us to remove the first one.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/help"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Live-checked: /settings/account accepts preferred_language and nothing else, and the schema states plainly that email and plan are owned by auth and billing rather than editable here."
+      },
+      "finding": "There is no in-product way to even ASK for this. A founder who mistyped their address at signup is signed in as an address they do not own and cannot reach us from inside the account. Worth an 'email change' action in the Privacy Center beside the correction request that already exists."
+    },
+    {
+      "id": 197,
+      "question": "I can't log in. I've forgotten my password.",
+      "answer": "You do not need it. Ask for a code instead.\n\nOn the sign-in screen, choose the option to sign in with a code, type your email address and we send you an 8-digit code. Enter it and you can set a new password there and then.\n\nThe code takes a moment to arrive and it is often in spam. If nothing comes, wait 60 seconds and press Resend.\n\nIf your email address is the problem -- you cannot get into that inbox any more -- write to info@goxl.in and we will help.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/guided/login"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Walked the sign-in flow: the email-and-code path is both the first sign-in and the forgotten-password route, and it ends by setting a new password. Codes are 8 digits and Resend unlocks after 60 seconds."
+      }
+    },
+    {
+      "id": 198,
+      "question": "Can I use the same account on my phone and my laptop?",
+      "answer": "Yes. Sign in on both and use whichever suits you.\n\nEverything is stored on our side, not on the device, so your report, your goals and your conversations are the same wherever you open them. Something you write on your phone is there on your laptop.\n\nSigning in on one does not sign you out of the other.\n\nThe only thing worth knowing is that long documents -- your report especially -- are easier to read on a bigger screen.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Sessions are per browser: each device gets its own refresh token and signing in on one does not disturb another. All state is server-side."
+      }
+    },
+    {
+      "id": 199,
+      "question": "I share a laptop. How do I sign out everywhere?",
+      "answer": "There is no button for that yet, and I would rather tell you than let you look for one.\n\nSigning out only signs out the device you are on.\n\nSo on a shared laptop, the thing that matters is signing out on that laptop when you finish -- use Sign out in Profile rather than just closing the tab. That does end the session on that machine properly.\n\nIf you think someone else has been in your account, write to info@goxl.in and say so. We will help you secure it, and we would want to know.\n\nWe are looking at adding a proper \"sign out everywhere\".",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/profile",
+        "/app/help"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Confirmed in code: /auth/logout revokes only the single refresh token presented, and revoked_tokens is keyed by jti with no founder_id column -- so no query exists that could end every session for one founder."
+      },
+      "finding": "Cannot be built without a schema change, and it is the security control founders actually ask for. Needs a founder_id on revoked_tokens or a per-founder token generation counter. This is the control worth having instead of the session_timeout_minutes setting removed on 2026-09-05 -- it closes a real hole rather than a decorative one."
+    },
+    {
+      "id": 200,
+      "question": "I run two businesses. Can I have both on one account?",
+      "answer": "No, one account is one business.\n\nRunning two means two accounts with two email addresses, and paying for each.\n\nThat is deliberate rather than a limitation we have not got to. Everything Ally builds -- your stage, your report, your goals -- is about one business. Two businesses in one account would give you a blurred read of both.\n\nIf you do run both accounts, use whichever fits the business you are working on that day. They stay completely separate.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/billing"
+      ],
+      "verified": {
+        "walked_on": "2026-09-06",
+        "how": "Team decision 2026-09-06: multi-business accounts are not available. Confirmed in the product: one profile, one diagnosis, one report per account."
+      },
+      "note": "Team decision, 2026-09-06."
+    },
+    {
+      "id": 201,
+      "question": "Can I give my cofounder access?",
+      "answer": "No, there is no way to add a second person to your account.\n\nNo invite, no extra seat, no shared login. And please do not share your password -- everything in your account is tied to that one sign-in, including your billing.\n\nIf your cofounder wants their own read, they can sign up separately. Their diagnosis would be about them, which is the point -- Ally is looking at the founder as much as the business, and the two of you will not answer the same way.\n\nComparing the two reports is usually more useful than sharing one.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/billing"
+      ],
+      "verified": {
+        "walked_on": "2026-09-06",
+        "how": "Team decision 2026-09-06: cofounder access is not available. Confirmed in the product: no second seat, no invite mechanism and no shared account exist."
+      },
+      "note": "Team decision, 2026-09-06."
+    },
+    {
+      "id": 202,
+      "question": "Is there a mobile app?",
+      "answer": "No app yet, but Ally works in your phone's browser.\n\nJust open the site on your phone and sign in as usual. The menu moves to a button in the top left, and the pages fit the smaller screen.\n\nLong things like your report are easier to read on a laptop, so if you have one, use it for the report and your phone for quick check-ins.\n\nWe do not have an app in the app stores yet.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Tested at 375x812: the main pages render with no horizontal overflow and the sidebar collapses to a menu button. There is no PWA manifest and no app store presence."
+      }
+    },
+    {
+      "id": 203,
+      "question": "Which browsers does this work on?",
+      "answer": "Chrome, Edge, Firefox and Safari, as long as they are reasonably up to date.\n\nAnything from the last two or three years is fine, on a computer or a phone. Internet Explorer is not supported at all.\n\nIf a page looks broken or will not load, the two things worth trying are updating your browser and doing a hard refresh, which clears the old copy your browser is holding.\n\nIf it still misbehaves, tell us which browser and version you are on. That is usually enough for us to find it.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/help"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "React 19 on Vite 8, built for baseline-widely-available browsers. No legacy build and no polyfill bundle ships, so genuinely old browsers will not run the app at all."
+      }
+    }
+  ]
+}

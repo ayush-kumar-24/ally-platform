@@ -63,6 +63,7 @@ from app.schemas.auth import (
     SessionResponse,
     TokenPair,
 )
+from app.services.login_notifications import note_sign_in
 from app.services.provisioning import ensure_founder_with_status
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -160,6 +161,13 @@ async def start_session(
     """
     ip = request.client.host if request.client else "0.0.0.0"
     founder, created = ensure_founder_with_status(identity, db, ip_address=ip)
+
+    # Record the device and, if we have not seen it before, tell the founder.
+    # `login_notifications` was a setting with no consumer -- default on, and no
+    # sign-in email ever sent -- which is why help answer 253 currently says an
+    # email claiming "someone signed in" is not from us. This is what makes that
+    # answer's replacement true. Never raises; a sign-in must not depend on it.
+    note_sign_in(db, founder, ip=ip, user_agent=request.headers.get("user-agent"))
 
     pair, refresh_token = _token_pair(identity)
     _set_refresh_cookie(response, refresh_token)

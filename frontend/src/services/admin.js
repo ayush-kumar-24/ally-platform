@@ -149,3 +149,27 @@ export function getUserUsage(id, days = 30) {
 export function reconcileUsage() {
   return post('/admin/usage/reconcile', {});
 }
+
+
+// --- discovery calls -------------------------------------------------------
+//
+// A founder requests a slot from the team's real availability and it lands here
+// as `pending`. Nothing is charged and no calendar event exists until somebody
+// confirms it -- confirming is what creates the meeting and emails the founder.
+
+/** The request queue: priority first, then soonest slot. */
+export function listCallRequests({ onlyPending = true, limit = 50 } = {}) {
+  return get('/admin/discovery-calls', {
+    params: { only_pending: onlyPending, limit },
+  });
+}
+
+/** Accept a request: creates the meeting and emails the founder. */
+export function confirmCallRequest(callId) {
+  return post(`/admin/discovery-calls/${callId}/confirm`, {});
+}
+
+/** Turn a request down. A reason is required -- the founder is owed one. */
+export function declineCallRequest(callId, reason) {
+  return post(`/admin/discovery-calls/${callId}/decline`, { reason });
+}

@@ -64,10 +64,16 @@ function UpsellCard({ quote }) {
         </span>
       </div>
 
+      {/* WAS "Paid plans include a call each month, and additional calls are
+          Rs X" -- which no plan has ever done. `free_calls_per_month` is 0 on
+          every tier in the catalog, so every call is charged and there is no
+          monthly allowance to run out of. Telling a founder their plan includes
+          one and then charging them is the kind of thing they only discover at
+          the moment they are trying to book. */}
       <p className="dc-locked-copy">
         A discovery call pairs you with a GoXL advisor who has already read your
-        Founder Report. Paid plans include a call each month
-        {price ? `, and additional calls are ₹${price}` : ''}.
+        Founder Report. Calls are {price ? `₹${price}` : 'charged'} each, on any
+        paid plan, and you can book as many as you need.
       </p>
 
       <div className="dc-locked-actions">
@@ -82,9 +88,36 @@ function UpsellCard({ quote }) {
   );
 }
 
-/** Existing bookings. Never gated: a call already on the books is theirs to see. */
+/** How each status reads to the founder. The raw value was printed straight out
+ *  of the database ("pending", "no_show"), which tells someone waiting on a paid
+ *  call almost nothing about what happens next. */
+const STATUS_COPY = {
+  pending: 'Waiting for us to confirm',
+  confirmed: 'Confirmed',
+  rescheduled: 'Moved — waiting for us to confirm',
+  cancelled: 'Cancelled',
+  completed: 'Done',
+  no_show: 'Missed',
+};
+
+/** Existing bookings. Never gated: a call already on the books is theirs to see.
+ *
+ *  THE JOIN LINK. This row used to show the date and the raw status and nothing
+ *  else -- no link, no button. That mattered far more than it looks, because
+ *  there was no OTHER route either: the host calendar is a personal Gmail, so
+ *  Google cannot invite the founder as an attendee, and with EMAIL_HOST unset
+ *  our own confirmation email logs instead of sending. A founder could book, pay
+ *  and be confirmed, and never receive the joining link by any path at all.
+ *
+ *  `meeting_link` was in the API response the whole time (CallRead) and simply
+ *  never rendered. Showing it here is the one delivery path that cannot silently
+ *  fail, because it does not depend on mail or on Workspace.
+ *  See docs/DEAD-SETTINGS-AND-CALL-DELIVERY.md. */
 function BookedCalls({ calls }) {
   if (!calls?.length) return null;
+  // Cancelled calls stay listed (a founder should be able to see one was
+  // cancelled), but they must never offer a way in.
+  const joinable = (c) => c.meeting_link && (c.status === 'confirmed' || c.status === 'rescheduled');
   return (
     <div className="dc-booked">
       <h3 className="dc-picker-title">Your calls</h3>
@@ -97,8 +130,22 @@ function BookedCalls({ calls }) {
             })}
           </div>
           <div className="dc-booked-meta">
-            {c.status}{c.timezone ? ` · ${c.timezone}` : ''}
+            {STATUS_COPY[c.status] || c.status}{c.timezone ? ` · ${c.timezone}` : ''}
           </div>
+          {joinable(c) ? (
+            <a
+              className="dc-join"
+              href={c.meeting_link}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Join call
+            </a>
+          ) : c.status === 'pending' ? (
+            <span className="dc-booked-note">
+              We&apos;ll send the joining link once this is confirmed.
+            </span>
+          ) : null}
         </div>
       ))}
     </div>

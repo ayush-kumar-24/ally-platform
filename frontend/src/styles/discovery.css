@@ -285,11 +285,39 @@
   border-radius: 12px;
 }
 .dc-booked-when { font-size: 13.5px; font-weight: 650; color: var(--ink, #16241c); }
-.dc-booked-meta { font-size: 12px; color: var(--muted-2, #6c7a70); text-transform: capitalize; }
+/* No text-transform: the status strings are written sentences now
+   ("Waiting for us to confirm"), not raw enum values needing a capital. */
+.dc-booked-meta { font-size: 12px; color: var(--muted-2, #6c7a70); }
+/* The join link. Deliberately the most prominent thing on the row -- it is the
+   only reliable way a founder gets into a call they have paid for. */
+.dc-join {
+  margin-left: auto;
+  flex-shrink: 0;
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: var(--emerald, #10b981);
+  color: #ffffff;
+  font-size: 12.5px;
+  font-weight: 650;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.dc-join:hover { filter: brightness(1.06); }
+.dc-join:focus-visible { outline: 2px solid var(--forest, #1b4332); outline-offset: 2px; }
+.dc-booked-note {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: 11.5px;
+  color: var(--muted-2, #6c7a70);
+  text-align: right;
+}
 
 .dc-confirm-btn:disabled { opacity: .45; cursor: not-allowed; }
 
 @media (max-width: 560px) {
   .dc-locked-actions { flex-direction: column; }
   .dc-booked-row { flex-direction: column; align-items: flex-start; gap: 6px; }
+  /* Stacked on a phone, so the auto margin that pushed these right on a wide
+     row would otherwise shove them off the left edge of the column. */
+  .dc-join, .dc-booked-note { margin-left: 0; text-align: left; }
 }

@@ -11,7 +11,9 @@
 
 import { get, patch } from './api';
 
-/** {in_app_all, email_reminders, email_report_ready, reduced_motion, private_mode} */
+/** {in_app_all, email_reminders, email_report_ready, reduced_motion}
+ *  private_mode was removed 2026-09-05 -- it described a data use that does
+ *  not exist and nothing read it. See app/schemas/settings.py. */
 export function getNotificationPreferences() {
   return get('/settings/notifications');
 }

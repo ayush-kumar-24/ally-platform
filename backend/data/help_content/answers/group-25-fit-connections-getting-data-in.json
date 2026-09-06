@@ -1,0 +1,198 @@
+{
+  "schema_version": "1.0",
+  "file": "group-25-fit-connections-getting-data-in",
+  "group": "fit-connections-getting-data-in",
+  "group_number": 25,
+  "group_title": "Fit, connections, getting data in",
+  "question_bank": "Founder Question Bank v3 -- group 25 (questions 290-300)",
+  "created": "2026-09-05",
+  "content_rules": {
+    "voice": "Very simple, easy English. Short sentences. Common everyday words. No idioms. Friendly and warm, but plain.",
+    "answer_length": "About 120 words maximum. Short paragraphs with a blank line between them.",
+    "never_name_the_model": "No vendor, no model, anywhere.",
+    "group_specific": "Almost every answer here is no. That is fine -- but it has to be a STATED no with a reason and, where there is one, the nearest thing that does work. A silence reads as 'they have not thought about it'; a bare no reads as 'they do not care'.",
+    "asked_by_the_people_most_likely_to_pay": "These come from founders already running something with tools and data in it. Never answer one with 'not yet' and stop -- say what to do instead today."
+  },
+  "walk_log": {
+    "walked_on": "2026-09-05",
+    "environment": "local dev build, plus a grep sweep of the whole repo for every integration named in this group.",
+    "observed": [
+      "NO integrations of any kind. Searched the entire backend and frontend for Notion, Slack, Zapier, accounting, CRM and banking connections: nothing. The only outbound connection in the product is Google Calendar, for Plan Your Day and discovery calls.",
+      "NO public API. There is no API key issued to founders, no developer documentation and no public surface -- the API exists only for the app itself.",
+      "NO referral programme. Nothing anywhere in the repo mentions referral, invites or credit for bringing another founder.",
+      "NO import path for goals or tasks from another tool. Goals and tasks are created in Ally or from the diagnosis.",
+      "NO offline support. There is no service worker and no PWA manifest, so nothing works without a connection.",
+      "File upload in chat reads PDFs, Word documents, plain text and CSV. It cannot read images, and it is a chat feature only -- there is no path that turns an uploaded document into diagnosis answers.",
+      "The diagnosis asks between 14 and 32 questions depending on stage, and every one must be answered by the founder. Nothing can be pre-filled from a document.",
+      "The framework itself is stage-and-business based, not geography based: nothing in the scoring, the pillars or the root causes is India-specific. Prices are in rupees, support hours are IST, and the knowledge base was built from Indian founder case studies."
+    ],
+    "findings": [
+      "EVERY INTEGRATION ANSWER IS NO, AND FIVE OF THEM ARE MARKED 'DECIDE' IN THE BANK. Connections, Notion/Slack, an API, a referral programme and bringing goals in are all genuinely absent. The answers below say so and offer the nearest working thing. They are written as 'not today' rather than 'never' EXCEPT where saying 'not yet' would be a promise -- see the note on 293.",
+      "QUESTION 290 IS THE ONE WORTH ACTING ON. 'Can I upload my business plan instead of answering all this' is asked by exactly the founder with the least patience and the most to give us -- and the answer is no, because nothing turns a document into diagnosis answers. Ally can already READ a deck in chat. Using an uploaded document to pre-fill or shorten the diagnosis is the highest-value thing on this list and the only one that is close to the existing machinery.",
+      "NO REFERRAL PROGRAMME EXISTS and question 295 is asked by founders who like the product enough to tell someone. That is the cheapest acquisition there is and it is currently answered with 'no, but thank you'. A team decision, not a build problem."
+    ]
+  },
+  "answers": [
+    {
+      "id": 290,
+      "question": "Can I upload my business plan or deck instead of answering all this?",
+      "answer": "No. Every question in the diagnosis has to be answered by you.\n\nThat is deliberate, and it is the whole point. Ally is trying to understand you, not just your business -- how you describe things, what you reach for first, where you hesitate. A document tells us about the company. It does not tell us about the founder, and half of what the diagnosis reads is the founder.\n\nYour plan is still useful, though. Upload it in a conversation and Ally will work through it with you, quote your own numbers back and tell you what it makes of them.\n\nThe diagnosis takes about half an hour, and you can stop and come back.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/ally-chat",
+        "/app/diagnosis"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Team decision 2026-09-05: the diagnosis will not be pre-filled or shortened from an uploaded document, because the system needs to hear from the founder directly. Chat file reading is unaffected and still works for PDFs, Word, plain text and CSV."
+      },
+      "note": "Team decision, 2026-09-05."
+    },
+    {
+      "id": 291,
+      "question": "Can Ally connect to my accounting, CRM or bank data?",
+      "answer": "No, and there is no plan to connect to your bank.\n\nAlly works from what you tell it, not from your systems. Nothing is plugged into your accounts.\n\nFor what it does, that matters less than you would think. The diagnosis asks for rough figures -- roughly what is coming in, roughly how many customers -- and approximate answers are genuinely fine.\n\nIf you want Ally to look at real numbers, export them and upload the file in a conversation. It reads spreadsheets and PDFs, and it can work through your actual figures with you that way.\n\nIf a particular connection would change things for you, tell us which one.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/ally-chat"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Searched the whole repo: no accounting, CRM or banking integration exists. CSV upload in chat is real and was tested -- Ally quoted exact figures from an uploaded file."
+      }
+    },
+    {
+      "id": 292,
+      "question": "Does it work with Notion, Slack, or anything I already use?",
+      "answer": "Not yet. Ally does not connect to Notion, Slack or any other tool.\n\nThe one exception is your calendar. Connect it from Plan Your Day and your tasks go into it, so at least the things you decide to do turn up where you already look.\n\nEverything else is copy and paste for now. Your report downloads as a PDF, so it goes into Notion or a Drive folder easily enough.\n\nIf there is one tool you would genuinely use this with, tell us which. We are keeping a list, and it is short enough that a few votes decide it.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/plan"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Google Calendar is the only outbound integration in the product. No Notion, Slack or Zapier code exists anywhere."
+      }
+    },
+    {
+      "id": 293,
+      "question": "Is there an API?",
+      "answer": "No. There is no public API and nothing you can build against.\n\nAlly's data moves in and out two ways: your report downloads as a PDF, and the Privacy Center gives you a full JSON export of everything we hold, which is machine-readable if you want to do something with it.\n\nFor most people that export is the thing they actually wanted.\n\nIf you have a real use for an API, please tell us what you would do with it. That is the sort of thing we would build for a reason and not on spec.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/profile"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "There is no public API surface, no founder-facing API key and no developer documentation. The privacy export is genuine machine-readable JSON."
+      },
+      "note": "Deliberately does NOT say 'not yet'. An API is a long-term commitment to a contract, and 'not yet' from a support bot is how a roadmap promise gets made by accident."
+    },
+    {
+      "id": 294,
+      "question": "Can I bring my existing goals in from another tool?",
+      "answer": "Not automatically. There is no import.\n\nYou would need to type them in on the Goals page, which is genuinely quick for the handful that matter.\n\nAnd honestly, that is not the worst thing. Most founders arrive with a list of twenty goals from somewhere else, and the useful exercise is deciding which three are real. Ally is built around a small number of things you are actually going to do.\n\nIf you are moving from another tool and have a long list, bring it to a conversation with Ally and work out which ones to keep.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/goals",
+        "/app/ally-chat"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "No import path exists for goals or tasks. Goals are created in Ally or come out of the diagnosis."
+      }
+    },
+    {
+      "id": 295,
+      "question": "Can I refer another founder? Do I get anything for it?",
+      "answer": "Please do tell them about us -- but there is no referral scheme, so there is nothing in it for you at the moment. No code to share, no credit, no discount.\n\nWhat there is: our first 100 founders get benefits and coupons as a thank-you for being early. If you are one of them, that comes to you automatically -- there is nothing to claim.\n\nIf a proper referral scheme would make you tell more people, say so. That is the kind of thing that gets built when enough people ask.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/feedback"
+      ],
+      "verified": {
+        "walked_on": "2026-09-06",
+        "how": "Team decision 2026-09-06: no referral programme; the first 100 users receive benefits and coupons instead. Confirmed that nothing in the repo implements referrals."
+      },
+      "finding": "The first-100 benefit is a promise with no mechanism behind it yet. Nothing in the catalog or the credits system grants anything to early founders automatically. Somebody needs to decide what they get and how it is applied before the 100th signup, not after.",
+      "note": "Team decision, 2026-09-06."
+    },
+    {
+      "id": 296,
+      "question": "I'm a nonprofit / an agency / a one-person practice. Does the model still apply?",
+      "answer": "Mostly yes, with one honest caveat.\n\nAlly is built around a founder and the organisation they are running. That much fits a nonprofit, an agency or a practice of one as well as it fits a startup. The questions about clarity, focus, what only you can decide and what is actually stuck are the same questions.\n\nThe caveat is revenue. Some of what Ally looks at assumes money coming from customers. If you are grant-funded, or your income works differently, that part will fit less well and the report will be thinner there.\n\nEverything about you as the person running it applies exactly the same.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/guided/profile"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "The framework is stage-and-business based. Revenue Maturity is one of six pillars and is scoped out at early stages, so a founder without conventional revenue gets a report weighted to the other five rather than a broken one."
+      }
+    },
+    {
+      "id": 297,
+      "question": "My cofounder reads the business completely differently. Can Ally handle that?",
+      "answer": "Not in one account, no. Ally hears one voice -- whoever answered the questions.\n\nSo the report reflects how you see the business. If your cofounder would have answered differently, that difference does not appear anywhere, and the report is not the neutral referee between you.\n\nThere are two things worth doing. Read the report together and mark where they would have answered differently -- that disagreement is usually more useful than the report itself. And bring it to a discovery call, where a person can hold both readings at once.\n\nA proper two-founder version does not exist yet.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/report",
+        "/app/discovery-call"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "One diagnosis per account, answered by one founder. There is no multi-user account, no cofounder access and no way to record a second set of answers. Consistent with answers 31, 200 and 201."
+      }
+    },
+    {
+      "id": 298,
+      "question": "Does this work on slow or patchy internet?",
+      "answer": "Mostly, but it will feel slow in two places.\n\nAlly's replies arrive a piece at a time, so on a weak connection they come in slowly rather than failing. That part copes.\n\nThe two heavy moments are your Compass, which loads a lot at once, and downloading your report as a PDF.\n\nIf a page does not load, refreshing usually fixes it. Nothing is lost when a connection drops -- your diagnosis answers are saved one at a time as you send them, so you never go back to the beginning.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Answers are persisted individually on submit, so a dropped connection costs at most the answer in flight. Compass is the heaviest page in the product and the report PDF is the largest single download."
+      }
+    },
+    {
+      "id": 299,
+      "question": "Does any of it work offline?",
+      "answer": "No. Ally needs a connection for everything.\n\nThere is nothing stored on your device to fall back on, so with no internet you will not be able to open it at all.\n\nThe one thing you can keep offline is your report. Download it as a PDF and it is yours to read on a plane or anywhere else.\n\nIf you know you are going to be without a connection, download it first.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/report"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "No service worker and no PWA manifest exist, so there is no offline capability of any kind. The report PDF is the only artefact a founder can keep locally."
+      }
+    },
+    {
+      "id": 300,
+      "question": "Everything is in rupees and Indian examples. Does it hold up for a business abroad?",
+      "answer": "The thinking does. The furniture around it is Indian.\n\nWhat Ally actually measures -- your clarity, your market, how your revenue works, whether too much depends on you -- is not specific to any country. A founder in Berlin gets the same six areas and the same kind of root cause.\n\nWhat is Indian is the surroundings. Prices are in rupees, support runs on India time, and the case studies behind the framework are Indian businesses. So some examples will feel local.\n\nNothing checks where you are, so it works wherever you sit. If you are outside India and thinking of paying, write to us first.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/help"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Nothing in the scoring, the six pillars or the root-cause rules is geography-dependent. Prices are INR, support hours are IST, and the knowledge base was built from Indian founder case studies. Consistent with answer 234."
+      }
+    }
+  ]
+}

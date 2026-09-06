@@ -16,6 +16,9 @@ const LINKS = [
   { to: '/admin', label: 'Dashboard', end: true, capability: 'view_users' },
   { to: '/admin/users', label: 'Users', capability: 'view_users' },
   { to: '/admin/usage', label: 'Usage', capability: 'view_users' },
+  // Support sees this too -- answering a call request is a scheduling decision
+  // about the team's own diary, not account administration.
+  { to: '/admin/calls', label: 'Calls', capability: 'manage_discovery_calls' },
   { to: '/admin/audit', label: 'Audit Log', capability: 'view_audit' },
   { to: '/admin/system', label: 'System', capability: 'view_users' },
 ];

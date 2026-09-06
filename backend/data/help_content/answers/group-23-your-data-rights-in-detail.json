@@ -1,0 +1,199 @@
+{
+  "schema_version": "1.0",
+  "file": "group-23-your-data-rights-in-detail",
+  "group": "your-data-rights-in-detail",
+  "group_number": 23,
+  "group_title": "Your data rights, in detail",
+  "question_bank": "Founder Question Bank v3 -- group 23 (questions 269-279)",
+  "created": "2026-09-05",
+  "supersedes": "The 269-279 entries in account-settings-privacy.json. This file is canonical for group 23.",
+  "content_rules": {
+    "voice": "Very simple, easy English. Short sentences. Common everyday words. No idioms. Friendly and warm, but plain.",
+    "answer_length": "About 120 words maximum. Short paragraphs with a blank line between them.",
+    "never_name_the_model": "No vendor, no model, anywhere.",
+    "group_specific": "Seven privacy actions, several of which sound identical and one of which cannot be undone. Every answer must say plainly what happens, what does NOT happen, and whether it can be reversed.",
+    "must_match_the_published_policy": "These answers are read alongside the Privacy Policy. Where the policy says something, the answer must not say something different -- a founder who catches a contradiction between the two stops believing either."
+  },
+  "walk_log": {
+    "walked_on": "2026-09-05",
+    "environment": "local dev build, the Privacy Center walked in a browser, and the published Privacy Policy and Terms of Service read in full.",
+    "observed": [
+      "'Download my data' returns 23 sections / 183 records. 'Export for portability' returns 11 sections / 126 records -- only what the founder supplied, leaving out Ally's own analysis. Both download immediately as JSON.",
+      "'View data summary' shows counts grouped into six founder-facing categories, on screen, with nothing downloaded.",
+      "'Request data correction' is the only action that queues for a person. Everything else is served immediately.",
+      "Restricting processing returns a clear 403 on chat and on starting a diagnosis, and changes nothing else. Verified by running it.",
+      "SELF-SERVE DELETION CANCEL EXISTS. DeletionPendingGate is mounted in PlatformLayout: signing in during the 30-day window shows a blocking prompt with a 'Cancel deletion & continue' button. The question bank's note that there is no self-serve cancel is out of date.",
+      "Privacy Policy section 6: identifiable data erased or anonymised within 30 days of account deletion; financial records kept 7 years as Indian law requires; anonymised aggregated diagnostic data may be kept indefinitely.",
+      "Privacy Policy section 7 lists six DPDP rights: access, correction, erasure, grievance redressal, withdraw consent, and nominate.",
+      "A Grievance Officer is properly named on the Privacy Policy page -- Ayush Kumar, Founder & Chief Data Officer, GoXL Consulting Solutions Pvt. Ltd., Bangalore.",
+      "The Privacy Policy claims DPDP Act 2023 and IT Act 2000 compliance. GDPR IS NOT MENTIONED ANYWHERE in either document.",
+      "Privacy Policy section 5(b) discloses that anonymised diagnostic data may be processed by third-party LLM providers under data handling agreements -- the category, without naming a vendor.",
+      "Privacy Policy section 8 claims TLS 1.3 in transit and AES-256 at rest."
+    ],
+    "findings": [
+      "THE PRIVACY POLICY ALREADY CLAIMS AES-256 ENCRYPTION AT REST, and nobody has confirmed it on production RDS or S3. Answer 246 deliberately did not make that claim because it could not be verified from here -- but the policy makes it publicly, in writing, to every founder who reads it. That turns Check 6 in docs/PRODUCTION-RDS-CHECKS.md from 'worth confirming' into 'we have already promised this'. Confirm it or change the policy.",
+      "GDPR IS NOWHERE. Question 278 asks about DPDP AND GDPR. The policy claims DPDP and the IT Act and says nothing about GDPR at all. The answer below says so plainly rather than implying a compliance we have not claimed. If any founder in the EU is ever taken on, this needs a real answer first.",
+      "QUESTION 209 IS NOW ANSWERABLE. It was left open because 'does what I type go to an outside AI company' collided with the rule never to name a model. The Privacy Policy already answers it at the right level -- anonymised diagnostic data may be processed by third-party LLM providers under data handling agreements. That discloses the category without naming a vendor, which is exactly what was needed. Answer 209 has been written from it."
+    ]
+  },
+  "answers": [
+    {
+      "id": 269,
+      "question": "What's the difference between \"download my data\" and \"export for portability\"?",
+      "answer": "They give you two different files.\n\n\"Download my data\" gives you everything we hold. That includes what Ally worked out about you -- your reports, the root causes it found, and what it remembers about your business.\n\n\"Export for portability\" gives you only what you gave us. Your answers, your goals, your tasks, your conversations and your profile. It leaves out Ally's own analysis, because that is the part you would not be taking anywhere else.\n\nBoth are JSON files, both download straight away, and both are in Profile, then Privacy Center.\n\nIf you just want a copy of everything, use the first one.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/profile"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Ran both: access returns 23 sections and 183 records; portability returns 11 sections and 126 records, covering only founder-supplied data."
+      }
+    },
+    {
+      "id": 270,
+      "question": "What does \"view data summary\" show me?",
+      "answer": "It shows how much we hold, not what it says.\n\nYou get counts, grouped into six plain headings: your profile and settings, your diagnosis, your reports and what Ally worked out, your conversations, your goals and tasks, and your account record.\n\nIt appears on screen. Nothing downloads, and nothing changes.\n\nIt is meant as a quick look before you decide whether to download the full thing. If you want to read the actual data, use \"Download my data\" on the same page.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/profile"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Ran it: 186 records grouped into six categories plus a catch-all, and the categories reconcile to the total so a new kind of record cannot quietly go missing."
+      }
+    },
+    {
+      "id": 271,
+      "question": "I want a fact corrected. Will that change my report?",
+      "answer": "We will correct the fact. Your report will not change.\n\nUse \"Request data correction\" in the Privacy Center and tell us what is wrong and what it should say. A person reads it and fixes the record.\n\nYour report is different. It was written from your answers on the day you did the diagnosis, and it stays as it was -- a record of that moment, not a live document. Correcting a fact now does not rewrite it, and we will not pretend it does.\n\nIf the fact was central to what Ally concluded, say so in the request. That is worth a conversation rather than a correction.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/profile"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "'Request data correction' is the one Privacy Center action that queues for a human. Reports are immutable once generated -- nothing anywhere regenerates one, consistent with answer 69."
+      }
+    },
+    {
+      "id": 272,
+      "question": "What does \"restrict data processing\" stop, exactly?",
+      "answer": "It stops Ally thinking about you, and nothing else.\n\nWhile it is on, you cannot send messages to Ally or start a diagnosis. Both stop with a notice telling you to resume from the Privacy Center.\n\nEverything you already have stays exactly as it is. Your account is active, your report is readable, your goals and tasks are all there, and nothing is deleted.\n\nIt is a pause, not a decision. You can turn it back on whenever you like and it takes effect straight away.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/profile"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Tested live: with processing restricted, a chat message returns a clear refusal naming the Privacy Center. Nothing stored is affected and resuming restores normal function immediately."
+      }
+    },
+    {
+      "id": 273,
+      "question": "What's the difference between restricting processing and withdrawing consent?",
+      "answer": "One is a pause. The other is a decision.\n\nRestricting processing is a switch. Ally stops analysing anything new until you turn it back on. Use it if you want a break, or you are thinking something over.\n\nWithdrawing consent takes away our permission to analyse your data at all. It is the formal version, and it is your right under the law.\n\nIn practice they stop the same things: no new chat, no new diagnosis. Neither deletes anything, and neither closes your account.\n\nIf you are unsure which you want, restrict processing. It is the reversible one.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/profile"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Both surface in the Privacy Center and both block the same two operations. Neither deletes anything or deactivates the account. The right to withdraw consent is section 7(e) of the published Privacy Policy."
+      }
+    },
+    {
+      "id": 274,
+      "question": "If I withdraw consent, do I lose my report?",
+      "answer": "No. Your report stays and you can still read it.\n\nWithdrawing consent stops new analysis. It does not delete anything you already have. Your report, your Founder DNA, your goals and your past conversations are all still there.\n\nWhat stops is Ally doing anything new with your data -- no new messages, no new diagnosis.\n\nIf you want the report gone as well, that is account deletion, which is a separate action on the same page and has a 30-day window before it becomes permanent.\n\nAnd if you change your mind, you can give consent again.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/profile",
+        "/app/report"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Withdrawing consent revokes the basis for new processing and leaves every existing record intact. Deletion is a separate action with its own 30-day grace window."
+      }
+    },
+    {
+      "id": 275,
+      "question": "I paused processing. How do I start it again?",
+      "answer": "Go to Profile, then Privacy Center. There is an amber banner at the top with a Resume button.\n\nPress it and Ally starts working normally again straight away. There is no waiting and nothing to confirm.\n\nIf you cannot see the banner, you are probably not paused any more -- try sending Ally a message and see whether it answers.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/profile"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Tested live: the amber banner carries a Resume control and lifting the restriction restores chat and diagnosis immediately."
+      }
+    },
+    {
+      "id": 276,
+      "question": "I scheduled deletion by mistake. Can I stop it?",
+      "answer": "Yes, and you can do it yourself. Just sign in.\n\nWhile your deletion is scheduled, signing in shows you a message about it with a button that says \"Cancel deletion & continue\". Press that and your account carries on as normal.\n\nNothing has been erased in the meantime. The 30-day window exists precisely so a mis-click is recoverable.\n\nYou do not need to email anybody. If the button does not work for you, then write to us -- but it should.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/profile"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Verified: DeletionPendingGate is mounted in PlatformLayout and shows a blocking prompt with a one-click 'Cancel deletion & continue' during the grace window."
+      },
+      "note": "The question bank recorded this as 'no self-serve cancel, the banner says contact support'. That was true of the COPY, which has since been corrected -- the button itself has existed throughout."
+    },
+    {
+      "id": 277,
+      "question": "How long do I have to change my mind?",
+      "answer": "Thirty days from the day you ask for deletion.\n\nUntil that date your account works completely normally and nothing has been removed. Sign in any time before it and you will be offered the chance to cancel.\n\nAfter that date it is permanent. Your data is erased or made anonymous, and it cannot be brought back.\n\nTwo things outlive it, and only because the law requires it: financial records are kept for seven years, and anything already made anonymous -- which cannot be traced back to you -- may be kept.\n\nIf you want a copy of anything, download it before the date.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/profile"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Matches the published Privacy Policy section 6 word for word: erasure or anonymisation within 30 days, financial records retained 7 years under Indian law, anonymised data retained indefinitely."
+      }
+    },
+    {
+      "id": 278,
+      "question": "Is Ally actually DPDP and GDPR compliant, or just saying so?",
+      "answer": "DPDP yes. GDPR does not apply to us, and we would rather say so than imply it.\n\nOur Privacy Policy is written to India's Digital Personal Data Protection Act 2023 and the IT Act 2000. That is not just a sentence: the rights it gives you are built and working. You can download your data, export it, ask for a correction, pause processing, withdraw consent and delete your account, all from the Privacy Center, and most happen immediately.\n\nWe also name a Grievance Officer, which the DPDP Act requires.\n\nAlly is for founders in India at the moment, which is why GDPR is not something we claim.\n\nWe have not been independently audited. If you need that for a compliance review, ask us and we will tell you exactly where we stand.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/profile",
+        "/privacy"
+      ],
+      "verified": {
+        "walked_on": "2026-09-06",
+        "how": "Team decision 2026-09-06: DPDP only, and users are India-based for now, so GDPR is deliberately out of scope. Privacy Policy claims DPDP 2023 and IT Act 2000 and names a Grievance Officer. Every right listed was exercised during the walk."
+      },
+      "note": "Team decision, 2026-09-06."
+    },
+    {
+      "id": 279,
+      "question": "You say requests are reviewed within 30 days. Why does it take that long?",
+      "answer": "For most things it does not. Thirty days is the legal maximum, not our normal speed.\n\nDownloading your data, exporting it, viewing the summary, pausing processing and withdrawing consent all happen the moment you press the button. Nothing waits for anybody.\n\nThe one that genuinely needs a person is a data correction, because somebody has to check what is wrong and fix the right record. Those are usually done in a few days.\n\nThe thirty days is there so that a hard request, or one that arrives while somebody is away, still has a promise attached to it.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/profile"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Walked all seven Privacy Center actions: six are served immediately, and only 'Request data correction' queues for a human."
+      }
+    }
+  ]
+}

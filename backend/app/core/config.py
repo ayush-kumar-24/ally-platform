@@ -118,6 +118,21 @@ class Settings(BaseSettings):
     # a specific environment genuinely needs it off.
     PLAN_ENFORCEMENT_ENABLED: bool = True
 
+    # --- Public launch -------------------------------------------------------
+    # Nothing is free once we launch. Until then Free carries almost the whole
+    # product, because the people using it are our own testers and gating them
+    # out mid-test would be worse than leaving it open.
+    #
+    # Flipping this to True empties the Free tier: a founder without a paid plan
+    # gets no product features and is sent to the plans page to choose one. It is
+    # a switch rather than a code change so launch day is a deploy setting, not a
+    # release, and so it can be put back inside a minute if something is wrong.
+    #
+    # BEFORE FLIPPING IT: move the existing testers onto a real plan, or they
+    # lose access at the same moment everyone else does. One UPDATE on
+    # founders.plan_type -- see docs/PUBLIC-LAUNCH-CHECKLIST.md.
+    PUBLIC_LAUNCH: bool = False
+
     # Founder-archetype assignment via LLM. Off => the deterministic lexical
     # match, which its own docstring calls a heuristic. The LLM chooses from the
     # same seeded catalogue and falls back to the lexical engine on any failure.

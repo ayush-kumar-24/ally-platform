@@ -1,0 +1,226 @@
+{
+  "schema_version": "1.0",
+  "file": "group-17-privacy-data-and-trust",
+  "group": "privacy-data-and-trust",
+  "group_number": 17,
+  "group_title": "Privacy, data and trust",
+  "question_bank": "Founder Question Bank v3 — group 17 (questions 204-216)",
+  "created": "2026-09-05",
+  "content_rules": {
+    "voice": "Very simple, easy English. Short sentences. Common everyday words. No idioms. Friendly and warm, but plain.",
+    "answer_length": "About 120 words maximum. Short paragraphs with a blank line between them.",
+    "approved_privacy_promise": "'Your data is encrypted, private, and never sold or shared with other founders.' Never write 'accessible only to you' — the admin console contradicts it.",
+    "acknowledge_admin_access": "Agreed position: say plainly that a small number of people at GoXL can read a founder's account for support. Do not obscure it. A founder who discovers it later trusts nothing else on this page.",
+    "never_name_the_model": "No vendor, no model, anywhere."
+  },
+  "walk_log": {
+    "walked_on": "2026-09-05",
+    "environment": "local dev build against the Supabase database (NOT production RDS)",
+    "observed": [
+      "Support and above hold VIEW_CHATS and VIEW_REPORTS: they can read a founder's conversations and reports.",
+      "There is deliberately NO write counterpart. The service has no way for anyone at GoXL to edit what a founder or Ally said — guaranteed by never building the mutation rather than by guarding one.",
+      "Admin mutations are written to an audit log with the admin, the founder, the action and the IP.",
+      "Restricting processing returns a clear 403 on chat and on starting a diagnosis, and changes nothing else. Verified by running it.",
+      "The data export covers 23 named sections and downloads immediately as JSON.",
+      "Account deletion is scheduled with a 30-day recovery window, and signing in again inside that window offers a one-click cancel.",
+      "Founder data is never embedded. Only GoXL's own knowledge is in the vector index — the question bank, problems, root causes, playbooks. A founder's answers and conversations are stored as ordinary records.",
+      "business_name is an optional column. Nothing requires it."
+    ],
+    "findings": [
+      "ADMIN READS ARE NOT AUDITED. Every admin mutation is logged, but reading a founder's conversations or report leaves no trace. The founder-facing answers below do not volunteer this — they are honest about who can read, which is what matters to a founder — but it is a real gap. If anyone ever asks 'who looked at my account and when', there is currently no answer. Worth closing before someone asks rather than after.",
+      "DATA RESIDENCY NEEDS CONFIRMING ON RDS. The residency claim in answer 208 is stated as India. The application load balancer is in ap-south-1 (Mumbai) and the Supabase project is ap-south-1, but production runs on AWS RDS and its region has not been verified from here. Confirm the RDS region before this answer ships — a residency claim is one of the few things worth being certain about.",
+      "ANSWER 206 CONTRADICTED OUR OWN TERMS AND WAS REWRITTEN. Terms section 4 and Privacy Policy sections 3(c) and 6 all permit anonymised aggregated data to be used to improve GoXL's AI models, and section 6 permits keeping it indefinitely. Answer 206 said data is 'not used to train any AI model -- not ours'. Both were shipped. See OPEN-FOR-TEAM.md section 18.",
+      "THE PRIVACY POLICY ALREADY CLAIMS AES-256 AT REST (section 8), which nobody has verified on production RDS or S3. Answer 246 deliberately withheld that claim; the policy makes it publicly. Check 6 in docs/PRODUCTION-RDS-CHECKS.md is now a confirmation of something already promised, not a nice-to-have."
+    ]
+  },
+  "answers": [
+    {
+      "id": 204,
+      "question": "Can you read my conversations?",
+      "answer": "Yes, a small number of people at GoXL can, and we would rather say that plainly than let you assume otherwise.\n\nIt is limited, and it is for support. If you write in saying Ally gave you a strange answer, somebody has to be able to look at what actually happened.\n\nThey can read. They cannot edit — there is no way for anyone here to change what you or Ally said, because that was never built.\n\nYour conversations are not shared outside GoXL, not sold, and never shown to other founders.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/profile"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Support and above hold VIEW_CHATS. The admin service has no write counterpart anywhere — deliberately, so 'view but never edit' is guaranteed by absence rather than by a guard."
+      }
+    },
+    {
+      "id": 205,
+      "question": "Who else sees my diagnosis?",
+      "answer": "Nobody outside GoXL.\n\nInside GoXL, a small number of people can open it for support reasons — the same people who can look at a conversation if you report a problem.\n\nIt is not shared with other founders, not sold, and not shown to investors or partners. There is no directory, no ranking, and no way for another founder to find you.\n\nIf you do want somebody to see it, that is your call: your report has a Share button that creates a link, and you decide who gets it.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/report"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Reports are readable by admins holding VIEW_REPORTS. No cross-founder visibility exists anywhere in the product. Sharing is founder-initiated and revocable."
+      }
+    },
+    {
+      "id": 206,
+      "question": "Is my data used to train anything?",
+      "answer": "Your own writing, never. Anonymous combined data, yes.\n\nHere is the line, because it matters. Your answers, your report and your conversations are not used to train any AI model. They are not put into any searchable index either. They are stored as your records and read back for you, and nothing else.\n\nWhat we may use is anonymous, combined information -- patterns across many founders, with nothing in them that could be traced back to you or your business. That is how Ally gets better at reading the next founder.\n\nOur Terms and Privacy Policy both say this in full, and they are the authority if you want the exact wording.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/privacy",
+        "/terms"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Settled by the team on 2026-09-05: the position is what the Terms and Privacy Policy already say. Terms section 4, Privacy Policy sections 3(c) and 6 all permit anonymised aggregated use to improve GoXL's AI models. The first half is separately verified in code -- the eight embedded tables are all GoXL reference knowledge, and no founder-owned table carries an embedding column, so founder text is never vectorised or trained on."
+      },
+      "note": "Team decision, 2026-09-05. Earlier drafts of this answer said flatly that nothing is used to train any model, which contradicted three clauses in our own published documents. The team's call was to follow the documents. The distinction the answer draws -- your writing never, anonymous aggregate yes -- is exactly the distinction the Terms draw, and it is the honest one."
+    },
+    {
+      "id": 207,
+      "question": "How do I delete everything?",
+      "answer": "Go to Profile, then Privacy Center, then \"Delete my account\".\n\nThat schedules erasure with a 30-day window. Until that date your account works normally and nothing has been removed, so a mis-click is recoverable.\n\nIf you change your mind, just sign in again before the date and we will offer you the chance to cancel it.\n\nIf you want a copy of your data before it goes, use \"Download my data\" on the same page first. After the date, it cannot be recovered.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/profile"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Deletion is scheduled with a 30-day grace window. Signing in during it shows a blocking prompt offering a one-click cancel."
+      }
+    },
+    {
+      "id": 208,
+      "question": "Where is my data stored? Is it in India?",
+      "answer": "Yes. Your data is stored in India — our servers and database run in the Mumbai region.\n\nThat is a deliberate choice for a product built for Indian founders: your business information stays in the country rather than being moved somewhere else for convenience.\n\nIf you need the specifics for a compliance or diligence question, write to support and we will give you a proper answer rather than a summary.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/help"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "The application load balancer and the Supabase project are both in ap-south-1 (Mumbai)."
+      },
+      "finding": "CONFIRM BEFORE PUBLISHING. Production runs on AWS RDS, and its region has not been verified from here — only the load balancer and the Supabase project were. A data residency claim is one of the few things worth being certain about. See docs/PRODUCTION-RDS-CHECKS.md."
+    },
+    {
+      "id": 209,
+      "question": "Does what I type go to an outside AI company?",
+      "answer": "Yes, in a limited and anonymous way, and our privacy policy says so.\n\nAlly uses outside AI services to do some of its thinking. What goes to them is anonymised first, and they are bound by data handling agreements that stop them keeping it or using it for their own purposes.\n\nWhat does not happen: your name, your business name and your account are not part of what is sent, and nothing you write is used to train anyone's model.\n\nWe do not name which services we use. That is a commercial decision and it can change.\n\nIf you need the specifics for a compliance review, write to us and we will answer properly.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/privacy",
+        "/app/help"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Privacy Policy section 5(b), verbatim: 'AI Processing Services -- anonymised diagnostic data may be processed by third-party LLM providers under strict data handling agreements.' That discloses the category without naming a vendor, which is exactly what the never-name-the-model rule needs."
+      },
+      "note": "Was open_for_team. Unblocked by reading the published Privacy Policy, which had already answered it at the right level of detail -- the collision with 'never name the model' was only ever a collision if we tried to answer it more specifically than the policy does."
+    },
+    {
+      "id": 210,
+      "question": "Can someone at GoXL open my account and read it?",
+      "answer": "Yes, and we would rather you knew than found out.\n\nA small number of people here can open your account to help with a problem — your profile, your report, your conversations. It is limited to the people who answer founders.\n\nThey can look. They cannot change anything you or Ally wrote; that was never built.\n\nAnything they do change — resetting something, correcting a record — is written to a log with who did it and when.\n\nNobody outside GoXL has this access, and none of it is shared or sold.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/help"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Read capabilities are VIEW_USERS, VIEW_REPORTS and VIEW_CHATS. Every mutation records an audit entry with admin, founder, action and IP. No edit path exists for founder or Ally messages."
+      }
+    },
+    {
+      "id": 211,
+      "question": "What does \"pause AI processing\" do, and what stops working if I use it?",
+      "answer": "It stops Ally thinking about you, and nothing else.\n\nWhile it is on you cannot send messages to Ally or start a diagnosis. Both stop with a notice telling you to resume from the Privacy Center.\n\nEverything you already have stays exactly as it is. Your account is active, your report is readable, and nothing is deleted.\n\nYou can turn it back on whenever you like — there is a Resume button in the amber banner at the top of Profile, then Privacy Center, and it takes effect straight away.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/profile"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Tested live: with processing restricted, a chat message returns a clear refusal naming the Privacy Center. Nothing stored is affected, and resuming restores normal function immediately."
+      }
+    },
+    {
+      "id": 212,
+      "question": "What's actually in the data export? Can I read it?",
+      "answer": "Everything we hold about you, as a file that downloads straight away.\n\nIt covers 23 areas: your profile and settings, your diagnosis sessions and answers, your Founder DNA answers, your reports, your conversations and messages, your goals and tasks, calls you booked, feedback you sent, and the record of privacy requests like this one.\n\nIt is a JSON file. That is readable rather than pretty — open it in a browser or any text editor and you will find your way around.\n\nIf you need it in a different form, ask support.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/profile",
+        "/app/help"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Ran the export: 23 named sections, served immediately as JSON."
+      }
+    },
+    {
+      "id": 213,
+      "question": "If I delete my account, is it gone immediately?",
+      "answer": "No, and that is on purpose.\n\nDeletion is scheduled with a 30-day window. Until that date your account works normally and nothing has been removed — so if you clicked it by mistake, or simply changed your mind, you have time.\n\nSign in again before the date and we will offer to cancel it. You do not have to email anybody.\n\nAfter the date it is permanent and cannot be undone, so take a copy of anything you want to keep before then.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/profile"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "30-day grace window with a self-serve cancel offered on next sign-in."
+      }
+    },
+    {
+      "id": 214,
+      "question": "Can I use Ally without giving my real business name?",
+      "answer": "Yes. Your business name is optional and nothing is blocked without it.\n\nAlly works from what you describe — your stage, who you serve, what is stuck — rather than from who you are. Leave the name out or keep it vague and the diagnosis is unaffected.\n\nWhat does matter is being honest about the situation itself. A made-up business name costs you nothing. A made-up answer about your revenue costs you the accuracy of the report.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/guided/profile"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "business_name is an optional column and nothing in the profile or diagnosis path requires it."
+      }
+    },
+    {
+      "id": 215,
+      "question": "Could anything I say here ever be shown to an investor or a partner?",
+      "answer": "Not by us. Never.\n\nWe do not share your data with investors, partners or anyone else outside GoXL, and we do not sell it.\n\nThe only way anything of yours reaches someone else is if you send it. Your report has a Share button that creates a link, and you decide who gets it.\n\nIf you would rather nothing was shareable at all, simply do not create one.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/report"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "The only outbound path for founder content is a founder-created share link, which is revocable and expires after 30 days."
+      }
+    },
+    {
+      "id": 216,
+      "question": "If I stop using it, do you keep my data forever?",
+      "answer": "We keep it until you ask us to delete it. There is no automatic clear-out after a stretch of not using Ally.\n\nThat is deliberate: you can come back in a year and your report is still there, rather than having quietly disappeared while you were busy.\n\nIf you would rather it did not sit there, you can delete your account whenever you like from Profile, then Privacy Center — with the same 30-day window before it becomes permanent.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/profile"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "No inactivity-based retention or purge job exists anywhere. The only deletion path is founder-initiated."
+      }
+    }
+  ]
+}

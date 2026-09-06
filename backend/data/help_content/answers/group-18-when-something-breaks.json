@@ -1,0 +1,212 @@
+{
+  "schema_version": "1.0",
+  "file": "group-18-when-something-breaks",
+  "group": "when-something-breaks",
+  "group_number": 18,
+  "group_title": "When something breaks",
+  "question_bank": "Founder Question Bank v3 -- group 18 (questions 217-228)",
+  "created": "2026-09-05",
+  "content_rules": {
+    "voice": "Very simple, easy English. Short sentences. Common everyday words. No idioms. Friendly and warm, but plain.",
+    "answer_length": "About 120 words maximum. Short paragraphs with a blank line between them.",
+    "never_name_the_model": "No vendor, no model, anywhere.",
+    "group_specific": "A founder reading this group is already annoyed. Every answer must (a) say what is actually happening, (b) give one thing to try, (c) say what to tell us if that fails. Never say 'try again later' and stop there.",
+    "never_blame_the_founder": "Where the product is at fault, say so. 'We know, and we are working on it' costs nothing and is the only honest line when the cause is ours."
+  },
+  "walk_log": {
+    "walked_on": "2026-09-05",
+    "environment": "local dev build (backend on :8000, frontend on :3000) against the Supabase database. NOT production RDS.",
+    "observed": [
+      "Avatar upload: POST /profile/avatar accepts PNG, JPEG and WEBP up to 5MB. Live test returned 201 for a PNG and 422 for a GIF, naming the accepted types. HEIC is neither accepted nor in the picker's accept list.",
+      "Calendar OAuth callback always redirects, never returns JSON, and carries one of four outcomes back to Plan Your Day: connected, cancelled, or an error with a readable sentence ('Link expired', 'Google refused the connection', 'Could not save the connection').",
+      "The Thinking screen polls for the report every 4 seconds and, after about 2 minutes, replaces its own copy with 'This is taking longer than usual. Your answers are saved.' It does not spin forever.",
+      "Diagnosis answers are persisted one at a time on submit, and the submit path is idempotent on resume ('Answer already saved; resuming the progress-update step').",
+      "Sessions: 30-minute access token, 30-day rotating refresh cookie, single-flight automatic refresh on any 401. Being signed out mid-diagnosis is genuinely unusual.",
+      "Report page on an account with no diagnosis renders a proper empty state (\"Your report isn't ready yet\") with a Start Founder Diagnosis button. The only blank moment is the load itself.",
+      "Mobile, 375x812: /app, /app/report and /app/ally-chat all render with zero horizontal overflow (scrollWidth == innerWidth on each) and the sidebar collapses to a menu button.",
+      "Compass took several seconds to fill in on a warm local build -- the slowest page in the product, consistent with the pool contention traced earlier.",
+      "Feedback: the written note and the star rating both POST to the same endpoint and land in founder_feedback, which the team reads. The note used to be a frontend-only mailto: handoff.",
+      "Help & Support states info@goxl.in, Mon-Fri 9 AM - 6 PM IST, and 'We aim to reply within one working day.'",
+      "Measured real token cost from the database: 54 messages averaging 1,305 tokens each, largest 2,776. Daily usage rows average 3,159 tokens, largest 8,189."
+    ],
+    "findings": [
+      "PLUS (Rs 450) GIVES ABOUT TWO OR THREE MESSAGES A DAY. Its daily ceiling is 3,500 tokens and a measured average message costs 1,305. Pro's 8,000 is about six, and a real founder-day has already exceeded it (8,189 recorded). Question 224 is 'it says I've hit a limit and I've only just started' -- on Plus that complaint will be literally true, on the first sitting, from a founder who has just paid. No wording fixes this. The ceiling does.",
+      "HEIC PHOTOS CANNOT BE UPLOADED AND CANNOT EVEN BE PICKED. The avatar picker's accept list is PNG/JPEG/WEBP, so on an iPhone the founder's own photos are greyed out in the file chooser with no explanation -- there is not even an error message to read. Either accept HEIC server-side and convert, or put one line of help text next to the button. This is question 219, and it was hit in our own testing.",
+      "NO STATUS PAGE. Every answer in this group ends with 'write to us'. When something is broken for everyone at once, that turns one outage into a hundred separate support conversations. Not urgent before launch, but it is the fallback for all twelve of these."
+    ]
+  },
+  "answers": [
+    {
+      "id": 217,
+      "question": "I uploaded a file and Ally says it can't see it.",
+      "answer": "Ally can read documents. It cannot read pictures.\n\nPDFs, Word files, plain text and CSV all work. Ally reads what is inside them and can quote your own numbers back to you.\n\nImages are different. A PNG, a JPEG or a screenshot will upload, but Ally cannot see what is in it. The same is true of a photo or a scan of a document.\n\nIf your file is a picture, the quickest fix is to type the important part into the chat, or upload the original document instead of a photo of it.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/ally-chat"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Uploaded a CSV and Ally quoted the exact figures back. Uploaded a PNG and it correctly said it could not read the contents -- it no longer claims to have looked at it."
+      },
+      "note": "Ally used to claim it had read images it could never see. The prompt said 'attached for you to look at' while the transport carried text only. Fixed on 2026-09-04 by setting the media limit to zero, so the model is never told an image is there."
+    },
+    {
+      "id": 218,
+      "question": "My calendar won't connect.",
+      "answer": "Go to Plan Your Day and press Connect calendar. Google asks you to sign in and allow access. When you come back, the page tells you what happened.\n\nIf it did not work, the message on that page says why. The three common ones:\n\n\"Link expired\" means you took too long on the Google screen. Press Connect again.\n\n\"Google refused the connection\" often means you signed in with a different Google account. Use the one your calendar is on.\n\nIf you pressed Cancel on the Google screen, nothing was saved. Just start again.\n\nIf it keeps failing, write to us and tell us which message you saw.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/plan"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Read the callback: it always redirects back to Plan Your Day carrying one of four outcomes, each with a readable sentence. Calendar sync is confirmed working on production by the founder who owns that account."
+      }
+    },
+    {
+      "id": 219,
+      "question": "My profile photo won't upload.",
+      "answer": "Ally accepts PNG, JPEG and WEBP, up to 5MB.\n\nThe most common reason it fails is an iPhone photo. iPhones save pictures as HEIC by default, and that is not accepted yet. GIFs are not accepted either.\n\nThe fix is to open the photo and save or export it as JPEG, then upload that.\n\nOn an iPhone you can also change Settings, then Camera, then Formats to \"Most Compatible\", so new photos are saved as JPEG from then on.\n\nIf the file is very large, make it smaller first.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/profile"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Live test: PNG returned 201 with a stored avatar URL. A GIF was refused with a clear message naming the accepted types. HEIC is neither accepted server-side nor offered in the picker."
+      },
+      "finding": "On an iPhone the founder's own photos are greyed out in the file chooser, so there is no error to read and nothing to explain the failure. Accept HEIC and convert, or add one line of help text beside the button."
+    },
+    {
+      "id": 220,
+      "question": "The page is stuck on \"thinking\".",
+      "answer": "That screen is waiting for your report to be built. It usually takes under a minute.\n\nIf it is taking longer, the screen says so and tells you that you can close it. That is true. Your answers are all saved, and leaving the page loses nothing.\n\nCome back to Report from the menu a few minutes later and it will be there.\n\nIf it is still not there an hour later, write to us and tell us roughly when you finished. We will find it.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/report"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "The screen polls for the report every 4 seconds and switches its own copy to 'This is taking longer than usual. Your answers are saved.' after about two minutes. It never spins silently."
+      }
+    },
+    {
+      "id": 221,
+      "question": "I found a bug. Where do I report it?",
+      "answer": "Go to Help & Support and press \"Report a bug\". That opens the Feedback page with the right topic already chosen, so you only have to describe what happened.\n\nThe most useful thing you can tell us is what you were doing just before it broke, and what you saw on screen. A screenshot helps more than anything.\n\nIt comes straight to our team. It is not a form that goes nowhere.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/help",
+        "/app/feedback"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "The Help & Support quick action carries the topic through to the Feedback page, and the note posts to the backend and lands in founder_feedback."
+      }
+    },
+    {
+      "id": 222,
+      "question": "My report page is blank.",
+      "answer": "There are two different things this can be.\n\nIf you have not finished a diagnosis yet, the page says \"Your report isn't ready yet\" and offers a button to start one. That is the normal state, not a fault.\n\nIf you have done the diagnosis and the page is empty, it is almost always still loading. Give it a moment, then refresh the page.\n\nIf a refresh does not fix it, write to us. Your report is stored on our side, so a blank page never means it has been lost.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/report"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Opened /app/report on an account with no diagnosis: a proper empty state with a Start Founder Diagnosis button. The only genuinely blank moment is the second or two while it loads."
+      }
+    },
+    {
+      "id": 223,
+      "question": "It signed me out in the middle of the diagnosis.",
+      "answer": "Sign back in and carry on. You will not have to start again.\n\nEvery answer is saved the moment you send it, so the diagnosis picks up from the question you were on.\n\nIt also does not count as a used diagnosis. Only a finished one counts, so nothing has been spent.\n\nBeing signed out part way through is unusual. It normally means you signed out somewhere else, or your browser cleared its stored data. If it keeps happening, tell us which browser you use and we will look.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/diagnosis"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Answers are persisted one at a time on submit, and the submit path is idempotent when resumed. Sessions renew automatically for 30 days, so a mid-session sign-out is genuinely rare."
+      }
+    },
+    {
+      "id": 224,
+      "question": "It says I've hit a limit and I've only just started.",
+      "answer": "The daily allowance is not counted in messages. It is counted in words, roughly speaking, and a long message costs a lot more than a short one.\n\nAlly also reads your report and your profile before it replies, so even a short question is not free.\n\nThat is why a handful of long messages can use up a day, and it is not a fault.\n\nThe message you saw says which limit you reached, and your billing page shows today's usage against your allowance.\n\nIf that page shows you have barely used anything and you are still blocked, that is a fault. Write to us.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/billing"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Measured the real cost from the database: 54 messages, average 1,305 tokens, largest 2,776. The daily error names the exact numbers and the reset time, so a founder can check it against the billing page."
+      },
+      "finding": "On Plus (Rs 450, 3,500 tokens a day) that average works out at two or three messages. This complaint will be literally true for a founder who has just paid, on their first sitting. The ceiling needs raising -- no support answer covers it."
+    },
+    {
+      "id": 225,
+      "question": "Everything is very slow.",
+      "answer": "Two things are usually behind it.\n\nThe first is the Compass page. It gathers a lot at once and is the slowest page in Ally, especially the first time you open it after signing in. We know, and we are working on it.\n\nThe second is simply a slow connection. Ally sends a fair amount back and forth.\n\nIf one particular page is slow every single time, tell us which one and roughly how long it takes. That is far more useful to us than \"it is slow\", and it gets fixed faster.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Compass took several seconds to fill in on a warm local build with no other load. Traced earlier to database pool contention when its panels all load together."
+      }
+    },
+    {
+      "id": 226,
+      "question": "It looks broken on my phone.",
+      "answer": "Ally works in a phone browser. We checked the main pages at phone size and they fit, with nothing running off the side of the screen.\n\nThere is no app to install yet. Use Chrome or Safari.\n\nIf a page looks wrong, it is usually an old copy stored by your browser after we released an update. Pull down to refresh, or close the tab and open it again.\n\nIf it still looks wrong, send us a screenshot and tell us which phone you have. That is the only way we can see what you are seeing.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/help"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Tested at 375x812: /app, /app/report and /app/ally-chat all render with zero horizontal overflow and the sidebar collapses to a menu button."
+      }
+    },
+    {
+      "id": 227,
+      "question": "Where does my feedback actually go? Does anyone read it?",
+      "answer": "It comes to our team, and yes, we read all of it.\n\nBoth things on the Feedback page, the written note and the star rating, are saved on our side and show up for the team straight away.\n\nThis used to be worse. The written note used to open your own email app, which quietly did nothing if you did not have one set up. That is fixed. It now reaches us directly.\n\nWe do not reply to every one. If you would like an answer, say so in the note.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/feedback"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Both the note and the rating POST to the same endpoint and land in the same founder_feedback table, which the team reads."
+      }
+    },
+    {
+      "id": 228,
+      "question": "If I message support, how long until someone replies?",
+      "answer": "We aim to reply within one working day.\n\nWe are here Monday to Friday, 9 AM to 6 PM India time. A message sent on Saturday evening will be picked up on Monday.\n\nYou can reach us at info@goxl.in, or through Help & Support inside Ally, which sends your name and email along so you do not have to repeat them.\n\nIf it is urgent, say so at the top of your message. Money leaving your account, or not being able to get in, go to the front of the queue.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/help"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Read from the Help & Support page as it stands today: info@goxl.in, Mon-Fri 9 AM - 6 PM IST, 'We aim to reply within one working day.' Stated as an aim, with no invented average."
+      }
+    }
+  ]
+}

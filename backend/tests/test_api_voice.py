@@ -16,7 +16,24 @@ from app.api.v1.voice.validators import MAX_AUDIO_SIZE_BYTES
 from app.main import app
 from app.services.voice.base import TranscriptionError, TranscriptionProvider
 
+
 BASE = "/api/v1/voice"
+
+
+# Several tests below describe the Free tier as it stands DURING THE TESTING
+# PHASE, when it carries almost the whole product. At public launch Free is
+# emptied (settings.PUBLIC_LAUNCH -- see app/plans/catalog.py) and those
+# assertions stop being true by design, not by regression.
+#
+# They are skipped rather than deleted: the testing-phase shape is the live
+# configuration today, and it is worth pinning while it is. Delete them the day
+# PUBLIC_LAUNCH becomes the permanent default.
+from app.core.config import settings as _settings
+
+testing_phase_only = pytest.mark.skipif(
+    _settings.PUBLIC_LAUNCH,
+    reason="describes the Free tier before public launch; Free is empty once PUBLIC_LAUNCH is on",
+)
 
 
 class FakeTranscriptionProvider(TranscriptionProvider):
@@ -62,6 +79,7 @@ def test_free_plan_blocked_from_chat_voice():
         _teardown()
 
 
+@testing_phase_only
 def test_free_plan_allowed_in_diagnosis():
     client = _client(plan_type="free", provider=FakeTranscriptionProvider(text="Churn is the issue."))
     try:

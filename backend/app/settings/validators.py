@@ -1,32 +1,16 @@
-"""Fail-closed validation for the settings this module owns (Part 4).
+"""Fail-closed validation for the settings this module owns.
 
-Only the new fields are validated here (reminder_time, session_timeout_minutes).
-Profile/account fields (timezone, language, phone, email) are validated in their
-existing homes -- the /profile endpoints and the account schema -- and are not
-duplicated (see the extend-existing decision in __init__.py).
+EMPTY ON PURPOSE, 2026-09-05. This file validated `reminder_time` and
+`session_timeout_minutes`. Both settings have been removed -- see
+app/settings/schemas.py for why -- so there is nothing left here to check.
+
+Kept as a file rather than deleted because `InvalidSettingError` is part of the
+module's public surface and a validator will be wanted again the moment a
+setting with a constrained value is added. Add it here.
 """
 
 from __future__ import annotations
 
-import re
-
 from app.settings.errors import InvalidSettingError
 
-_TIME_24H = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
-MIN_SESSION_TIMEOUT = 5
-MAX_SESSION_TIMEOUT = 1440   # 24h
-
-
-def validate_reminder_time(value: str) -> None:
-    if not isinstance(value, str) or not _TIME_24H.match(value):
-        raise InvalidSettingError("reminder_time", "must be 'HH:MM' in 24-hour form (e.g. 09:00)")
-
-
-def validate_session_timeout(value: int) -> None:
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise InvalidSettingError("session_timeout_minutes", "must be an integer")
-    if not (MIN_SESSION_TIMEOUT <= value <= MAX_SESSION_TIMEOUT):
-        raise InvalidSettingError(
-            "session_timeout_minutes",
-            f"must be between {MIN_SESSION_TIMEOUT} and {MAX_SESSION_TIMEOUT} minutes",
-        )
+__all__ = ["InvalidSettingError"]

@@ -29,7 +29,7 @@
     {
       "id": 143,
       "question": "What happens on a discovery call, and who am I talking to?",
-      "answer": "It is 30 minutes with someone from our team, not a bot.\n\nYou pick a time that suits you, and the team confirms it. Once they do, you get an email with the time and the joining link.\n\nThe useful version of the call is you bringing something specific — your report, a decision you are stuck on, or a finding you disagree with. Say what you want to cover when you request it, and they will come prepared.\n\nIt is a conversation, not a presentation. Bring the awkward question rather than the tidy one.",
+      "answer": "It is 30 minutes with someone from our team, not a bot.\n\nYou pick a time that suits you, and the team confirms it. Once they do, your call appears under \"Your calls\" on the Discovery call page with a Join button, and you also get an email with the time and the link.\n\nThe useful version of the call is you bringing something specific: your report, a decision you are stuck on, or a finding you disagree with. Say what you want to cover when you request it, and they will come prepared.\n\nIt is a conversation, not a presentation.",
       "answer_type": "walked",
       "status": "answered",
       "links": [
@@ -37,44 +37,14 @@
       ],
       "verified": {
         "walked_on": "2026-09-05",
-        "how": "Tested end to end after rebuilding the flow: requested a slot (pending, no meeting), rescheduled it (stayed pending), and cancelled it."
-      }
+        "how": "Walked 2026-09-05. The join link is now shown on the calls list for a confirmed call, and a pending one says the link follows confirmation. Before today the link was in the API response and never rendered, and with email unconfigured there was no route to it at all."
+      },
+      "note": "Deliberately says the link is on the page FIRST and the email second. The page is the path that cannot silently fail; the email depends on EMAIL_HOST being configured."
     },
     {
       "id": 144,
       "question": "Is the discovery call free? Why can't I book one?",
-      "answer": "Discovery calls are paid — no plan includes a free one at the moment. But asking for a slot costs nothing.\n\nYou pick a time and send the request. Our team checks it against their diary and confirms. Payment comes after that, once you know the call is actually happening.\n\nSo nothing is taken when you request, and you are never charged for a call that did not get confirmed.\n\nIf no times are showing at all, it means the team has nothing free in that window yet.",
-      "answer_type": "walked",
-      "status": "answered",
-      "links": [
-        "/app/discovery-call",
-        "/app/billing"
-      ],
-      "verified": {
-        "walked_on": "2026-09-05",
-        "how": "Tested end to end after rebuilding the flow: requested a slot (pending, no meeting), rescheduled it (stayed pending), and cancelled it."
-      },
-      "finding": "The blocker behind this whole group: with no free calls on any plan and no checkout, the old flow refused every founder with a 402 they could not pass. Requesting is now free and the team confirms, so the feature works today and the payment step can land later without changing any of these answers."
-    },
-    {
-      "id": 145,
-      "question": "How many calls do I get, and what does an extra one cost?",
-      "answer": "Every call is paid — there is no included allowance on any plan right now.\n\nThe price is confirmed to you when the team accepts your request, before you pay anything. We have deliberately not printed a figure here, because it moves with the plans and this page would go stale. What you are told at the time is what is right.\n\nRequesting a slot is always free, and you can cancel a request without paying.",
-      "answer_type": "walked",
-      "status": "answered",
-      "links": [
-        "/app/discovery-call",
-        "/app/billing"
-      ],
-      "verified": {
-        "walked_on": "2026-09-05",
-        "how": "Tested end to end after rebuilding the flow: requested a slot (pending, no meeting), rescheduled it (stayed pending), and cancelled it."
-      }
-    },
-    {
-      "id": 146,
-      "question": "Do unused calls roll over?",
-      "answer": "There is nothing to roll over — no plan includes free calls at the moment, so there is no monthly allowance to use or lose.\n\nEach call is requested and paid for on its own. Nothing expires, and you are not missing out by not booking this month.\n\nIf that changes and calls start being included in a plan, we will say so clearly.",
+      "answer": "It is not free. A discovery call costs Rs 300 for 30 minutes, on every plan.\n\nThat is per call. No plan includes one, so nobody has an allowance to run out of.\n\nAsking for a slot costs nothing, though. You pick a time and send the request, our team checks it against their diary and confirms, and payment comes after that -- once you know the call is actually happening.\n\nIf the button is not there at all, it is because discovery calls are not included on the free plan.",
       "answer_type": "walked",
       "status": "answered",
       "links": [
@@ -82,8 +52,39 @@
       ],
       "verified": {
         "walked_on": "2026-09-05",
-        "how": "Tested end to end after rebuilding the flow: requested a slot (pending, no meeting), rescheduled it (stayed pending), and cancelled it."
-      }
+        "how": "Team decision 2026-09-05: Rs 300 per 30-minute discovery call, on every plan, with no included allowance anywhere. CALL_PRICE_INR raised from 199 to 300 in the catalog the same day; free_calls_per_month is 0 on all four tiers. The two prices were deliberately separated -- Starter is Rs 199 a month, a call is Rs 300 -- so a founder can tell them apart."
+      },
+      "note": "Price set by the team on 2026-09-05. Raised from Rs 199 so it is not confused with the Rs 199 monthly Starter plan."
+    },
+    {
+      "id": 145,
+      "question": "How many calls do I get, and what does an extra one cost?",
+      "answer": "As many as you like, and each one costs Rs 300.\n\nThere is no limit and no allowance. Book one call or book six -- every one is Rs 300 for 30 minutes, and it is the same price on every plan.\n\nSo there is no such thing as an extra call here. There is just the next call, at the same price as the last one.\n\nYou are only charged once the team has confirmed the time. Requesting a slot costs nothing.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/discovery-call"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Team decision 2026-09-05: Rs 300 per 30-minute discovery call, on every plan, with no included allowance anywhere. CALL_PRICE_INR raised from 199 to 300 in the catalog the same day; free_calls_per_month is 0 on all four tiers. The two prices were deliberately separated -- Starter is Rs 199 a month, a call is Rs 300 -- so a founder can tell them apart."
+      },
+      "note": "Price set by the team on 2026-09-05. Raised from Rs 199 so it is not confused with the Rs 199 monthly Starter plan."
+    },
+    {
+      "id": 146,
+      "question": "Do unused calls roll over?",
+      "answer": "There is nothing to roll over. Calls are not an allowance.\n\nNo plan includes free calls, so there is no monthly quota to use or lose. Each call is requested and paid for on its own, at Rs 300 for 30 minutes.\n\nWhich means you are never missing out by not booking this month. Book one when you actually need one.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/discovery-call"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Team decision 2026-09-05: Rs 300 per 30-minute discovery call, on every plan, with no included allowance anywhere. CALL_PRICE_INR raised from 199 to 300 in the catalog the same day; free_calls_per_month is 0 on all four tiers. The two prices were deliberately separated -- Starter is Rs 199 a month, a call is Rs 300 -- so a founder can tell them apart."
+      },
+      "note": "Price set by the team on 2026-09-05. Raised from Rs 199 so it is not confused with the Rs 199 monthly Starter plan."
     },
     {
       "id": 147,

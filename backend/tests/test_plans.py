@@ -8,6 +8,7 @@ import pytest
 from app.credits import InMemoryCreditRepository, build_credit_service
 from app.credits.expiry import CreditState
 from app.plans import (
+
     CALL_PRICE_INR,
     DailyTokenLimitError,
     Feature,
@@ -24,6 +25,22 @@ from app.plans import (
     period_month,
     usage_day,
 )
+
+# Several tests below describe the Free tier as it stands DURING THE TESTING
+# PHASE, when it carries almost the whole product. At public launch Free is
+# emptied (settings.PUBLIC_LAUNCH -- see app/plans/catalog.py) and those
+# assertions stop being true by design, not by regression.
+#
+# They are skipped rather than deleted: the testing-phase shape is the live
+# configuration today, and it is worth pinning while it is. Delete them the day
+# PUBLIC_LAUNCH becomes the permanent default.
+from app.core.config import settings as _settings
+
+testing_phase_only = pytest.mark.skipif(
+    _settings.PUBLIC_LAUNCH,
+    reason="describes the Free tier before public launch; Free is empty once PUBLIC_LAUNCH is on",
+)
+
 
 T0 = datetime(2026, 8, 2, 12, 0, tzinfo=timezone.utc)
 UID = 1
@@ -180,6 +197,7 @@ def test_credits_round_up(tokens, expected):
 # ── feature gates ───────────────────────────────────────────────────────────
 
 
+@testing_phase_only
 def test_every_tier_gets_the_assessment_and_what_comes_out_of_it():
     s, _ = svc()
     for tier in PlanTier:
@@ -235,6 +253,7 @@ def test_voice_in_chat_is_paid_only():
     assert s.has_feature(PlanTier.PRO, Feature.VOICE_CHAT)
 
 
+@testing_phase_only
 def test_plan_your_day_is_included_free_during_the_testing_phase():
     """Normally a paid feature. Free carries it for the closed test because the
     tier grants a planning token budget (7,700/day), and a budget without the
@@ -287,6 +306,7 @@ def test_free_user_blocked_from_voice_chat_with_403_not_429():
         s.check_chat_allowed(UID, PlanTier.FREE, voice=True)
 
 
+@testing_phase_only
 def test_daily_limit_blocks_before_credits():
     """The rate ceiling must fire ahead of the credit check: a founder who is out
     of tokens for today should be told to come back tomorrow, not told to pay."""
@@ -301,6 +321,7 @@ def test_daily_limit_blocks_before_credits():
         s.check_chat_allowed(UID, PlanTier.FREE)
 
 
+@testing_phase_only
 def test_chat_and_planning_meter_separately():
     """Exhausting one feature must not disable the other -- they are different
     features sharing only a founder."""
@@ -319,6 +340,7 @@ def test_chat_and_planning_meter_separately():
         s.check_chat_allowed(UID, PlanTier.FREE, source="planning")
 
 
+@testing_phase_only
 def test_out_of_credits_blocks():
     s, _ = svc(PlanTier.FREE, balance=0)
     with pytest.raises(OutOfCreditsError):
@@ -330,6 +352,7 @@ def test_allowed_when_under_all_limits():
     s.check_chat_allowed(UID, PlanTier.STARTER, voice=True)     # no raise
 
 
+@testing_phase_only
 def test_first_diagnosis_bypasses_credits_and_daily_limit():
     """It is the hook -- a founder must never hit a paywall midway through it."""
     s, usage = svc(PlanTier.FREE, balance=0)

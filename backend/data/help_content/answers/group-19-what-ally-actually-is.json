@@ -1,0 +1,172 @@
+{
+  "schema_version": "1.0",
+  "file": "group-19-what-ally-actually-is",
+  "group": "what-ally-actually-is",
+  "group_number": 19,
+  "group_title": "What Ally actually is",
+  "question_bank": "Founder Question Bank v3 -- group 19 (questions 229-237)",
+  "created": "2026-09-05",
+  "content_rules": {
+    "voice": "Very simple, easy English. Short sentences. Common everyday words. No idioms. Friendly and warm, but plain.",
+    "answer_length": "About 120 words maximum. Short paragraphs with a blank line between them.",
+    "never_name_the_model": "No vendor, no model, anywhere.",
+    "group_specific": "These are positioning answers. Every claim must trace to the live landing page (goxlally.ai) or to something the product actually does. Nothing here may be drafted from what sounds good.",
+    "no_invented_credentials": "Nothing public names the GoXL team or their track record. Do not write CVs, years of experience or client lists. The qualification claim rests on the framework and the corpus, both of which are real and stated publicly.",
+    "no_invented_guardrails": "Do not claim Ally refuses a category of advice. No such boundary exists in the product -- see question 100, still open."
+  },
+  "walk_log": {
+    "walked_on": "2026-09-05",
+    "environment": "The live landing page at https://goxlally.ai, read in full, plus the local dev build against the Supabase database.",
+    "observed": [
+      "The landing page lives at https://goxlally.ai. The earlier join. subdomain is retired on purpose -- the page was merged onto the main domain.",
+      "Landing page positioning, verbatim: 'GoXL Ally is your Founder's Compass -- an AI that understands you, your business and your situation before helping you decide what to do next.' and 'Most AI gives you answers. Ally helps you find the right question.'",
+      "Landing page corpus claim, verbatim: 'Built on insights across 100+ entrepreneurial dimensions, 10,000+ founder case studies, and 25,000+ founder problems mapped to their root causes.' This matches what answers 34 and 60 already say.",
+      "Landing page audience list: aspiring founders, first-time founders, solo operators, growing businesses, second-time founders, small teams, family businesses, bootstrapped builders.",
+      "Landing page on who built it: 'For the entrepreneurs, by the entrepreneurs.' No names, no credentials, no track record anywhere on the page.",
+      "Landing page: 'Currently onboarding founders through limited access only.'",
+      "founder_stages holds all eight stages, Ideation (order 1) through Exit (order 8), grouped as Stage 0 / Stage 0->1 / Stage 1->10+. The onboarding stage picker mirrors them exactly.",
+      "The onboarding industry picker offers eleven options: AI, SaaS, Fintech, Manufacturing, Healthcare, Education, D2C Services, Logistics, Real Estate, Agriculture, Other.",
+      "Ally's system prompt: answers ONLY from the founder's diagnosis context, never invents findings, scores or advice the diagnosis does not support, and says so plainly when the context does not contain the answer.",
+      "The root cause is computed by the deterministic scoring engine. The model narrates the result; it does not reach it.",
+      "Nothing in the product restricts sign-up by country, industry or company size. There is no exclusivity mechanism and no cross-founder visibility of any kind."
+    ],
+    "findings": [
+      "NOT A DEFECT, RECORDED SO IT IS NOT RE-RAISED: join.goxlally.ai returns 404 because the landing page was deliberately merged into the main goxlally.ai domain. Confirmed by the founder on 2026-09-05. goxlally.ai is the live landing page and is what every answer in groups 19 and 20 was written against. The only loose end is that Our Story (/about.html) still prints 'join.goxlally.ai -- early access is open' as plain text under its call to action; the button beside it correctly points at /#early-access, so nobody is 404'd by clicking, but it reads as the address to type.",
+      "THE LANDING PAGE MAKES A PRIVACY CLAIM THE PRODUCT CONTRADICTS. Under OUR PROMISE it reads: 'Your data is encrypted, private and accessible only to you.' Support and above hold VIEW_CHATS and VIEW_REPORTS, so a small number of people at GoXL can read a founder's conversations and report. Group 17 already forbids that exact phrase in support answers for this reason. The landing page needs the same correction -- 'private and never sold or shared with other founders' is true and says almost as much.",
+      "THE LANDING PAGE PROMISES RE-RUNS. 'As the business changes, Ally reruns the diagnosis instead of starting the founder over.' There is one diagnosis per account and re-running at a stage change is not built. Answer 85 already handles this as 'not yet, never no', but the page states it as a present-tense feature. A founder will pay on that sentence.",
+      "NOTHING PUBLIC NAMES THE TEAM. Our Story does exist, at goxlally.ai/about.html, and it answers WHY Ally was built -- accessibility, the founder who has nobody to ask, tier-2 and tier-3 ceilings. It names no people and states no credentials. So question 232 ('what qualifies them to diagnose my business?') is answered from the framework and the corpus, which is the strongest true answer available. If a founder pushes past it there is still nothing to give them."
+    ]
+  },
+  "answers": [
+    {
+      "id": 229,
+      "question": "Is Ally a coach, a consultant, or a tool?",
+      "answer": "None of the three, and the difference matters.\n\nA coach asks you questions. A consultant hands you answers. A tool waits for you to know what to do with it.\n\nAlly is a compass. It works out where you actually are first -- you and the business -- and then points at the one thing to move next.\n\nThe way we put it is this: most AI gives you answers, Ally helps you find the right question. The problem you can see is often not the problem you need to solve.\n\nSo it is not there to advise you, or to be clever. It is there so you stop guessing which problem is the real one.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/help"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "The settled position, matching the landing page word for word: 'Your Founder's Compass' and 'Most AI gives you answers. Ally helps you find the right question.'"
+      }
+    },
+    {
+      "id": 230,
+      "question": "Can this replace a real mentor or advisor?",
+      "answer": "No, and we would not want it to.\n\nA good mentor gives you judgement, a network, and someone who has done it before and cares how it goes for you. Ally has none of that.\n\nWhat Ally has is different. It is there at eleven at night. It has read every answer you gave it. It never gets tired of the same question, and it has no reason to tell you what you want to hear.\n\nThe useful way to use both is together. Bring your report to your mentor. It saves the first hour of every conversation.\n\nIf you want a person from our side, you can book a discovery call.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/discovery-call"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Consistent with answers 76 and 147: a discovery call is 30 minutes with a real person, and the report is what makes that conversation start somewhere useful."
+      }
+    },
+    {
+      "id": 231,
+      "question": "Is a human involved in any of what I get?",
+      "answer": "In your report, no. It was written by AI, and no person read it before you did.\n\nPeople built what it works from. The framework, the questions, the six areas and the way a root cause is found were all designed by our team. Ally cannot go outside that, and it is not allowed to invent findings.\n\nThere are two places a person is genuinely involved. A discovery call is 30 minutes with someone from our team. And when you message support, a person replies.\n\nWe would rather be plain about this than let you imagine somebody is reading over your shoulder.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/report",
+        "/app/discovery-call"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Matches answer 44. The report is generated with no human review step anywhere in the pipeline. The prompt forbids inventing findings. Discovery calls and support are the two human surfaces."
+      }
+    },
+    {
+      "id": 232,
+      "question": "Who built this, and what qualifies them to diagnose my business?",
+      "answer": "GoXL built it. Entrepreneurs, building for entrepreneurs.\n\nBut the honest answer to \"what qualifies it\" is not somebody's CV. It is what sits underneath.\n\nAlly was built from real founder work: more than 10,000 founder case studies, and 25,000 founder problems traced back to what actually caused them, across more than a hundred areas.\n\nAnd the root cause is not an AI's opinion. Your answers are scored against that framework, and the framework decides. The AI's job is to explain the result in plain language, not to reach it.\n\nIf you want to talk to the people behind it, book a discovery call.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/discovery-call"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Corpus figures are the landing page's own, verbatim, and match answers 34 and 60. 'For the entrepreneurs, by the entrepreneurs' is the landing page's phrase. The deterministic-engine point is true of the code: the engine picks the root cause and the model narrates it."
+      },
+      "finding": "Nothing public names the team or their track record. If a founder pushes past this answer we have nothing to give them. A short 'about us' page the bot can point at would close it."
+    },
+    {
+      "id": 233,
+      "question": "Do you work with my competitors?",
+      "answer": "Possibly. Anyone can sign up, and we do not offer exclusivity to anyone in any industry.\n\nWhat matters is that it changes nothing for you. Nothing of yours is ever visible to another founder. There is no directory, no ranking, and no way for anyone to find you or to see your report.\n\nYou are not compared against named businesses either. Your report measures you against the framework, not against the founder down the road.\n\nYour data is never sold, and never shared outside GoXL.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/profile"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "No exclusivity mechanism exists anywhere in the product, and no cross-founder visibility of any kind. Consistent with answers 38 and 205."
+      }
+    },
+    {
+      "id": 234,
+      "question": "Is this only for Indian founders?",
+      "answer": "It is built for Indian founders, but it is not closed to anyone else.\n\nAlmost everything is set up around India. Prices are in rupees. Your data is stored in India. Support runs Monday to Friday, 9 AM to 6 PM India time.\n\nNothing in Ally checks where you are, so it works wherever you sit. The questions are about your stage and your business, not your country.\n\nIf you are outside India and thinking of paying, write to us first. We would rather sort that out with you than have you find a problem at checkout.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/help"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "No geographic restriction exists in the code. Prices are in INR, support hours are IST, and residency is India. Deliberately does not promise foreign payment -- question 185 is still open."
+      },
+      "note": "Kept vague on paying from outside India on purpose. Question 185 (foreign payment) is still with the team, and checkout is not built."
+    },
+    {
+      "id": 235,
+      "question": "Is my business too small -- or too big -- for this?",
+      "answer": "Almost certainly not.\n\nThere are eight stages, from just exploring an idea all the way to exit. You do not need revenue, customers, a team, or even a registered company. If you only have an idea, Ideation is a real stage and the diagnosis is built for it.\n\nAt the other end, Ally is built around a founder-led business -- one person whose decisions still shape the company. If you have a full leadership team and your own decisions are no longer the constraint, less of it will apply.\n\nSolo founders, small teams, family businesses and bootstrapped builders are all squarely who this is for.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/guided/profile"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "founder_stages holds all eight stages from Ideation to Exit, and the diagnosis scopes itself to fewer pillars at the early ones rather than refusing them. The audience list is the landing page's own."
+      }
+    },
+    {
+      "id": 236,
+      "question": "What's coming next? Can I ask for a feature?",
+      "answer": "Yes, please do. Go to Feedback and choose \"I have an idea\". It comes straight to our team, and we read all of it.\n\nWe do not publish a roadmap, mainly because we would rather not promise dates we then miss.\n\nOne thing we have committed to in writing: being able to run the diagnosis again when your business stage changes. That is intended, and not built yet.\n\nIf you tell us what you want and why, it genuinely counts. Several things in Ally are there because a founder asked.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/feedback"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "The Feedback page's 'I have an idea' topic posts to founder_feedback, which the team reads. The re-run commitment is the only forward promise made anywhere in the answer set (answer 85), so it is the only one repeated here."
+      }
+    },
+    {
+      "id": 237,
+      "question": "What does Ally deliberately not do?",
+      "answer": "A short and honest list.\n\nIt does not invent things about your business. It works only from what you told it and what the framework found.\n\nIt does not answer questions about the product itself -- your plan, your bill, your allowance. That is what Help & Support is for.\n\nIt does not produce files. It will help you write a pitch deck in the chat, but it cannot hand you a PowerPoint. Your report is the one document you can download.\n\nIt does not chase you. No emails, no nudges outside the app.\n\nIt does not rank you against other founders, and it never shows your work to anyone else.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/help"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Every item on this list is a real, checked behaviour: the no-invention rule is in the system prompt, the help-content boundary is answer 99, the no-file-export limit is answer 91, the no-outbound-nudge limit is answer 137, and no cross-founder visibility exists anywhere."
+      },
+      "finding": "Legal, tax and investment advice was deliberately LEFT OFF this list. No such boundary exists in the product -- the prompt library, the knowledge base and the grounding prompts state nothing about what Ally may advise on. Question 100 is open for exactly this reason. Add it here only after the boundary is built, never before."
+    }
+  ]
+}

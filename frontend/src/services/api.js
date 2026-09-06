@@ -57,6 +57,76 @@ export function setTokens({ access_token }) {
 
 export function clearTokens() {
   localStorage.removeItem(ACCESS_KEY);
+  // Never leave the cross-tab refresh lock held by a session that has just
+  // ended -- the next tab would wait out its full TTL for a holder that is
+  // never coming back.
+  releaseRefreshLock();
+}
+
+// ── Cross-tab refresh lock ───────────────────────────────────────────────────
+//
+// The refresh token is single-use and rotating, so exactly ONE tab may call
+// /auth/refresh at a time. localStorage is the only thing every tab shares
+// synchronously, so the lock lives there.
+//
+// Every read and write is wrapped: localStorage throws outright in some
+// contexts (Safari private browsing, a browser set to block site data). If it
+// is unavailable we return "you hold the lock" and behave exactly as before
+// this existed -- degraded, never broken.
+
+const LOCK_KEY = 'ally.refresh_lock';
+/** How long a held lock is believed before it is treated as an abandoned tab.
+ *  Comfortably above a normal refresh round trip and below the request timeout,
+ *  so a tab that dies mid-refresh cannot wedge the others. */
+const LOCK_TTL_MS = 10_000;
+/** How long a waiting tab will wait for the holder's new token. */
+const LOCK_WAIT_MS = 12_000;
+const LOCK_POLL_MS = 60;
+
+const TAB_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+
+function readLock() {
+  try {
+    const raw = localStorage.getItem(LOCK_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
+/** True if this tab may proceed to refresh. `force` takes an abandoned lock. */
+function acquireRefreshLock({ force = false } = {}) {
+  try {
+    const held = readLock();
+    const fresh = held && Date.now() - held.at < LOCK_TTL_MS;
+    if (fresh && !force && held.id !== TAB_ID) return false;
+    localStorage.setItem(LOCK_KEY, JSON.stringify({ id: TAB_ID, at: Date.now() }));
+    return true;
+  } catch {
+    return true; // no shared storage -- fall back to the old per-tab behaviour
+  }
+}
+
+function releaseRefreshLock() {
+  try {
+    const held = readLock();
+    if (!held || held.id === TAB_ID) localStorage.removeItem(LOCK_KEY);
+  } catch { /* nothing to release */ }
+}
+
+/** Wait for whichever tab holds the lock to publish a new access token.
+ *  Resolves with that token, or null if it never arrives (holder died, or the
+ *  refresh genuinely failed) -- the caller then refreshes itself. */
+async function waitForOtherTabsRefresh(previousToken) {
+  const deadline = Date.now() + LOCK_WAIT_MS;
+  while (Date.now() < deadline) {
+    await new Promise((r) => { setTimeout(r, LOCK_POLL_MS); });
+    const current = getAccessToken();
+    if (current && current !== previousToken) return current;
+    const held = readLock();
+    // Lock released or gone stale without a new token: the holder failed or
+    // died. Stop waiting and try ourselves rather than stalling the request.
+    if (!held || Date.now() - held.at >= LOCK_TTL_MS) return null;
+  }
+  return null;
 }
 
 /** Optional app-level hook: called once when a session can't be recovered
@@ -143,6 +213,30 @@ api.interceptors.request.use((config) => {
 let refreshFlight = null; // Promise<string new access token> while a refresh is in progress
 
 async function refreshTokens() {
+  // CROSS-TAB SERIALISATION. `refreshFlight` below is a module-level variable,
+  // so it only ever guarded ONE tab. The refresh token is single-use and
+  // rotating (the backend revokes the old jti on every refresh), so two tabs
+  // whose 30-minute access tokens expired together both posted the same cookie
+  // and the second was told "Refresh token has been revoked" -- which ran
+  // clearTokens() and bounced that founder to the sign-in screen, and cleared
+  // localStorage under the tab that had just succeeded.
+  //
+  // Reproduced with curl before this was written: first /auth/refresh 200,
+  // second with the same cookie 401. This was the cause of "it keeps signing
+  // me out", which had been reported and never explained.
+  //
+  // The lock lives in localStorage because that is the only thing every tab in
+  // the browser shares synchronously. Whoever wins refreshes; everyone else
+  // waits for the new access token to appear and uses it.
+  const startedWith = getAccessToken();
+  if (!acquireRefreshLock()) {
+    const shared = await waitForOtherTabsRefresh(startedWith);
+    if (shared) return shared;
+    // The holder died, or took too long, or failed. Fall through and refresh
+    // ourselves rather than signing the founder out on someone else's timeout.
+    acquireRefreshLock({ force: true });
+  }
+
   // No client-side way to pre-check "is there a session" anymore -- the
   // refresh token lives only in the HttpOnly cookie, which JS cannot read
   // (that's the point). The backend is the one that finds out whether it's
@@ -160,9 +254,20 @@ async function refreshTokens() {
     setTokens(data);
     return data.access_token;
   } catch (err) {
+    // LAST DEFENCE against the same race. The lock above makes this rare, but
+    // it cannot be airtight: a tab that was already mid-flight when another
+    // took the lock will still land here with a revoked token. Before signing
+    // anyone out, look at whether another tab has since written a NEWER access
+    // token. If it has, the session is alive and this failure was ours alone --
+    // signing the founder out on it would be the very bug this is fixing.
+    const current = getAccessToken();
+    if (current && current !== startedWith) return current;
+
     clearTokens();
     authFailureHandler?.();
     throw normalizeError(err);
+  } finally {
+    releaseRefreshLock();
   }
 }
 
@@ -197,8 +302,33 @@ async function refreshTokens() {
 // refreshFlight already does for the 401-triggered path.
 let resumeFlight = null;
 
+// The comment above already predicted the other half of this: "the same shape
+// would hit production too with two tabs mounting around the same moment."
+// resumeFlight only ever covered one tab, so two tabs opened together still
+// raced on the same single-use cookie and the loser was shown the login page
+// despite a perfectly good session. It now takes the SAME cross-tab lock as
+// refreshTokens(), which is what makes them mutually exclusive: a resume and a
+// refresh in different tabs were racing each other too, not just resume against
+// resume.
 export function resumeSession() {
   resumeFlight ??= (async () => {
+    const startedWith = getAccessToken();
+    if (!acquireRefreshLock()) {
+      const shared = await waitForOtherTabsRefresh(startedWith);
+      // Another tab restored the session. Ask the backend who we are rather
+      // than duplicating its answer -- this call is cheap and, unlike /resume,
+      // spends no refresh token.
+      if (shared) {
+        try {
+          const { data } = await axios.get(`${BASE_URL}/auth/me`, {
+            timeout: TIMEOUT_MS,
+            headers: { Authorization: `Bearer ${shared}` },
+          });
+          return data;
+        } catch { /* fall through and resume ourselves */ }
+      }
+      acquireRefreshLock({ force: true });
+    }
     try {
       const { data } = await axios.post(
         `${BASE_URL}/auth/resume`,
@@ -209,6 +339,8 @@ export function resumeSession() {
       return data.founder;
     } catch {
       return null;
+    } finally {
+      releaseRefreshLock();
     }
   })().finally(() => { resumeFlight = null; });
   return resumeFlight;

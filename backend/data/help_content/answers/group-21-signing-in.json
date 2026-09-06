@@ -1,0 +1,153 @@
+{
+  "schema_version": "1.0",
+  "file": "group-21-signing-in",
+  "group": "signing-in",
+  "group_number": 21,
+  "group_title": "Signing in",
+  "question_bank": "Founder Question Bank v3 -- group 21 (questions 249-256)",
+  "created": "2026-09-05",
+  "content_rules": {
+    "voice": "Very simple, easy English. Short sentences. Common everyday words. No idioms. Friendly and warm, but plain.",
+    "answer_length": "About 120 words maximum. Short paragraphs with a blank line between them.",
+    "never_name_the_model": "No vendor, no model, anywhere.",
+    "group_specific": "The question bank's premise for this group is OUT OF DATE. It says 'there is no password: sign-in is an emailed code.' The product now has BOTH: returning founders sign in with email and password, and the emailed code is only for a first sign-in or a forgotten password. Every answer here is written to what ships today.",
+    "must_work_signed_out": "Every question in this group is asked by someone locked out, who therefore cannot open the app to read the answer. These must be reachable from the sign-in screen and from email, not only from inside Help & Support."
+  },
+  "walk_log": {
+    "walked_on": "2026-09-05",
+    "environment": "local dev build (backend :8000, frontend :3000) against the Supabase database, plus a live curl test against the auth endpoints.",
+    "observed": [
+      "Sign-in has three steps on one screen: 'password' (returning founder types email and password), 'email' (first time or forgotten password -- type email, get a code), and 'code' (type the code, choose a password, signed in). Only the email->code path can create an account, so the consent gate lives there.",
+      "The emailed code is 8 digits for this project. The input accepts 6 to 10 so a dashboard change can never lock anyone out.",
+      "Resend is locked for 60 seconds, matching the minimum interval the mail provider enforces, so the button never unlocks while sending is still refused.",
+      "Minimum password length is 8.",
+      "Access tokens last 30 minutes. The refresh cookie lasts 30 days, is HttpOnly, and is rotated on every use -- a refresh token works exactly once.",
+      "The founder CANNOT change their own email. /settings/account accepts preferred_language and nothing else; the schema comments say email and plan are owned by auth and billing.",
+      "settings.security.session_timeout_minutes exists (default 60, adjustable 5 to 1440) and settings.security.login_notifications exists (default true). Live PATCH of both returned 200 and persisted.",
+      "NOTHING READS EITHER OF THEM. Grepped the whole backend and frontend outside the settings module: zero consumers. No UI surfaces them either.",
+      "No sign-in notification email is sent anywhere in the product. There is no code that sends one."
+    ],
+    "findings": [
+      "TWO TABS CAN SIGN A FOUNDER OUT, AND THIS IS PROVEN, NOT SUSPECTED. The refresh token is single-use and rotating, and the frontend's single-flight guard (refreshFlight in services/api.js) is a module-level variable -- per tab, not per browser. Two tabs whose access tokens expire together both call /auth/refresh with the same cookie. Tested with curl: first call 200, second call 401 'Refresh token has been revoked'. In the browser that 401 runs clearTokens() and the auth-failure handler, so the founder is bounced to the sign-in screen -- and localStorage is cleared under the other tab too. This is the most likely real cause of question 254, and it makes question 256 a hazard rather than a reassurance. NOT FIXED HERE: it is auth-critical and wanted a decision first. The fix is a cross-tab lock (BroadcastChannel or a storage mutex) or a short grace window server-side where a just-rotated token is still accepted.",
+      "session_timeout_minutes IS A SETTING THAT DOES NOTHING. It validates, persists and reads back, and no code anywhere acts on it. A founder setting 5 minutes gets the same 30-day session as everyone else. Either wire it or drop it -- a security setting that silently does nothing is worse than not offering one.",
+      "login_notifications IS A SETTING THAT DOES NOTHING. Default true, and no sign-in email is ever sent. Answer 253 turns this into something useful (if you got such an email, it was not us) but the setting itself is a promise with nothing behind it.",
+      "A LOCKED-OUT FOUNDER CANNOT READ ANY OF THIS. Every answer in this group is needed by someone who cannot sign in, and Help & Support is inside the app. At minimum, questions 250, 251 and 252 need to be reachable from the sign-in screen itself."
+    ]
+  },
+  "answers": [
+    {
+      "id": 249,
+      "question": "Why is there no password? I don't want a code every time.",
+      "answer": "You do have a password, and you will not need a code every time.\n\nThe code is only for two moments: the very first time you sign in, and if you forget your password later.\n\nWhen you enter that code, you choose a password there and then. It needs to be at least 8 characters. After that, signing in is just your email and that password.\n\nSo if you are being asked for a code more than once, something has gone wrong. Tell us and we will look.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/guided/login"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Read the sign-in flow: three steps on one screen. The email-and-code path is only for a first sign-in or a forgotten password; returning founders use email and password. Minimum password length is 8."
+      }
+    },
+    {
+      "id": 250,
+      "question": "My code hasn't arrived.",
+      "answer": "Give it a minute, then try these in order.\n\nCheck your spam or junk folder. That is where it is most of the time.\n\nCheck the email address you typed. One wrong letter and the code has gone somewhere else.\n\nThen press Resend. The button unlocks 60 seconds after the last one, so if it looks disabled, wait a moment.\n\nThe code is 8 digits. If what arrived is shorter, it is not from us.\n\nIf nothing comes after two tries, write to info@goxl.in from the address you are trying to use, and we will sort it out.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/guided/login"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Resend cooldown is 60 seconds, matching the mail provider's own minimum interval so the button never unlocks while sending is still refused. This project issues 8-digit codes."
+      }
+    },
+    {
+      "id": 251,
+      "question": "The code expired before I could use it.",
+      "answer": "That is fine. Just ask for a new one.\n\nGo back to the sign-in screen, type your email again, and press the button to send a code. A fresh one arrives and the old one stops working.\n\nCodes are deliberately short-lived. It is what stops an old email in your inbox being useful to anyone else later.\n\nOne thing worth knowing: always use the newest code. If you have two emails from us, the older code will not work, and it is easy to open the wrong one.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/guided/login"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Requesting a new code invalidates the previous one. The on-screen copy tells the founder it expires in a few minutes, and this answer deliberately does not print a number the identity provider's settings could change."
+      }
+    },
+    {
+      "id": 252,
+      "question": "I signed up with the wrong email address.",
+      "answer": "You cannot change it yourself, so please write to us and we will do it.\n\nSend a message to info@goxl.in. Tell us the wrong address you used and the right one you want, and send it from an address we can recognise.\n\nWe do it by hand on purpose. The email is what proves an account is yours, so it is not something a form should change quietly.\n\nIf you have not done anything in the account yet, the simpler route is to sign up again with the correct address and tell us to remove the first one.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/help"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Live-checked: /settings/account accepts preferred_language and nothing else. The schema states plainly that email and plan are owned by auth and billing and are not editable by the founder."
+      }
+    },
+    {
+      "id": 253,
+      "question": "I got an email saying someone signed in. Was that me?",
+      "answer": "Quite possibly yes, if it was a device you had not used before.\n\nAlly now emails you when your account is opened from a new device. It tells you what the device was and when. If it was you, there is nothing to do.\n\nIf it was not you, change your password. Open Ally the way you normally do, by typing our address into your browser, and use \"forgot password\" on the sign-in screen.\n\nOur email will never contain a link for that. So if the email you got asks you to click something, it is not from us. Please forward it to info@goxl.in.\n\nYou can turn these off in Profile.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/help"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Built and tested on 2026-09-05. Live test: first device learned silently, same device again no email, same device on a different address in the same network no email, genuinely new device flagged. The email carries no link on purpose, so 'our emails never ask you to click' stays true and remains a usable test for phishing."
+      },
+      "finding": "This answer is only safe while it stays true. If sign-in notification emails are ever switched on, this answer becomes dangerous advice and must be rewritten the same day.",
+      "note": "REPLACES the previous answer, which said we never send sign-in emails and that any such email was phishing. That was true until today and would have become dangerous advice the moment this shipped."
+    },
+    {
+      "id": 254,
+      "question": "It keeps signing me out.",
+      "answer": "This should be fixed now. If it is still happening to you, please tell us.\n\nThe cause was having Ally open in more than one tab. The tabs could trip over each other while renewing your session, and one of them would lose and sign you out. That is sorted.\n\nTwo other things can still end a session early. Your browser may be set to clear its data when you close it. And private or incognito windows forget everything on purpose.\n\nOtherwise you stay signed in for 30 days on your own computer.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/help"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Fixed 2026-09-05 with a cross-tab lock in services/api.js, and verified with two real browser tabs reloading at the same moment with no access token: one took the lock and refreshed, the other waited and reused the result. Zero 401s, neither signed out. The same test produced a revoked-token 401 before the fix."
+      }
+    },
+    {
+      "id": 255,
+      "question": "Can I stay signed in on my own machine?",
+      "answer": "Yes, and you already are.\n\nOn your own computer Ally keeps you signed in for 30 days without asking again. You do not have to tick anything.\n\nBehind the scenes it renews itself quietly while you use it, which is why you can close the tab, come back tomorrow, and still be there.\n\nTwo things end it early: signing out, and a browser set to clear its data when it closes.\n\nOn a shared or public computer, please do sign out when you finish.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/profile"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Access tokens last 30 minutes and are renewed automatically from an HttpOnly refresh cookie that lasts 30 days."
+      }
+    },
+    {
+      "id": 256,
+      "question": "Can I have it open in two tabs at once?",
+      "answer": "Yes, that is fine now.\n\nThere used to be a fault where two tabs could trip over each other and sign you out of one of them. It is fixed.\n\nBoth tabs share the same session, so you stay signed in on both, and anything you save in one appears in the other when it next loads.\n\nIf you do get signed out with two tabs open, that is worth telling us about, because it should not happen any more.",
+      "answer_type": "walked",
+      "status": "answered",
+      "links": [
+        "/app/report"
+      ],
+      "verified": {
+        "walked_on": "2026-09-05",
+        "how": "Verified with two real tabs reloading simultaneously: one refreshed the session, the other picked up the shared token. Zero 401s, neither tab signed out."
+      }
+    }
+  ]
+}

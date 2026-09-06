@@ -30,6 +30,12 @@ class FounderSettings(Base):
     daily_reminders: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
     reminder_time: Mapped[str] = mapped_column(String(5), nullable=False, server_default=text("'09:00'"))
     task_reminders: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    # RETIRED 2026-09-05, column kept deliberately. `meeting_reminders` and
+    # `session_timeout_minutes` were both removed from the API, the domain model
+    # and the service -- nothing can set or read them any more. The COLUMNS stay
+    # because dropping them needs a migration against a production database that
+    # is already behind on its own, and an unread column costs nothing. Drop them
+    # in a later tidy-up migration if anyone wants the schema clean.
     meeting_reminders: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
     goal_reminders: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
 
