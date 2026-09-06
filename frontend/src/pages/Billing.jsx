@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { MOCK_PLANS } from '../data/mockData';
 import { getProfile } from '../services/profile';
 import { getCatalog, getMyPlan } from '../services/plans';
-import { openCheckout, startCheckout, waitForPlanActivation } from '../services/payments';
+import { openCheckout, startCheckout, validateCoupon, waitForPlanActivation } from '../services/payments';
 
 /* ─── Static data ─── */
 /** Keys must match the plan tiers served by GET /plans, which lists only the
@@ -286,21 +286,73 @@ function CheckoutView({ plan, onBack, onPaid }) {
   const [payError, setPayError] = useState(null);
   const [prefill, setPrefill] = useState({ name: '', email: '' });
 
+  /* The code the founder typed, and the quote the backend priced for it.
+     `applied` is what the order was actually created with -- kept separate from
+     the input so editing the box after applying does not silently change what
+     they are about to pay for. */
+  const [couponInput, setCouponInput] = useState('');
+  const [applied, setApplied] = useState(null);
+  const [couponError, setCouponError] = useState(null);
+  const [couponBusy, setCouponBusy] = useState(false);
+
   /* Nothing started here may touch state after unmount: both the order request
      and the Razorpay popup outlive a "Back to Plans" click. */
   const alive = useRef(true);
   useEffect(() => () => { alive.current = false; }, []);
 
-  const createOrder = useCallback(() => {
+  const createOrder = useCallback((couponCode = null) => {
     setOrder(null);
     setOrderError(null);
     setPayError(null);
-    return startCheckout(plan.id)
+    return startCheckout(plan.id, couponCode)
       .then((o) => { if (alive.current) setOrder(o); })
-      .catch((err) => { if (alive.current) setOrderError(err); });
+      .catch((err) => {
+        if (!alive.current) return;
+        /* A code that priced cleanly a moment ago can be gone by now -- the
+           last slot of a capped code goes to whoever's order is created first.
+           Drop it and rebuild at full price rather than stranding the founder
+           on a checkout that cannot proceed. */
+        if (couponCode) {
+          setApplied(null);
+          setCouponError(err?.detail || err?.message || 'That code is no longer available.');
+          startCheckout(plan.id)
+            .then((o) => { if (alive.current) setOrder(o); })
+            .catch((e) => { if (alive.current) setOrderError(e); });
+          return;
+        }
+        setOrderError(err);
+      });
   }, [plan.id]);
 
-  useEffect(() => { createOrder(); }, [createOrder]);
+  const applyCoupon = async () => {
+    const code = couponInput.trim();
+    if (!code || couponBusy) return;
+    setCouponBusy(true);
+    setCouponError(null);
+    try {
+      const quote = await validateCoupon(plan.id, code);
+      if (!alive.current) return;
+      setApplied(quote);
+      /* Rebuild the order at the discounted price. The quote is a preview; the
+         order is what Razorpay charges, and it must agree with the summary. */
+      await createOrder(quote.code);
+    } catch (err) {
+      if (!alive.current) return;
+      setApplied(null);
+      setCouponError(err?.detail || err?.message || 'That code could not be applied.');
+    } finally {
+      if (alive.current) setCouponBusy(false);
+    }
+  };
+
+  const removeCoupon = () => {
+    setApplied(null);
+    setCouponInput('');
+    setCouponError(null);
+    createOrder();
+  };
+
+  useEffect(() => { createOrder(); }, [createOrder]);  // full price until a code is applied
 
   /* Prefill only. Razorpay asks for anything we cannot supply, so a failed
      profile fetch costs the founder a field, not the payment. */
@@ -350,7 +402,13 @@ function CheckoutView({ plan, onBack, onPaid }) {
     }
   };
 
+  /* All three read off the ORDER, never the quote: the order is what Razorpay
+     will charge, so the summary cannot drift from the receipt. */
   const amountLabel = order ? `₹${rupeesFromPaise(order.amount_paise)}` : null;
+  const listLabel = order?.list_amount_paise
+    ? `₹${rupeesFromPaise(order.list_amount_paise)}` : null;
+  const discountLabel = order?.discount_paise
+    ? `₹${rupeesFromPaise(order.discount_paise)}` : null;
   const busy = payState !== 'idle';
 
   return (
@@ -397,6 +455,50 @@ function CheckoutView({ plan, onBack, onPaid }) {
               <span>{payError}</span>
             </div>
           )}
+
+          {/* Discount code. Sits above Pay because it changes what Pay costs,
+              and a founder who spots it afterwards has already committed. */}
+          <div className="bl-coupon">
+            {applied ? (
+              <div className="bl-coupon-applied">
+                <span className="bl-coupon-code">{applied.code}</span>
+                <span className="bl-coupon-saved">
+                  &minus;&#8377;{applied.discount_inr.toLocaleString('en-IN')}
+                </span>
+                <button type="button" className="bl-link-btn" onClick={removeCoupon}
+                        disabled={busy}>
+                  Remove
+                </button>
+              </div>
+            ) : (
+              <div className="bl-coupon-entry">
+                <input
+                  id="checkout-coupon-input"
+                  type="text"
+                  className="bl-coupon-input"
+                  placeholder="Discount code"
+                  value={couponInput}
+                  autoComplete="off"
+                  autoCapitalize="characters"
+                  spellCheck="false"
+                  disabled={couponBusy || busy}
+                  onChange={(e) => setCouponInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); applyCoupon(); } }}
+                />
+                <button type="button" className="bl-coupon-apply"
+                        onClick={applyCoupon}
+                        disabled={!couponInput.trim() || couponBusy || busy}>
+                  {couponBusy ? 'Checking…' : 'Apply'}
+                </button>
+              </div>
+            )}
+            {couponError && (
+              <p className="bl-coupon-err" role="alert">{couponError}</p>
+            )}
+            {applied?.description && !couponError && (
+              <p className="bl-coupon-note">{applied.description}</p>
+            )}
+          </div>
 
           <button
             id="checkout-pay-btn"
@@ -454,8 +556,14 @@ function CheckoutView({ plan, onBack, onPaid }) {
           <div className="bl-os-breakdown">
             <div className="bl-os-line">
               <span>{plan.name} ({plan.oneTime ? 'One-time' : 'Monthly'})</span>
-              <span>{amountLabel ?? '—'}</span>
+              <span>{listLabel ?? amountLabel ?? '—'}</span>
             </div>
+            {discountLabel && (
+              <div className="bl-os-line bl-os-discount">
+                <span>Discount ({order.coupon_code})</span>
+                <span>&minus;{discountLabel}</span>
+              </div>
+            )}
             <div className="bl-os-total">
               <span>Total payable</span>
               <span>{amountLabel ?? '—'}</span>

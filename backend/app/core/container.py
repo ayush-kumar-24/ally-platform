@@ -408,10 +408,16 @@ class Container:
             webhook_secret=settings.RAZORPAY_WEBHOOK_SECRET,
         )
 
+    def coupon_service(self, db: Session):
+        from app.coupons.repository import CouponRepository
+        from app.coupons.service import CouponService
+        return CouponService(CouponRepository(db))
+
     def payment_service(self, db: Session):
         from app.payments.repository import PaymentRepository
         from app.payments.service import PaymentService
-        return PaymentService(self.payment_gateway(), PaymentRepository(db), self.credit_service(db))
+        return PaymentService(self.payment_gateway(), PaymentRepository(db),
+                              self.credit_service(db), coupons=self.coupon_service(db))
 
     def admin_panel_service(self, db: Session) -> AdminPanelService:
         """Request-scoped panel service. The audit repository is DB-backed so the
