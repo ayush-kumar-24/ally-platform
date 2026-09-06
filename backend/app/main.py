@@ -155,7 +155,7 @@ if settings.is_production:
 # happened to need a connection rather than as a configuration problem.
 _SESSION_MODE_POOLER_LIMIT = 15
 _per_process = settings.DB_POOL_SIZE + settings.DB_POOL_MAX_OVERFLOW
-if ":6543" not in (settings.DATABASE_URL or "") and _per_process * 2 > _SESSION_MODE_POOLER_LIMIT:
+if not settings.uses_transaction_pooler and _per_process * 2 > _SESSION_MODE_POOLER_LIMIT:
     logger.error(
         "db_pool_may_exhaust_session_mode_pooler",
         extra={

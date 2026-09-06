@@ -14,7 +14,7 @@ router = APIRouter(prefix="/feedback", tags=["feedback"])
 
 
 @router.post("", response_model=FeedbackRead, status_code=status.HTTP_201_CREATED)
-async def submit_feedback(
+def submit_feedback(
     payload: FeedbackCreate,
     background: BackgroundTasks,
     founder: Founder = Depends(get_founder_record),
@@ -44,7 +44,7 @@ async def submit_feedback(
 
 
 @router.get("", response_model=FeedbackList)
-async def read_feedback(
+def read_feedback(
     founder: Founder = Depends(get_founder_record),
     db: Session = Depends(get_db),
 ):

@@ -6,7 +6,6 @@ import { completionPercent, loadDashboard, markTourSeen, relativeDay } from '../
 import { loadVision } from '../services/vision';
 import { listGoals } from '../services/goals';
 import { getLatestReport, getRecommendations } from '../services/reports';
-import { DnaLoading } from '../components/DnaState';
 import FeedbackPrompt from '../components/FeedbackPrompt';
 import { FEEDBACK } from '../services/feedback';
 import { useCallAccess } from '../hooks/useCallAccess';
@@ -61,14 +60,22 @@ function progressPct(target, current) {
  *  is called the Founder's Compass. The reading itself is not lost: the arc
  *  carries it visually, and the figure's aria-label still states it in words
  *  for anyone who cannot see either. */
-function CompassGauge({ pct }) {
+function CompassGauge({ pct, pending = false }) {
   const r = 118;
   const circumference = 2 * Math.PI * r;
-  const known = pct != null;
+  const known = !pending && pct != null;
   const offset = circumference - ((known ? pct : 0) / 100) * circumference;
   const angle = known ? -90 + (pct / 100) * 180 : -90;
   return (
-    <figure className="compass-gauge" aria-label={known ? `${pct}% toward your vision target` : 'Not enough data yet'}>
+    <figure
+      className="compass-gauge"
+      aria-busy={pending || undefined}
+      aria-label={
+        pending ? 'Reading your vision progress'
+          : known ? `${pct}% toward your vision target`
+            : 'Not enough data yet'
+      }
+    >
       <svg viewBox="0 0 300 300" role="img" aria-hidden="true">
         <circle cx="150" cy="150" r="118" fill="none" stroke="rgba(27,67,50,.1)" strokeWidth="1" />
         <circle cx="150" cy="150" r="96" fill="none" stroke="rgba(27,67,50,.07)" strokeWidth="1" />
@@ -107,6 +114,18 @@ function CompassGauge({ pct }) {
   );
 }
 
+/** A stand-in for one value whose source has not answered yet.
+ *
+ *  Deliberately NOT an empty state: "you have no reports" and "we have not
+ *  asked yet" look identical to a founder, and only one of them is true on
+ *  mount. A neutral bar claims nothing. `aria-hidden` with the section's own
+ *  `aria-busy` keeps a screen reader from announcing decorative bars as
+ *  content -- it hears "busy", then the real value when it lands.
+ */
+function Skel({ w = '100%', h }) {
+  return <span className="skel" style={{ width: w, height: h }} aria-hidden="true" />;
+}
+
 /* ScoreRing, StatCard, Pill and COMPASS_TILES (the old flat tile grid) were
    removed here -- the new Founder's Compass Overview structure below
    replaces what they rendered: readouts cover the score/stat cards, and the
@@ -117,35 +136,54 @@ export default function Dashboard() {
   const { user, startTour } = useApp();
   const [showBanner, setShowBanner] = useState(true);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
+  /* Both of these hold ONE KEY PER SOURCE, filled in as each request lands,
+     and every consumer below reads the three states apart: `undefined` is
+     "still in flight", `null` is "the request failed", a value is an answer.
+     They used to be a single object each, assigned once every source had
+     resolved -- which is what made the whole page sit behind the slowest of
+     ten requests (see the load() comment below). */
+  const [data, setData] = useState({});
   // North star (Vision + Goals) and Bottleneck/Next steps (report recommendations)
   // are fetched separately from loadDashboard()'s six sources -- same "resolve to
   // null on failure" rule so one missing piece dims one section, not the page.
-  const [compassExtra, setCompassExtra] = useState(null);
+  const [compassExtra, setCompassExtra] = useState({});
   // Every discovery-call surface on this page hangs off this one signal.
-  const { canBook: canBookCall } = useCallAccess();
+  const { canBook: canBookCall, loading: callAccessLoading } = useCallAccess();
 
-  const load = useCallback(() => {
-    setLoading(true);
-    loadDashboard()
-      .then(setData)
-      .finally(() => setLoading(false));
-
-    Promise.all([
-      loadVision().catch(() => null),
-      listGoals().catch(() => null),
-      getLatestReport().catch(() => null),
-    ]).then(async ([vision, goals, report]) => {
-      const recs = report ? await getRecommendations(report.report_id).catch(() => null) : null;
-      setCompassExtra({ vision, goals, hasReport: Boolean(report), actions: toActions(recs) });
-    });
+  const setPart = useCallback((key, value) => {
+    setData((prev) => ({ ...prev, [key]: value }));
   }, []);
+  const setExtra = useCallback((key, value) => {
+    setCompassExtra((prev) => ({ ...prev, [key]: value }));
+  }, []);
+
+  /* Ten requests leave the browser here, and each section below paints as soon
+     as ITS OWN source answers. This used to be two all-or-nothing awaits, so
+     time-to-first-pixel was the slowest of the ten however fast the other nine
+     were -- and the recommendations call is deliberately last in a chain, so
+     that slowest one was usually two round trips deep. */
+  const load = useCallback(() => {
+    loadDashboard(setPart);
+
+    loadVision().catch(() => null).then((v) => setExtra('vision', v));
+    listGoals().catch(() => null).then((g) => setExtra('goals', g));
+    getLatestReport().catch(() => null).then(async (report) => {
+      // Published before the recommendations round trip, not after it: the
+      // Bottleneck and Next steps sections can already tell "no diagnosis yet"
+      // from "your actions are still loading" with just this.
+      setExtra('report', report);
+      const recs = report ? await getRecommendations(report.report_id).catch(() => null) : null;
+      setExtra('actions', report ? toActions(recs) : []);
+    });
+  }, [setPart, setExtra]);
 
   useEffect(load, [load]);
 
-  // Server name wins; the context value is the optimistic one set at login.
-  const fullName = data?.profile?.full_name || user?.name || '';
+  /* AppContext owns the founder's identity for the whole app: it fetches
+     GET /profile once on mount and replaces the login-time optimistic value
+     with the server's. This page used to fetch the same endpoint a second
+     time purely to read full_name off it. */
+  const fullName = user?.name || '';
   const firstName = fullName.split(' ')[0] || 'there';
   // Shared helper rather than a local copy -- three of these had drifted apart.
   const greeting = greetingNow();
@@ -191,8 +229,8 @@ export default function Dashboard() {
   // Bottleneck + today's next steps: same report.recommendations data
   // RecommendationsPage.jsx reads -- plain action strings, no fabricated
   // evidence bullets or confidence score (see toActions()'s docstring above).
-  const hasReport = Boolean(compassExtra?.hasReport);
-  const recActions = compassExtra?.actions ?? [];
+  const hasReport = Boolean(compassExtra.report);
+  const recActions = compassExtra.actions ?? [];
   const bottleneckAction = recActions[0] || null;
   const nextStepsPreview = recActions.slice(0, 3);
 
@@ -224,19 +262,29 @@ export default function Dashboard() {
      top of the page on every visit. */
   const tourUnseen = Boolean(overview) && overview.welcome?.show_tour !== false;
 
-  /* `loading` was computed and never read: the page mounted its full chrome
-     with zero-value fallbacks and then reflowed once the six sources resolved,
-     so a returning founder briefly saw "no diagnosis yet / no reports / no
-     conversations" before their real data replaced it. */
-  if (loading && !data) {
-    return (
-      <div className="dash-page">
-        <div className="dash-inner">
-          <DnaLoading label="Loading your Compass…" />
-        </div>
-      </div>
-    );
-  }
+  /* The page used to render nothing at all -- one centred "Loading your
+     Compass…" -- until every one of loadDashboard()'s six sources had
+     resolved, so the slowest request set the time to first pixel for a screen
+     that is mostly static chrome, navigation and the founder's own name.
+     Everything except the data readouts can be drawn immediately, and each
+     readout now waits only on the source behind it.
+
+     The gate was not pointless, though, and this must not undo what it fixed:
+     rendering the chrome with zero-value fallbacks showed a returning founder
+     "no diagnosis yet / no reports / no conversations" for a moment before
+     their real data arrived. An empty state is a claim about the founder, and
+     making it before the answer is in is a lie the founder cannot tell from
+     the truth. So each flag below means "this source has not answered YET",
+     and every section it guards renders a placeholder rather than an empty
+     state until it has. */
+  const waitingForHealth = data.health === undefined;
+  const waitingForCounts = data.overview === undefined || data.summary === undefined;
+  const waitingForOverview = data.overview === undefined;
+  const waitingForPlan = data.plan === undefined;
+  const waitingForNorthStar = compassExtra.vision === undefined || compassExtra.goals === undefined;
+  const waitingForReport = compassExtra.report === undefined;
+  const waitingForActions = compassExtra.actions === undefined;
+  const callPending = callAccessLoading || waitingForOverview;
 
   return (
     <div className="dash-page">
@@ -321,43 +369,57 @@ export default function Dashboard() {
             <div className="compass-eyebrow">Current state</div>
             <h2>Where you're reading right now</h2>
           </div>
-          <div className="compass-readouts">
+          <div className="compass-readouts" aria-busy={waitingForHealth || waitingForCounts}>
             <div className="compass-readout">
               <span className="crl">Founder clarity</span>
-              <span className="crv">{band || '—'}</span>
-              <span className="crs">{hasHealth ? 'From your latest diagnosis' : 'Run a diagnosis to see this'}</span>
+              <span className="crv">{waitingForHealth ? <Skel w="5ch" /> : (band || '—')}</span>
+              <span className="crs">
+                {waitingForHealth ? <Skel w="14ch" />
+                  : hasHealth ? 'From your latest diagnosis' : 'Run a diagnosis to see this'}
+              </span>
             </div>
             <div className="compass-readout">
               <span className="crl">Dimensions scanned</span>
-              <span className="crv">{pillars.length || '—'}</span>
-              <span className="crs">{pillars.length ? 'From your latest diagnosis' : 'No diagnosis yet'}</span>
+              <span className="crv">{waitingForHealth ? <Skel w="3ch" /> : (pillars.length || '—')}</span>
+              <span className="crs">
+                {waitingForHealth ? <Skel w="12ch" />
+                  : pillars.length ? 'From your latest diagnosis' : 'No diagnosis yet'}
+              </span>
             </div>
             <div className="compass-readout">
               <span className="crl">Red flags</span>
-              <span className="crv">{hasHealth ? redFlags.length : '—'}</span>
-              <span className="crs">{hasHealth ? (redFlags.length ? 'Needs attention' : 'None detected') : 'No diagnosis yet'}</span>
+              <span className="crv">{waitingForHealth ? <Skel w="3ch" /> : (hasHealth ? redFlags.length : '—')}</span>
+              <span className="crs">
+                {waitingForHealth ? <Skel w="12ch" />
+                  : hasHealth ? (redFlags.length ? 'Needs attention' : 'None detected') : 'No diagnosis yet'}
+              </span>
             </div>
             <div className="compass-readout">
               <span className="crl">Reports</span>
-              <span className="crv">{reports || '—'}</span>
-              <span className="crs">{sessions ? `${sessions} session${sessions === 1 ? '' : 's'} completed` : 'No sessions yet'}</span>
+              <span className="crv">{waitingForCounts ? <Skel w="3ch" /> : (reports || '—')}</span>
+              <span className="crs">
+                {waitingForCounts ? <Skel w="14ch" />
+                  : sessions ? `${sessions} session${sessions === 1 ? '' : 's'} completed` : 'No sessions yet'}
+              </span>
             </div>
           </div>
         </section>
 
         {/* NORTH STAR — the founder's own Vision + Goals, nothing invented. */}
         <section className="compass-section">
-          <div className="compass-northstar">
+          <div className="compass-northstar" aria-busy={waitingForNorthStar}>
             <div>
               <div className="compass-eyebrow">Your north star</div>
-              {northStarStatement ? (
+              {waitingForNorthStar ? (
+                <p className="compass-statement"><Skel w="78%" /></p>
+              ) : northStarStatement ? (
                 <p className="compass-statement">"{northStarStatement}"</p>
               ) : (
                 <p className="compass-statement is-empty">You haven't written your vision yet.</p>
               )}
               <dl className="compass-ns-rows">
-                <div className="compass-ns-row"><dt>Vision</dt><dd>{visionSummary?.target?.trim() || 'Not set yet'}</dd></div>
-                <div className="compass-ns-row"><dt>Goal this year</dt><dd>{topGoal?.title || 'No goals set yet'}</dd></div>
+                <div className="compass-ns-row"><dt>Vision</dt><dd>{waitingForNorthStar ? <Skel w="16ch" /> : (visionSummary?.target?.trim() || 'Not set yet')}</dd></div>
+                <div className="compass-ns-row"><dt>Goal this year</dt><dd>{waitingForNorthStar ? <Skel w="20ch" /> : (topGoal?.title || 'No goals set yet')}</dd></div>
                 {topGoal?.subtitle && (
                   <div className="compass-ns-row"><dt>Next milestone</dt><dd>{topGoal.subtitle}</dd></div>
                 )}
@@ -367,18 +429,28 @@ export default function Dashboard() {
                 <button className="btn btn-ghost" type="button" onClick={() => navigate('/app/goals')}>See goals <IconArrowRight /></button>
               </div>
             </div>
-            <CompassGauge pct={northStarPct} />
+            <CompassGauge pct={northStarPct} pending={waitingForNorthStar} />
           </div>
         </section>
 
         {/* BOTTLENECK — the founder's own top diagnosis recommendation, or an
             honest lock when there's no diagnosis to draw one from yet. No
             invented evidence bullets or confidence score -- see toActions(). */}
-        <section className="compass-section">
-          {hasReport ? (
+        <section className="compass-section" aria-busy={waitingForReport || waitingForActions}>
+          {waitingForReport ? (
+            /* Neither branch below is safe to guess at: one tells a founder
+               with a diagnosis to go run one, the other shows a recommendation
+               slot to somebody who has no report at all. */
             <article className="compass-bottleneck">
               <div className="compass-eyebrow">What Ally would flag first</div>
-              {bottleneckAction ? (
+              <p className="compass-bottleneck-text"><Skel w="90%" /><Skel w="62%" /></p>
+            </article>
+          ) : hasReport ? (
+            <article className="compass-bottleneck">
+              <div className="compass-eyebrow">What Ally would flag first</div>
+              {waitingForActions ? (
+                <p className="compass-bottleneck-text"><Skel w="88%" /><Skel w="54%" /></p>
+              ) : bottleneckAction ? (
                 <>
                   <p className="compass-bottleneck-text">{bottleneckAction}</p>
                   <div className="btn-row" style={{ marginTop: 18 }}>
@@ -451,7 +523,12 @@ export default function Dashboard() {
             <div className="compass-eyebrow">Continue where you left off</div>
             <h2>Your last conversation with Ally</h2>
           </div>
-          {latestConversation ? (
+          {waitingForOverview ? (
+            <article className="compass-convo" aria-busy="true">
+              <div className="cc-title"><Skel w="46%" /></div>
+              <div className="cc-meta"><Skel w="18ch" /></div>
+            </article>
+          ) : latestConversation ? (
             <article className="compass-convo">
               <div className="cc-title">{latestConversation.title || 'Untitled conversation'}</div>
               <div className="cc-meta">
@@ -474,9 +551,18 @@ export default function Dashboard() {
         <section className="compass-section">
           <div className="compass-section-head">
             <div className="compass-eyebrow">Today's next steps</div>
-            <h2>{hasReport ? 'Pulled from your diagnosis' : 'Nothing pulled yet'}</h2>
+            <h2>{waitingForReport ? <Skel w="18ch" /> : hasReport ? 'Pulled from your diagnosis' : 'Nothing pulled yet'}</h2>
           </div>
-          {nextStepsPreview.length > 0 ? (
+          {(waitingForReport || (hasReport && waitingForActions)) ? (
+            <ol className="compass-steps" aria-busy="true">
+              {[0, 1, 2].map((i) => (
+                <li key={i} className="compass-step">
+                  <span className="cst-num">{String(i + 1).padStart(2, '0')}</span>
+                  <div className="cst-body"><p><Skel w={`${90 - i * 14}%`} /></p></div>
+                </li>
+              ))}
+            </ol>
+          ) : nextStepsPreview.length > 0 ? (
             <ol className="compass-steps">
               {nextStepsPreview.map((text, i) => (
                 <li key={i} className="compass-step">
@@ -539,7 +625,11 @@ export default function Dashboard() {
             two siblings moved into the new Bottleneck/recent-conversation
             sections above) -- when it's hidden, the left column would render
             empty and the grid would leave a large blank gap on the left. */}
-        <section className={`dash-grid${(canBookCall || hasCall) ? '' : ' no-left-col'}`}>
+        {/* `callPending`: whether this column exists at all depends on two
+            answers that have not arrived yet, and letting the grid collapse to
+            one column and then snap back to two is a worse first impression
+            than holding the space for a moment. */}
+        <section className={`dash-grid${(callPending || canBookCall || hasCall) ? '' : ' no-left-col'}`}>
           <div className="dash-stack">
             {/* Hidden entirely when they cannot book, EXCEPT when they already
                 have a call on the books -- an existing booking is theirs and
@@ -547,12 +637,17 @@ export default function Dashboard() {
                 beats an upsell slot here: the dashboard already carries a plan
                 card doing that job, and a second one turns the page into a
                 pitch. */}
-            {(canBookCall || hasCall) && (
-            <section className="dash-section">
+            {(callPending || canBookCall || hasCall) && (
+            <section className="dash-section" aria-busy={callPending || undefined}>
               <div className="dash-section-head">
                 <div className="dash-section-title">Upcoming discovery call</div>
               </div>
-              {hasCall ? (
+              {callPending ? (
+                <div className="dash-call">
+                  <Skel w="40%" />
+                  <Skel w="70%" />
+                </div>
+              ) : hasCall ? (
                 <div className="dash-call">
                   <div className="dash-call-kicker">
                     {call.status === 'confirmed' ? 'Confirmed' : call.status}
@@ -597,17 +692,21 @@ export default function Dashboard() {
             {/* Every value here was hardcoded to "Ally Free" and "18 / 20",
                 so a founder on Pro was told they were on Free and shown usage
                 belonging to nobody. */}
-            <section className="dash-section dash-plan">
+            <section className="dash-section dash-plan" aria-busy={waitingForPlan}>
               <div className="dash-plan-top">
                 <div>
                   <div className="dash-kicker">Your plan</div>
-                  <div className="dash-plan-title">{planLabel}</div>
+                  {/* Both of these read from the same unloaded object, and its
+                      fallbacks say "Ally", "Free forever", "Upgrade" -- i.e.
+                      they tell a paying founder they are on the free tier
+                      until /plans/me answers. */}
+                  <div className="dash-plan-title">{waitingForPlan ? <Skel w="9ch" /> : planLabel}</div>
                 </div>
-                <span className="dash-badge small">{planLabel}</span>
+                <span className="dash-badge small">{waitingForPlan ? <Skel w="7ch" /> : planLabel}</span>
               </div>
               <div className="dash-plan-row">
                 <span>Billing</span>
-                <b>{isFree ? 'Free forever' : 'Active subscription'}</b>
+                <b>{waitingForPlan ? <Skel w="12ch" /> : (isFree ? 'Free forever' : 'Active subscription')}</b>
               </div>
               <div className="dash-meter">
                 <div>
@@ -645,7 +744,10 @@ export default function Dashboard() {
               <div className="dash-plan-actions">
                 <button className="btn btn-em" type="button" onClick={() => navigate('/app/billing')}>
                   <IconArrowRight />
-                  {isFree ? 'Upgrade' : 'Manage plan'}
+                  {/* "Billing" is the one label that is true either way, and it
+                      is where the button goes -- better than telling a paying
+                      founder to upgrade for the moment before the plan lands. */}
+                  {waitingForPlan ? 'Billing' : (isFree ? 'Upgrade' : 'Manage plan')}
                 </button>
               </div>
             </section>
@@ -676,8 +778,17 @@ export default function Dashboard() {
               </div>
               {/* Three invented reports with invented scores of 74/68/61 --
                   shown even to founders who had never run a diagnosis. */}
-              <div className="dash-list reports">
-                {recentReports.length === 0 && (
+              <div className="dash-list reports" aria-busy={waitingForOverview}>
+                {waitingForOverview && [0, 1].map((i) => (
+                  <div key={i} className="dash-list-row report">
+                    <span className="dash-list-ic soft"><IconDocument /></span>
+                    <span className="dash-list-body">
+                      <span className="dash-list-title"><Skel w="60%" /></span>
+                      <span className="dash-list-sub"><Skel w="8ch" /></span>
+                    </span>
+                  </div>
+                ))}
+                {!waitingForOverview && recentReports.length === 0 && (
                   <p className="dash-empty">
                     No reports yet. Your first one arrives when you finish a diagnosis.
                   </p>

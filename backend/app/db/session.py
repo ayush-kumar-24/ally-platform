@@ -1,7 +1,7 @@
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import Session, sessionmaker, declarative_base
 
-from app.core.config import settings
+from app.core.config import is_transaction_pooler, settings
 
 # Supabase's pooler allows 15 client connections in session mode, shared by
 # every process that talks to it -- and this app can run as more than one
@@ -13,17 +13,59 @@ from app.core.config import settings
 # first -- which is exactly what happened in development with just two
 # processes running.
 #
-# DB_POOL_SIZE/DB_POOL_MAX_OVERFLOW (app/core/config.py) default to a per-
-# process cap of 5, sized for up to 2 instances with headroom. pool_recycle
-# keeps connections from going stale behind the pooler, which closes idle ones.
+# DB_POOL_SIZE/DB_POOL_MAX_OVERFLOW (app/core/config.py) size themselves from
+# which pooler DATABASE_URL names, because the two modes have completely
+# different budgets -- see the comment there. What made the size start to
+# matter is that routes taking a Session are now `def` rather than `async def`
+# (see the note above SessionLocal below): they run in the threadpool and
+# really do run concurrently, so the pool is what bounds concurrency instead
+# of the event loop accidentally doing it. pool_recycle keeps connections from
+# going stale behind the pooler, which closes idle ones.
+#
+# Transaction mode does NOT support prepared statements -- Supabase's own
+# connecting-to-postgres guide says so outright, and the dedicated PgBouncer
+# pooler on the same port is the same story. psycopg3 does not know that: it
+# prepares a statement server-side once it has seen it `prepare_threshold`
+# times (default 5), so on a transaction pooler every query the app runs more
+# than a handful of times eventually raises `prepared statement "_pg3_0"
+# already exists` (or `does not exist`) when it lands on a backend connection
+# that is not the one it was prepared on. The failure is sporadic and depends
+# on which pooled connection a request happens to get, which makes it look
+# like anything except a configuration problem.
+#
+# `prepare_threshold=None` turns server-side prepares off entirely. It costs
+# the parse-plan reuse a repeated query would get, which is why it is tied to
+# the pooler mode rather than set unconditionally: session mode supports
+# prepared statements and keeps them.
+# A plain function of the URL, so the rule can be asserted without reloading
+# this module -- a reload rebinds Base, SessionLocal and engine, which every
+# other module is already holding references to.
+def connect_args_for(url: str) -> dict:
+    """psycopg connect() kwargs this URL implies. Empty for every other driver
+    (sqlite in the tests, psycopg2) -- prepare_threshold is psycopg3's."""
+    if is_transaction_pooler(url) and "+psycopg" in url:
+        return {"prepare_threshold": None}
+    return {}
+
+
 engine = create_engine(
     settings.DATABASE_URL,
     pool_pre_ping=True,
     pool_size=settings.DB_POOL_SIZE,
     max_overflow=settings.DB_POOL_MAX_OVERFLOW,
+    pool_timeout=settings.DB_POOL_TIMEOUT,
     pool_recycle=1800,
+    connect_args=connect_args_for(settings.DATABASE_URL),
 )
 
+# This Session is SYNCHRONOUS, and that decides how routes must be declared:
+# a FastAPI route that takes one is `def`, never `async def`. An `async def`
+# route runs ON the event loop, so each of its queries blocks every other
+# request in the process for the duration of a network round trip to the
+# database; a `def` route runs in the threadpool and blocks only itself. This
+# is enforced by tests/test_routes_do_not_block_the_event_loop.py, which has
+# the full story -- it was found through the founder dashboard, whose six
+# parallel requests were executing strictly one after another.
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
