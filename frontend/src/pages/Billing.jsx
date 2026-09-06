@@ -209,10 +209,6 @@ function PlansView({ onSelectPlan, currentPlan }) {
           Bank-grade encryption
         </span>
         <span>
-          <svg viewBox="0 0 24 24"><polyline points="9 11 12 14 22 4" /><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" /></svg>
-          Cancel anytime
-        </span>
-        <span>
           <svg viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 11-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></svg>
           100% data privacy
         </span>
