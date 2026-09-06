@@ -173,3 +173,34 @@ export function confirmCallRequest(callId) {
 export function declineCallRequest(callId, reason) {
   return post(`/admin/discovery-calls/${callId}/decline`, { reason });
 }
+
+// --- privacy center review queue -------------------------------------------
+//
+// Every Privacy Center action that needs a person lands here: data corrections,
+// and email changes from founders who mistyped their address at signup and can
+// no longer receive anything we send.
+//
+// These endpoints existed on the backend with NOTHING in the UI calling them,
+// so the queue was invisible: rows accumulated `pending` and could only be seen
+// by querying the database directly.
+
+/** The review queue. `status` filters; omit it to see everything. */
+export function listPrivacyRequests({ status = 'pending', limit = 50 } = {}) {
+  return get('/admin/privacy-requests', {
+    params: status ? { status, limit } : { limit },
+  });
+}
+
+/**
+ * Move a request on: 'in_progress', 'completed' or 'rejected'.
+ *
+ * `rejection_reason` is required by the API when rejecting — the founder is
+ * owed a reason, and the endpoint refuses without one.
+ */
+export function resolvePrivacyRequest(requestId, { status, processingNotes, rejectionReason } = {}) {
+  return patch(`/admin/privacy-requests/${requestId}`, {
+    status,
+    ...(processingNotes ? { processing_notes: processingNotes } : {}),
+    ...(rejectionReason ? { rejection_reason: rejectionReason } : {}),
+  });
+}

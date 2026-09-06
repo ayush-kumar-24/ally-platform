@@ -388,6 +388,21 @@ class Settings(BaseSettings):
     def health_alert_emails(self) -> list[str]:
         return [e.strip() for e in self.HEALTH_ALERT_EMAILS.split(",") if e.strip()]
 
+    #: Who is told when a Privacy Center request lands on the review queue.
+    #:
+    #: Separate from HEALTH_ALERT_EMAILS on purpose: that is an on-call/ops
+    #: inbox for "the system is red", this is whoever handles founder requests
+    #: and DSARs. The same person may read both; they are not the same question.
+    #:
+    #: Unset is NOT silence -- privacy_notifications falls back to
+    #: EMAIL_REPLY_TO, because a request nobody is told about is the exact
+    #: defect that feature exists to remove.
+    PRIVACY_ALERT_EMAILS: str = ""
+
+    @property
+    def privacy_alert_emails(self) -> list[str]:
+        return [e.strip() for e in self.PRIVACY_ALERT_EMAILS.split(",") if e.strip()]
+
     # --- CORS ---
     CORS_ORIGINS: str = "http://localhost:3000"
 

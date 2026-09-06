@@ -17,12 +17,13 @@ ours. Credentials and 2FA stay with the identity provider, surfaced read-only
 under /settings/security.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_founder_record
 from app.core.auth import AuthUser, get_current_founder
 from app.db.session import get_db
+from app.services.privacy_notifications import notify_team_of_request
 from app.models import Founder
 from app.repositories import founder_repository, privacy_request_repository
 from app.schemas.privacy import (
@@ -113,6 +114,7 @@ async def read_security(auth_user: AuthUser = Depends(get_current_founder)):
 @router.post("/privacy", response_model=PrivacyRequestRead, status_code=status.HTTP_201_CREATED)
 async def submit_privacy_request(
     payload: PrivacyRequestCreate,
+    background: BackgroundTasks,
     founder: Founder = Depends(get_founder_record),
     db: Session = Depends(get_db),
 ):
@@ -154,12 +156,25 @@ async def submit_privacy_request(
                 ),
             )
 
-    return privacy_request_repository.submit(
+    created = privacy_request_repository.submit(
         db,
         founder_id=founder.founder_id,
         request_type=payload.request_type,
         request_details=payload.request_details,
     )
+
+    # Told AFTER the row exists, and in the background. The founder's 201 must
+    # not wait on an SMTP round trip, and must not turn into a 500 if the mail
+    # fails -- their request IS recorded at this point, and telling them it
+    # failed would have them submit it again, straight into the duplicate guard.
+    background.add_task(
+        notify_team_of_request,
+        request_type=payload.request_type,
+        founder_id=founder.founder_id,
+        founder_email=founder.email,
+        request_details=payload.request_details,
+    )
+    return created
 
 
 @router.get("/privacy", response_model=PrivacyRequestListResponse)

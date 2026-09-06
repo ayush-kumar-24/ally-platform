@@ -19,6 +19,10 @@ const LINKS = [
   // Support sees this too -- answering a call request is a scheduling decision
   // about the team's own diary, not account administration.
   { to: '/admin/calls', label: 'Calls', capability: 'manage_discovery_calls' },
+  // view_users, not manage_privacy_requests: seeing the queue is the same
+  // tier as seeing users, and hiding it from people who can read it but
+  // not action it is how a request sits unnoticed for a month.
+  { to: '/admin/privacy', label: 'Privacy', capability: 'view_users' },
   { to: '/admin/audit', label: 'Audit Log', capability: 'view_audit' },
   { to: '/admin/system', label: 'System', capability: 'view_users' },
 ];
