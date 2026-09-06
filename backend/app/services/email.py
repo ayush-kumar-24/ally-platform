@@ -26,6 +26,9 @@ def send_email(to: str, subject: str, body_text: str, body_html: str | None = No
     msg["From"] = settings.EMAIL_FROM
     msg["To"] = to
     msg["Subject"] = subject
+    # Our From is no-reply, but several emails ask the founder to reply.
+    if settings.EMAIL_REPLY_TO:
+        msg["Reply-To"] = settings.EMAIL_REPLY_TO
     msg.set_content(body_text)
     if body_html:
         msg.add_alternative(body_html, subtype="html")

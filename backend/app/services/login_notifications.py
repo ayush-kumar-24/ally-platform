@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime, timedelta, timezone
+from html import escape
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -163,9 +164,10 @@ def _send(to: str, name: str, label: str, when: datetime) -> bool:
         "The GoXL Team"
     )
     html = (
-        f"<p>Hi {name},</p>"
+        f"<p>Hi {escape(name)},</p>"
         f"<p>Your Ally account was just opened from a device we have not seen before.</p>"
-        f"<p><strong>Device:</strong> {label}<br><strong>When:</strong> {stamp}</p>"
+        f"<p><strong>Device:</strong> {escape(label)}<br>"
+        f"<strong>When:</strong> {escape(stamp)}</p>"
         "<p>If that was you, there is nothing to do.</p>"
         "<p>If it was not, please change your password. Open Ally the way you normally "
         "do &mdash; by typing the address into your browser &mdash; and use "
