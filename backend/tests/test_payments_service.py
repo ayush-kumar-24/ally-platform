@@ -49,9 +49,6 @@ class FakeGateway:
             {"amount_paise": amount_paise, "currency": currency, "receipt": receipt, "notes": notes})
         return GatewayOrder(order_id=self.order_id, amount_paise=amount_paise, currency=currency)
 
-    def verify_payment_signature(self, *, order_id, payment_id, signature):
-        return True
-
     def verify_webhook_signature(self, *, body, signature):
         expected = hmac.new(WEBHOOK_SECRET.encode(), body, hashlib.sha256).hexdigest()
         return hmac.compare_digest(expected, signature or "")
