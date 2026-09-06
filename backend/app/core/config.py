@@ -368,11 +368,38 @@ class Settings(BaseSettings):
     # network namespace. Without that sidecar every PDF download 503s forever.
     GOTENBERG_URL: str = "http://localhost:3000"
 
-    # Public origin used to build shareable links. Empty falls back to the
-    # request's own base URL, which behind the Vercel proxy is the API host --
-    # correct but wrong-looking in a link a founder sends to an investor. Set
-    # this to the site people actually visit (e.g. https://goxlally.ai).
+    # Where the FOUNDER-FACING APP lives, e.g. https://app.goxlally.ai.
+    #
+    # Used to send a founder back into the app after an external redirect they
+    # cannot carry a header through -- today that means the Google Calendar
+    # OAuth callback, which lands on the API with no session and has to bounce
+    # to /app/plan.
+    #
+    # NOT used for share links any more. It was, and it produced dead links: it
+    # is set to the marketing site rather than the app, and the /r/<token> path
+    # it was combined with stopped existing when the frontend left Vercel. See
+    # share_url_for in api/v1/reports/routes.py.
     PUBLIC_APP_URL: str = ""
+
+    # This API's own public origin, e.g. https://app.goxlally.ai.
+    #
+    # Only needed to build absolute links back to this API from inside it --
+    # share links being the one that matters. Empty falls back to the origin the
+    # request arrived on, which is right whenever the API is reached directly and
+    # wrong only behind a proxy that rewrites Host without forwarding it.
+    PUBLIC_API_URL: str = ""
+
+    # OPT-IN pretty share links: https://<this>/r/<token>.
+    #
+    # LEAVE EMPTY UNLESS A REWRITE ACTUALLY EXISTS at that origin mapping /r/* to
+    # GET /api/v1/reports/shared/{token}/view -- a CloudFront Function, an nginx
+    # location, something real. Empty means share links use the direct API URL,
+    # which is longer and always resolves.
+    #
+    # This is opt-in because the opposite arrangement is what broke sharing:
+    # the code assumed a Vercel rewrite was in place, the frontend moved to S3,
+    # and every share link 404'd with nothing in the codebase looking wrong.
+    SHARE_LINK_BASE_URL: str = ""
 
     # --- Payments (Razorpay) ---
     # Until both key settings are set, app.payments refuses to create a real

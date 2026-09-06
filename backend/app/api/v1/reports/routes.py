@@ -152,27 +152,53 @@ def _section(narrative, key: str) -> SectionOut | None:
 
 
 def share_url_for(token: str, request: Request) -> str:
-    """The public URL for a share token.
+    """The public URL for a share token. It must resolve, above all else.
 
-    `/r/<token>` is a REWRITE on the Vercel frontend (see frontend/vercel.json),
-    not a route on this backend -- so it only resolves against the site's own
-    origin. Building it against the API host instead produces a link that 404s,
-    which is the worst possible outcome for a feature whose entire job is to
-    hand someone a working URL.
+    THIS USED TO BUILD `<PUBLIC_APP_URL>/r/<token>` AND THAT BROKE EVERY SHARE
+    LINK. `/r/:token` was never a route on anything -- it was a REWRITE declared
+    in frontend/vercel.json, pointing at the API. When the frontend moved from
+    Vercel to S3 + CloudFront, the rewrite went with it: S3 static hosting has no
+    rewrite engine, so nothing serves `/r/` any more. The file is still in the
+    repo, which is what made this hard to see -- it reads like live config.
 
-    So the pretty path is used only when PUBLIC_APP_URL says where the site
-    lives. Without it we fall back to this API's own endpoint, which is uglier
-    but always resolves. A link that works beats a link that looks right.
+    Two things went wrong at once, and either alone was enough to 404:
 
-    The fallback is reversed out of the route table rather than written as a
-    literal, so it follows the router if this module is ever remounted under a
-    different prefix. A hardcoded "/api/v1/..." would keep returning 200s from
-    url_path_for's point of view while silently pointing at nothing.
+      * PUBLIC_APP_URL points at the marketing site (goxlally.ai), not the app,
+        so links were built against a domain that has never had the route; and
+      * even the app's own origin has no `/r/` handler now.
+
+    PUBLIC_APP_URL is deliberately NOT consulted here any more. It is still right
+    for what it was added for -- bouncing a founder back to /app/plan after the
+    calendar OAuth dance -- and quietly reusing it for shares is how a link ended
+    up pointing at a static marketing site.
+
+    DEFAULT IS THE DIRECT API URL, which needs no CDN rewrite, no second domain
+    and no configuration to work. It is longer than /r/<token>. It also resolves,
+    which the pretty one did not, and a link that works beats a link that looks
+    right -- this feature's entire job is handing someone a URL that opens.
+
+    Set SHARE_LINK_BASE_URL only once a rewrite genuinely exists at that origin
+    (a CloudFront Function mapping /r/* to this endpoint). It is opt-in on
+    purpose: the previous arrangement assumed a rewrite was there and produced
+    dead links for months when it silently stopped being.
+
+    The path is reversed out of the route table rather than written as a literal,
+    so it follows the router if this module is ever remounted under a different
+    prefix. A hardcoded "/api/v1/..." would keep looking correct while pointing
+    at nothing.
     """
-    site = (settings.PUBLIC_APP_URL or "").strip().rstrip("/")
-    if site:
-        return f"{site}/r/{token}"
     path = request.app.url_path_for("shared_report_page", token=token)
+
+    pretty = (settings.SHARE_LINK_BASE_URL or "").strip().rstrip("/")
+    if pretty:
+        return f"{pretty}/r/{token}"
+
+    base = (settings.PUBLIC_API_URL or "").strip().rstrip("/")
+    if base:
+        return f"{base}{path}"
+    # Last resort: the origin this very request arrived on. Correct whenever the
+    # API is reached directly, and wrong only behind a proxy that rewrites Host
+    # without forwarding it -- which is exactly what PUBLIC_API_URL is for.
     return f"{str(request.base_url).rstrip('/')}{path}"
 
 
