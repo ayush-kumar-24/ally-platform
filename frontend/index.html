@@ -2,6 +2,21 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <!-- The invitation link carries the founder's email in the URL fragment. It
+         is moved out of the address bar here, before any other script runs, so
+         nothing that reads the location (an analytics tag, an error report, a
+         session recorder) ever sees it. The login page reads it back from
+         sessionStorage. Inline and first on purpose. -->
+    <script>
+      (function () {
+        try {
+          var m = /(?:^#|&)email=([^&]+)/.exec(window.location.hash);
+          if (!m) return;
+          window.sessionStorage.setItem('ally_invite_email', m[1]);
+          window.history.replaceState(null, '', window.location.pathname + window.location.search);
+        } catch (e) { /* storage blocked: the page falls back to the fragment */ }
+      })();
+    </script>
     <!-- favicon.svg is 9 kB and scales; ally-logo.png is 519 kB and was being
          downloaded by every visitor purely to draw a 16px tab icon. The PNG is
          kept as the apple-touch-icon, where a raster is actually required. -->

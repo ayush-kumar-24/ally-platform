@@ -55,21 +55,6 @@ function CheckIcon({ size = 18, color = '#10B981' }) {
   );
 }
 
-function UsageBar({ used, total, color = '#10B981' }) {
-  const pct = Math.min(100, Math.round((used / total) * 100));
-  const barColor = pct >= 90 ? '#f59e0b' : color;
-  return (
-    <div className="bl-usage-bar-wrap">
-      <div className="bl-usage-bar-track">
-        <div
-          className="bl-usage-bar-fill"
-          style={{ width: `${pct}%`, background: barColor }}
-        />
-      </div>
-      <span className="bl-usage-bar-label">{used}/{total}</span>
-    </div>
-  );
-}
 
 /* ═══════════════════════════════════════════
    VIEW 1 — Plans (existing, enhanced)
@@ -92,41 +77,50 @@ function useCatalog() {
         if (cancelled || !catalog?.plans?.length) return;
         const callMins = catalog.call_duration_minutes ?? 15;
         const callPrice = catalog.call_price_inr ?? 300;
-        setPlans(catalog.plans.map((p) => ({
-          id: p.tier,
-          name: p.name,
-          price: p.price_inr,
-          // Null unless the backend judged it a real saving — the decision is
-          // made once, server-side, so no surface can render a crossed-out
-          // number that saves the founder nothing.
-          mrp: p.mrp_inr ?? null,
-          // Starter is paid once for one diagnosis; Plus and Pro renew. The
-          // backend decides which, so no surface here assumes "/mo".
-          oneTime: Boolean(p.one_time),
-          period: p.price_inr ? (p.one_time ? 'one-time' : '/mo') : '',
-          tag: p.tagline,
-          popular: p.tier === 'pro',
-          cta: p.price_inr ? `Start ${p.name}` : 'Current',
-          features: [
-            // Tokens, not credits: credits are an internal accounting unit.
-            // Rs 199 has no metered surface at all, so it gets what it is.
-            ...(p.features.includes('ally_chat')
-              ? [`${p.daily_token_limit.toLocaleString('en-IN')} tokens per day`,
-                 'Chat with Ally']
-              : ['One adaptive diagnosis', 'Your Clarity Report']),
-            p.features.includes('voice_chat') ? 'Voice in Ally Chat' : 'Voice in Diagnosis',
-            ...(p.features.includes('next_steps') ? ['Your next 3 steps'] : []),
-            ...(p.features.includes('goals') ? ['Goals'] : []),
-            ...(p.features.includes('plan_your_day') ? ['Plan Your Day'] : []),
-            ...(p.features.includes('recommendations') ? ['Ally recommends your steps'] : []),
-            ...(p.features.includes('vision') ? ['Vision'] : []),
-            ...(p.features.includes('knowledge_chat') ? ['Discuss the knowledge base'] : []),
-            ...(p.features.includes('email_notifications') ? ['Email reminders from Ally'] : []),
-            ...(p.features.includes('know_my_energy') ? ['Know My Energy'] : []),
-            `Book a call · ₹${callPrice} / ${callMins} min`,
-            ...(p.features.includes('priority_call') ? ['Priority call booking'] : []),
-          ],
-        })));
+        setPlans(catalog.plans.map((p) => {
+          // Whether a tier is bought once or subscribed to is the backend's
+          // call (`one_time` in the catalog response). The old inference is
+          // kept as the fallback because the frontend and backend deploy
+          // separately: a frontend that lands before the backend that grew
+          // the field must not relabel a one-time purchase as monthly.
+          // Both agree on today's catalog -- a paid tier with nothing that
+          // renews, no monthly credits and no daily budget, is Starter.
+          const oneTime = p.one_time
+            ?? (!!p.price_inr && !p.monthly_credits && !p.daily_token_limit);
+          return {
+            id: p.tier,
+            name: p.name,
+            price: p.price_inr,
+            // Null unless the backend judged it a real saving — the decision is
+            // made once, server-side, so no surface can render a crossed-out
+            // number that saves the founder nothing.
+            mrp: p.mrp_inr ?? null,
+            oneTime,
+            period: p.price_inr ? (oneTime ? ' once' : '/mo') : '',
+            tag: p.tagline,
+            popular: p.tier === 'pro',
+            cta: p.price_inr ? `Start ${p.name}` : 'Current',
+            features: [
+              // Tokens, not credits: credits are an internal accounting unit.
+              // Rs 199 has no metered surface at all, so it gets what it is.
+              ...(p.features.includes('ally_chat')
+                ? [`${p.daily_token_limit.toLocaleString('en-IN')} tokens per day`,
+                   'Chat with Ally']
+                : ['One adaptive diagnosis', 'Your Clarity Report']),
+              p.features.includes('voice_chat') ? 'Voice in Ally Chat' : 'Voice in Diagnosis',
+              ...(p.features.includes('next_steps') ? ['Your next 3 steps'] : []),
+              ...(p.features.includes('goals') ? ['Goals'] : []),
+              ...(p.features.includes('plan_your_day') ? ['Plan Your Day'] : []),
+              ...(p.features.includes('recommendations') ? ['Ally recommends your steps'] : []),
+              ...(p.features.includes('vision') ? ['Vision'] : []),
+              ...(p.features.includes('knowledge_chat') ? ['Discuss the knowledge base'] : []),
+              ...(p.features.includes('email_notifications') ? ['Email reminders from Ally'] : []),
+              ...(p.features.includes('know_my_energy') ? ['Know My Energy'] : []),
+              `Book a call · ₹${callPrice} / ${callMins} min`,
+              ...(p.features.includes('priority_call') ? ['Priority call booking'] : []),
+            ],
+          };
+        }));
         setLive(true);
       })
       .catch(() => { /* keep the fallback — a pricing page must always render */ });
@@ -178,9 +172,7 @@ function PlansView({ onSelectPlan, currentPlan }) {
                   </>
                 )}
               </div>
-              {plan.price > 0 && (
-                <div className="pc-sub">{plan.oneTime ? 'one-time payment' : 'billed monthly'}</div>
-              )}
+              {plan.price > 0 && <div className="pc-sub">{plan.oneTime ? 'one-time payment' : 'billed monthly'}</div>}
               <button
                 id={`plan-cta-${plan.id}`}
                 className={`pc-cta${isCurrent ? '' : ' primary'}`}
@@ -238,9 +230,7 @@ function PlansView({ onSelectPlan, currentPlan }) {
               {PLANS.map(p => (
                 <th scope="col" key={p.id} className={p.popular ? 'cmp-col-pop' : ''}>
                   <div className="cmp-pn">{p.name}</div>
-                  <div className="cmp-pp">
-                    {p.price === 0 ? 'Free' : `₹${p.price.toLocaleString()} ${p.period}`}
-                  </div>
+                  <div className="cmp-pp">{p.price === 0 ? 'Free' : `₹${p.price.toLocaleString()}${p.period}`}</div>
                 </th>
               ))}
             </tr>
@@ -668,11 +658,9 @@ function StatusView({ onUpgrade, currentPlan }) {
             {plan.name} Plan
             <span className="bl-status-badge active">Active</span>
           </h2>
-          {plan.oneTime ? (
-            <p className="bl-status-renew">One-time purchase · ₹{plan.price.toLocaleString()} · nothing renews</p>
-          ) : (
-            <p className="bl-status-renew">Next renewal: <strong>August 1, 2026</strong> · ₹{plan.price.toLocaleString()}/mo</p>
-          )}
+          {plan.oneTime
+            ? <p className="bl-status-renew">One-time purchase · ₹{plan.price.toLocaleString()}</p>
+            : <p className="bl-status-renew">Next renewal: <strong>August 1, 2026</strong> · ₹{plan.price.toLocaleString()}/mo</p>}
         </div>
         <div className="bl-status-actions">
           <button id="upgrade-plan-btn" className="bl-action-btn primary" onClick={onUpgrade}>
@@ -684,31 +672,10 @@ function StatusView({ onUpgrade, currentPlan }) {
         </div>
       </div>
 
-      {/* Usage meters */}
-      <div className="bl-usage-grid">
-        <div className="bl-usage-card">
-          <div className="bl-uc-label">Diagnoses this month</div>
-          <UsageBar used={8} total={10} />
-          <div className="bl-uc-note">2 remaining — resets Aug 1</div>
-        </div>
-        <div className="bl-usage-card">
-          <div className="bl-uc-label">Ally Chat sessions</div>
-          <div className="bl-uc-unlimited">
-            <CheckIcon size={14} /> Unlimited
-          </div>
-        </div>
-        <div className="bl-usage-card">
-          <div className="bl-uc-label">Clarity Reports generated</div>
-          <UsageBar used={3} total={10} color="#10B981" />
-          <div className="bl-uc-note">7 remaining this month</div>
-        </div>
-        <div className="bl-usage-card">
-          <div className="bl-uc-label">Team members</div>
-          <div className="bl-uc-unlimited" style={{ color: '#6c7a70' }}>
-            Not available on {plan.name}
-          </div>
-        </div>
-      </div>
+      {/* The usage meters that stood here were mock numbers (8 of 10 diagnoses,
+          unlimited chat) that no plan matches: every plan is one diagnosis per
+          account and chat is metered by tokens. Real meters need real usage
+          data from the API; until then nothing is better than fiction. */}
 
       {/* Plan features included */}
       <div className="bl-incl-section">

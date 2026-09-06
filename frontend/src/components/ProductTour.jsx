@@ -41,7 +41,9 @@ const TOUR_STEPS = [
   { nav: '/app/goals', emoji: '🎯', title: 'Goals', text: 'The bigger arcs you are working toward, tracked beyond a single day.' },
   { nav: '/app/vision', emoji: '👁️', title: 'Your Vision', text: 'Where you want this to end up, in your words. Ally reads it when it advises you.' },
   { nav: '/app/frameworks', emoji: '📚', title: 'Frameworks', text: 'Practical models to reach for when you are stuck on a decision.' },
-  { nav: '/app/founder-dna-journey', emoji: '🔄', title: 'Run it again', text: 'Come back and re-run the diagnosis once your steps are done — that is when the picture actually moves.' },
+  /* Not 'Run it again': the diagnosis is one deep mapping per account, on
+     every plan. The step now says where its findings live afterwards. */
+  { nav: '/app/founder-dna-journey', emoji: '🧭', title: 'Journey', text: 'One deep diagnosis per account. This is where its findings, and your progress since, live.' },
   { nav: '/app/discovery-call', emoji: '📞', title: 'Discovery call', text: 'When you want a person in the room, book a short call with a GoXL advisor.' },
 
   /* One stop, three items. Profile, Help and Send feedback each took their own
