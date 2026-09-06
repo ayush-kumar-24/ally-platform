@@ -13,14 +13,20 @@ from app.core.config import settings
 # first -- which is exactly what happened in development with just two
 # processes running.
 #
-# DB_POOL_SIZE/DB_POOL_MAX_OVERFLOW (app/core/config.py) default to a per-
-# process cap of 5, sized for up to 2 instances with headroom. pool_recycle
-# keeps connections from going stale behind the pooler, which closes idle ones.
+# DB_POOL_SIZE/DB_POOL_MAX_OVERFLOW (app/core/config.py) size themselves from
+# which pooler DATABASE_URL names, because the two modes have completely
+# different budgets -- see the comment there. What made the size start to
+# matter is that routes taking a Session are now `def` rather than `async def`
+# (see the note above SessionLocal below): they run in the threadpool and
+# really do run concurrently, so the pool is what bounds concurrency instead
+# of the event loop accidentally doing it. pool_recycle keeps connections from
+# going stale behind the pooler, which closes idle ones.
 engine = create_engine(
     settings.DATABASE_URL,
     pool_pre_ping=True,
     pool_size=settings.DB_POOL_SIZE,
     max_overflow=settings.DB_POOL_MAX_OVERFLOW,
+    pool_timeout=settings.DB_POOL_TIMEOUT,
     pool_recycle=1800,
 )
 

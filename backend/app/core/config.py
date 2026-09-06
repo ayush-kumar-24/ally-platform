@@ -1,3 +1,4 @@
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -12,19 +13,42 @@ class Settings(BaseSettings):
     # --- Database ---
     # Supabase today, AWS RDS later -- only this value changes when that happens.
     DATABASE_URL: str
-    # Per-process cap on connections to the Supabase pooler, which allows 15 in
-    # session mode total across everything talking to it -- every API process,
-    # every alembic run, every one-off script. Configurable so a multi-instance
-    # deploy can be tuned without a code change: at N instances this process
-    # alone can open up to N * (POOL_SIZE + POOL_MAX_OVERFLOW), and that must
-    # stay comfortably under 15 with headroom for the rest. Defaults sized for
-    # up to 2 instances (2*5=10) with room to spare. Running more than that
-    # needs either a lower per-instance value here or -- the real fix --
-    # switching DATABASE_URL to Supabase's transaction-mode pooler (port 6543),
-    # which is built for many concurrent short-lived connections instead of a
-    # fixed pool of long-lived ones.
-    DB_POOL_SIZE: int = 2
-    DB_POOL_MAX_OVERFLOW: int = 3
+    # Per-process cap on connections to the pooler. At N instances this process
+    # alone can open up to N x (POOL_SIZE + POOL_MAX_OVERFLOW), and what that
+    # total is allowed to be depends entirely on WHICH pooler DATABASE_URL
+    # points at -- so the defaults are derived from the URL rather than being
+    # one number that has to be wrong for one of the two modes:
+    #
+    #   session mode (port 5432, the default Supabase URI) -- 15 client
+    #     connections in TOTAL across everything that talks to it: every API
+    #     instance, every alembic run, every one-off script. Past that the
+    #     pooler answers "(EMAXCONNSESSION) max clients reached" and endpoints
+    #     500 intermittently depending on who got there first (observed live
+    #     against this project's pooler). 2 + 4 keeps two instances at 12 of
+    #     15, leaving room for a migration and a script.
+    #
+    #   transaction mode (port 6543) -- built for many short-lived
+    #     connections, which is why DEPLOY_AWS.md makes switching to it a
+    #     pre-traffic step. The 15-connection ceiling does not apply, so the
+    #     pool can be sized for what the app actually does instead.
+    #
+    # Overflow carries most of the increase deliberately: overflow connections
+    # are closed when they are returned, so they absorb a burst (the founder
+    # dashboard opens a page with ten requests on it) without holding slots
+    # from the shared budget while the app is idle.
+    #
+    # Both are still plain settings: an explicit DB_POOL_SIZE /
+    # DB_POOL_MAX_OVERFLOW in the environment always wins over the derived
+    # default, so a deploy can be tuned without a code change.
+    DB_POOL_SIZE: int | None = None
+    DB_POOL_MAX_OVERFLOW: int | None = None
+
+    # How long a request waits for a free connection before failing. SQLAlchemy
+    # defaults to 30s, which is longer than the frontend's own 20s HTTP timeout
+    # (services/api.js) -- so a saturated pool showed up as the browser giving
+    # up on a request the server was still holding, with nothing logged. 10s
+    # fails inside that window, loudly, while still absorbing a normal burst.
+    DB_POOL_TIMEOUT: int = 10
 
     # --- Auth ---
     # "dev"      = temporary local stand-in for testing, never used in production.
@@ -617,6 +641,29 @@ class Settings(BaseSettings):
         if stage_budget is not None and stage_budget > 0:
             return stage_budget
         return max(1, self.MAX_DIAGNOSIS_QUESTIONS)
+
+    # Supabase's transaction-mode pooler listens on 6543; the session-mode one
+    # (and a direct connection) on 5432. main.py checks the same marker when it
+    # decides whether the 15-connection ceiling applies to this deploy.
+    @property
+    def uses_transaction_pooler(self) -> bool:
+        return ":6543" in (self.DATABASE_URL or "")
+
+    @model_validator(mode="after")
+    def _size_the_pool_for_the_pooler(self) -> "Settings":
+        """Fill in the pool defaults the URL implies, leaving explicit ones alone.
+
+        See DB_POOL_SIZE above for why one pair of numbers cannot be right for
+        both pooler modes. Anything set in the environment is honoured as-is --
+        including a value larger than session mode can serve, which main.py
+        logs at startup rather than silently overriding, because a deploy that
+        has been told what it is doing may have raised the pooler's own limit.
+        """
+        if self.DB_POOL_SIZE is None:
+            self.DB_POOL_SIZE = 10 if self.uses_transaction_pooler else 2
+        if self.DB_POOL_MAX_OVERFLOW is None:
+            self.DB_POOL_MAX_OVERFLOW = 10 if self.uses_transaction_pooler else 4
+        return self
 
 
 settings = Settings()

@@ -16,13 +16,26 @@ server, just managed.
 
 ## Why the Dockerfile changed the pool size
 
-`app/db/session.py` now reads `DB_POOL_SIZE` / `DB_POOL_MAX_OVERFLOW` from
-config (default 2 + 3 = 5 per process) instead of the higher numbers used
-earlier in development. That earlier setting (5 + 10 = 15 in one process
-alone) caused a real outage with just two local processes running — at
-App Runner's default of up to 2 instances, 5 per instance keeps the total at
-10, leaving headroom for `alembic upgrade head` and anything else that
-connects alongside the API.
+`app/db/session.py` reads `DB_POOL_SIZE` / `DB_POOL_MAX_OVERFLOW` from config
+instead of the higher numbers used earlier in development. That earlier
+setting (5 + 10 = 15 in one process alone) caused a real outage with just two
+local processes running.
+
+The defaults now follow whichever pooler `DATABASE_URL` names, because the two
+modes have different budgets entirely:
+
+| `DATABASE_URL` | pool + overflow | 2 instances use |
+|---|---|---|
+| session mode (`:5432`) | 2 + 4 = 6 | 12 of the pooler's 15 |
+| transaction mode (`:6543`) | 10 + 10 = 20 | not subject to the 15 ceiling |
+
+Session mode keeps headroom for `alembic upgrade head` and anything else that
+connects alongside the API. Setting either variable explicitly overrides the
+derived value; `main.py` logs at startup if what is set cannot fit session
+mode. `DB_POOL_TIMEOUT` (default 10s) bounds how long a request waits for a
+free connection — deliberately under the frontend's own 20s HTTP timeout, so
+a saturated pool is logged here rather than showing up only as a browser
+giving up.
 
 **Do this too, before real traffic arrives:** switch `DATABASE_URL` to
 Supabase's **transaction-mode pooler** (port 6543, not 5432). It's built for

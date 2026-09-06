@@ -179,8 +179,11 @@ export default function Dashboard() {
 
   useEffect(load, [load]);
 
-  // Server name wins; the context value is the optimistic one set at login.
-  const fullName = data?.profile?.full_name || user?.name || '';
+  /* AppContext owns the founder's identity for the whole app: it fetches
+     GET /profile once on mount and replaces the login-time optimistic value
+     with the server's. This page used to fetch the same endpoint a second
+     time purely to read full_name off it. */
+  const fullName = user?.name || '';
   const firstName = fullName.split(' ')[0] || 'there';
   // Shared helper rather than a local copy -- three of these had drifted apart.
   const greeting = greetingNow();

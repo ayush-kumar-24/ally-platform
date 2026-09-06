@@ -1,10 +1,11 @@
 /**
  * services/dashboard.js — the founder's home screen data.
  *
- * Three independent sources, fetched together but failing independently: a founder
- * with no diagnosis yet still has a profile and a name, and the page must render
- * for them. Treating any one failure as fatal would make a brand-new account look
- * like a broken app.
+ * Independent sources, fetched together but failing -- and arriving --
+ * independently: a founder with no diagnosis yet still has a profile and a
+ * name, and the page must render for them. Treating any one failure as fatal
+ * would make a brand-new account look like a broken app, and making the page
+ * wait for all of them makes a working account look like a slow one.
  */
 
 import { get, post } from './api';
@@ -22,11 +23,6 @@ export function getProfileProgress() {
 /** Session and report counts. */
 export function getIntelligenceSummary() {
   return get('/intelligence/summary');
-}
-
-/** The signed-in founder's profile. */
-export function getProfile() {
-  return get('/profile');
 }
 
 /**
@@ -75,8 +71,12 @@ export function markTourSeen() {
   return post('/dashboard/tour-seen', {}).catch(() => null);
 }
 
+/* No `profile` source here. AppContext already fetches GET /profile on mount
+   for the whole signed-in app (it owns the founder's name, avatar and
+   initials), so fetching it again here made the dashboard's own load two
+   identical requests -- one more round trip through the auth dependency, for
+   a value the page could already read from context. */
 const SOURCES = {
-  profile: getProfile,
   health: getBusinessHealth,
   progress: getProfileProgress,
   summary: getIntelligenceSummary,
