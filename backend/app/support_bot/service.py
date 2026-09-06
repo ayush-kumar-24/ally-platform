@@ -145,13 +145,41 @@ class SupportBotService:
             return SupportReply(answer=best.answer, answered=True, sources=(best,),
                                 links=best.links, reason="verbatim_fallback")
 
-        # Routing found nothing, or the model was unreachable. Keyword search is
-        # the safety net -- presented as "this might help", never as the answer.
+        # Routing found nothing, or the model was unreachable.
+        #
+        # KEYWORD HITS ARE NO LONGER RETURNED VERBATIM. They used to be, and it
+        # produced the worst failure this bot can have -- a confident, wrong,
+        # off-topic answer. Measured: "give me a recipe for biryani" came back
+        # with the credits-and-allowances answer, and "what is Ally" came back
+        # explaining which file types can be uploaded. Keyword search always has
+        # a best hit; it has no idea whether that hit answers the question.
+        #
+        # So the hits become CANDIDATES for the model rather than the reply. It
+        # uses them when they fit, ignores them when they do not, and falls back
+        # to what it knows about Ally -- or declines. An empty list is a real and
+        # useful input here: "what is this?" matches no single row well, and the
+        # ABOUT_ALLY block in the prompt is always there to answer it.
+        #
+        # This is also what makes the same question answer the same way twice.
+        # Before, two accounts asking "how will it help me" got different replies
+        # depending on which rows routing happened to grab that run.
         hits = self.repo.search(question, limit=2)
+        reply = await self._compose(question, hits)
+        if reply is not None:
+            return SupportReply(
+                answer=reply.answer, answered=True, sources=tuple(hits),
+                links=reply.links,
+                reason="keyword_grounded" if hits else "about_ally")
+
+        # The model is unreachable AND keyword search found something. Better to
+        # offer the closest published answer than nothing -- but say plainly that
+        # it might not be the right one, which the verbatim path never did.
         if hits:
             return SupportReply(
-                answer=hits[0].answer, answered=True, sources=tuple(hits),
-                links=hits[0].links, reason="keyword_fallback")
+                answer=("I could not work out a proper answer just now. This one "
+                        "might be close:\n\n" + hits[0].answer),
+                answered=True, sources=tuple(hits), links=hits[0].links,
+                reason="keyword_verbatim_degraded")
 
         return SupportReply(answer=NO_MATCH_REPLY, answered=False,
                             escalate=True, reason="no_match")
