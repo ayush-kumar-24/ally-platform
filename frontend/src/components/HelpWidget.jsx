@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
-import { FAQS, searchFaqs } from '../data/faqs';
+import { searchFaqs } from '../data/faqs';
 import { ApiError } from '../services/api';
 import { FEEDBACK, submitFeedback } from '../services/feedback';
-import { askSupport, getSupportStatus } from '../services/support';
+import { askSupport } from '../services/support';
 import { IconClose, IconMessageSquare, IconSend } from '../utils/icons';
 
 /**
@@ -78,13 +78,6 @@ export default function HelpWidget() {
   const [draft, setDraft] = useState('');
   const [thinking, setThinking] = useState(false);
 
-  /* How many published answers the backend actually holds. Starts at the local
-     list's size so the header is never blank or wrong-by-default, and is
-     replaced once /support/status answers. If that call fails we keep showing
-     the local number, which is then the honest one -- the fallback list is what
-     is really answering. */
-  const [topicCount, setTopicCount] = useState(FAQS.length);
-
   const [composing, setComposing] = useState(false);
   const [supportMsg, setSupportMsg] = useState('');
   const [sending, setSending] = useState(false);
@@ -156,16 +149,6 @@ export default function HelpWidget() {
 
     setThinking(false);
     setMessages((prev) => [...prev, reply || localReply()]);
-  }, []);
-
-  /* One call on mount, not on open: the count is in the header the moment the
-     panel appears, rather than changing under the founder a beat later. */
-  useEffect(() => {
-    let cancelled = false;
-    getSupportStatus().then((s) => {
-      if (!cancelled && s?.available && s.topics > 0) setTopicCount(s.topics);
-    });
-    return () => { cancelled = true; };
   }, []);
 
   // Close on Escape and on a click outside. Escape leaves full screen first,
@@ -268,9 +251,18 @@ export default function HelpWidget() {
           <span className="hw-avatar" aria-hidden="true"><RobotIcon /></span>
           <div>
             <div className="hw-title">{composing ? 'Message support' : 'Help assistant'}</div>
-            <div className="hw-sub">
-              {composing ? 'We reply by email' : `Answers from Ally's help guide · ${topicCount} topics`}
-            </div>
+            {/* The assistant subtitle used to read "Answers from Ally's help
+                guide · N topics". Removed: a topic count is a fact about our
+                content library, not about whether we can answer the question
+                somebody is holding -- and it was actively misleading, because
+                it counted whichever source happened to be answering. A founder
+                who saw "16 topics" and then got "I don't have an answer" read
+                the number as the reason, which it never was.
+
+                `composing` keeps its subtitle: "we reply by email" tells
+                someone about to type a message what happens next, which is
+                worth the line. */}
+            {composing && <div className="hw-sub">We reply by email</div>}
           </div>
         </div>
         <div className="hw-head-actions">
