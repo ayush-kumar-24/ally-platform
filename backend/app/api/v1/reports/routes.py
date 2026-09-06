@@ -155,32 +155,31 @@ def share_url_for(token: str, request: Request) -> str:
     """The public URL for a share token. It must resolve, above all else.
 
     THIS USED TO BUILD `<PUBLIC_APP_URL>/r/<token>` AND THAT BROKE EVERY SHARE
-    LINK. `/r/:token` was never a route on anything -- it was a REWRITE declared
-    in frontend/vercel.json, pointing at the API. When the frontend moved from
-    Vercel to S3 + CloudFront, the rewrite went with it: S3 static hosting has no
-    rewrite engine, so nothing serves `/r/` any more. The file is still in the
-    repo, which is what made this hard to see -- it reads like live config.
+    LINK -- not because the path was wrong, but because PUBLIC_APP_URL points at
+    the MARKETING SITE (goxlally.ai) rather than the app (app.goxlally.ai).
 
-    Two things went wrong at once, and either alone was enough to 404:
+    `/r/:token` is a rewrite declared in frontend/vercel.json, and it works --
+    verified against production: app.goxlally.ai/r/<anything> returns this API's
+    own "This shared report is not available." So the rewrite was never the
+    problem. The host was. Links went to goxlally.ai/r/<token>, which redirects
+    to www and lands on the marketing site's 404 page, and the founder sees a
+    dead link for a feature whose entire job is handing someone a working URL.
 
-      * PUBLIC_APP_URL points at the marketing site (goxlally.ai), not the app,
-        so links were built against a domain that has never had the route; and
-      * even the app's own origin has no `/r/` handler now.
+    PUBLIC_APP_URL is deliberately NOT consulted here any more. It has its own
+    job -- bouncing a founder back to /app/plan after the calendar OAuth dance --
+    and quietly borrowing it for a second purpose is how one wrong value broke
+    two unrelated features at once. (It broke that one too: the calendar callback
+    returns founders to goxlally.ai/app/plan, which also 404s.)
 
-    PUBLIC_APP_URL is deliberately NOT consulted here any more. It is still right
-    for what it was added for -- bouncing a founder back to /app/plan after the
-    calendar OAuth dance -- and quietly reusing it for shares is how a link ended
-    up pointing at a static marketing site.
+    THE DEFAULT IS THE DIRECT API URL, which needs no rewrite, no second domain
+    and no configuration. Longer than /r/<token>, and it resolves wherever this
+    service is reachable.
 
-    DEFAULT IS THE DIRECT API URL, which needs no CDN rewrite, no second domain
-    and no configuration to work. It is longer than /r/<token>. It also resolves,
-    which the pretty one did not, and a link that works beats a link that looks
-    right -- this feature's entire job is handing someone a URL that opens.
-
-    Set SHARE_LINK_BASE_URL only once a rewrite genuinely exists at that origin
-    (a CloudFront Function mapping /r/* to this endpoint). It is opt-in on
-    purpose: the previous arrangement assumed a rewrite was there and produced
-    dead links for months when it silently stopped being.
+    SET SHARE_LINK_BASE_URL=https://app.goxlally.ai IN PRODUCTION to get the
+    pretty path back, since that rewrite genuinely exists there. It is opt-in
+    rather than inferred because the failure mode is silent: a base URL whose
+    rewrite is missing produces links that look perfect and 404, and nothing in
+    this codebase can detect that.
 
     The path is reversed out of the route table rather than written as a literal,
     so it follows the router if this module is ever remounted under a different

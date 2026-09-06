@@ -215,14 +215,16 @@ def test_share_url_ignores_public_app_url(monkeypatch):
     """THE REGRESSION GUARD. PUBLIC_APP_URL must never shape a share link.
 
     This test used to assert the opposite, and that is exactly how sharing
-    broke: PUBLIC_APP_URL was combined with `/r/<token>`, which was a rewrite
-    declared in vercel.json rather than a route anywhere. When the frontend
-    moved from Vercel to S3 + CloudFront the rewrite disappeared, and on top of
-    that PUBLIC_APP_URL points at the marketing site rather than the app -- so
-    every share link resolved to a 404 page on a static site.
+    broke. PUBLIC_APP_URL is set to the MARKETING site (goxlally.ai) rather than
+    the app, so `<PUBLIC_APP_URL>/r/<token>` sent every recipient to a 404 page
+    on a static site.
+
+    The `/r/` rewrite itself was never the problem -- it lives in vercel.json and
+    works, verified against production. The host was wrong, not the path.
 
     PUBLIC_APP_URL still has a real job (bouncing a founder back to /app/plan
-    after the calendar OAuth redirect). It just has nothing to do with shares.
+    after the calendar OAuth redirect, where the same wrong value is a separate
+    live bug). It just has nothing to do with shares.
     """
     from app.api.v1.reports import routes
     from app.core.config import settings
@@ -271,8 +273,10 @@ def test_share_url_prefers_public_api_url_over_the_request_origin(monkeypatch):
 def test_share_url_uses_the_pretty_path_only_when_opted_into(monkeypatch):
     """SHARE_LINK_BASE_URL is opt-in, and means "a rewrite really exists here".
 
-    Setting it without building the rewrite recreates the original bug, which
-    is why it is a separate setting rather than something inferred.
+    In production this should be https://app.goxlally.ai, where the vercel.json
+    /r/:token rewrite is live and verified. It is opt-in rather than inferred
+    because pointing it at an origin WITHOUT that rewrite produces links that
+    look perfect and 404 -- exactly the failure this whole change is undoing.
     """
     from app.api.v1.reports import routes
     from app.core.config import settings
