@@ -808,6 +808,7 @@
 .bl-pay-alert.err{background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.28);color:#b91c1c}
 .bl-pay-alert.warn{background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);color:#92400e}
 .bl-pay-alert .bl-link-btn{font-size:12.5px}
+.bl-pay-alert .bl-pay-ref{font-size:11px;opacity:.75;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
 .bl-pay-order-ref{font-size:11px;color:#8b978f;text-align:center;margin:10px 0 0;font-variant-numeric:tabular-nums;word-break:break-all}
 /* Waiting on the payment webhook. Green like success (the money has arrived)
    but spinning, because the plan is not granted until the backend says so. */

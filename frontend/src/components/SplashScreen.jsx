@@ -39,6 +39,17 @@ export default function SplashScreen({ onDone }) {
     if (prefersReducedMotion()) finish();
   }, [finish]);
 
+  /* The splash is a brand moment, not a loading screen. On a slow connection
+     the video is not ready for seconds, and until it is the founder sees a
+     dark frame and nothing else -- the login page is behind it. If the first
+     frame is not here within 2.5s, the intro is skipped rather than kept
+     waiting for; a fast connection never notices this timer. */
+  useEffect(() => {
+    if (ready) return undefined;
+    const t = setTimeout(finish, 2500);
+    return () => clearTimeout(t);
+  }, [ready, finish]);
+
   // When fade-out transition ends, call onDone
   const handleTransitionEnd = (e) => {
     if (phase === 'fading' && e.propertyName === 'opacity') {
@@ -98,7 +109,6 @@ export default function SplashScreen({ onDone }) {
         Skip intro
       </button>
       <video
-        src="/ally-animation-video-hd.mp4"
         autoPlay
         muted
         playsInline
@@ -115,7 +125,13 @@ export default function SplashScreen({ onDone }) {
           transform: ready ? 'scale(1)' : 'scale(1.03)',
           transition: `opacity 0.6s ${EASE}, transform 1.2s ${EASE}`,
         }}
-      />
+      >
+        {/* The 1696x960 render exists so the film stays crisp stretched across
+            a desktop. A phone is a third of that width and was downloading
+            twice the bytes for nothing; it gets the 848x480 source. */}
+        <source src="/ally-animation-video-hd.mp4" type="video/mp4" media="(min-width: 1000px)" />
+        <source src="/ally-animation-video.mp4" type="video/mp4" />
+      </video>
       {/* Soft vignette keeps focus on the mark and hides upscale softness at
           the extreme edges on very wide displays. */}
       <div
