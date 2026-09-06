@@ -857,7 +857,7 @@ img,svg,video,canvas{max-width:100%}
   .pg-act,.a-x,.a-rep,.ac-menu,.ac-hist-x,.pc-undo,.pally-x,.ps-x,.np-x,.notif-x{min-width:42px;min-height:42px}
 }
 
-/* Chat with Ally + Diagnosis â€” comfortable on phones, input always visible */
+/* Talk to Ally + Diagnosis â€” comfortable on phones, input always visible */
 @media(max-width:640px){
   /* suggestions scroll horizontally instead of wrapping/pushing layout */
   .suggs{flex-wrap:nowrap;overflow-x:auto;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch;padding-bottom:8px;scrollbar-width:none}
