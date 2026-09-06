@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { MOCK_PLANS } from '../data/mockData';
 import { getProfile } from '../services/profile';
 import { getCatalog, getMyPlan } from '../services/plans';
+import { openCheckout, startCheckout, waitForPlanActivation } from '../services/payments';
 
 /* ─── Static data ─── */
 /** Keys must match the plan tiers served by GET /plans, which lists only the
@@ -76,42 +77,50 @@ function useCatalog() {
         if (cancelled || !catalog?.plans?.length) return;
         const callMins = catalog.call_duration_minutes ?? 15;
         const callPrice = catalog.call_price_inr ?? 300;
-        setPlans(catalog.plans.map((p) => ({
-          id: p.tier,
-          name: p.name,
-          price: p.price_inr,
-          // Null unless the backend judged it a real saving — the decision is
-          // made once, server-side, so no surface can render a crossed-out
-          // number that saves the founder nothing.
-          mrp: p.mrp_inr ?? null,
-          // A paid tier with nothing that renews -- no monthly credits, no
-          // daily budget -- is bought once, not subscribed to. That is Rs 199:
-          // one diagnosis for the life of the account, one payment.
-          oneTime: !!p.price_inr && !p.monthly_credits && !p.daily_token_limit,
-          period: p.price_inr ? (!p.monthly_credits && !p.daily_token_limit ? ' once' : '/mo') : '',
-          tag: p.tagline,
-          popular: p.tier === 'pro',
-          cta: p.price_inr ? `Start ${p.name}` : 'Current',
-          features: [
-            // Tokens, not credits: credits are an internal accounting unit.
-            // Rs 199 has no metered surface at all, so it gets what it is.
-            ...(p.features.includes('ally_chat')
-              ? [`${p.daily_token_limit.toLocaleString('en-IN')} tokens per day`,
-                 'Chat with Ally']
-              : ['One adaptive diagnosis', 'Your Clarity Report']),
-            p.features.includes('voice_chat') ? 'Voice in Ally Chat' : 'Voice in Diagnosis',
-            ...(p.features.includes('next_steps') ? ['Your next 3 steps'] : []),
-            ...(p.features.includes('goals') ? ['Goals'] : []),
-            ...(p.features.includes('plan_your_day') ? ['Plan Your Day'] : []),
-            ...(p.features.includes('recommendations') ? ['Ally recommends your steps'] : []),
-            ...(p.features.includes('vision') ? ['Vision'] : []),
-            ...(p.features.includes('knowledge_chat') ? ['Discuss the knowledge base'] : []),
-            ...(p.features.includes('email_notifications') ? ['Email reminders from Ally'] : []),
-            ...(p.features.includes('know_my_energy') ? ['Know My Energy'] : []),
-            `Book a call · ₹${callPrice} / ${callMins} min`,
-            ...(p.features.includes('priority_call') ? ['Priority call booking'] : []),
-          ],
-        })));
+        setPlans(catalog.plans.map((p) => {
+          // Whether a tier is bought once or subscribed to is the backend's
+          // call (`one_time` in the catalog response). The old inference is
+          // kept as the fallback because the frontend and backend deploy
+          // separately: a frontend that lands before the backend that grew
+          // the field must not relabel a one-time purchase as monthly.
+          // Both agree on today's catalog -- a paid tier with nothing that
+          // renews, no monthly credits and no daily budget, is Starter.
+          const oneTime = p.one_time
+            ?? (!!p.price_inr && !p.monthly_credits && !p.daily_token_limit);
+          return {
+            id: p.tier,
+            name: p.name,
+            price: p.price_inr,
+            // Null unless the backend judged it a real saving — the decision is
+            // made once, server-side, so no surface can render a crossed-out
+            // number that saves the founder nothing.
+            mrp: p.mrp_inr ?? null,
+            oneTime,
+            period: p.price_inr ? (oneTime ? ' once' : '/mo') : '',
+            tag: p.tagline,
+            popular: p.tier === 'pro',
+            cta: p.price_inr ? `Start ${p.name}` : 'Current',
+            features: [
+              // Tokens, not credits: credits are an internal accounting unit.
+              // Rs 199 has no metered surface at all, so it gets what it is.
+              ...(p.features.includes('ally_chat')
+                ? [`${p.daily_token_limit.toLocaleString('en-IN')} tokens per day`,
+                   'Chat with Ally']
+                : ['One adaptive diagnosis', 'Your Clarity Report']),
+              p.features.includes('voice_chat') ? 'Voice in Ally Chat' : 'Voice in Diagnosis',
+              ...(p.features.includes('next_steps') ? ['Your next 3 steps'] : []),
+              ...(p.features.includes('goals') ? ['Goals'] : []),
+              ...(p.features.includes('plan_your_day') ? ['Plan Your Day'] : []),
+              ...(p.features.includes('recommendations') ? ['Ally recommends your steps'] : []),
+              ...(p.features.includes('vision') ? ['Vision'] : []),
+              ...(p.features.includes('knowledge_chat') ? ['Discuss the knowledge base'] : []),
+              ...(p.features.includes('email_notifications') ? ['Email reminders from Ally'] : []),
+              ...(p.features.includes('know_my_energy') ? ['Know My Energy'] : []),
+              `Book a call · ₹${callPrice} / ${callMins} min`,
+              ...(p.features.includes('priority_call') ? ['Priority call booking'] : []),
+            ],
+          };
+        }));
         setLive(true);
       })
       .catch(() => { /* keep the fallback — a pricing page must always render */ });
@@ -248,103 +257,110 @@ function PlansView({ onSelectPlan, currentPlan }) {
 }
 
 /* ═══════════════════════════════════════════
-   VIEW 2 — Checkout
+   VIEW 2 — Checkout (Razorpay)
 ═══════════════════════════════════════════ */
-const PAYMENT_METHODS = [
-  { id: 'card', label: 'Credit / Debit Card' },
-  { id: 'upi', label: 'UPI' },
-  { id: 'netbanking', label: 'Net Banking' },
-];
 
-function CheckoutView({ plan, onBack, onSuccess }) {
-  const [method, setMethod] = useState('card');
-  const [form, setForm] = useState({
-    name: '',
-    email: '',
-    card: '',
-    expiry: '',
-    cvv: '',
-    upi: '',
-    bank: '',
+/** Paise → a rupee string, without inventing precision the order lacks. */
+function rupeesFromPaise(paise) {
+  const rupees = (paise ?? 0) / 100;
+  return rupees.toLocaleString('en-IN', {
+    minimumFractionDigits: Number.isInteger(rupees) ? 0 : 2,
+    maximumFractionDigits: 2,
   });
+}
 
-  /* Prefill from the signed-in founder rather than a placeholder identity.
-     This used to read `founder` inside useState's initializer, which runs only
-     on the first render — before the profile request had resolved — so Name and
-     Email were permanently blank no matter what came back. Merging in an effect
-     is what actually lands the values, and it leaves anything the founder has
-     already typed alone. */
+/**
+ * Payment happens in Razorpay's own hosted widget, so this screen collects no
+ * card, UPI or netbanking details at all. What used to be here was a mock form
+ * behind a 2.2-second timer that charged nothing and then declared success —
+ * and a real form in its place would have put card data in our DOM for no
+ * reason, since Razorpay's widget is what must handle it.
+ *
+ * The order is created when the screen opens rather than on the Pay click, so
+ * every amount rendered below is read straight off the order Razorpay will
+ * charge against. The frontend adds nothing to it — no GST line, no rounding —
+ * because the backend order carries no such line either (payments/service.py:
+ * `amount_paise = plan.price_inr * 100`). A total here that disagreed with the
+ * widget would be a broken promise about a price.
+ */
+function CheckoutView({ plan, onBack, onPaid }) {
+  const [order, setOrder] = useState(null);
+  const [orderError, setOrderError] = useState(null);
+  const [payState, setPayState] = useState('idle'); // 'idle' | 'opening' | 'paid'
+  const [payError, setPayError] = useState(null);
+  const [prefill, setPrefill] = useState({ name: '', email: '' });
+
+  /* Nothing started here may touch state after unmount: both the order request
+     and the Razorpay popup outlive a "Back to Plans" click. */
+  const alive = useRef(true);
+  useEffect(() => () => { alive.current = false; }, []);
+
+  const createOrder = useCallback(() => {
+    setOrder(null);
+    setOrderError(null);
+    setPayError(null);
+    return startCheckout(plan.id)
+      .then((o) => { if (alive.current) setOrder(o); })
+      .catch((err) => { if (alive.current) setOrderError(err); });
+  }, [plan.id]);
+
+  useEffect(() => { createOrder(); }, [createOrder]);
+
+  /* Prefill only. Razorpay asks for anything we cannot supply, so a failed
+     profile fetch costs the founder a field, not the payment. */
   useEffect(() => {
     let cancelled = false;
     getProfile()
       .then((p) => {
         if (cancelled || !p) return;
-        setForm(prev => ({
-          ...prev,
-          name: prev.name || p.full_name || '',
-          email: prev.email || p.email || '',
-        }));
+        setPrefill({ name: p.full_name || '', email: p.email || '' });
       })
-      .catch(() => { /* leave the fields empty for the founder to fill in */ });
+      .catch(() => { /* leave it to the widget */ });
     return () => { cancelled = true; };
   }, []);
-  const [errors, setErrors] = useState({});
-  const [processing, setProcessing] = useState(false);
 
-  const price = plan.price;
-  const gst = Math.round(price * 0.18);
-  const total = price + gst;
-
-  const formatCard = v => v.replace(/\D/g, '').replace(/(.{4})/g, '$1 ').trim().slice(0, 19);
-  const formatExpiry = v => {
-    const d = v.replace(/\D/g, '');
-    if (d.length >= 3) return `${d.slice(0, 2)}/${d.slice(2, 4)}`;
-    return d;
-  };
-
-  const validate = () => {
-    const e = {};
-    if (!form.name.trim()) e.name = 'Required';
-    if (!form.email.trim()) e.email = 'Required';
-    if (method === 'card') {
-      if (form.card.replace(/\s/g, '').length < 16) e.card = 'Enter valid 16-digit card number';
-      if (form.expiry.length < 5) e.expiry = 'Enter valid expiry';
-      if (form.cvv.length < 3) e.cvv = 'Enter 3-digit CVV';
+  const handlePay = async () => {
+    if (!order || payState !== 'idle') return;
+    setPayError(null);
+    setPayState('opening');
+    let outcome;
+    try {
+      outcome = await openCheckout({ order, planName: plan.name, prefill });
+    } catch (err) {
+      // Checkout.js itself never loaded — nothing was charged.
+      if (alive.current) {
+        setPayState('idle');
+        setPayError(err?.message || 'Could not open the payment window. Please try again.');
+      }
+      return;
     }
-    if (method === 'upi' && !form.upi.includes('@')) e.upi = 'Enter valid UPI ID (e.g. name@upi)';
-    if (method === 'netbanking' && !form.bank) e.bank = 'Select a bank';
-    return e;
+    if (!alive.current) return;
+
+    if (outcome.status === 'paid') {
+      /* Deliberately NOT "your plan is active". This callback is the founder's
+         own browser telling us what it saw; the plan is granted by the signed
+         payment.captured webhook, and the next screen is what waits for it. */
+      setPayState('paid');
+      onPaid({ plan, order, razorpayPaymentId: outcome.response?.razorpay_payment_id ?? null });
+      return;
+    }
+
+    setPayState('idle');
+    if (outcome.status === 'failed') {
+      setPayError(outcome.error?.description
+        || 'The payment did not go through. No money has been taken — you can try again.');
+    } else {
+      setPayError('Payment cancelled. You have not been charged.');
+    }
   };
 
-  /* NOTE: this does not charge anything — it waits 2.2s and reports success.
-     There is no processor integration behind this screen yet. Tracked as a
-     blocker in the QA report; the timer handling below is the part that is
-     fixed here (it previously kept running after unmount and called
-     setProcessing on a dead component). */
-  const payTimer = useRef(null);
-  useEffect(() => () => clearTimeout(payTimer.current), []);
-
-  const handleSubmit = e => {
-    e.preventDefault();
-    if (processing) return;
-    const errs = validate();
-    if (Object.keys(errs).length) { setErrors(errs); return; }
-    setProcessing(true);
-    payTimer.current = setTimeout(() => {
-      setProcessing(false);
-      onSuccess(plan);
-    }, 2200);
-  };
-
-  const set = (k, v) => {
-    setForm(f => ({ ...f, [k]: v }));
-    setErrors(ex => { const n = { ...ex }; delete n[k]; return n; });
-  };
+  const amountLabel = order ? `₹${rupeesFromPaise(order.amount_paise)}` : null;
+  const busy = payState !== 'idle';
 
   return (
     <div className="bl-checkout-wrap stagger d1">
       {/* Back */}
-      <button id="checkout-back-btn" className="bl-back-btn" onClick={onBack}>
+      <button id="checkout-back-btn" className="bl-back-btn" onClick={onBack} disabled={busy}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
           <polyline points="15 18 9 12 15 6" />
         </svg>
@@ -352,137 +368,63 @@ function CheckoutView({ plan, onBack, onSuccess }) {
       </button>
 
       <div className="bl-checkout-grid">
-        {/* ── Left: Form ── */}
+        {/* ── Left: Pay ── */}
         <div className="bl-checkout-form-col">
-          <div className="bl-section-label">Payment Details</div>
+          <div className="bl-section-label">Secure Payment</div>
 
-          {/* Payment method tabs */}
-          <div className="bl-method-tabs">
-            {PAYMENT_METHODS.map(m => (
-              <button
-                key={m.id}
-                id={`method-tab-${m.id}`}
-                className={`bl-method-tab${method === m.id ? ' active' : ''}`}
-                onClick={() => { setMethod(m.id); setErrors({}); }}
-                type="button"
-              >
-                {m.label}
+          <h3 className="bl-pay-heading">Pay for {plan.name}</h3>
+          <p className="bl-pay-lede">
+            You&apos;ll complete payment in Razorpay&apos;s secure window — card, UPI,
+            net banking and wallets are all available there. Your payment details
+            are entered on Razorpay and never touch GoXL Ally.
+          </p>
+
+          {orderError && (
+            <div className="bl-pay-alert err" role="alert">
+              <strong>We couldn&apos;t start this payment.</strong>
+              <span>{orderError.detail || orderError.message || 'Please try again in a moment.'}</span>
+              <button type="button" className="bl-link-btn" onClick={createOrder}>
+                Try again
               </button>
-            ))}
-          </div>
-
-          <form id="checkout-form" className="bl-form" onSubmit={handleSubmit} noValidate>
-            {/* Cardholder / Contact */}
-            <div className="bl-field-row">
-              <div className={`bl-field${errors.name ? ' err' : ''}`}>
-                <label htmlFor="co-name">Full Name</label>
-                <input id="co-name" type="text" value={form.name}
-                  onChange={e => set('name', e.target.value)} placeholder="Rahul Varma" />
-                {errors.name && <span className="bl-err-msg">{errors.name}</span>}
-              </div>
-              <div className={`bl-field${errors.email ? ' err' : ''}`}>
-                <label htmlFor="co-email">Email</label>
-                <input id="co-email" type="email" value={form.email}
-                  onChange={e => set('email', e.target.value)} placeholder="you@example.com" />
-                {errors.email && <span className="bl-err-msg">{errors.email}</span>}
-              </div>
             </div>
+          )}
 
-            {/* Card fields */}
-            {method === 'card' && (
+          {payError && (
+            <div className="bl-pay-alert warn" role="alert">
+              <span>{payError}</span>
+            </div>
+          )}
+
+          <button
+            id="checkout-pay-btn"
+            type="button"
+            className={`bl-pay-btn${busy ? ' loading' : ''}`}
+            onClick={handlePay}
+            disabled={!order || busy}
+          >
+            {busy ? (
               <>
-                <div className={`bl-field${errors.card ? ' err' : ''}`}>
-                  <label htmlFor="co-card">Card Number</label>
-                  <div className="bl-input-icon-wrap">
-                    <svg className="bl-input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                      <rect x="1" y="4" width="22" height="16" rx="3" ry="3" />
-                      <line x1="1" y1="10" x2="23" y2="10" />
-                    </svg>
-                    <input id="co-card" type="text" inputMode="numeric" value={form.card}
-                      onChange={e => set('card', formatCard(e.target.value))}
-                      placeholder="1234 5678 9012 3456" maxLength={19} />
-                  </div>
-                  {errors.card && <span className="bl-err-msg">{errors.card}</span>}
-                </div>
-                <div className="bl-field-row">
-                  <div className={`bl-field${errors.expiry ? ' err' : ''}`}>
-                    <label htmlFor="co-expiry">Expiry</label>
-                    <input id="co-expiry" type="text" inputMode="numeric" value={form.expiry}
-                      onChange={e => set('expiry', formatExpiry(e.target.value))}
-                      placeholder="MM/YY" maxLength={5} />
-                    {errors.expiry && <span className="bl-err-msg">{errors.expiry}</span>}
-                  </div>
-                  <div className={`bl-field${errors.cvv ? ' err' : ''}`}>
-                    <label htmlFor="co-cvv">CVV</label>
-                    <input id="co-cvv" type="text" inputMode="numeric" value={form.cvv}
-                      onChange={e => set('cvv', e.target.value.replace(/\D/g, '').slice(0, 3))}
-                      placeholder="•••" maxLength={3} />
-                    {errors.cvv && <span className="bl-err-msg">{errors.cvv}</span>}
-                  </div>
-                </div>
+                <span className="bl-spinner" />
+                {payState === 'paid' ? 'Payment received…' : 'Opening Razorpay…'}
+              </>
+            ) : (
+              <>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                </svg>
+                {order ? `Pay ${amountLabel}` : 'Preparing secure checkout…'}
               </>
             )}
+          </button>
 
-            {/* UPI field */}
-            {method === 'upi' && (
-              <div className={`bl-field${errors.upi ? ' err' : ''}`}>
-                <label htmlFor="co-upi">UPI ID</label>
-                <div className="bl-input-icon-wrap">
-                  <svg className="bl-input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                    <path d="M12 2L2 7l10 5 10-5-10-5z" /><path d="M2 17l10 5 10-5" /><path d="M2 12l10 5 10-5" />
-                  </svg>
-                  <input id="co-upi" type="text" value={form.upi}
-                    onChange={e => set('upi', e.target.value)}
-                    placeholder="yourname@upi" />
-                </div>
-                {errors.upi && <span className="bl-err-msg">{errors.upi}</span>}
-                <p className="bl-field-hint">Enter your UPI ID linked to your bank account.</p>
-              </div>
-            )}
+          <p className="bl-pay-note">
+            🔒 Payments are processed by Razorpay. GoXL Ally never sees or stores
+            your card details.
+          </p>
 
-            {/* Net banking */}
-            {method === 'netbanking' && (
-              <div className={`bl-field${errors.bank ? ' err' : ''}`}>
-                <label htmlFor="co-bank">Select Bank</label>
-                <select id="co-bank" value={form.bank} onChange={e => set('bank', e.target.value)}>
-                  <option value="">-- Choose your bank --</option>
-                  <option>HDFC Bank</option>
-                  <option>ICICI Bank</option>
-                  <option>SBI</option>
-                  <option>Axis Bank</option>
-                  <option>Kotak Mahindra Bank</option>
-                  <option>Yes Bank</option>
-                  <option>IndusInd Bank</option>
-                </select>
-                {errors.bank && <span className="bl-err-msg">{errors.bank}</span>}
-              </div>
-            )}
-
-            {/* Submit */}
-            <button
-              id="checkout-pay-btn"
-              type="submit"
-              className={`bl-pay-btn${processing ? ' loading' : ''}`}
-              disabled={processing}
-            >
-              {processing ? (
-                <>
-                  <span className="bl-spinner" />
-                  Processing…
-                </>
-              ) : (
-                <>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-                  </svg>
-                  Pay ₹{total.toLocaleString()} / month
-                </>
-              )}
-            </button>
-            <p className="bl-pay-note">
-              🔒 Secured by 256-bit SSL encryption. Your card details are never stored.
-            </p>
-          </form>
+          {order && (
+            <p className="bl-pay-order-ref">Order reference: {order.order_id}</p>
+          )}
         </div>
 
         {/* ── Right: Order Summary ── */}
@@ -492,7 +434,7 @@ function CheckoutView({ plan, onBack, onSuccess }) {
           <div className="bl-os-plan-badge">
             <div className="bl-os-plan-name">{plan.name} Plan</div>
             <div className="bl-os-plan-tag">{plan.tag}</div>
-            <div className="bl-os-plan-cycle">Billed Monthly</div>
+            <div className="bl-os-plan-cycle">{plan.oneTime ? 'One-time payment' : 'Billed Monthly'}</div>
           </div>
 
           <ul className="bl-os-feats">
@@ -504,25 +446,23 @@ function CheckoutView({ plan, onBack, onSuccess }) {
             ))}
           </ul>
 
+          {/* Every figure here comes from the order the backend created, so what
+              the founder reads is exactly what Razorpay will charge. */}
           <div className="bl-os-breakdown">
             <div className="bl-os-line">
               <span>{plan.name} ({plan.oneTime ? 'One-time' : 'Monthly'})</span>
-              <span>₹{price.toLocaleString()}</span>
-            </div>
-            <div className="bl-os-line">
-              <span>GST (18%)</span>
-              <span>₹{gst.toLocaleString()}</span>
+              <span>{amountLabel ?? '—'}</span>
             </div>
             <div className="bl-os-total">
-              <span>{plan.oneTime ? 'Total' : 'Total / month'}</span>
-              <span>₹{total.toLocaleString()}</span>
+              <span>Total payable</span>
+              <span>{amountLabel ?? '—'}</span>
             </div>
           </div>
 
           <div className="bl-os-trust">
-            <span>Cancel anytime, no questions asked</span>
-            <span>14-day money-back guarantee</span>
-            <span>Instant activation after payment</span>
+            <span>Payments secured by Razorpay</span>
+            <span>Your plan activates as soon as payment is confirmed</span>
+            <span>No card details are stored by GoXL Ally</span>
           </div>
         </div>
       </div>
@@ -531,9 +471,116 @@ function CheckoutView({ plan, onBack, onSuccess }) {
 }
 
 /* ═══════════════════════════════════════════
+   VIEW 2b — Activating (waiting on the webhook)
+═══════════════════════════════════════════ */
+/**
+ * The gap between "Razorpay says paid" and "the founder is on the plan".
+ *
+ * Razorpay's success callback runs in the founder's own tab, so it grants
+ * nothing here — the plan is granted server-side when Razorpay's signed
+ * payment.captured webhook reaches the backend. This screen simply asks
+ * GET /plans/me until that has happened, which is why it can honestly say
+ * "activating" rather than "active".
+ */
+function ActivatingView({ plan, order, onActivated, onViewStatus }) {
+  const [timedOut, setTimedOut] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  // Bumped by "Check again", which restarts the wait rather than reloading the
+  // page -- a founder who has already paid should never have to guess whether
+  // refreshing costs them the payment.
+  const [round, setRound] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    setTimedOut(false);
+    const ticker = setInterval(() => { if (!cancelled) setAttempt(a => a + 1); }, 1000);
+
+    waitForPlanActivation(plan.id, { isCancelled: () => cancelled })
+      .then((result) => {
+        if (cancelled) return;
+        if (result.activated) onActivated(result.entitlements);
+        else if (result.timedOut) setTimedOut(true);
+      });
+
+    return () => { cancelled = true; clearInterval(ticker); };
+    // `attempt` is display-only and must not restart the wait.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plan.id, round]);
+
+  return (
+    <div className="bl-success-wrap stagger d1">
+      <div className={`bl-activating-icon${timedOut ? ' slow' : ''}`}>
+        {timedOut ? (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+            <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+          </svg>
+        ) : (
+          <span className="bl-spinner dark" />
+        )}
+      </div>
+
+      {timedOut ? (
+        <>
+          <h2 className="bl-success-title">Payment received — activation is taking longer than usual</h2>
+          <p className="bl-success-sub">
+            Your payment went through and nothing is lost. {plan.name} is activated
+            by our payment provider&apos;s confirmation, which is running late.
+            It usually lands within a few minutes.
+          </p>
+        </>
+      ) : (
+        <>
+          <h2 className="bl-success-title">Payment received. Activating your plan…</h2>
+          <p className="bl-success-sub">
+            We&apos;re confirming your payment with Razorpay and switching you to
+            {' '}{plan.name}. This usually takes a few seconds — please keep this
+            page open.
+          </p>
+        </>
+      )}
+
+      <div className="bl-success-details">
+        <div className="bl-sd-row"><span>Plan</span><strong>{plan.name}</strong></div>
+        {order && (
+          <>
+            <div className="bl-sd-row">
+              <span>Amount paid</span>
+              <strong>₹{rupeesFromPaise(order.amount_paise)}</strong>
+            </div>
+            <div className="bl-sd-row"><span>Order reference</span><strong>{order.order_id}</strong></div>
+          </>
+        )}
+        <div className="bl-sd-row">
+          <span>Status</span>
+          <strong className={`bl-status-badge ${timedOut ? 'pending' : 'active'}`}>
+            {timedOut ? 'Awaiting confirmation' : `Activating${'.'.repeat(attempt % 4)}`}
+          </strong>
+        </div>
+      </div>
+
+      {timedOut && (
+        <>
+          <button id="activation-recheck-btn" className="bl-pay-btn"
+                  onClick={() => setRound(r => r + 1)}>
+            Check again
+          </button>
+          <p className="bl-pay-note">
+            Still not showing?{' '}
+            <button type="button" className="bl-link-btn" onClick={onViewStatus}>
+              Go to My Subscription
+            </button>
+            {' '}or email info@goxl.in with the order reference above.
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════
    VIEW 3 — Payment Success / Confirmation
 ═══════════════════════════════════════════ */
-function SuccessView({ plan, onViewStatus }) {
+function SuccessView({ plan, order, onViewStatus }) {
   const [founder, setFounder] = useState(null);
   useEffect(() => { getProfile().then(setFounder).catch(() => setFounder(null)); }, []);
   return (
@@ -545,14 +592,22 @@ function SuccessView({ plan, onViewStatus }) {
       </div>
       <h2 className="bl-success-title">Payment Successful!</h2>
       <p className="bl-success-sub">
-        Welcome to the <strong>{plan.name} Plan</strong>. Your subscription is now active.
-        A confirmation receipt has been sent to <strong>{founder?.email ?? 'your email'}</strong>.
+        Welcome to the <strong>{plan.name} Plan</strong>. Your {plan.oneTime ? 'plan' : 'subscription'} is now active.
+        A payment receipt has been sent to <strong>{founder?.email ?? 'your email'}</strong>.
       </p>
       <div className="bl-success-details">
         <div className="bl-sd-row"><span>Plan</span><strong>{plan.name}</strong></div>
-        <div className="bl-sd-row"><span>Amount charged</span><strong>₹{plan.displayPrice?.toLocaleString()}{plan.oneTime ? '' : '/mo'} + GST</strong></div>
+        {/* The order's own amount, not a recomputed one: this is the figure
+            Razorpay charged, so it cannot drift from the receipt. */}
+        <div className="bl-sd-row">
+          <span>Amount charged</span>
+          <strong>₹{rupeesFromPaise(order?.amount_paise)}{plan.oneTime ? '' : '/mo'}</strong>
+        </div>
         <div className="bl-sd-row"><span>Billing cycle</span><strong>{plan.oneTime ? 'One-time' : 'Monthly'}</strong></div>
         {!plan.oneTime && <div className="bl-sd-row"><span>Next renewal</span><strong>Aug 2026</strong></div>}
+        {order && (
+          <div className="bl-sd-row"><span>Order reference</span><strong>{order.order_id}</strong></div>
+        )}
         <div className="bl-sd-row"><span>Status</span><strong className="bl-status-badge active">Active</strong></div>
       </div>
       <button id="view-subscription-btn" className="bl-pay-btn" onClick={onViewStatus}>
@@ -655,8 +710,13 @@ function StatusView({ onUpgrade, currentPlan }) {
    ROOT COMPONENT
 ═══════════════════════════════════════════ */
 export default function Billing() {
-  const [view, setView] = useState('plans'); // 'plans' | 'checkout' | 'success' | 'status'
+  // 'plans' | 'checkout' | 'activating' | 'success' | 'status'
+  const [view, setView] = useState('plans');
   const [selectedPlan, setSelectedPlan] = useState(null);
+  // The order the founder actually paid against, kept so the activating and
+  // success screens can quote the charged amount and order reference rather
+  // than a price recomputed from the catalog.
+  const [paidOrder, setPaidOrder] = useState(null);
   // Was hardcoded to 'starter' -- every founder, on any plan, saw Starter marked
   // "Current Plan" here regardless of what they actually pay for.
   const [currentPlan, setCurrentPlan] = useState(null);
@@ -671,18 +731,29 @@ export default function Billing() {
 
   const handleSelectPlan = plan => {
     setSelectedPlan(plan);
+    setPaidOrder(null);
     setView('checkout');
   };
 
-  const handlePaySuccess = plan => {
+  /* Razorpay reported a captured payment. That is NOT authority to show the
+     plan as active: the grant happens when the signed payment.captured webhook
+     reaches the backend, so this only moves to the screen that waits for it. */
+  const handlePaid = ({ plan, order }) => {
     setSelectedPlan(plan);
+    setPaidOrder(order);
+    setView('activating');
+  };
+
+  /* The backend itself now reports the new tier — the webhook has landed. */
+  const handleActivated = (entitlements) => {
+    if (entitlements?.tier) setCurrentPlan(entitlements.tier);
     setView('success');
   };
 
   return (
     <div className="pad bill-wrap">
       {/* Top nav tabs (when not in plans view) */}
-      {view !== 'plans' && view !== 'checkout' && (
+      {view !== 'plans' && view !== 'checkout' && view !== 'activating' && (
         <div className="bl-top-tabs">
           <button
             id="tab-plans"
@@ -712,13 +783,23 @@ export default function Billing() {
         <CheckoutView
           plan={selectedPlan}
           onBack={() => setView('plans')}
-          onSuccess={handlePaySuccess}
+          onPaid={handlePaid}
+        />
+      )}
+
+      {view === 'activating' && selectedPlan && (
+        <ActivatingView
+          plan={selectedPlan}
+          order={paidOrder}
+          onActivated={handleActivated}
+          onViewStatus={() => setView('status')}
         />
       )}
 
       {view === 'success' && selectedPlan && (
         <SuccessView
           plan={selectedPlan}
+          order={paidOrder}
           onViewStatus={() => setView('status')}
         />
       )}
