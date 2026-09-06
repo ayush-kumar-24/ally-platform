@@ -21,6 +21,25 @@ from app.core.config import settings
 # really do run concurrently, so the pool is what bounds concurrency instead
 # of the event loop accidentally doing it. pool_recycle keeps connections from
 # going stale behind the pooler, which closes idle ones.
+# Transaction mode does NOT support prepared statements -- Supabase's own
+# connecting-to-postgres guide says so outright, and the dedicated PgBouncer
+# pooler on the same port is the same story. psycopg3 does not know that: it
+# prepares a statement server-side once it has seen it `prepare_threshold`
+# times (default 5), so on a transaction pooler every query the app runs more
+# than a handful of times eventually raises `prepared statement "_pg3_0"
+# already exists` (or `does not exist`) when it lands on a backend connection
+# that is not the one it was prepared on. The failure is sporadic and depends
+# on which pooled connection a request happens to get, which makes it look
+# like anything except a configuration problem.
+#
+# `prepare_threshold=None` turns server-side prepares off entirely. It costs
+# the parse-plan reuse a repeated query would get, which is why it is tied to
+# the pooler mode rather than set unconditionally: session mode supports
+# prepared statements and keeps them.
+_connect_args = {}
+if settings.uses_transaction_pooler and "+psycopg" in settings.DATABASE_URL:
+    _connect_args["prepare_threshold"] = None
+
 engine = create_engine(
     settings.DATABASE_URL,
     pool_pre_ping=True,
@@ -28,6 +47,7 @@ engine = create_engine(
     max_overflow=settings.DB_POOL_MAX_OVERFLOW,
     pool_timeout=settings.DB_POOL_TIMEOUT,
     pool_recycle=1800,
+    connect_args=_connect_args,
 )
 
 # This Session is SYNCHRONOUS, and that decides how routes must be declared:

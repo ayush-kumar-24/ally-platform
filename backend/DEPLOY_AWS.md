@@ -37,11 +37,46 @@ free connection — deliberately under the frontend's own 20s HTTP timeout, so
 a saturated pool is logged here rather than showing up only as a browser
 giving up.
 
-**Do this too, before real traffic arrives:** switch `DATABASE_URL` to
-Supabase's **transaction-mode pooler** (port 6543, not 5432). It's built for
+### Switching to the transaction pooler
+
+**Do this before real traffic arrives:** point the *runtime* `DATABASE_URL` at
+Supabase's **transaction-mode pooler** (port 6543, not 5432). It is built for
 many concurrent short-lived connections rather than a fixed pool of long-lived
-ones, and is the actual fix — the pool-size tuning above is a safety margin on
-top of it, not a replacement for it.
+ones, and is the actual fix — the pool sizing above is a safety margin on top
+of it, not a replacement for it.
+
+Session mode and transaction mode are the **same Supavisor host** and differ
+only by port, so the edit is `:5432` → `:6543` in the existing value. Keep the
+`postgres.<project-ref>` username and the password exactly as they are:
+
+```
+postgresql+psycopg://postgres.<project-ref>:<password>@aws-<n>-ap-south-1.pooler.supabase.com:6543/postgres
+```
+
+The value lives in AWS Secrets Manager and is injected by the ECS task
+definition; `backend-deploy.yml` deliberately carries the runtime secret
+forward untouched on every deploy, so editing the secret is the whole change —
+but **running tasks keep the old value until they are replaced**, so force a
+new deployment of `ally-backend-service` afterwards.
+
+Three things that must stay true when you flip it:
+
+- **Only the runtime secret.** `MIGRATION_DATABASE_URL_SECRET` stays on 5432.
+  Alembic runs DDL and wants a real session; Supabase's own guidance is to use
+  a direct or session connection for migrations. The deploy already runs
+  migrations under a separate task definition and secret, so leaving that one
+  alone is enough.
+- **Prepared statements must be off.** Transaction mode does not support them
+  and psycopg3 uses them by default after 5 executions. `app/db/session.py`
+  sets `prepare_threshold=None` automatically when the URL names port 6543 —
+  which is why the port is what drives it, and why nothing else needs setting.
+- **No session-level `SET`.** A backend connection is handed to whoever asks
+  next, carrying whatever state was left on it. The RLS context is set with
+  `set_config(..., true)` (transaction-local), which is correct here; a plain
+  `SET` would leak one founder's context to another.
+
+`tests/test_transaction_pooler_safety.py` asserts the first two, and the pool
+sizing that follows from the port.
 
 ## 1. Push the image to ECR
 
