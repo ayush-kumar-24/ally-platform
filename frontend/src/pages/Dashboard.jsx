@@ -6,6 +6,7 @@ import { completionPercent, loadDashboard, markTourSeen, relativeDay } from '../
 import { loadVision } from '../services/vision';
 import { listGoals } from '../services/goals';
 import { getLatestReport, getRecommendations } from '../services/reports';
+import { swrGet } from '../services/swr';
 import FeedbackPrompt from '../components/FeedbackPrompt';
 import { FEEDBACK } from '../services/feedback';
 import { useCallAccess } from '../hooks/useCallAccess';
@@ -165,15 +166,20 @@ export default function Dashboard() {
   const load = useCallback(() => {
     loadDashboard(setPart);
 
-    loadVision().catch(() => null).then((v) => setExtra('vision', v));
-    listGoals().catch(() => null).then((g) => setExtra('goals', g));
-    getLatestReport().catch(() => null).then(async (report) => {
+    swrGet('compass:vision', loadVision, (v) => setExtra('vision', v));
+    swrGet('compass:goals', listGoals, (g) => setExtra('goals', g));
+    swrGet('compass:report', getLatestReport, (report) => {
       // Published before the recommendations round trip, not after it: the
       // Bottleneck and Next steps sections can already tell "no diagnosis yet"
       // from "your actions are still loading" with just this.
       setExtra('report', report);
-      const recs = report ? await getRecommendations(report.report_id).catch(() => null) : null;
-      setExtra('actions', report ? toActions(recs) : []);
+    }).then((report) => {
+      if (!report) return setExtra('actions', []);
+      return swrGet(
+        `compass:actions:${report.report_id}`,
+        () => getRecommendations(report.report_id),
+        (recs) => setExtra('actions', toActions(recs)),
+      );
     });
   }, [setPart, setExtra]);
 

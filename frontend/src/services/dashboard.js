@@ -9,6 +9,7 @@
  */
 
 import { get, post } from './api';
+import { swrGet } from './swr';
 
 /** Diagnosis-derived health score, band, pillars and red flags. */
 export function getBusinessHealth() {
@@ -77,7 +78,9 @@ const SOURCES = {
  * yet" (`available: false`) from "could not load" (`null`).
  *
  * `onPart(key, value)` fires as each source lands, so the page can paint each
- * card the moment ITS data arrives instead of waiting for all of them.
+ * card the moment ITS data arrives instead of waiting for all of them. On a
+ * repeat visit within the cache window it fires twice: once immediately with
+ * the previous value, once with the server's (see services/swr.js).
  * Awaiting the returned promise still gives the whole object, for callers
  * that want that.
  * The three states a caller reads are deliberately distinct: `undefined` means
@@ -88,12 +91,8 @@ const SOURCES = {
 export function loadDashboard(onPart) {
   return Promise.all(
     Object.entries(SOURCES).map(([key, fetchOne]) =>
-      fetchOne()
-        .catch(() => null)
-        .then((value) => {
-          onPart?.(key, value);
-          return [key, value];
-        })
+      swrGet(`dashboard:${key}`, fetchOne, (value) => onPart?.(key, value))
+        .then((value) => [key, value])
     )
   ).then(Object.fromEntries);
 }
