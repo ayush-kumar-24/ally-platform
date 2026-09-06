@@ -77,9 +77,52 @@ const PRIVACY_ACTIONS = [
       </svg>
     ),
     confirmTitle: 'Request data correction?',
-    confirmDesc: 'Our team will review and correct the identified data within 30 days. Please add details in the request.',
+    confirmDesc: 'Our team will review and correct the identified data within 30 days. Tell us what is wrong and what it should say.',
     confirmColor: '#4338ca',
     confirmBg: '#f0f4ff',
+    // `prompt` turns the confirm modal into a one-field form. Without it this
+    // action said "please add details in the request" above a dialog with
+    // nowhere to add them, and posted no details at all -- so every correction
+    // reached an admin as "this founder wants something corrected".
+    prompt: {
+      label: 'What should we correct?',
+      placeholder: 'e.g. my company name is spelled wrong — it should be GoXL, not Goxl',
+      multiline: true,
+      required: false,
+    },
+  },
+  {
+    // Sits beside the correction request because it IS one -- the same ask, the
+    // same queue, the same 30 days. It is listed separately only because a
+    // founder looking for it is looking for the word "email", not "correction".
+    type: 'email_change',
+    kind: 'queued',
+    label: 'Request an email change',
+    desc: 'Signed up with the wrong address, or need your account moved to a different one? Ask us to change it — we cannot change it from here ourselves.',
+    icon: (
+      <svg viewBox="0 0 24 24">
+        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+        <polyline points="22,6 12,13 2,6" />
+      </svg>
+    ),
+    confirmTitle: 'Request an email change?',
+    // Says plainly that we will write to the NEW address. A founder who
+    // mistyped theirs cannot receive anything at the old one, so "we'll confirm
+    // by email" would read as "you will never hear back".
+    confirmDesc: 'A person reviews this within 30 days and will contact you at the new address to confirm it is yours. Your sign-in address does not change until then.',
+    confirmColor: '#4338ca',
+    confirmBg: '#f0f4ff',
+    prompt: {
+      label: 'New email address',
+      placeholder: 'you@example.com',
+      type: 'email',
+      required: true,
+      // Mirrors the server rule. Client-side only to give the answer instantly;
+      // the server validates the same thing and is the one that counts.
+      validate: (v) => (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v.trim())
+        ? null
+        : 'Enter a valid email address, e.g. you@example.com.'),
+    },
   },
   {
     type: 'portability',
@@ -159,6 +202,8 @@ const TYPE_LABELS = {
   restrict_processing: 'Restrict processing',
   withdraw_consent: 'Withdraw consent',
   delete_account: 'Account deletion',
+  cancel_deletion: 'Deletion cancelled',
+  email_change: 'Email change',
 };
 
 function fmtDate(iso) {
@@ -227,9 +272,20 @@ export default function FounderProfile() {
   // it neither viewed anything nor said anything a founder could read. Held here
   // so it can be shown on the page instead.
   const [dataSummary, setDataSummary] = useState(null);
+  // Freetext for the actions that carry a `prompt` (correction, email change).
+  // Cleared whenever the modal opens or closes so a half-typed address from an
+  // abandoned attempt is never silently submitted with the next one.
+  const [promptValue, setPromptValue] = useState('');
+  const [promptError, setPromptError] = useState('');
   // Ref, not state: state updates are async, so two clicks in the same tick would
   // both see submitting === false. The ref flips synchronously.
   const inFlight = useRef(false);
+
+  const openAction = useCallback((action) => {
+    setPromptValue('');
+    setPromptError('');
+    setPendingAction(action);
+  }, []);
 
   // Load privacy standing + request history on mount (graceful if backend is down)
   useEffect(() => {
@@ -252,6 +308,25 @@ export default function FounderProfile() {
 
   const handleSubmitPrivacyRequest = useCallback(async () => {
     if (!pendingAction || inFlight.current) return;
+
+    // Validate before the spinner starts. A required field that fails should
+    // leave the modal open with the message under the box, not close it and
+    // surface a server error in a toast the founder has to read twice.
+    const prompt = pendingAction.prompt;
+    if (prompt) {
+      const value = promptValue.trim();
+      if (prompt.required && !value) {
+        setPromptError(`${prompt.label} is required.`);
+        return;
+      }
+      const invalid = value && prompt.validate ? prompt.validate(value) : null;
+      if (invalid) {
+        setPromptError(invalid);
+        return;
+      }
+    }
+    setPromptError('');
+
     inFlight.current = true;
     setSubmitting(true);
 
@@ -320,9 +395,18 @@ export default function FounderProfile() {
         default: {
           // Rights that need a human to action — queued for review.
           setProgress('Submitting request…');
-          const created = await post('/settings/privacy', { request_type: pendingAction.type });
+          // request_details is sent only when there is something in it. The
+          // endpoint forbids unknown keys and treats the field as optional, so
+          // an empty string would be a meaningless row for an admin to read.
+          const details = promptValue.trim();
+          const created = await post('/settings/privacy', {
+            request_type: pendingAction.type,
+            ...(details ? { request_details: details } : {}),
+          });
           setPrivacyRequests(prev => [created, ...prev]);
-          showToast(`${label} request submitted ✓`);
+          showToast(pendingAction.type === 'email_change'
+            ? 'Email change requested ✓ — we will contact you at the new address'
+            : `${label} request submitted ✓`);
         }
       }
     } catch (err) {
@@ -334,8 +418,10 @@ export default function FounderProfile() {
       setSubmitting(false);
       setProgress('');
       setPendingAction(null);
+      setPromptValue('');
+      setPromptError('');
     }
-  }, [pendingAction, showToast]);
+  }, [pendingAction, promptValue, showToast]);
 
   const handleResumeProcessing = useCallback(async () => {
     if (inFlight.current) return;
@@ -580,6 +666,66 @@ export default function FounderProfile() {
             </div>
             <h3>{pendingAction.confirmTitle}</h3>
             <p>{pendingAction.confirmDesc}</p>
+
+            {/* One field, for the actions that need the founder to say what they
+                actually want. Labelled properly and wired to the error with
+                aria-describedby: this is the only input in the Privacy Center,
+                and a screen-reader user who cannot hear why Confirm did nothing
+                is stuck with no way forward. */}
+            {pendingAction.prompt && (
+              <div style={{ textAlign: 'left', margin: '4px 0 18px' }}>
+                <label
+                  htmlFor="pr-privacy-prompt"
+                  style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 6 }}
+                >
+                  {pendingAction.prompt.label}
+                  {pendingAction.prompt.required && (
+                    <span aria-hidden="true" style={{ color: '#b91c1c' }}> *</span>
+                  )}
+                </label>
+                {pendingAction.prompt.multiline ? (
+                  <textarea
+                    id="pr-privacy-prompt"
+                    className="pr-privacy-prompt-input"
+                    rows={3}
+                    value={promptValue}
+                    placeholder={pendingAction.prompt.placeholder}
+                    maxLength={2000}
+                    disabled={submitting}
+                    aria-required={!!pendingAction.prompt.required}
+                    aria-invalid={!!promptError}
+                    aria-describedby={promptError ? 'pr-privacy-prompt-err' : undefined}
+                    onChange={e => { setPromptValue(e.target.value); setPromptError(''); }}
+                  />
+                ) : (
+                  <input
+                    id="pr-privacy-prompt"
+                    className="pr-privacy-prompt-input"
+                    type={pendingAction.prompt.type || 'text'}
+                    value={promptValue}
+                    placeholder={pendingAction.prompt.placeholder}
+                    maxLength={2000}
+                    disabled={submitting}
+                    autoComplete="email"
+                    aria-required={!!pendingAction.prompt.required}
+                    aria-invalid={!!promptError}
+                    aria-describedby={promptError ? 'pr-privacy-prompt-err' : undefined}
+                    onChange={e => { setPromptValue(e.target.value); setPromptError(''); }}
+                    onKeyDown={e => { if (e.key === 'Enter' && !submitting) handleSubmitPrivacyRequest(); }}
+                  />
+                )}
+                {promptError && (
+                  <div
+                    id="pr-privacy-prompt-err"
+                    role="alert"
+                    style={{ color: '#b91c1c', fontSize: 12.5, marginTop: 6 }}
+                  >
+                    {promptError}
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="pr-privacy-modal-actions">
               <button
                 className="pr-privacy-cancel-btn"
@@ -836,8 +982,20 @@ export default function FounderProfile() {
           <div className="pr-field">
             <div className="pr-lbl">Email</div>
             {/* Email comes from the Google/LinkedIn identity, so it is not editable
-                here -- offering an input implied a change we cannot persist. */}
+                here -- offering an input implied a change we cannot persist.
+                But "you cannot change this" is only half an answer, and the
+                founder who most needs the other half is the one who mistyped it
+                and is now reading their own wrong address. So this says where to
+                go, on the field itself, rather than leaving them to find the
+                Privacy Center on a hunch. */}
             <div className="pr-val">{form.email || '—'}</div>
+            <button
+              type="button"
+              className="pr-inline-link"
+              onClick={() => openAction(PRIVACY_ACTIONS.find(a => a.type === 'email_change'))}
+            >
+              Wrong address? Request a change
+            </button>
           </div>
 
           {/* Phone and Location removed -- not needed here per product
@@ -1262,7 +1420,7 @@ export default function FounderProfile() {
             </div>
             <button
               className="pr-privacy-btn"
-              onClick={() => setPendingAction(action)}
+              onClick={() => openAction(action)}
               type="button"
               id={`privacy-btn-${action.type}`}
               disabled={
@@ -1378,7 +1536,7 @@ export default function FounderProfile() {
                opened the withdraw-consent dialog and POSTed /privacy/withdraw,
                so the account was never scheduled for erasure — while the user
                was told it had been. */
-            onClick={() => setPendingAction(PRIVACY_ACTIONS.find(a => a.type === 'delete_account'))}
+            onClick={() => openAction(PRIVACY_ACTIONS.find(a => a.type === 'delete_account'))}
             type="button"
             id="delete-account-btn"
           >
