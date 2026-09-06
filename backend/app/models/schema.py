@@ -990,7 +990,10 @@ class PrivacyRequests(Base):
         # erasure, its cancellation and consent withdrawal all logged as
         # `withdraw_consent`, so the audit trail could not answer "who asked to be
         # deleted" -- the one question it exists to answer.
-        CheckConstraint("request_type::text = ANY (ARRAY['view_data'::character varying, 'download_data'::character varying, 'correct_data'::character varying, 'withdraw_consent'::character varying, 'restrict_processing'::character varying, 'portability'::character varying, 'delete_account'::character varying, 'cancel_deletion'::character varying]::text[])", name='privacy_requests_request_type_check'),
+        # `email_change` added by b4e7d21a9c68: a founder who mistyped their
+        # address at signup cannot reach us from the account, because the account
+        # is the thing that is wrong.
+        CheckConstraint("request_type::text = ANY (ARRAY['view_data'::character varying, 'download_data'::character varying, 'correct_data'::character varying, 'withdraw_consent'::character varying, 'restrict_processing'::character varying, 'portability'::character varying, 'delete_account'::character varying, 'cancel_deletion'::character varying, 'email_change'::character varying]::text[])", name='privacy_requests_request_type_check'),
         CheckConstraint("status::text = ANY (ARRAY['pending'::character varying, 'in_progress'::character varying, 'completed'::character varying, 'rejected'::character varying]::text[])", name='privacy_requests_status_check'),
         ForeignKeyConstraint(['founder_id'], ['founders.founder_id'], name='privacy_requests_founder_id_fkey'),
         PrimaryKeyConstraint('request_id', name='privacy_requests_pkey'),

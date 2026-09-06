@@ -61,10 +61,6 @@ class PaymentGateway(Protocol):
         self, *, amount_paise: int, currency: str, receipt: str, notes: dict[str, str]
     ) -> GatewayOrder: ...
 
-    def verify_payment_signature(
-        self, *, order_id: str, payment_id: str, signature: str
-    ) -> bool: ...
-
     def verify_webhook_signature(self, *, body: bytes, signature: str) -> bool: ...
 
 
@@ -83,11 +79,21 @@ def _error_description(resp: httpx.Response) -> str | None:
 
 
 class RazorpayGateway:
-    """Orders API (create) + the two HMAC checks Razorpay's own docs specify:
-    the checkout-callback signature (order_id|payment_id, signed with the key
-    secret) and the webhook signature (raw body, signed with the separate
-    webhook secret). Neither is optional -- an unsigned or wrongly-signed
-    payload must never be trusted as "payment succeeded".
+    """Orders API (create) + the webhook signature check Razorpay's own docs
+    specify (raw body, signed with the webhook secret). It is not optional --
+    an unsigned or wrongly-signed payload must never be trusted as "payment
+    succeeded".
+
+    There is deliberately no checkout-callback signature check here. Razorpay
+    also signs `order_id|payment_id` with the key secret for the browser
+    callback, and this class used to verify it, but nothing ever called that
+    method: the plan is granted from the signed webhook alone (see
+    PaymentService.handle_webhook's own note), and the browser callback is
+    treated as a hint about what to show the founder, never as authority.
+    Verifying a signature whose verdict changes nothing is a check in name
+    only -- it invites a later caller to mistake it for the authority it
+    is not. Should a genuine use appear (say, telling a returning founder
+    whether the attempt they just made looked real), reinstate it there.
     """
 
     def __init__(
@@ -145,17 +151,6 @@ class RazorpayGateway:
         return GatewayOrder(
             order_id=data["id"], amount_paise=data["amount"], currency=data["currency"]
         )
-
-    def verify_payment_signature(self, *, order_id: str, payment_id: str, signature: str) -> bool:
-        """The checkout widget's own callback signature -- confirms the
-        redirect actually came from Razorpay. NOT what grants the plan (the
-        webhook is, see PaymentService.handle_webhook's own note); this is
-        only ever used to decide what the frontend is told about the attempt
-        it just made."""
-        expected = hmac.new(
-            self.key_secret.encode(), f"{order_id}|{payment_id}".encode(), hashlib.sha256
-        ).hexdigest()
-        return hmac.compare_digest(expected, signature or "")
 
     def verify_webhook_signature(self, *, body: bytes, signature: str) -> bool:
         if not self.webhook_secret:

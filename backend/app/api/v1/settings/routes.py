@@ -17,7 +17,7 @@ ours. Credentials and 2FA stay with the identity provider, surfaced read-only
 under /settings/security.
 """
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_founder_record
@@ -118,10 +118,42 @@ async def submit_privacy_request(
 ):
     """Queue a data-rights request for admin review.
 
-    Allowed types (enforced by DB constraint): view_data, download_data,
-    correct_data, withdraw_consent, restrict_processing, portability.
-    The row is created with status='pending' and routed to admins for fulfilment.
+    Allowed types are in `PrivacyRequestType`; `delete_account` and
+    `cancel_deletion` exist in the table but are NOT submittable here (see the
+    note on that Literal). The row is created with status='pending' and routed
+    to admins for fulfilment.
+
+    `email_change` is the one type with extra rules, both below. It is reviewed
+    by a human rather than applied, because changing the address on an account
+    is an account-takeover primitive and because the address lives with the auth
+    provider, not in a column this endpoint could update.
     """
+    if payload.request_type == "email_change":
+        new_email = (payload.request_details or "").strip().lower()
+
+        # Nothing to do, and it reads as a bug to whoever picks it up.
+        if new_email == (founder.email or "").strip().lower():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="That is already the address on your account.",
+            )
+
+        # One at a time. There is no rate limit on this endpoint, and a founder
+        # who is not sure the first one worked -- which is exactly the founder
+        # this feature is for, since we cannot email them a confirmation -- will
+        # press it again. Ten identical rows is a worse queue for them, not just
+        # for us.
+        if privacy_request_repository.has_pending(
+            db, founder.founder_id, request_type="email_change"
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "You already have an email change waiting for review. "
+                    "We will be in touch within 30 days."
+                ),
+            )
+
     return privacy_request_repository.submit(
         db,
         founder_id=founder.founder_id,

@@ -5,12 +5,21 @@ enforced by a database CHECK constraint; we mirror them here so the API
 surfaces a meaningful validation error before hitting the DB.
 """
 
+import re
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-# The six right types the DB constraint allows.
+#: What a founder may POST to /settings/privacy -- the rights that need a human
+#: to action them.
+#:
+#: DELIBERATELY NARROWER THAN THE DB CONSTRAINT. The table also allows
+#: `delete_account` and `cancel_deletion`, but those are written by the erasure
+#: service, which schedules the deletion, sets the grace period and records the
+#: consent trail. Accepting them here would let a founder queue a row that looks
+#: like a deletion request while none of that happened -- a deletion we would
+#: believe we had and never perform. They stay out on purpose.
 PrivacyRequestType = Literal[
     "view_data",
     "download_data",
@@ -18,9 +27,18 @@ PrivacyRequestType = Literal[
     "withdraw_consent",
     "restrict_processing",
     "portability",
+    "email_change",
 ]
 
 PrivacyRequestStatus = Literal["pending", "in_progress", "completed", "rejected"]
+
+#: Deliberately permissive. This is not the place to adjudicate what a valid
+#: address is -- a human reads the request and the real test is whether mail
+#: arrives. It exists to catch the obvious ("no", "same as before", a phone
+#: number), because an email-change request with no address in it is
+#: unactionable and the founder cannot be asked to clarify: the address we hold
+#: is the thing that is broken.
+_LOOKS_LIKE_EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 class PrivacyRequestCreate(BaseModel):
@@ -32,8 +50,32 @@ class PrivacyRequestCreate(BaseModel):
     request_details: str | None = Field(
         default=None,
         max_length=2000,
-        description="Optional freetext the founder wants to include (e.g. specific fields to correct).",
+        description=(
+            "Freetext the founder wants to include (e.g. specific fields to "
+            "correct). REQUIRED for email_change, where it must be the new "
+            "address and nothing else."
+        ),
     )
+
+    @model_validator(mode="after")
+    def _email_change_carries_an_address(self) -> "PrivacyRequestCreate":
+        """An email_change request must say which address to change it to.
+
+        Enforced here rather than left to the admin because the admin's only
+        recourse for an empty one is to ask the founder -- at the address that
+        does not work. The request would sit in the queue forever.
+        """
+        if self.request_type != "email_change":
+            return self
+        value = (self.request_details or "").strip()
+        if not value:
+            raise ValueError("An email change request must include the new email address.")
+        if not _LOOKS_LIKE_EMAIL.fullmatch(value):
+            raise ValueError(
+                "Enter just the new email address, e.g. you@example.com."
+            )
+        self.request_details = value.lower()
+        return self
 
 
 class PrivacyRequestRead(BaseModel):
