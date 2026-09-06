@@ -30,7 +30,7 @@
       "Measured real token cost from the database: 54 messages averaging 1,305 tokens each, largest 2,776. Daily usage rows average 3,159 tokens, largest 8,189."
     ],
     "findings": [
-      "PLUS (Rs 450) GIVES ABOUT TWO OR THREE MESSAGES A DAY. Its daily ceiling is 3,500 tokens and a measured average message costs 1,305. Pro's 8,000 is about six, and a real founder-day has already exceeded it (8,189 recorded). Question 224 is 'it says I've hit a limit and I've only just started' -- on Plus that complaint will be literally true, on the first sitting, from a founder who has just paid. No wording fixes this. The ceiling does.",
+      "PLUS (Rs 499) GIVES ABOUT TWO OR THREE MESSAGES A DAY. Its daily ceiling is 3,500 tokens and a measured average message costs 1,305. Pro's 8,000 is about six, and a real founder-day has already exceeded it (8,189 recorded). Question 224 is 'it says I've hit a limit and I've only just started' -- on Plus that complaint will be literally true, on the first sitting, from a founder who has just paid. No wording fixes this. The ceiling does.",
       "HEIC PHOTOS CANNOT BE UPLOADED AND CANNOT EVEN BE PICKED. The avatar picker's accept list is PNG/JPEG/WEBP, so on an iPhone the founder's own photos are greyed out in the file chooser with no explanation -- there is not even an error message to read. Either accept HEIC server-side and convert, or put one line of help text next to the button. This is question 219, and it was hit in our own testing.",
       "NO STATUS PAGE. Every answer in this group ends with 'write to us'. When something is broken for everyone at once, that turns one outage into a hundred separate support conversations. Not urgent before launch, but it is the fallback for all twelve of these."
     ]
@@ -150,7 +150,7 @@
         "walked_on": "2026-09-05",
         "how": "Measured the real cost from the database: 54 messages, average 1,305 tokens, largest 2,776. The daily error names the exact numbers and the reset time, so a founder can check it against the billing page."
       },
-      "finding": "On Plus (Rs 450, 3,500 tokens a day) that average works out at two or three messages. This complaint will be literally true for a founder who has just paid, on their first sitting. The ceiling needs raising -- no support answer covers it."
+      "finding": "On Plus (Rs 499, 3,500 tokens a day) that average works out at two or three messages. This complaint will be literally true for a founder who has just paid, on their first sitting. The ceiling needs raising -- no support answer covers it."
     },
     {
       "id": 225,

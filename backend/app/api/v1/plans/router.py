@@ -63,6 +63,9 @@ def catalog() -> dict:
                 "free_calls_per_month": p.free_calls_per_month,
                 "features": sorted(f.value for f in p.features),
                 "is_paid": p.is_paid,
+                # One-time vs monthly is a fact about the plan, decided here,
+                # so the pricing page cannot label a single purchase "/mo".
+                "one_time": p.one_time,
             }
             for p in sold_plans()
         ],

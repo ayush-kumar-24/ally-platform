@@ -29,10 +29,14 @@
 .sb-toggle{width:30px;height:30px;flex-shrink:0;border-radius:9px;border:1px solid rgba(255,255,255,.13);background:rgba(255,255,255,.04);color:var(--on-dark-muted,#a7c0b4);display:grid;place-items:center;cursor:pointer;transition:background .2s,color .2s,border-color .2s;-webkit-tap-highlight-color:transparent}
 .sb-toggle:hover{background:rgba(255,255,255,.1);color:#fff;border-color:rgba(255,255,255,.22)}
 .sb-toggle .ic{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;transition:transform .3s cubic-bezier(.2,.7,.2,1)}
-.sb-brand{display:flex;flex-direction:column;line-height:1}
-.sb-brand .mark{font-family:var(--display-tight);font-weight:800;font-size:23px;letter-spacing:-.02em;color:#fff}
+/* Mark and words side by side, matching the marketing site's lockup. */
+.sb-brand{display:flex;flex-direction:row;align-items:center;gap:10px;line-height:1}
+.sb-brand .sb-words{display:flex;flex-direction:column;min-width:0}
+.sb-brand .mark{font-family:var(--display-tight);font-weight:800;font-size:19px;letter-spacing:-.02em;color:#fff;white-space:nowrap}
+/* "Ally" is the quieter half of the lockup -- <i> for the pairing, not italics. */
+.sb-brand .mark i{font-style:normal;font-weight:600;color:var(--on-dark-muted,#a7c0b4)}
 .sb-brand .mark .x{color:#10B981}
-.sb-brand .sub{font-size:7.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--on-dark-dim,#7d9488);font-weight:600;margin-top:3px}
+.sb-brand .sub{font-size:8.5px;letter-spacing:.06em;color:var(--on-dark-dim,#7d9488);font-weight:500;margin-top:4px;white-space:nowrap}
 .ally-badge{display:inline-flex;align-items:center;gap:6px;margin-top:12px;background:rgba(16,185,129,.14);border:1px solid rgba(16,185,129,.32);border-radius:999px;padding:4px 10px;font-size:11px;font-weight:700;color:#34d399;letter-spacing:.04em}
 .ally-badge .dot{width:6px;height:6px;border-radius:50%;background:#34d399;box-shadow:0 0 0 0 rgba(52,211,153,.6);animation:pulse 2.4s infinite}
 @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(52,211,153,.5)}70%{box-shadow:0 0 0 7px rgba(52,211,153,0)}100%{box-shadow:0 0 0 0 rgba(52,211,153,0)}}
@@ -793,6 +797,24 @@
 .bl-pay-btn:hover{background:linear-gradient(150deg,#164a32,#0a2016);box-shadow:0 18px 40px -16px rgba(6,32,20,.55)}
 .bl-pay-btn.loading{opacity:.75;pointer-events:none}
 .bl-pay-note{font-size:11.5px;color:#6c7a70;text-align:center;margin:6px 0 0;line-height:1.45}
+/* Razorpay checkout panel. The page collects no card fields of its own -- the
+   founder is handed to Razorpay's hosted widget -- so what used to be a form
+   column is now a short explanation, the pay button, and the two states that
+   can follow it (order could not be created / payment did not complete). */
+.bl-pay-heading{font-family:var(--display-tight);font-size:19px;font-weight:800;color:#0E2A1C;margin:0 0 8px}
+.bl-pay-lede{font-size:13px;line-height:1.6;color:#556458;margin:0 0 18px}
+.bl-pay-alert{display:flex;flex-direction:column;gap:5px;align-items:flex-start;border-radius:12px;padding:12px 14px;margin-bottom:16px;font-size:12.5px;line-height:1.5}
+.bl-pay-alert strong{font-weight:750}
+.bl-pay-alert.err{background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.28);color:#b91c1c}
+.bl-pay-alert.warn{background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);color:#92400e}
+.bl-pay-alert .bl-link-btn{font-size:12.5px}
+.bl-pay-order-ref{font-size:11px;color:#8b978f;text-align:center;margin:10px 0 0;font-variant-numeric:tabular-nums;word-break:break-all}
+/* Waiting on the payment webhook. Green like success (the money has arrived)
+   but spinning, because the plan is not granted until the backend says so. */
+.bl-activating-icon{width:68px;height:68px;border-radius:50%;background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.3);display:grid;place-items:center;margin:0 auto 22px}
+.bl-activating-icon.slow{background:rgba(245,158,11,.12);border-color:rgba(245,158,11,.32)}
+.bl-activating-icon svg{width:30px;height:30px;stroke:#b45309;fill:none}
+.bl-spinner.dark{width:26px;height:26px;border-width:3px;border-color:rgba(16,185,129,.25);border-top-color:#10B981}
 .bl-spinner{width:16px;height:16px;border:2.5px solid rgba(255,255,255,.25);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0}
 @keyframes spin{to{transform:rotate(360deg)}}
 
@@ -827,6 +849,7 @@
 /* Status badges */
 .bl-status-badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:750;letter-spacing:.05em;text-transform:uppercase;padding:3px 10px;border-radius:99px;vertical-align:middle;margin-left:10px}
 .bl-status-badge.active{background:rgba(52,211,153,.15);color:#059669;border:1px solid rgba(52,211,153,.3)}
+.bl-status-badge.pending{background:rgba(245,158,11,.14);color:#b45309;border:1px solid rgba(245,158,11,.32)}
 .bl-status-badge.active::before{content:'';width:5px;height:5px;border-radius:50%;background:#34d399}
 .inv-status.paid{display:inline-block;font-size:10.5px;font-weight:750;letter-spacing:.04em;text-transform:uppercase;padding:3px 9px;border-radius:99px;background:rgba(16,185,129,.12);color:#059669;border:1px solid rgba(52,211,153,.25)}
 
@@ -1290,10 +1313,12 @@ img,svg,video,canvas{max-width:100%}
    (transparent wordmark Â· aspect ~3.33:1 Â· crisp on Retina)
    ============================================================ */
 .goxl-logo{display:block;width:auto;height:32px;object-fit:contain;-webkit-user-drag:none;user-select:none;flex-shrink:0}
-.sb-brand .goxl-logo{height:38px}
+/* The sidebar carries the SQUARE Ally mark, not the wordmark: fixed on both
+   axes so the flex row cannot stretch it. */
+.sb-brand .goxl-logo{width:34px;height:34px;flex:0 0 auto}
 .gn-logo{display:inline-flex;align-items:center;gap:8px}
 .gn-logo .goxl-logo{height:24px}
-@media(max-width:767px){ .sb-brand .goxl-logo{height:36px} }
+@media(max-width:767px){ .sb-brand .goxl-logo{width:32px;height:32px} }
 
 /* ============================================================
    AUTHENTICATION THEME â€” warm ivory / soft-white (reference-driven)

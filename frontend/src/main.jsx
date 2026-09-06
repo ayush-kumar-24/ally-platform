@@ -18,6 +18,7 @@ import './styles/onboarding-supplement.css';
 import './styles/onboarding-questions.css';
 import './styles/animations.css';
 import './styles/tour.css';
+import './styles/help-widget.css';
 
 // ErrorBoundary (below) only catches errors React's render phase throws
 // through its own tree -- by design, React error boundaries do NOT catch

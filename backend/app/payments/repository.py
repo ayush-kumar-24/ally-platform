@@ -89,7 +89,7 @@ class PaymentRepository:
 
     def create_subscription(
         self, *, founder_id: int, plan_type: str, amount_inr: int, billing_cycle: str,
-        expires_at: datetime, gateway: str,
+        expires_at: datetime | None, gateway: str,
     ) -> int:
         subscription_id = self.db.execute(
             text(

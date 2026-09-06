@@ -49,9 +49,11 @@
 .compass-ns-row dd{margin:0;font-size:13.5px;color:var(--ink)}
 .compass-gauge{display:grid;place-items:center;position:relative}
 .compass-gauge svg{width:100%;max-width:220px;height:auto}
-.compass-gauge-center{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;pointer-events:none}
-.compass-gauge-center b{display:block;font-size:28px;font-weight:600;letter-spacing:-.03em;color:var(--forest-deep);font-variant-numeric:tabular-nums}
-.compass-gauge-center span{display:block;font-family:var(--body);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-top:3px}
+/* The dial face. Quiet on purpose -- it is the surface the needle reads
+   against, not something to look at on its own. */
+.compass-rose path{fill:rgba(27,67,50,.13)}
+.compass-rose-minor path{fill:rgba(27,67,50,.07)}
+.compass-rose-letters text{font-family:var(--body);font-size:11px;font-weight:600;letter-spacing:.08em;fill:var(--muted);opacity:.55}
 @media(max-width:960px){.compass-northstar{grid-template-columns:1fr}.compass-gauge{order:-1}}
 
 /* Bottleneck */

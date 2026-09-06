@@ -1628,3 +1628,79 @@ img,svg,video,canvas{max-width:100%}
 
 
 
+
+/* ==========================================
+   Cookie banner -- compact bar
+   ==========================================
+   The card above was a 180px-tall panel that sat over the middle of the
+   sign-in form on the very first screen a founder sees. A consent prompt has
+   to be there, but it does not have to be in the way: on desktop it is now
+   one row -- icon, two lines of text, the two choices -- pinned to the bottom
+   edge, roughly 80px tall. Only when "Customize Preferences" is opened does
+   it grow back into a column, because the toggles need the room. The phone
+   rules earlier in this file still apply below 768px. */
+.cookie-banner-overlay {
+  bottom: 16px;
+}
+
+.cookie-banner-card {
+  max-width: 1080px;
+  padding: 14px 18px;
+  gap: 12px;
+  border-radius: 16px;
+}
+
+.cookie-banner-icon-wrapper {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+}
+.cookie-banner-icon-wrapper svg { width: 18px; height: 18px; }
+
+.cookie-banner-title-area h3 {
+  font-size: 15px;
+  margin: 0 0 2px;
+}
+
+.cookie-banner-desc {
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.cookie-banner-actions {
+  border-top: 0;
+  padding-top: 0;
+  gap: 12px;
+}
+
+.cookie-btn {
+  padding: 8px 16px;
+  font-size: 13px;
+  border-radius: 9px;
+}
+
+@media (min-width: 769px) {
+  .cookie-banner-card:not(.is-customizing) {
+    flex-direction: row;
+    align-items: center;
+    gap: 24px;
+  }
+  .cookie-banner-card:not(.is-customizing) .cookie-banner-header {
+    flex: 1 1 auto;
+    align-items: center;
+    gap: 14px;
+    min-width: 0;
+  }
+  .cookie-banner-card:not(.is-customizing) .cookie-banner-actions {
+    flex: 0 0 auto;
+    gap: 14px;
+  }
+  .cookie-banner-card.is-customizing {
+    padding: 18px 22px;
+    gap: 16px;
+  }
+  .cookie-banner-card.is-customizing .cookie-banner-actions {
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    padding-top: 14px;
+  }
+}

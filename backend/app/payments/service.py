@@ -138,11 +138,18 @@ class PaymentService:
                                  payment_id=payment.payment_id, founder_id=payment.founder_id)
 
         now = self._now()
-        expires_at = now + timedelta(days=_BILLING_CYCLE_DAYS)
+        # A one-time tier buys one diagnosis, not a month of service: it has no
+        # cycle to renew and nothing to expire, so it gets no expiry date. The
+        # old code stamped every purchase as monthly with a 30-day expiry, which
+        # for Basic was simply untrue -- and an expiry nothing enforces today is
+        # the sort of field something enforces later.
+        one_time = plan.one_time
+        expires_at = None if one_time else now + timedelta(days=_BILLING_CYCLE_DAYS)
 
         subscription_id = self.repository.create_subscription(
             founder_id=payment.founder_id, plan_type=tier.value, amount_inr=payment.amount_inr,
-            billing_cycle="monthly", expires_at=expires_at, gateway="razorpay",
+            billing_cycle="one_time" if one_time else "monthly",
+            expires_at=expires_at, gateway="razorpay",
         )
         self.repository.mark_captured(
             payment.payment_id, gateway_payment_id=gateway_payment_id, paid_at=now,

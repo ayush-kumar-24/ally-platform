@@ -112,7 +112,9 @@ export default function CookieBanner() {
       aria-labelledby="cookie-banner-title"
       aria-describedby="cookie-banner-desc"
     >
-      <div className="cookie-banner-card" ref={cardRef}>
+      {/* `is-customizing` lets the stylesheet give the toggles a full-width
+          column; the closed bar is a single compact row on desktop. */}
+      <div className={`cookie-banner-card${showCustomize ? ' is-customizing' : ''}`} ref={cardRef}>
         <div className="cookie-banner-header">
           <div className="cookie-banner-icon-wrapper">
             <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" className="text-emerald">

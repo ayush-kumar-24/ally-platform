@@ -1,6 +1,7 @@
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import DeletionPendingGate from '../components/DeletionPendingGate';
 import PlanRequiredGate from '../components/PlanRequiredGate';
+import HelpWidget from '../components/HelpWidget';
 import { useApp } from '../context/AppContext';
 import { useState, useRef, useEffect } from 'react';
 import ProductTour from '../components/ProductTour';
@@ -72,21 +73,18 @@ const NAV_GROUPS = [
   {
     label: 'FOUNDER DIAGNOSIS',
     items: [
-      /* Ordered to read as the journey itself: Founder DNA, then Business DNA,
-         then the diagnosis that uses both. That is the sequence a founder is
-         actually taken through, and the nav is the only place it is visible.
-         (2026-08-27 product decision.)
+      /* Entry point first, then the pages it produces. "Adaptive diagnosis" is
+         the thing a founder runs; Founder DNA and Business DNA are written
+         *from* it and stay locked until there is a report.
 
-         Worth knowing when reading this list: the first two are the RESULT
-         pages, written *from* a finished diagnosis, while "Adaptive diagnosis"
-         below is the entry point that runs all three phases. So for a founder
-         with no report yet, the two items above the entry point are locked --
-         the order tells them what they are working toward, not what to click
-         first. If that ever reads as friction rather than a map, the fix is to
-         surface the entry point separately, not to reshuffle these again. */
+         This reverses the 2026-08-27 order, which put the two result pages
+         first so the section read as the journey. It read instead as two
+         locked rows above the one row a new founder could actually click --
+         the map was there, but the door was below it. (2026-09-05 product
+         decision.) */
+      { path: '/app/founder-dna-journey', tip: 'Adaptive diagnosis', icon: IconPulse, label: 'Adaptive diagnosis', badge: null },
       { path: '/app/founder-dna', tip: 'Founder DNA', icon: IconUser, label: 'Founder DNA', badge: null, needsReport: true },
       { path: '/app/business-dna', tip: 'Business DNA', icon: IconTrendingUp, label: 'Business DNA', badge: null, needsReport: true },
-      { path: '/app/founder-dna-journey', tip: 'Adaptive diagnosis', icon: IconPulse, label: 'Adaptive diagnosis', badge: null },
       /* Unlike the DNA pages above, this isn't derived from a diagnosis report
          -- it's the founder's own long-term vision, written whenever they like.
          No needsReport gate: nothing here depends on one existing. */
@@ -247,9 +245,16 @@ export default function PlatformLayout() {
       <aside className={`sidebar${sidebarOpen ? ' open' : ''}`} aria-label="Primary">
         <div className="sb-head">
           <div className="sb-head-top">
+            {/* The lockup the marketing site uses: the Ally mark beside the
+                product's own name. The wide GoXL wordmark that was here named
+                the company, not the thing the founder is signed in to -- and
+                nothing else in the sidebar said "Ally" at all. */}
             <div className="sb-brand">
-              <img className="goxl-logo" src="/goxl-logo.svg" alt="GoXL" width="2515" height="755" decoding="async" />
-              <span className="sub">Consulting Solutions</span>
+              <img className="goxl-logo" src="/ally-logo-mark.png" alt="" width="512" height="512" decoding="async" />
+              <span className="sb-words">
+                <span className="mark">GoXL <i>Ally</i></span>
+                <span className="sub">by GoXL Entrepreneurship</span>
+              </span>
             </div>
             <button
               className="sb-toggle"
@@ -308,8 +313,10 @@ export default function PlatformLayout() {
         <div className="nav-upsell">
           {/* The leading "*" was a stand-in for a dropped icon and was read out
               as "asterisk" before the plan name on every page. */}
+          {/* No tagline: the old one promised "deeper diagnosis, unlimited chat
+              and Founder MRI", none of which any plan sells. The plan name and
+              the button say what this card is. */}
           <div className="nu-t"><span>{planLabel}</span></div>
-          <div className="nu-s">Unlock deeper diagnosis, unlimited chat and Founder MRI.</div>
           <button className="nu-btn" onClick={() => handleNav('/app/billing')}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M12 19V5M5 12l7-7 7 7" />
@@ -473,6 +480,8 @@ export default function PlatformLayout() {
       <DeletionPendingGate />
       <PlanRequiredGate />
       <ProductTour />
+      {/* Fixed-position, so it renders last and belongs to no column. */}
+      <HelpWidget />
     </div>
   );
 }

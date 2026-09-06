@@ -12,7 +12,7 @@
     "answer_length": "About 120 words maximum. Short paragraphs with a blank line between them.",
     "vocabulary": "Use the product's words, not the landing page's. Frameworks and Vision, never 'knowledge base' or 'vision board'. Eight stages, not four groups.",
     "public_figures": "Only figures published on join.goxlally.ai may appear in an answer. Never quote a database count to a founder.",
-    "pricing": "There is no free plan. Entry is Rs 199 one-time for the diagnosis and full report; Rs 450 and Rs 999 are the monthly plans. All prices include GST."
+    "pricing": "There is no free plan. Entry is Rs 199 one-time for the diagnosis and full report; Rs 499 and Rs 999 are the monthly plans. All prices include GST."
   },
   "walk_log": {
     "walked_on": "2026-09-04",
@@ -98,9 +98,9 @@
       ],
       "verified": {
         "walked_on": "2026-09-06",
-        "how": "Team decision 2026-09-06. Starter: Rs 199 paid ONCE, buying one month -- it does not auto-renew. Plus (Rs 450) and Pro (Rs 999) are monthly subscriptions, with 12 months for the price of 10 if paid annually. A discovery call is Rs 300 per 30 minutes on any plan. GST is included in every price shown."
+        "how": "Team decision 2026-09-06. Starter: Rs 199 paid ONCE, buying one month -- it does not auto-renew. Plus (Rs 499) and Pro (Rs 999) are monthly subscriptions, with 12 months for the price of 10 if paid annually. A discovery call is Rs 300 per 30 minutes on any plan. GST is included in every price shown."
       },
-      "finding": "CONFLICTS WITH THE LIVE PRODUCT. The app still ships a Free tier: the test account shows 'Ally Free' at ₹0, and the plan catalog defines free/starter/pro at ₹0/₹450/₹999 with no ₹199 tier. This answer is correct against the decision and wrong against the product until the catalog is changed. Do not publish it before then.",
+      "finding": "CONFLICTS WITH THE LIVE PRODUCT. The app still ships a Free tier: the test account shows 'Ally Free' at ₹0, and the plan catalog defines free/starter/pro at ₹0/₹499/₹999 with no ₹199 tier. This answer is correct against the decision and wrong against the product until the catalog is changed. Do not publish it before then.",
       "note": "HELD until PUBLIC_LAUNCH is on -- describes the paid-only launch state. REVISED 2026-09-06: Starter is a one-off payment for a month, not a monthly subscription. The 2026-09-05 draft said it renewed monthly."
     },
     {

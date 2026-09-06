@@ -65,6 +65,10 @@ function ReportDocument({ html, onDownload, onShare, frameRef }) {
     <iframe
       ref={frameRef}
       title="Your clarity report"
+      /* Same-origin so the parent can wire the buttons; scripts, forms and
+         top-navigation stay off. The document is script-free by design, so
+         nothing it needs is lost, and nothing it could be made to carry runs. */
+      sandbox="allow-same-origin allow-popups"
       srcDoc={html}
       onLoad={wire}
       style={{ width: '100%', height, border: 0, display: 'block',

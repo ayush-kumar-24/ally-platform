@@ -18,7 +18,7 @@
     "ladder_as_it_stands": {
       "Free (Rs 0)": "Diagnosis, report, call booking, Ally chat, Next steps, Goals, Plan Your Day, plus Vision, Recommendations and knowledge chat. No voice in chat. A testing-phase tier: the catalog says in as many words that it is to be resized at public launch.",
       "Starter (Rs 199)": "The diagnosis and the Clarity Report it writes. Nothing else — no chat at all, and the daily chat ceiling is zero rather than small, deliberately, so it never reads as an allowance a founder could spend.",
-      "Plus (Rs 450)": "Adds the working surfaces: Ally chat with voice, Next steps, Goals and Plan Your Day.",
+      "Plus (Rs 499)": "Adds the working surfaces: Ally chat with voice, Next steps, Goals and Plan Your Day.",
       "Pro (Rs 999)": "Adds Vision, Recommendations, knowledge chat, email notifications, priority in the call queue, and Know My Energy (declared but not yet built)."
     },
     "observed": [
@@ -68,14 +68,14 @@
       ],
       "verified": {
         "walked_on": "2026-09-06",
-        "how": "Team decision 2026-09-06. Starter: Rs 199 paid ONCE, buying one month -- it does not auto-renew. Plus (Rs 450) and Pro (Rs 999) are monthly subscriptions, with 12 months for the price of 10 if paid annually. A discovery call is Rs 300 per 30 minutes on any plan. GST is included in every price shown."
+        "how": "Team decision 2026-09-06. Starter: Rs 199 paid ONCE, buying one month -- it does not auto-renew. Plus (Rs 499) and Pro (Rs 999) are monthly subscriptions, with 12 months for the price of 10 if paid annually. A discovery call is Rs 300 per 30 minutes on any plan. GST is included in every price shown."
       },
       "note": "HELD until PUBLIC_LAUNCH is on -- describes the paid-only launch state. REVISED 2026-09-06: Starter is a one-off payment for a month, not a monthly subscription. The 2026-09-05 draft said it renewed monthly."
     },
     {
       "id": 153,
       "question": "Why does Free get more chat per day than Starter?",
-      "answer": "It does not any more -- there is no free plan.\n\nHere is the honest shape of it now. Starter is Rs 199, paid once for a month. It is the diagnosis and your report, and it does not include chatting with Ally.\n\nChat starts at Plus, Rs 450 a month, which also gives you Goals, Next steps and Plan Your Day. Pro, at Rs 999 a month, gives you more of it each day.\n\nSo the ladder is: Starter tells you what is wrong. Plus is where you work on it with Ally. If you know you want to talk things through, start at Plus.",
+      "answer": "It does not any more -- there is no free plan.\n\nHere is the honest shape of it now. Starter is Rs 199, paid once for a month. It is the diagnosis and your report, and it does not include chatting with Ally.\n\nChat starts at Plus, Rs 499 a month, which also gives you Goals, Next steps and Plan Your Day. Pro, at Rs 999 a month, gives you more of it each day.\n\nSo the ladder is: Starter tells you what is wrong. Plus is where you work on it with Ally. If you know you want to talk things through, start at Plus.",
       "answer_type": "walked",
       "status": "answered_pending_product_change",
       "links": [
@@ -83,7 +83,7 @@
       ],
       "verified": {
         "walked_on": "2026-09-06",
-        "how": "Team decision 2026-09-06. Starter: Rs 199 paid ONCE, buying one month -- it does not auto-renew. Plus (Rs 450) and Pro (Rs 999) are monthly subscriptions, with 12 months for the price of 10 if paid annually. A discovery call is Rs 300 per 30 minutes on any plan. GST is included in every price shown."
+        "how": "Team decision 2026-09-06. Starter: Rs 199 paid ONCE, buying one month -- it does not auto-renew. Plus (Rs 499) and Pro (Rs 999) are monthly subscriptions, with 12 months for the price of 10 if paid annually. A discovery call is Rs 300 per 30 minutes on any plan. GST is included in every price shown."
       },
       "note": "HELD until PUBLIC_LAUNCH is on -- describes the paid-only launch state. REVISED 2026-09-06: Starter is a one-off payment for a month, not a monthly subscription. The 2026-09-05 draft said it renewed monthly."
     },
@@ -98,7 +98,7 @@
       ],
       "verified": {
         "walked_on": "2026-09-06",
-        "how": "Team decision 2026-09-06. Starter: Rs 199 paid ONCE, buying one month -- it does not auto-renew. Plus (Rs 450) and Pro (Rs 999) are monthly subscriptions, with 12 months for the price of 10 if paid annually. A discovery call is Rs 300 per 30 minutes on any plan. GST is included in every price shown."
+        "how": "Team decision 2026-09-06. Starter: Rs 199 paid ONCE, buying one month -- it does not auto-renew. Plus (Rs 499) and Pro (Rs 999) are monthly subscriptions, with 12 months for the price of 10 if paid annually. A discovery call is Rs 300 per 30 minutes on any plan. GST is included in every price shown."
       },
       "note": "HELD until PUBLIC_LAUNCH is on -- describes the paid-only launch state. REVISED 2026-09-06: Starter is a one-off payment for a month, not a monthly subscription. The 2026-09-05 draft said it renewed monthly."
     },
@@ -113,7 +113,7 @@
       ],
       "verified": {
         "walked_on": "2026-09-06",
-        "how": "Team decision 2026-09-06. Starter: Rs 199 paid ONCE, buying one month -- it does not auto-renew. Plus (Rs 450) and Pro (Rs 999) are monthly subscriptions, with 12 months for the price of 10 if paid annually. A discovery call is Rs 300 per 30 minutes on any plan. GST is included in every price shown."
+        "how": "Team decision 2026-09-06. Starter: Rs 199 paid ONCE, buying one month -- it does not auto-renew. Plus (Rs 499) and Pro (Rs 999) are monthly subscriptions, with 12 months for the price of 10 if paid annually. A discovery call is Rs 300 per 30 minutes on any plan. GST is included in every price shown."
       },
       "note": "HELD until PUBLIC_LAUNCH is on -- describes the paid-only launch state. REVISED 2026-09-06: Starter is a one-off payment for a month, not a monthly subscription. The 2026-09-05 draft said it renewed monthly."
     },

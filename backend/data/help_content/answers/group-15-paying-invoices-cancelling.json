@@ -16,7 +16,7 @@
     "walked_on": "2026-09-06",
     "environment": "Team pricing decisions of 2026-09-06, read against the plan catalog. Checkout itself does not exist, so nothing here could be walked in the product.",
     "observed": [
-      "Starter Rs 199 is paid ONCE for one month and does not renew. Plus Rs 450 and Pro Rs 999 are monthly and renew until cancelled. Twelve months paid up front costs ten.",
+      "Starter Rs 199 is paid ONCE for one month and does not renew. Plus Rs 499 and Pro Rs 999 are monthly and renew until cancelled. Twelve months paid up front costs ten.",
       "A discovery call is Rs 300 per 30 minutes on every plan, with no included allowance.",
       "GST is included in every price shown -- the figures are inclusive, not exclusive.",
       "Refunds: none on Starter. On Plus and Pro, within 7 days of payment, on request.",
@@ -54,7 +54,7 @@
     {
       "id": 182,
       "question": "Is GST included in the price?",
-      "answer": "Yes. Every price you see already includes GST.\n\nRs 199 for Starter, Rs 450 for Plus, Rs 999 for Pro and Rs 300 for a discovery call are all final figures. Nothing is added at checkout, so the number on the plans page is the number that leaves your account.\n\nIf you need a GST invoice for your business, ask us at info@goxl.in and we will sort it out.",
+      "answer": "Yes. Every price you see already includes GST.\n\nRs 199 for Starter, Rs 499 for Plus, Rs 999 for Pro and Rs 300 for a discovery call are all final figures. Nothing is added at checkout, so the number on the plans page is the number that leaves your account.\n\nIf you need a GST invoice for your business, ask us at info@goxl.in and we will sort it out.",
       "answer_type": "walked",
       "status": "answered",
       "links": [
