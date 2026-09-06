@@ -22,6 +22,7 @@ from app.credits.service import CreditService
 from app.payments.errors import (
     InvalidCheckoutError,
     InvalidWebhookSignatureError,
+    PaymentGatewayUnavailableError,
     PaymentsNotConfiguredError,
 )
 from app.payments.gateway import PaymentGateway, PaymentGatewayError
@@ -72,10 +73,19 @@ class PaymentService:
                 amount_paise=amount_paise, currency=_CURRENCY, receipt=receipt,
                 notes={"founder_id": str(founder_id), "plan_tier": tier.value},
             )
-        except PaymentGatewayError:
+        except PaymentGatewayError as exc:
+            # The one log line that says WHY checkout is failing in an
+            # environment: Razorpay's own status and error description
+            # (401 = the key id/secret configured here are wrong or
+            # mismatched, e.g. a test key with a live secret; 400 = a bad
+            # field). The founder gets a 502 with a plain message instead of
+            # the generic 500 this used to fall through to.
             logger.error("payments: order creation failed",
-                         extra={"founder_id": founder_id, "tier": tier.value})
-            raise
+                         extra={"founder_id": founder_id, "tier": tier.value,
+                                "gateway_status": exc.status_code,
+                                "gateway_message": exc.gateway_message,
+                                "error": str(exc)})
+            raise PaymentGatewayUnavailableError() from exc
 
         payment_id = self.repository.create_pending(
             founder_id=founder_id, amount_inr=plan.price_inr, currency=_CURRENCY,
