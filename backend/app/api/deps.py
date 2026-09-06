@@ -1,9 +1,9 @@
 from uuid import UUID
 
-from fastapi import Depends, status
+from fastapi import Depends, Request, status
 from sqlalchemy.orm import Session
 
-from app.core.auth import AuthUser, get_current_founder
+from app.core.auth import AuthUser, founder_row_for_request, get_current_founder
 from app.db.session import get_db, set_founder_rls_context
 from app.middleware.error_handler import AppError
 from app.models import Founder
@@ -26,6 +26,7 @@ class InvalidFounderIdentityError(AppError):
 
 
 def get_founder_record(
+    request: Request,
     auth_user: AuthUser = Depends(get_current_founder),
     db: Session = Depends(get_db),
 ) -> Founder:
@@ -48,6 +49,14 @@ def get_founder_record(
         user_uuid = UUID(str(auth_user.id))
     except (ValueError, AttributeError, TypeError) as exc:
         raise InvalidFounderIdentityError() from exc
+
+    # get_current_founder -- which this depends on, so it has always already
+    # run -- loaded this exact row to check the account was not suspended.
+    # Fetching it a second time was the third of four database round trips
+    # every authenticated request paid before its handler started.
+    cached = founder_row_for_request(request, db, str(user_uuid))
+    if isinstance(cached, Founder):
+        return cached
 
     set_founder_rls_context(db, str(user_uuid))
 

@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from uuid import UUID
 
 from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -10,7 +11,9 @@ from app.core.auth.dev_provider import DEV_FOUNDER_EMAIL, DEV_FOUNDER_ID
 from app.core.auth.factory import get_auth_provider
 from app.core.auth.tokens import ACCESS, decode_token, identity_from_claims
 from app.core.logger import logger
-from app.db.session import get_db
+from app.db.session import get_db, set_founder_rls_context
+from app.models import Founder
+from app.repositories import founder_repository
 
 # auto_error=False so a missing header reaches our code, which decides what to do.
 _bearer = HTTPBearer(auto_error=False, description="Bearer token")
@@ -22,6 +25,99 @@ _SUSPENDED_STATUSES = {"suspended", "banned"}
 # windows this feeds (Live now / Today / 7 days -- see app/admin/insights.py)
 # need finer than a minute.
 _LAST_ACTIVE_THROTTLE = timedelta(seconds=60)
+
+
+# "The lookup itself failed", which is NOT the same answer as "no such
+# founder": one means we could not check, the other is definite.
+_LOOKUP_FAILED = object()
+
+# The cache holds a 1-tuple so that a definite `None` ("no founder row for this
+# identity") is distinguishable from "nothing cached yet".
+_ROW_ATTR = "founder_row_cache"
+
+
+def founder_row_for_request(request: Request, db: Session, user_id: str):
+    """The founder row this request is about, loaded AT MOST ONCE.
+
+    Three things used to ask the database about the same founder on every
+    authenticated request, and two of them wanted the same row of the same
+    table by the same key:
+
+        SELECT status FROM founders WHERE user_id = ...   (is_account_active)
+        UPDATE founders SET last_active_at = ...          (record_last_active)
+        SELECT ... FROM founders WHERE user_id = ...      (get_founder_record)
+
+    Four round trips to the database before a route handler ran a line of its
+    own -- and the founder dashboard opens with thirteen requests on it. One
+    row answers all three questions, so it is fetched once and cached here.
+
+    Returns the Founder; None when no founder row exists for this identity
+    (the caller decides whether that is a 404); or _LOOKUP_FAILED when the
+    query errored, which preserves `is_account_active`'s deliberate fail-open:
+    a database we could not ask is not an account we know to be fine.
+    """
+    cached = getattr(request.state, _ROW_ATTR, None)
+    if cached is not None:
+        return cached[0]
+
+    try:
+        lookup_key = UUID(str(user_id))
+    except (ValueError, AttributeError, TypeError):
+        # Dev mode makes any bearer string the founder id, so this is not
+        # necessarily a uuid. It is still handed to the repository rather than
+        # short-circuited: against Postgres the type mismatch raises and falls
+        # open below, which is exactly what the old raw query did, and against
+        # a dev backend that does resolve it the lookup still works.
+        lookup_key = user_id
+
+    # Set BEFORE the request's first query, so the RLS `set_config` rides the
+    # transaction that SELECT opens instead of arriving after it began.
+    set_founder_rls_context(db, str(user_id))
+
+    try:
+        row = founder_repository.get_by_user_id(db, lookup_key)
+    except Exception:
+        db.rollback()
+        logger.warning("Could not load founder row; failing open",
+                       extra={"founder_id": str(user_id)})
+        row = _LOOKUP_FAILED
+
+    setattr(request.state, _ROW_ATTR, (row,))
+    return row
+
+
+def _row_is_active(row) -> bool:
+    """The suspension check, read off the row we already have. Unknown fails
+    open, for exactly the reasons is_account_active spells out below."""
+    if not isinstance(row, Founder):
+        return True
+    return getattr(row, "status", None) not in _SUSPENDED_STATUSES
+
+
+def stamp_last_active(db: Session, user_id: str, row, *, now: datetime | None = None) -> None:
+    """Write founders.last_active_at, but only when it is actually stale.
+
+    The throttle used to live entirely in the UPDATE's WHERE clause, so no row
+    was written for a founder stamped within the last minute -- but the
+    statement and its COMMIT still crossed the network on every request. The
+    row we already loaded carries `last_active_at`, so the same throttle costs
+    nothing here, and the write happens about once a minute per founder
+    instead of once per request. The admin metrics reading this column (Live
+    now / Today / 7 days) see exactly what they saw before.
+    """
+    at = now or datetime.now(timezone.utc)
+
+    if isinstance(row, Founder):
+        seen = getattr(row, "last_active_at", None)
+        if seen is not None:
+            # The column can come back naive; compare like with like rather
+            # than raising inside an auth dependency.
+            if seen.tzinfo is None:
+                seen = seen.replace(tzinfo=timezone.utc)
+            if seen >= at - _LAST_ACTIVE_THROTTLE:
+                return
+
+    record_last_active(db, user_id, now=at)
 
 
 def _token(credentials: HTTPAuthorizationCredentials | None) -> str | None:
@@ -142,9 +238,21 @@ async def get_current_founder(
     claims = decode_token(token, ACCESS)
     founder = identity_from_claims(claims)
 
-    if not is_account_active(db, founder.id):
+    # One row, three answers -- see founder_row_for_request. get_founder_record
+    # reads this same row back off the request rather than fetching it again.
+    row = founder_row_for_request(request, db, founder.id)
+
+    if not _row_is_active(row):
         raise AccountSuspendedError()
-    record_last_active(db, founder.id)
+    stamp_last_active(db, founder.id, row)
+
+    # No rollback/commit here on purpose. Closing the transaction the SELECT
+    # above opened would EXPIRE the row we just loaded (the sessionmaker keeps
+    # SQLAlchemy's expire_on_commit default), so the first attribute a handler
+    # touched would silently re-SELECT it and hand back the round trip this
+    # whole change exists to remove. The transaction stays open exactly as long
+    # as it already did -- get_founder_record's own SELECT used to open one at
+    # this same point and hold it for the rest of the request.
 
     # Picked up by the JSON logger's founder_id field.
     request.state.founder_id = founder.id
