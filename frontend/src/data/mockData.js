@@ -151,7 +151,7 @@ export const MOCK_PLANS = [
     ],
   },
   {
-    id: 'starter', name: 'Plus', price: 450, mrp: 600, period: '/mo', oneTime: false,
+    id: 'starter', name: 'Plus', price: 499, mrp: 600, period: '/mo', oneTime: false,
     tag: 'For founders working on the business weekly', popular: false, cta: 'Start Plus',
     features: [
       '3,500 tokens per day',
