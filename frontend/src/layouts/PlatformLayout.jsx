@@ -312,8 +312,10 @@ export default function PlatformLayout() {
         <div className="nav-upsell">
           {/* The leading "*" was a stand-in for a dropped icon and was read out
               as "asterisk" before the plan name on every page. */}
+          {/* No tagline: the old one promised "deeper diagnosis, unlimited chat
+              and Founder MRI", none of which any plan sells. The plan name and
+              the button say what this card is. */}
           <div className="nu-t"><span>{planLabel}</span></div>
-          <div className="nu-s">Unlock deeper diagnosis, unlimited chat and Founder MRI.</div>
           <button className="nu-btn" onClick={() => handleNav('/app/billing')}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M12 19V5M5 12l7-7 7 7" />

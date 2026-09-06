@@ -54,21 +54,6 @@ function CheckIcon({ size = 18, color = '#10B981' }) {
   );
 }
 
-function UsageBar({ used, total, color = '#10B981' }) {
-  const pct = Math.min(100, Math.round((used / total) * 100));
-  const barColor = pct >= 90 ? '#f59e0b' : color;
-  return (
-    <div className="bl-usage-bar-wrap">
-      <div className="bl-usage-bar-track">
-        <div
-          className="bl-usage-bar-fill"
-          style={{ width: `${pct}%`, background: barColor }}
-        />
-      </div>
-      <span className="bl-usage-bar-label">{used}/{total}</span>
-    </div>
-  );
-}
 
 /* ═══════════════════════════════════════════
    VIEW 1 — Plans (existing, enhanced)
@@ -632,31 +617,10 @@ function StatusView({ onUpgrade, currentPlan }) {
         </div>
       </div>
 
-      {/* Usage meters */}
-      <div className="bl-usage-grid">
-        <div className="bl-usage-card">
-          <div className="bl-uc-label">Diagnoses this month</div>
-          <UsageBar used={8} total={10} />
-          <div className="bl-uc-note">2 remaining — resets Aug 1</div>
-        </div>
-        <div className="bl-usage-card">
-          <div className="bl-uc-label">Ally Chat sessions</div>
-          <div className="bl-uc-unlimited">
-            <CheckIcon size={14} /> Unlimited
-          </div>
-        </div>
-        <div className="bl-usage-card">
-          <div className="bl-uc-label">Clarity Reports generated</div>
-          <UsageBar used={3} total={10} color="#10B981" />
-          <div className="bl-uc-note">7 remaining this month</div>
-        </div>
-        <div className="bl-usage-card">
-          <div className="bl-uc-label">Team members</div>
-          <div className="bl-uc-unlimited" style={{ color: '#6c7a70' }}>
-            Not available on {plan.name}
-          </div>
-        </div>
-      </div>
+      {/* The usage meters that stood here were mock numbers (8 of 10 diagnoses,
+          unlimited chat) that no plan matches: every plan is one diagnosis per
+          account and chat is metered by tokens. Real meters need real usage
+          data from the API; until then nothing is better than fiction. */}
 
       {/* Plan features included */}
       <div className="bl-incl-section">
