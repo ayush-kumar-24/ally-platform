@@ -181,15 +181,22 @@ def test_checkout_creates_a_pending_payment_and_a_real_order():
     service, repo, _ = _service()
     session = service.start_checkout(42, PlanTier.STARTER)
 
+    # Read from the catalog rather than pinned to a literal: what matters is
+    # that the order is created for exactly the catalog price in paise, not
+    # what that price happens to be this quarter. A hard-coded copy here only
+    # asserts that someone remembered to edit two places -- which is what it
+    # did when Plus moved from Rs 450 to Rs 499.
+    price = PLANS[PlanTier.STARTER].price_inr
+
     assert session.order_id == "order_1"
-    assert session.amount_paise == 45000        # Rs 450 * 100
+    assert session.amount_paise == price * 100
     assert session.currency == "INR"
     assert session.key_id == "rzp_test_key"
 
     payment = repo.get_by_gateway_order_id("order_1")
     assert payment.founder_id == 42
     assert payment.status == "pending"
-    assert payment.amount_inr == 450
+    assert payment.amount_inr == price
 
 
 def test_checkout_carries_founder_and_plan_in_the_order_notes():

@@ -104,7 +104,7 @@ class PlanTier(str, Enum):
 
     FREE = "free"
     BASIC = "basic"          # Rs 199 / month -- shown as "Starter"
-    STARTER = "starter"      # Rs 450 / month -- shown as "Plus"
+    STARTER = "starter"      # Rs 499 / month -- shown as "Plus"
     PRO = "pro"              # Rs 999 / month
 
 
@@ -145,7 +145,7 @@ _BASE = frozenset({
     Feature.CALL_BOOKING,
 })
 
-#: Added at Rs 450: the founder gets somewhere to work, and Ally answers.
+#: Added at Rs 499: the founder gets somewhere to work, and Ally answers.
 #: Rs 199 buys an answer; this buys the place you act on it.
 _WORKSPACE = frozenset({
     Feature.ALLY_CHAT,
@@ -245,7 +245,7 @@ PLANS: dict[PlanTier, Plan] = {
         daily_token_limit=8_000,    # ~32 chat messages/day; testing-phase value, see docstring
         planning_daily_token_limit=7_700,   # 7 planning actions/day at 1,100 each
         free_calls_per_month=0,
-        # Free out-grants Rs 450 on three features, and only for the testing
+        # Free out-grants Rs 499 on three features, and only for the testing
         # phase: Vision, recommendations and the knowledge base were ungated
         # before paid tiers existed, so gating them here would take away what
         # our own testers are currently using. It stops short of voice chat and
@@ -288,7 +288,7 @@ PLANS: dict[PlanTier, Plan] = {
     PlanTier.STARTER: Plan(
         tier=PlanTier.STARTER,
         name="Plus",
-        price_inr=450,
+        price_inr=499,
         mrp_inr=600,
         # 105, not 180: at 3,500 tokens/day the most anyone can spend in a
         # 30-day month is 105,000 tokens = 105 credits. Granting 180 would

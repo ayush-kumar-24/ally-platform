@@ -43,7 +43,7 @@ def test_four_tiers_in_price_order():
     plans = all_plans()
     assert [p.tier for p in plans] == [PlanTier.FREE, PlanTier.BASIC,
                                        PlanTier.STARTER, PlanTier.PRO]
-    assert [p.price_inr for p in plans] == [0, 199, 450, 999]
+    assert [p.price_inr for p in plans] == [0, 199, 499, 999]
 
 
 def test_struck_through_price_is_only_ever_a_real_saving():
@@ -57,7 +57,7 @@ def test_struck_through_price_is_only_ever_a_real_saving():
         else:
             assert not plan.has_offer, plan.name
     assert [(p.mrp_inr, p.price_inr) for p in all_plans() if p.has_offer] == [
-        (300, 199), (600, 450), (1_200, 999)]
+        (300, 199), (600, 499), (1_200, 999)]
 
 
 def test_starter_is_the_only_one_time_purchase():
@@ -216,7 +216,7 @@ def test_basic_buys_the_diagnosis_and_its_report_and_nothing_else():
 
 
 def test_starter_buys_the_conversation_but_not_ally_initiating():
-    """Rs 450 is where Ally answers; Rs 999 is where Ally starts things. Vision,
+    """Rs 499 is where Ally answers; Rs 999 is where Ally starts things. Vision,
     recommendations, the knowledge base, mail and call priority all sit on the
     far side of that line -- this is the distinction the two paid tiers sell."""
     s, _ = svc()
@@ -230,7 +230,7 @@ def test_starter_buys_the_conversation_but_not_ally_initiating():
 
 
 def test_free_never_out_grants_paid_on_the_scarce_perks():
-    """Free deliberately out-grants Rs 450 on features that cost us only tokens
+    """Free deliberately out-grants Rs 499 on features that cost us only tokens
     (see the catalog comment). It must never do so on the two that cost someone
     else something real: an inbox we send to, and a place in the call queue
     ahead of founders who paid for it."""

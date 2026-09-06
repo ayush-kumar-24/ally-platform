@@ -25,7 +25,7 @@ def require_vision(
     founder: Founder = Depends(get_founder_record),
     db: Session = Depends(get_db),
 ) -> None:
-    """Vision is a Rs 999 feature. Rs 199 and Rs 450 get Goals and daily plans
+    """Vision is a Rs 999 feature. Rs 199 and Rs 499 get Goals and daily plans
     instead -- the near horizon, not the long one.
 
     Applied once at the router rather than per endpoint, for the same reason
