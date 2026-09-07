@@ -274,7 +274,11 @@ export default function VisionPage() {
   return (
     <div className="vis-page">
       <header className="vis-head">
-        <div className="vis-kicker">Your Vision</div>
+        {/* The section names what the founder has, not what the page is: with
+            nothing written there is no board yet, only the invitation to start
+            one. Keyed off the same filledCount the sub-copy below already uses,
+            so the two can never disagree about whether a vision exists. */}
+        <div className="vis-kicker">{filledCount === 0 ? 'Build Your Vision' : 'Your Vision Board'}</div>
         <h1>Build the future you actually want.</h1>
         <p className="vis-sub">
           {filledCount === 0
