@@ -903,12 +903,18 @@ export default function AllyChat() {
                 </div>
               ))}
               {typing && (
+                /* The avatar is the loader: Ally's own mark turning a quarter
+                   at a time inside an orbiting light, rather than three dots
+                   that could belong to any chat app. The bubble says what is
+                   happening in words -- also what a screen reader announces,
+                   since the motion is aria-hidden. */
                 <div className="typing">
-                  <div className="m-av ally"><img src="/ally-logo-mark.png" alt="" /></div>
-                  <div className="bubble">
-                    <div className="td">
-                      <span /><span /><span />
-                    </div>
+                  <div className="m-av ally thinking" aria-hidden="true">
+                    <span className="th-orbit" />
+                    <img src="/ally-logo-mark.png" alt="" />
+                  </div>
+                  <div className="bubble th-bubble" role="status" aria-live="polite">
+                    <span className="th-text">Ally is thinking</span>
                   </div>
                 </div>
               )}

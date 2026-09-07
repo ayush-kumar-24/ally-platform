@@ -367,11 +367,41 @@ body.sb-collapsed .sb-toggle .ic{transform:rotate(180deg)}
 .conf .bar{flex:1;height:4px;border-radius:99px;background:rgba(255,255,255,.1);overflow:hidden}
 .conf .bar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#10B981,#A8D94A);width:0;transition:width 1s cubic-bezier(.22,1,.3,1)}
 .conf .pct{font-size:12px;font-weight:700;color:#34d399;font-variant-numeric:tabular-nums}
-.typing{display:flex;gap:12px;max-width:76%}
-.typing .bubble{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);border-bottom-left-radius:5px;padding:14px 17px}
-.typing .td{display:flex;gap:5px}
-.typing .td span{width:7px;height:7px;border-radius:50%;background:#34d399;opacity:.4;animation:blink 1.2s infinite}
-.typing .td span:nth-child(2){animation-delay:.2s}.typing .td span:nth-child(3){animation-delay:.4s}
+/* "Ally is thinking" -- the avatar is the loader.
+   The mark is a four-blade pinwheel, so it is rotated a QUARTER turn at a
+   time with a rest between: four-fold symmetry means the 90deg end state is
+   indistinguishable from 0deg, and the loop reads as a continuous, deliberate
+   tick rather than a spinner. Around it, a light orbits a thin ring (the same
+   registered-angle technique as the sidebar badge, on its own property so the
+   two are not coupled). The bubble carries the
+   words, with a slow sheen -- that text is also what assistive tech reads,
+   which is why every moving part here is aria-hidden and the text is not. */
+@property --th-angle{syntax:"<angle>";initial-value:0deg;inherits:false}
+.typing{display:flex;gap:12px;max-width:76%;align-items:flex-end}
+.typing .bubble{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);border-bottom-left-radius:5px;padding:12px 16px}
+.typing .m-av.thinking{position:relative;isolation:isolate;overflow:visible}
+/* No filter on the mark. A drop-shadow blurs every edge of a 30px raster
+   and, once it is also being transformed, forces the compositor to rasterise
+   the blurred version -- which is what made the logo look out of focus. The
+   glow lives on the halo behind instead, where softness is the point. */
+.typing .m-av.thinking img{position:relative;z-index:2;animation:th-turn 1.7s cubic-bezier(.65,0,.25,1) infinite;backface-visibility:hidden}
+.typing .th-orbit{position:absolute;inset:-4px;border-radius:50%;padding:1.5px;box-sizing:border-box;z-index:1;
+  background:conic-gradient(from var(--th-angle,0deg),rgba(52,211,153,0) 0deg,rgba(52,211,153,.6) 60deg,rgba(167,243,208,1) 100deg,rgba(52,211,153,.5) 140deg,rgba(52,211,153,0) 210deg,rgba(52,211,153,0) 360deg);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;
+  mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);mask-composite:exclude;
+  animation:th-orbit 2.4s linear infinite}
+.typing .th-text{font-size:13.5px;font-weight:600;letter-spacing:.01em;
+  background:linear-gradient(100deg,#8fb8a6 0%,#8fb8a6 35%,#d6ffe9 50%,#8fb8a6 65%,#8fb8a6 100%);
+  background-size:240% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;
+  animation:th-sheen 2.2s ease-in-out infinite}
+@keyframes th-turn{0%{transform:rotate(0deg)}58%{transform:rotate(90deg)}100%{transform:rotate(90deg)}}
+@keyframes th-orbit{to{--th-angle:360deg}}
+@keyframes th-sheen{0%{background-position:120% 0}100%{background-position:-120% 0}}
+@media(prefers-reduced-motion:reduce){
+  .typing .m-av.thinking img,.typing .th-orbit,.typing .th-text{animation:none}
+  .typing .th-orbit{display:none}
+  .typing .th-text{color:#a7c0b4;background:none;-webkit-background-clip:initial;background-clip:initial}
+}
 .suggs{display:flex;gap:8px;flex-wrap:wrap;padding:12px 26px;border-top:1px solid rgba(255,255,255,.08);position:relative;z-index:2}
 .sugg{padding:8px 14px;border-radius:999px;font-size:12.5px;font-weight:500;border:1px solid rgba(255,255,255,.13);background:rgba(255,255,255,.04);color:#a7c0b4;transition:.25s cubic-bezier(.2,.7,.2,1);cursor:pointer}
 .sugg:hover{border-color:rgba(16,185,129,.4);color:#34d399;background:rgba(16,185,129,.08);transform:translateY(-1px)}
