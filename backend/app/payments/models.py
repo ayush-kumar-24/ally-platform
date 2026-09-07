@@ -32,6 +32,10 @@ class WebhookOutcome:
 
     CAPTURED = "captured"
     ALREADY_PROCESSED = "already_processed"
+    # Razorpay itself says this payment is not (yet) captured. Only
+    # PaymentService.confirm_checkout produces it: the webhook is told about
+    # captures, but a founder can ask about a payment still settling.
+    NOT_CAPTURED = "not_captured"
     FAILED_RECORDED = "failed_recorded"
     IGNORED_EVENT = "ignored_event"
     UNKNOWN_PAYMENT = "unknown_payment"
@@ -48,6 +52,12 @@ class PaymentRecord:
     gateway_payment_id: str | None
     amount_inr: int
     subscription_id: int | None
+    #: The tier this payment was priced for, written when the order was
+    #: created. None on rows predating that column -- see PaymentService for
+    #: what happens then. It is deliberately OUR copy: the gateway's notes
+    #: come back through the browser, which must never get to choose the plan
+    #: it is granted.
+    plan_tier: str | None = None
 
 
 @dataclass(frozen=True)

@@ -804,6 +804,7 @@ class CookiePreferences(Base):
     founder_id: Mapped[Optional[int]] = mapped_column(Integer)
     session_token: Mapped[Optional[str]] = mapped_column(String(200))
     banner_action: Mapped[Optional[str]] = mapped_column(String(20))
+    ip_address: Mapped[Optional[str]] = mapped_column(String(45))
     created_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True), server_default=text('now()'))
     updated_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True), server_default=text('now()'))
 

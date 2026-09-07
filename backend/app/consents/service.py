@@ -54,6 +54,8 @@ class ConsentService:
         privacy_version: str,
         agree_terms: bool,
         agree_diagnosis: bool = False,
+        age_confirmed: bool | None = None,
+        ip_address: str | None = None,
     ) -> tuple[ConsentRecord, bool]:
         """Append a consent record. Returns (record, created).
 
@@ -72,6 +74,12 @@ class ConsentService:
             and current.privacy_version == privacy
             and current.agree_terms is True
             and current.agree_diagnosis == agree_diagnosis
+            and current.age_confirmed == age_confirmed
+            # ip_address is deliberately NOT compared. The ledger records
+            # decisions, and re-opening the app on a different network is not a
+            # new decision -- comparing it would append a duplicate record every
+            # time a founder's address changed, which is precisely the pollution
+            # this check exists to prevent.
         ):
             return current, False
 
@@ -82,6 +90,10 @@ class ConsentService:
             privacy_version=privacy,
             agree_terms=True,
             agree_diagnosis=agree_diagnosis,
+            age_confirmed=age_confirmed,
+            # Resolved by the route from the request, never read from the body:
+            # a self-reported address is not evidence of anything.
+            ip_address=ip_address,
             consented_at=self._now(),
         )
         return self.repository.add(record), True

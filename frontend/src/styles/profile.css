@@ -91,6 +91,13 @@
   border-radius: 99px;
 }
 
+/* Spent for the day. Amber rather than the resting brown, and matched on the
+   figure beside it so bar and number say the same thing -- they used to
+   disagree, the bar clamping at 100% while the label printed the raw
+   "8416 / 8000" that the backend's check-then-charge metering can produce. */
+.pr-usage-fill.is-full { background: linear-gradient(90deg, #d97706, #f59e0b); }
+.pr-usage-val.is-full { color: #b45309; }
+
 /* ---- Headers & Grid cards ---- */
 .pr-sec-head {
   margin: 32px 2px 14px;

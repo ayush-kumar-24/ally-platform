@@ -247,7 +247,7 @@
   }
 }
 
-/* --- gated / paid-plan state ------------------------------------------------
+/* --- empty / explanatory copy inside the picker card -------------------------
    Light theme: .dc-picker-card is a white card, so these use --ink/--muted/--bd
    rather than the translucent-white values the dark panels use. */
 .dc-locked-copy {
@@ -256,8 +256,20 @@
   line-height: 1.65;
   color: var(--muted, #556458);
 }
-.dc-locked-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: auto; }
-.dc-locked-actions .btn { flex: 1 1 auto; justify-content: center; }
+
+/* What asking for a slot actually does. Sits between the heading and the day
+   row so it is read before a time is picked, not after -- and is quiet enough
+   that it does not compete with the times themselves. */
+.dc-request-note {
+  margin: 12px 0 0;
+  padding: 9px 11px;
+  border: 1px solid var(--bd, #e3e8e4);
+  border-radius: 9px;
+  background: var(--bg-2, #f7f9f7);
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--muted, #556458);
+}
 
 /* Shown in place, not as a toast: a refused booking needs a decision, and a
    toast is gone before they have made one. */
@@ -315,7 +327,6 @@
 .dc-confirm-btn:disabled { opacity: .45; cursor: not-allowed; }
 
 @media (max-width: 560px) {
-  .dc-locked-actions { flex-direction: column; }
   .dc-booked-row { flex-direction: column; align-items: flex-start; gap: 6px; }
   /* Stacked on a phone, so the auto margin that pushed these right on a wide
      row would otherwise shove them off the left edge of the column. */

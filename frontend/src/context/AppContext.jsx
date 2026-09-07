@@ -58,6 +58,17 @@ export function AppProvider({ children }) {
     () => localStorage.getItem('ally_sb_collapsed') === 'true'
   );
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  /* Has the founder written any vision territory? Shared, because two places
+     that are always on screen depend on it: the sidebar item and the vision
+     page's title. null means "not known yet" -- the label falls back to the
+     neutral "Your Vision" rather than flickering a guess before the answer
+     arrives. Loaded once by PlatformLayout (which is inside the auth gate, so
+     the request is always authenticated) and kept fresh by VisionPage, which
+     holds the same data and so updates this for free.
+
+     Summary target/current deliberately do NOT count. The founder's own words
+     for it: numbers entered with six empty territories is not a vision yet. */
+  const [hasVision, setHasVision] = useState(null);
   const [notifications, setNotifications] = useState([]);
   // The badge counts UNREAD, not the list length. The list is everything,
   // read included, so counting it made a badge that never went down.
@@ -265,6 +276,7 @@ export function AppProvider({ children }) {
       startGuided, exitGuided,
       navigate,
       tourOpen, startTour, endTour,
+      hasVision, setHasVision,
     }}>
       {children}
     </AppContext.Provider>

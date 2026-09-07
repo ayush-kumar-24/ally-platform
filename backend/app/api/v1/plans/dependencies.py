@@ -143,7 +143,7 @@ class ChatGate:
         try:
             return self.service.record_chat_usage(
                 self.founder_id, self.tier, tokens=tokens,
-                is_first_diagnosis=is_first_diagnosis, reason=reason)
+                is_first_diagnosis=is_first_diagnosis, reason=reason, source=source)
         except Exception as exc:                          # noqa: BLE001
             if not is_first_diagnosis:
                 from app.plans.catalog import credits_for_tokens

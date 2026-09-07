@@ -19,6 +19,8 @@ class VisionTerritoryResponse(BaseModel):
     #: NOT here -- which backend holds the bytes is an operational detail, and
     #: publishing the S3 key would hand out a second, unmanaged handle on it.
     image_url: str | None = None
+    #: null while the territory is still ahead of the founder.
+    completed_at: datetime | None = None
 
     @classmethod
     def from_domain(cls, territory_key: str, t: VisionTerritory | None) -> "VisionTerritoryResponse":
@@ -27,7 +29,8 @@ class VisionTerritoryResponse(BaseModel):
         if t is None:
             return cls(territory=territory_key, statement="", tag1="", tag2="", updated_at=None)
         return cls(territory=t.territory, statement=t.statement, tag1=t.tag1, tag2=t.tag2,
-                   updated_at=t.updated_at, image_url=t.image_url)
+                   updated_at=t.updated_at, image_url=t.image_url,
+                   completed_at=t.completed_at)
 
 
 class VisionSummaryResponse(BaseModel):

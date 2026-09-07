@@ -16,6 +16,7 @@ from sqlalchemy import text
 
 from app.admin.users_models import (
     ConsentStatus,
+    CookieStatus,
     SortField,
     UserDetail,
     UserFilters,
@@ -122,9 +123,22 @@ class SqlAlchemyAdminUserRepository(AdminUserRepository):
         params["lim"] = page_size
         params["off"] = max(0, (page - 1) * page_size)
 
+        # LEFT JOIN LATERAL rather than a subquery per column: the table is
+        # append-only, so a founder can have many rows and a plain join would
+        # multiply them. The lateral takes exactly the newest, and LEFT keeps
+        # founders who have never answered the banner in the list -- they are
+        # precisely who an admin is looking for.
+        cookie_join = """
+            left join lateral (
+                select banner_action, created_at
+                  from cookie_preferences cp
+                 where cp.founder_id = f.founder_id
+                 order by cp.created_at desc
+                 limit 1
+            ) ck on true"""
         rows = self.db.execute(text(f"""
-            select {self._select_list()}
-              from founders f
+            select {self._select_list()}, ck.banner_action as cookie_action
+              from founders f{cookie_join}
              where {clause}
              order by {order} {direction} nulls last, f.founder_id asc
              limit :lim offset :off"""), params).mappings().all()
@@ -166,16 +180,27 @@ class SqlAlchemyAdminUserRepository(AdminUserRepository):
                            from credit_transactions where user_id = :fid
                           order by created_at desc limit 10""", [])
         consents = section("""select terms_version, privacy_version, agree_terms,
-                                     agree_diagnosis, consented_at
+                                     agree_diagnosis, age_confirmed, ip_address,
+                                     consented_at
                                 from founder_consents where founder_id = :fid
                                order by consented_at desc limit 1""", [])
+        # Cookie choice is a SEPARATE consent under a separate legal basis, and
+        # until now the panel could not show it at all: a founder who rejected
+        # analytics looked identical to one who had never seen the banner.
+        # Newest row wins -- the table is append-only, every change of mind is
+        # its own row, and the current choice is the latest one.
+        cookies = section("""select banner_action, necessary, analytics, marketing,
+                                    functional, ip_address, created_at
+                               from cookie_preferences where founder_id = :fid
+                              order by created_at desc limit 1""", [])
         chat_rows = section("select count(*) as n from conversations where founder_id = :fid", [])
 
         return UserDetail(
             founder_id=founder_id,
             profile={k: f.get(k) for k in (
-                "founder_id", "full_name", "email", "phone", "status", "created_at",
-                "last_active_at", "admin_notes", "preferred_language", "profile_completed")},
+                "founder_id", "full_name", "email", "phone", "status", "plan_type",
+                "created_at", "last_active_at", "admin_notes", "preferred_language",
+                "profile_completed")},
             business={k: f.get(k) for k in (
                 "business_name", "industry", "business_model", "team_size",
                 "current_revenue", "website", "linkedin_url", "customer_segment",
@@ -183,6 +208,9 @@ class SqlAlchemyAdminUserRepository(AdminUserRepository):
             subscription=subs[0] if subs else None,
             credits={"balance": f.get("credits_balance", 0), "recent_transactions": txs},
             consent=consents[0] if consents else None,
+            # None means the banner has never been answered by this founder --
+            # distinct from an answer of "rejected everything", which is a row.
+            cookie_consent=cookies[0] if cookies else None,
             reports=section("""select * from founder_reports where founder_id = :fid
                                order by created_at desc limit 20""", []),
             chat_count=int(chat_rows[0]["n"]) if chat_rows else 0,
@@ -240,6 +268,13 @@ class SqlAlchemyAdminUserRepository(AdminUserRepository):
             raise
 
 
+def _cookie_status(action: str | None) -> CookieStatus:
+    try:
+        return CookieStatus(action) if action else CookieStatus.NEVER_ANSWERED
+    except ValueError:
+        return CookieStatus.NEVER_ANSWERED
+
+
 def _to_summary(r) -> UserSummary:
     return UserSummary(
         founder_id=r["founder_id"],
@@ -253,6 +288,10 @@ def _to_summary(r) -> UserSummary:
         diagnosis_completed=r.get("diagnosis_locked_at") is not None,
         consent_status=(ConsentStatus.GRANTED if r.get("consent_version")
                         else ConsentStatus.MISSING),
+        # An unrecognised banner_action falls to NEVER_ANSWERED rather than
+        # raising: an admin list must not 500 because one row holds a value the
+        # CHECK constraint has since stopped allowing.
+        cookie_status=_cookie_status(r.get("cookie_action")),
         created_at=r["created_at"],
         last_active_at=r.get("last_active_at"),
     )

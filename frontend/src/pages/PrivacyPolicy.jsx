@@ -31,12 +31,12 @@ const SECTIONS = [
   {
     id: 'sharing',
     title: '5. Data Sharing & Disclosure',
-    content: `We do not sell or rent your personal data. We may share data with: (a) Cloud Infrastructure Providers — to host and process data (e.g., AWS, Google Cloud), bound by data processing agreements; (b) AI Processing Services — anonymised diagnostic data may be processed by third-party LLM providers under strict data handling agreements; (c) Analytics Providers — pseudonymised usage data for platform improvements; (d) Legal Authorities — where required by law, court order, or government authority. In all cases, we share the minimum data necessary and ensure adequate contractual protections are in place.`,
+    content: `We do not sell or rent your personal data. We may share data with: (a) Cloud Infrastructure and Service Providers — to host and run the platform, bound by data processing agreements. These are: Amazon Web Services (hosting and database, Mumbai region), Supabase (sign-in), Razorpay (payments), our email delivery provider, and an error-monitoring service. A current list is available on request; (b) AI Processing Services — the answers you give Ally, and the content of your conversations with it, are sent to third-party large language model providers so that Ally can respond. These providers are located OUTSIDE India, primarily in the United States, so this involves a cross-border transfer of your data. They process it only to generate a response for you, under contractual terms that prohibit using it to train their models. Your data is stored in India; this processing step is the exception, and we are naming it here rather than leaving it implied; (c) Analytics Providers — pseudonymised usage data for platform improvements; (d) Legal Authorities — where required by law, court order, or government authority. In all cases, we share the minimum data necessary and ensure adequate contractual protections are in place.`,
   },
   {
     id: 'retention',
     title: '6. Data Retention',
-    content: `We retain your personal data for as long as your account is active or as necessary to provide services. If you delete your account, we will erase or anonymise your identifiable data within 30 days, except where retention is required by law (e.g., financial records retained for 7 years as required under applicable Indian law). Anonymised, aggregated diagnostic data that cannot be linked back to you may be retained indefinitely to improve our AI models.`,
+    content: `We retain your personal data for as long as your account is active or as necessary to provide services. If you delete your account, there is a 30-day window in which you can change your mind and cancel. Once that window closes, we erase or anonymise your identifiable data within 30 days of it closing, except where retention is required by law (e.g., financial records retained for 7 years as required under applicable Indian law). Anonymised, aggregated diagnostic data that cannot be linked back to you may be retained indefinitely to improve our AI models.`,
   },
   {
     id: 'rights',
@@ -171,7 +171,7 @@ export default function PrivacyPolicy() {
                       </div>
                       <div className="grievance-row">
                         <span className="grievance-label">Address</span>
-                        <span className="grievance-value">GoXL Consulting Solutions Pvt. Ltd.,<br />Bangalore, Karnataka, India — 560001</span>
+                        <span className="grievance-value">GoXL Consulting Solutions Pvt. Ltd.,<br />513, National Plaza, RC Dutt Road, Alkapuri,<br />Vadodara, Gujarat, India — 390007</span>
                       </div>
                       <div className="grievance-row">
                         <span className="grievance-label">Email</span>
@@ -181,7 +181,7 @@ export default function PrivacyPolicy() {
                       </div>
                       <div className="grievance-row">
                         <span className="grievance-label">Response Time</span>
-                        <span className="grievance-value">We aim to acknowledge all complaints within 48 hours and resolve within 30 days.</span>
+                        <span className="grievance-value">We aim to acknowledge all complaints within 48 hours and resolve within 30 days. The fastest way to reach us is Privacy Center → Raise a privacy complaint inside your account, which records your complaint and its time directly with our team. You can also write to the address above.</span>
                       </div>
                     </div>
                     <p className="grievance-footer-note">

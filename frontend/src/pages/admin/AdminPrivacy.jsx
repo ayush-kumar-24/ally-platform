@@ -32,6 +32,7 @@ const MANAGE_CAPABILITY = 'manage_privacy_requests';
 const TYPE_LABELS = {
   correct_data: 'Data correction',
   email_change: 'Email change',
+  grievance: 'Privacy complaint',
   view_data: 'View data summary',
   download_data: 'Download data',
   portability: 'Data portability export',
@@ -54,6 +55,16 @@ function whenLabel(iso) {
  * How long it has been sitting. The commitment to founders is 30 days, so this
  * counts toward that rather than showing a raw age nobody can act on.
  */
+/** Hours since it arrived -- the unit a 48-hour promise is actually measured in. */
+function ackClock(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const hours = Math.floor((new Date() - d) / 3600000);
+  if (hours < 1) return { label: 'just now', tone: 'ok' };
+  if (hours < 48) return { label: `${hours}h ago — ack due in ${48 - hours}h`, tone: hours > 36 ? 'soon' : 'ok' };
+  return { label: `${hours}h ago — 48h ack MISSED`, tone: 'past' };
+}
+
 function waiting(iso) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return null;
@@ -95,9 +106,13 @@ export default function AdminPrivacy() {
   // up next. The API returns them in its own order; sorting here rather than
   // asking for a new query parameter keeps this page's opinion in this page.
   const ordered = useMemo(() => {
-    const urgent = (r) => (r.request_type === 'email_change' ? 0 : 1);
+    /* Grievances first: they carry a 48-hour acknowledgement promise under the
+       DPDP Act, far shorter than the 30 days everything else here gets. Then
+       email changes, whose founders cannot be reached at all. Then oldest. */
+    const rank = (r) => (r.request_type === 'grievance' ? 0
+      : r.request_type === 'email_change' ? 1 : 2);
     return [...rows].sort((a, b) =>
-      urgent(a) - urgent(b) ||
+      rank(a) - rank(b) ||
       new Date(a.requested_at) - new Date(b.requested_at));
   }, [rows]);
 
@@ -203,6 +218,7 @@ export default function AdminPrivacy() {
                     <tr key={r.request_id}>
                       <td>
                         <div>{TYPE_LABELS[r.request_type] || r.request_type}</div>
+                        {isGrievance && <span className="adm-tag">Complaint · 48h</span>}
                         {isEmail && <span className="adm-tag">Locked out</span>}
                         <div className="adm-dim">{whenLabel(r.requested_at)}</div>
                       </td>

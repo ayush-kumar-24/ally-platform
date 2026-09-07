@@ -3,13 +3,15 @@ import DeletionPendingGate from '../components/DeletionPendingGate';
 import PlanRequiredGate from '../components/PlanRequiredGate';
 import HelpWidget from '../components/HelpWidget';
 import { useApp } from '../context/AppContext';
+import { planLabel as planLabelFor } from '../services/plans';
+import { usePlanName } from '../hooks/usePlanName';
 import { useState, useRef, useEffect } from 'react';
 import ProductTour from '../components/ProductTour';
 import { TITLES as ROUTE_TITLES } from '../components/RouteTitle';
 import { greetingNow } from '../utils/helpers';
 import { getOverview } from '../services/dashboard';
+import { loadVision } from '../services/vision';
 import { firstSafe } from '../utils/looksLikeToken';
-import { useCallAccess } from '../hooks/useCallAccess';
 import {
   IconDashboard,
   IconMessageSquare,
@@ -20,6 +22,7 @@ import {
   IconArrowRight,
   IconCalendar,
   IconHelpCircle,
+  IconPlay,
   IconSettings,
   IconBell,
   IconEye,
@@ -28,6 +31,8 @@ import {
   IconList,
   IconLightbulb,
   IconBook,
+  IconFile,
+  IconTarget,
 } from '../utils/icons';
 
 function IconPulse(props) {
@@ -53,7 +58,11 @@ const ROUTE_EYE = {
   '/app/goals': 'Outcomes',
   '/app/recommendations': 'What to do next',
   '/app/frameworks': 'Thinking toolkit',
-  '/app/report': 'Executive report',
+  /* A category, not a second name for the page. It used to read "Executive
+     report", which put a third name on a screen that already called itself two
+     things. The other entries in this map are categories -- Overview,
+     Conversation, Long-term -- and this one now is too. */
+  '/app/report': 'Your diagnosis',
   '/app/next-steps': 'Momentum',
   '/app/plan': 'Today',
   '/app/discovery-call': 'Talk to a human',
@@ -61,6 +70,15 @@ const ROUTE_EYE = {
   '/app/profile': 'Founder identity',
   '/app/help': "We're here to help",
 };
+
+/* The vision item names what the founder has, not what the route is: an
+   invitation until the first territory is written, a possession after. null is
+   "not loaded yet" and keeps the neutral wording. Used for the sidebar label
+   and the page's own title, so the two can never disagree. */
+function visionLabel(hasVision) {
+  if (hasVision === null) return 'Your Vision';
+  return hasVision ? 'Your Vision Board' : 'Build Your Vision';
+}
 
 const NAV_GROUPS = [
   {
@@ -122,7 +140,7 @@ const NAV_GROUPS = [
          item still advertises the feature; for the beta the instruction is to
          take discovery calls out of the free-tier UI, and a founder who cannot
          book one has nothing to unlock by clicking. */
-      { path: '/app/discovery-call', tip: 'Discovery call', icon: IconCalendar, label: 'Discovery call', badge: null, needsCallAccess: true },
+      { path: '/app/discovery-call', tip: 'Book a discovery call', icon: IconCalendar, label: 'Discovery call', badge: null },
     ],
   },
   {
@@ -136,6 +154,14 @@ const NAV_GROUPS = [
     label: 'KNOWLEDGE',
     items: [
       { path: '/app/frameworks', tip: 'Frameworks', icon: IconBook, label: 'Frameworks', badge: null },
+      /* The three reference libraries the section was left room for. Ordered by
+         how much of a founder's time each one asks for -- an article, then a
+         talk, then a course -- so the cheapest thing to act on is nearest the
+         top. Distinct icons on purpose: three book-ish glyphs in one group
+         reads as one repeated item rather than three choices. */
+      { path: '/app/knowledge/read', tip: 'Things to read', icon: IconFile, label: 'Things to read', badge: null },
+      { path: '/app/knowledge/watch', tip: 'Things to watch', icon: IconPlay, label: 'Things to watch', badge: null },
+      { path: '/app/knowledge/learn', tip: 'Things to learn', icon: IconTarget, label: 'Things to learn', badge: null },
     ],
   },
   {
@@ -151,6 +177,11 @@ const NAV_GROUPS = [
     label: 'ACCOUNT',
     items: [
       { path: '/app/profile', tip: 'Profile', icon: IconSettings, label: 'Profile', badge: null },
+      /* Not a page -- it starts the tour where the founder already is. The tour
+         spotlights the sidebar itself, so sending them somewhere first would
+         move the very thing it is about to point at. `action` is what marks an
+         item as doing something rather than going somewhere. */
+      { action: 'tour', tip: 'Replay the product tour', icon: IconPlay, label: 'Product tour', badge: null },
       { path: '/app/help', tip: 'Help & Support', icon: IconHelpCircle, label: 'Help & Support', badge: null },
     ],
   },
@@ -158,13 +189,21 @@ const NAV_GROUPS = [
 
 export default function PlatformLayout() {
   const { user, sidebarCollapsed, toggleSidebar, sidebarOpen, openSidebar, closeSidebar,
-          notifications, clearNotifications, unreadCount, readNotification } = useApp();
+          notifications, clearNotifications, unreadCount, readNotification,
+          hasVision, setHasVision, startTour } = useApp();
 
-  // Both of these read "Ally Free" as literal text, so a paying founder was shown
-  // the free badge everywhere. `user.plan` is hydrated from the server profile.
+  /* Both of these read "Ally Free" as literal text, so a paying founder was
+     shown the free badge everywhere. `user.plan` is hydrated from the server
+     profile -- but it is a TIER ID, not a plan name, and the label used to be
+     built out of it: the map here had no `basic` entry, so a founder who had
+     just paid Rs 199 for the plan everything else calls "Starter" was shown
+     "Ally Basic" and reasonably concluded the payment had not applied. Worse,
+     it mapped `starter` to "Ally Starter" as well, so the Rs 499 plan and the
+     Rs 199 plan rendered identically. planLabel() reads the catalog's own
+     name, from the server where it has arrived. */
   const planTier = (user?.plan || 'free').toLowerCase();
-  const planLabel = { free: 'Ally Free', starter: 'Ally Starter', pro: 'Ally Pro' }[planTier]
-    || `Ally ${planTier.charAt(0).toUpperCase()}${planTier.slice(1)}`;
+  const serverPlanName = usePlanName();
+  const planLabel = planLabelFor(planTier, serverPlanName);
   const onTopTier = planTier === 'pro';
   const nav = useNavigate();
   const location = useLocation();
@@ -174,10 +213,6 @@ export default function PlatformLayout() {
   /* Whether a diagnosis has actually produced a report yet -- what decides
      which nav items are still locked. Starts unlocked so a slow call never
      shuts a founder out of pages they have already earned. */
-  // Discovery calls are hidden for founders with no free call left -- see
-  // hooks/useCallAccess for why the plan feature flag is the wrong signal.
-  const { canBook: canBookCall } = useCallAccess();
-
   const [hasReport, setHasReport] = useState(true);
   // Independent of AppContext's user.name -- live-confirmed a real gap: right
   // after a fresh login, this header could render "there" for several
@@ -197,6 +232,17 @@ export default function PlatformLayout() {
         if (o.founder_name) setFounderName(o.founder_name);
       })
       .catch(() => { /* leave unlocked rather than guess */ });
+    /* One request per session for one word in the sidebar. It rides in the
+       effect that already runs here rather than in AppContext, because this
+       component is inside the auth gate and the provider is not -- fetching
+       there would fire before there is a session to fetch with. A failure
+       leaves hasVision null, which is the neutral label, not a wrong one. */
+    loadVision()
+      .then(v => {
+        if (cancelled) return;
+        setHasVision(Object.values(v.territories).some(t => t.statement.trim()));
+      })
+      .catch(() => { /* neutral label */ });
     return () => { cancelled = true; };
   }, []);
 
@@ -287,16 +333,15 @@ export default function PlatformLayout() {
               {group.hideLabel
                 ? <div className="sb-gap" aria-hidden="true" />
                 : <div className="sb-group">{group.label}</div>}
-              {group.items.map(({ path, tip, icon: Icon, label, badge, needsReport, needsCallAccess, comingSoon, lockTip }) => {
-                if (needsCallAccess && !canBookCall) return null;
+              {group.items.map(({ path, action, tip, icon: Icon, label, badge, needsReport, comingSoon, lockTip }) => {
                 const reportLocked = needsReport && !hasReport;
                 const locked = reportLocked || comingSoon;
                 return (
                   <button
-                    key={path}
-                    className={`nav-item${isActive(path) ? ' active' : ''}${locked ? ' locked' : ''}`}
-                    data-tip={comingSoon ? (lockTip || 'Coming soon') : reportLocked ? 'Finish your diagnosis to unlock' : tip}
-                    data-nav={path}
+                    key={path ?? action}
+                    className={`nav-item${path && isActive(path) ? ' active' : ''}${locked ? ' locked' : ''}`}
+                    data-tip={comingSoon ? (lockTip || 'Coming soon') : reportLocked ? 'Finish your diagnosis to unlock' : path === '/app/vision' ? visionLabel(hasVision) : tip}
+                    data-nav={path ?? action}
                     aria-disabled={reportLocked}
                     onClick={() => {
                       // A report-gated item sends them to the thing that
@@ -305,11 +350,15 @@ export default function PlatformLayout() {
                       // nothing to unlock -- it opens its own honest
                       // "coming soon" page instead of redirecting anywhere.
                       if (reportLocked) { handleNav('/app/founder-dna-journey'); return; }
+                      // An action item stays put: the tour opens over whatever
+                      // page they are on, and the drawer is left to the tour,
+                      // which opens it itself on a phone.
+                      if (action === 'tour') { startTour(); return; }
                       handleNav(path);
                     }}
                   >
                     <Icon className="ic" />
-                    <span className="lbl">{label}</span>
+                    <span className="lbl">{path === '/app/vision' ? visionLabel(hasVision) : label}</span>
                     {locked && <IconLock className="nav-lock" />}
                     {!locked && badge && <span className="nav-badge">{badge}</span>}
                   </button>
@@ -380,16 +429,24 @@ export default function PlatformLayout() {
               <>
                  <div className="ey">{ROUTE_EYE[location.pathname] || currentLabel}</div>
                  <h1>
-                   {location.pathname === '/app/report'
-                     ? 'Founder DNA Report'
+                   {location.pathname === '/app/vision'
+                     ? visionLabel(hasVision)
+                     : location.pathname === '/app/report'
+                     /* Matches the masthead on the report itself, which the
+                        backend renders as "Founder Clarity Report · <date>"
+                        (api/v1/reports/document.py), and the name the rest of
+                        the product uses -- billing, the FAQs, the plan catalog
+                        and the PDF all say Clarity Report.
+
+                        It used to say "Founder DNA Report", which was a second
+                        name for the same document AND collided with a real,
+                        different thing: Founder DNA is its own nav page and a
+                        section inside this report. */
+                     ? 'Founder Clarity Report'
                      : location.pathname === '/app/next-steps'
                      ? 'Your next steps'
-                     /* The page is still reachable by URL when booking is not
-                        available, and titling it "Book a..." above a card that
-                        explains they cannot book is the same overclaim this
-                        change is removing. */
                      : location.pathname === '/app/discovery-call'
-                     ? (canBookCall ? 'Book a discovery call' : 'Discovery call')
+                     ? 'Book a discovery call'
                      : location.pathname === '/app/profile'
                      ? 'Founder Profile'
                      : currentLabel}

@@ -3,11 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import {
   computeGap, imageProblem, IMAGE_TYPES, loadVision, removeTerritoryImage,
-  saveSummary, saveTerritory, TERRITORIES, uploadTerritoryImage,
+  saveSummary, saveTerritory, setTerritoryCompleted, TERRITORIES, uploadTerritoryImage,
 } from '../services/vision';
 import { DnaError, DnaLoading } from '../components/DnaState';
 import Modal from '../components/Modal';
-import { IconAnchor, IconAward, IconChat, IconClock, IconDollar, IconEdit, IconPlus, IconTrendingUp, IconUsers } from '../utils/icons';
+import { IconAnchor, IconAward, IconChat, IconCheck, IconClock, IconDollar, IconEdit, IconPlus, IconTrendingUp, IconUsers } from '../utils/icons';
 
 // Purely decorative -- which icon marks which territory. Not a stand-in for
 // data (there is none until the founder writes their own vision), just a
@@ -23,11 +23,12 @@ const TERRITORY_ICON = {
 
 const EMPTY_TERRITORY = { statement: '', tag1: '', tag2: '' };
 
-function TerritoryCard({ territory, data, onEdit, onTalk }) {
+function TerritoryCard({ territory, data, onEdit, onTalk, onToggle, busy }) {
   const isEmpty = !data.statement.trim();
+  const done = Boolean(data.completedAt);
   const Icon = TERRITORY_ICON[territory.key];
   return (
-    <div className={`vt-card${isEmpty ? ' is-empty' : ''}`}>
+    <div className={`vt-card${isEmpty ? ' is-empty' : ''}${done ? ' is-reached' : ''}`}>
       {/* The edit surface and the "talk to Ally about this one" action are
           siblings, not nested buttons -- a <button> inside a <button> is
           invalid HTML and the inner click would also fire the outer one. */}
@@ -61,9 +62,26 @@ function TerritoryCard({ territory, data, onEdit, onTalk }) {
           </>
         )}
       </button>
-      <button type="button" className="vt-talk" onClick={() => onTalk(territory, data)}>
-        <IconChat /> {isEmpty ? 'Brainstorm this with Ally' : 'Talk to Ally about this'}
-      </button>
+      <div className="vt-foot">
+        <button type="button" className="vt-talk" onClick={() => onTalk(territory, data)}>
+          <IconChat /> {isEmpty ? 'Brainstorm this with Ally' : 'Talk to Ally about this'}
+        </button>
+        {/* Only on a written vision. The backend answers 404 for an unwritten
+            one -- there is nothing there to have reached -- so the card simply
+            does not offer it rather than letting the founder find that out. */}
+        {!isEmpty && (
+          <button
+            type="button"
+            className={`vt-reach${done ? ' on' : ''}`}
+            onClick={() => onToggle(territory.key, !done)}
+            disabled={busy}
+            aria-pressed={done}
+            title={done ? 'Reopen this vision' : 'Mark this reached'}
+          >
+            <IconCheck /> {done ? 'Reached' : 'Mark reached'}
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -201,9 +219,10 @@ function TerritoryEditor({ territory, data, onSave, onUploadImage, onRemoveImage
 
 export default function VisionPage() {
   const navigate = useNavigate();
-  const { showToast } = useApp();
+  const { showToast, setHasVision } = useApp();
   const [state, setState] = useState({ status: 'loading', vision: null, error: null });
   const [editingKey, setEditingKey] = useState(null);
+  const [reaching, setReaching] = useState(null);
 
   const load = () => {
     setState((s) => ({ ...s, status: 'loading', error: null }));
@@ -251,6 +270,19 @@ export default function VisionPage() {
     }, 500);
   };
 
+  /* Keeps the shared flag honest the moment a founder writes their first
+     territory, so the sidebar renames itself without a reload. Not cleared on
+     unmount: this is a fact about the founder, not a property of the page, and
+     the sidebar outlives the page. Computed from `state` rather than the
+     `filledCount` further down, which lives past the early returns below --
+     a hook cannot. */
+  const visionWritten = state.status === 'ready'
+    && TERRITORIES.some((t) => state.vision.territories[t.key]?.statement.trim());
+  useEffect(() => {
+    if (state.status !== 'ready') return;
+    setHasVision(visionWritten);
+  }, [state.status, visionWritten, setHasVision]);
+
   if (state.status === 'loading') return <DnaLoading label="Loading your vision…" />;
   if (state.status === 'error') return <DnaError onRetry={load} />;
 
@@ -258,6 +290,26 @@ export default function VisionPage() {
   const filledCount = TERRITORIES.filter(t => vision.territories[t.key]?.statement.trim()).length;
   const gap = computeGap(vision.summary.target, vision.summary.current);
   const hasSummary = vision.summary.target.trim() || vision.summary.current.trim();
+
+  /* One territory at a time, keyed rather than a bare boolean, so a slow
+     request disables the card being toggled and not the other five. */
+  const toggleReached = async (key, next) => {
+    setReaching(key);
+    try {
+      const t = await setTerritoryCompleted(key, next);
+      setState((s) => ({
+        ...s,
+        vision: { ...s.vision, territories: { ...s.vision.territories, [key]: t } },
+      }));
+      // Only on the way in -- reopening needs no announcement, and the
+      // achievement it already wrote deliberately stays.
+      if (next) showToast('Reached — saved to Your Achievements.');
+    } catch {
+      showToast("Couldn't update that vision. Try again.");
+    } finally {
+      setReaching(null);
+    }
+  };
 
   // Opens Ally chat pre-filled with the founder's own words about that one
   // territory -- dropped into the composer for them to review/edit, never
@@ -274,8 +326,15 @@ export default function VisionPage() {
   return (
     <div className="vis-page">
       <header className="vis-head">
-        <div className="vis-kicker">Your Vision</div>
-        <h1>Build the future you actually want.</h1>
+        {/* No kicker. It named the section -- "Build Your Vision" / "Your Vision
+            Board" -- and so does the top bar directly above it, which is where
+            that name now lives because it is state-dependent and the bar is the
+            page's actual title. Two identical lines stacked is not emphasis, it
+            is a stutter, so the headline leads the page instead. */}
+        {/* "Build" already opens the label above in the empty state; repeating
+            it here read as a stutter. The filled state keeps the verb, because
+            its label ("Your Vision Board") does not carry one. */}
+        <h1>{filledCount === 0 ? 'The future you actually want.' : 'Build the future you actually want.'}</h1>
         <p className="vis-sub">
           {filledCount === 0
             ? 'Six territories connect what you want with a number and the milestone that proves it is becoming real.'
@@ -312,6 +371,8 @@ export default function VisionPage() {
             data={vision.territories[t.key] || EMPTY_TERRITORY}
             onEdit={setEditingKey}
             onTalk={talkAboutTerritory}
+            onToggle={toggleReached}
+            busy={reaching === t.key}
           />
         ))}
       </div>

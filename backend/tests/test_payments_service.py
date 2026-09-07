@@ -19,7 +19,9 @@ import pytest
 
 from app.credits.models import CreditOperation
 from app.payments.errors import (
+    InvalidCheckoutCallbackError,
     InvalidCheckoutError,
+    PaymentNotFoundError,
     InvalidWebhookSignatureError,
     PaymentGatewayUnavailableError,
     PaymentsNotConfiguredError,
@@ -31,16 +33,21 @@ from app.plans.catalog import PLANS, PlanTier
 
 NOW = datetime(2026, 9, 4, 12, 0, tzinfo=timezone.utc)
 WEBHOOK_SECRET = "whsec_test"
+KEY_SECRET = "rzp_key_secret"
 
 
 # --- fakes ---------------------------------------------------------------
 
 class FakeGateway:
-    def __init__(self, *, order_id="order_1", raise_on_create=None):
+    def __init__(self, *, order_id="order_1", raise_on_create=None, entities=None,
+                 raise_on_fetch=None):
         self.key_id = "rzp_test_key"
         self.order_id = order_id
         self.raise_on_create = raise_on_create
         self.created_orders = []
+        self.entities = entities or {}
+        self.raise_on_fetch = raise_on_fetch
+        self.fetched = []
 
     def create_order(self, *, amount_paise, currency, receipt, notes):
         if self.raise_on_create:
@@ -52,6 +59,25 @@ class FakeGateway:
     def verify_webhook_signature(self, *, body, signature):
         expected = hmac.new(WEBHOOK_SECRET.encode(), body, hashlib.sha256).hexdigest()
         return hmac.compare_digest(expected, signature or "")
+
+    def verify_checkout_signature(self, *, order_id, payment_id, signature):
+        expected = hmac.new(KEY_SECRET.encode(), f"{order_id}|{payment_id}".encode(),
+                            hashlib.sha256).hexdigest()
+        return hmac.compare_digest(expected, signature or "")
+
+    def fetch_payment(self, payment_id):
+        """What Razorpay says about this payment when ASKED -- the only thing
+        confirm_checkout is allowed to grant on. `entities` is what the fake
+        gateway will admit to; anything else raises the way the real one does
+        for an id Razorpay does not know."""
+        if self.raise_on_fetch:
+            raise self.raise_on_fetch
+        self.fetched.append(payment_id)
+        try:
+            return self.entities[payment_id]
+        except KeyError:
+            raise PaymentGatewayError("razorpay: payment fetch failed: HTTP 400",
+                                      status_code=400) from None
 
 
 class FakeRepository:
@@ -67,13 +93,14 @@ class FakeRepository:
         self.db = _FakeDbHandle()
 
     def create_pending(self, *, founder_id, amount_inr, currency, gateway, gateway_order_id,
-                       coupon_id=None, list_amount_inr=None, discount_inr=None, commit=True):
+                       plan_tier, coupon_id=None, list_amount_inr=None, discount_inr=None,
+                       commit=True):
         pid = self._next_payment_id
         self._next_payment_id += 1
         self._payments[pid] = {
             "payment_id": pid, "founder_id": founder_id, "status": "pending",
             "gateway_order_id": gateway_order_id, "gateway_payment_id": None,
-            "amount_inr": amount_inr, "subscription_id": None,
+            "amount_inr": amount_inr, "subscription_id": None, "plan_tier": plan_tier,
             "coupon_id": coupon_id, "list_amount_inr": list_amount_inr,
             "discount_inr": discount_inr,
         }
@@ -126,7 +153,8 @@ class FakeRepository:
         return PaymentRecord(payment_id=row["payment_id"], founder_id=row["founder_id"],
                              status=row["status"], gateway_order_id=row["gateway_order_id"],
                              gateway_payment_id=row["gateway_payment_id"],
-                             amount_inr=row["amount_inr"], subscription_id=row["subscription_id"])
+                             amount_inr=row["amount_inr"], subscription_id=row["subscription_id"],
+                             plan_tier=row.get("plan_tier"))
 
 
 class _FakeDbHandle:
@@ -546,19 +574,81 @@ def test_captured_payment_for_an_unknown_order_is_not_granted():
     assert credits.grants == []
 
 
-def test_captured_payment_with_no_recognisable_plan_tier_note_is_not_granted():
+def test_a_captured_payment_with_no_notes_is_still_granted_from_our_own_row():
+    """The regression that charged a founder Rs 999 and gave them nothing.
+
+    Razorpay's payment entity carries whatever notes the BROWSER's Checkout
+    options set, not the order's -- and ours sent {plan_name}, so `plan_tier`
+    never arrived and the grant was refused on every widget payment. The tier
+    is recorded on the payment row at checkout now, so an entity with no
+    useful notes at all still grants exactly what was paid for.
+    """
     service, repo, _ = _service()
     service.start_checkout(42, PlanTier.STARTER)
     body = json.dumps({
         "event": "payment.captured",
         "payload": {"payment": {"entity": {
-            "id": "pay_1", "order_id": "order_1", "notes": {},
+            "id": "pay_1", "order_id": "order_1", "notes": {"plan_name": "Plus"},
         }}},
     }).encode()
 
     result = service.handle_webhook(body=body, signature=_sign(body))
-    assert result.outcome == WebhookOutcome.UNKNOWN_PAYMENT
-    assert repo.plans_granted == []
+    assert result.outcome == WebhookOutcome.CAPTURED
+    assert repo.plans_granted == [(42, "starter")]
+
+
+def test_gateway_notes_cannot_upgrade_a_founder_past_what_they_paid_for():
+    """Notes are browser-supplied, so they are not authority for a grant.
+
+    Before, the tier came from them: pay for the cheapest plan, put
+    `plan_tier: pro` in the Checkout notes, receive Pro. The recorded tier
+    wins, and the disagreement is logged rather than honoured.
+    """
+    service, repo, _ = _service()
+    service.start_checkout(42, PlanTier.BASIC)          # paid Rs 199
+    body = json.dumps({
+        "event": "payment.captured",
+        "payload": {"payment": {"entity": {
+            "id": "pay_1", "order_id": "order_1", "notes": {"plan_tier": "pro"},
+        }}},
+    }).encode()
+
+    result = service.handle_webhook(body=body, signature=_sign(body))
+    assert result.outcome == WebhookOutcome.CAPTURED
+    assert result.plan == "basic"
+    assert repo.plans_granted == [(42, "basic")]
+
+
+def test_a_legacy_payment_row_falls_back_to_the_notes_then_refuses():
+    """A checkout started before payments.plan_tier existed still completes if
+    the gateway happens to carry the tier, and is refused -- never guessed --
+    when nothing names it."""
+    service, repo, _ = _service()
+    service.start_checkout(42, PlanTier.STARTER)
+    repo._payments[1]["plan_tier"] = None               # a row from the old build
+
+    body = json.dumps({
+        "event": "payment.captured",
+        "payload": {"payment": {"entity": {
+            "id": "pay_1", "order_id": "order_1", "notes": {"plan_tier": "starter"},
+        }}},
+    }).encode()
+    assert service.handle_webhook(body=body, signature=_sign(body)).outcome == (
+        WebhookOutcome.CAPTURED)
+    assert repo.plans_granted == [(42, "starter")]
+
+    service2, repo2, _ = _service()
+    service2.start_checkout(42, PlanTier.STARTER)
+    repo2._payments[1]["plan_tier"] = None
+    body2 = json.dumps({
+        "event": "payment.captured",
+        "payload": {"payment": {"entity": {
+            "id": "pay_2", "order_id": "order_1", "notes": {},
+        }}},
+    }).encode()
+    assert service2.handle_webhook(body=body2, signature=_sign(body2)).outcome == (
+        WebhookOutcome.UNKNOWN_PAYMENT)
+    assert repo2.plans_granted == []
 
 
 def test_a_credit_grant_failure_does_not_undo_the_plan_grant():
@@ -598,3 +688,159 @@ def test_unhandled_event_types_are_ignored_not_errored():
     body = json.dumps({"event": "refund.processed", "payload": {}}).encode()
     result = service.handle_webhook(body=body, signature=_sign(body))
     assert result.outcome == WebhookOutcome.IGNORED_EVENT
+
+
+# --- confirm_checkout ------------------------------------------------------
+#
+# The founder-initiated settle. Its whole reason to exist is speed -- a founder
+# should not watch a spinner for as long as Razorpay's webhook takes to arrive
+# -- and the thing worth testing about it is that speed costs nothing: it
+# grants only what Razorpay itself reports, only for the founder's own order,
+# and never twice.
+
+def _checkout_sig(order_id: str, payment_id: str, secret: str = KEY_SECRET) -> str:
+    return hmac.new(secret.encode(), f"{order_id}|{payment_id}".encode(),
+                    hashlib.sha256).hexdigest()
+
+
+def _captured_entity(*, order_id="order_1", payment_id="pay_1", tier="starter",
+                     status="captured") -> dict:
+    return {"id": payment_id, "order_id": order_id, "status": status,
+            "notes": {"founder_id": "42", "plan_tier": tier}}
+
+
+def _paid_service(*, entity=None, raise_on_fetch=None):
+    """A service whose founder 42 has a pending `order_1` for Starter -- the
+    state a browser is in the instant Razorpay's handler fires."""
+    entity = entity if entity is not None else _captured_entity()
+    gateway = FakeGateway(entities={entity["id"]: entity}, raise_on_fetch=raise_on_fetch)
+    service, repo, credits = _service(gateway=gateway)
+    service.start_checkout(42, PlanTier.STARTER)
+    return service, repo, credits, gateway
+
+
+def test_confirm_grants_the_plan_without_waiting_for_the_webhook():
+    service, repo, credits, gateway = _paid_service()
+
+    result = service.confirm_checkout(42, order_id="order_1", gateway_payment_id="pay_1",
+                                      signature=_checkout_sig("order_1", "pay_1"))
+
+    assert result.outcome == WebhookOutcome.CAPTURED
+    assert repo.plans_granted == [(42, "starter")]
+    assert credits.grants[0]["amount"] == PLANS[PlanTier.STARTER].monthly_credits
+    # The grant hangs on Razorpay's own answer, not on the caller's claim.
+    assert gateway.fetched == ["pay_1"]
+
+
+def test_confirm_refuses_a_payment_razorpay_has_not_captured():
+    """Authorised-but-not-captured is not a grant and not an error: the founder
+    keeps waiting, and the webhook lands when the capture does."""
+    service, repo, credits, _ = _paid_service(entity=_captured_entity(status="authorized"))
+
+    result = service.confirm_checkout(42, order_id="order_1", gateway_payment_id="pay_1",
+                                      signature=_checkout_sig("order_1", "pay_1"))
+
+    assert result.outcome == WebhookOutcome.NOT_CAPTURED
+    assert repo.plans_granted == []
+    assert credits.grants == []
+
+
+def test_confirm_rejects_a_forged_callback_signature():
+    service, repo, _, gateway = _paid_service()
+
+    with pytest.raises(InvalidCheckoutCallbackError):
+        service.confirm_checkout(42, order_id="order_1", gateway_payment_id="pay_1",
+                                 signature="not-a-real-signature")
+
+    assert repo.plans_granted == []
+    # Refused before Razorpay was even asked.
+    assert gateway.fetched == []
+
+
+def test_confirm_refuses_another_founders_order():
+    """A founder's own token reaches this call, so an order id that is not
+    theirs must look exactly like one that does not exist."""
+    service, repo, _, _ = _paid_service()
+
+    with pytest.raises(PaymentNotFoundError):
+        service.confirm_checkout(99, order_id="order_1", gateway_payment_id="pay_1",
+                                 signature=_checkout_sig("order_1", "pay_1"))
+
+    assert repo.plans_granted == []
+
+
+def test_confirm_refuses_an_unknown_order():
+    service, repo, _, _ = _paid_service()
+
+    with pytest.raises(PaymentNotFoundError):
+        service.confirm_checkout(42, order_id="order_never_created",
+                                 gateway_payment_id="pay_1",
+                                 signature=_checkout_sig("order_never_created", "pay_1"))
+
+    assert repo.plans_granted == []
+
+
+def test_confirm_refuses_a_payment_belonging_to_a_different_order():
+    """Even a genuinely captured payment cannot be quoted against someone
+    else's pending order: the entity's own order_id has to match."""
+    entity = _captured_entity(order_id="order_somebody_else", payment_id="pay_9")
+    gateway = FakeGateway(entities={"pay_9": entity})
+    service, repo, _ = _service(gateway=gateway)
+    service.start_checkout(42, PlanTier.STARTER)
+
+    with pytest.raises(PaymentNotFoundError):
+        service.confirm_checkout(42, order_id="order_1", gateway_payment_id="pay_9",
+                                 signature=_checkout_sig("order_1", "pay_9"))
+
+    assert repo.plans_granted == []
+
+
+def test_confirm_after_the_webhook_already_granted_is_a_no_op():
+    """Both paths race by design. Whichever loses must add nothing -- no second
+    plan grant, no second month of credits."""
+    service, repo, credits, gateway = _paid_service()
+    service.handle_webhook(body=_captured_event(order_id="order_1", payment_id="pay_1"),
+                           signature=_sign(_captured_event(order_id="order_1", payment_id="pay_1")))
+    assert repo.plans_granted == [(42, "starter")]
+
+    result = service.confirm_checkout(42, order_id="order_1", gateway_payment_id="pay_1",
+                                      signature=_checkout_sig("order_1", "pay_1"))
+
+    assert result.outcome == WebhookOutcome.ALREADY_PROCESSED
+    assert repo.plans_granted == [(42, "starter")]
+    assert len(credits.grants) == 1
+    assert gateway.fetched == []  # settled from our own row, no round trip needed
+
+
+def test_the_webhook_after_confirm_already_granted_is_a_no_op():
+    """The same race the other way round -- the ordinary case, since the
+    webhook usually arrives after the founder's tab has already confirmed."""
+    service, repo, credits, _ = _paid_service()
+    service.confirm_checkout(42, order_id="order_1", gateway_payment_id="pay_1",
+                             signature=_checkout_sig("order_1", "pay_1"))
+
+    body = _captured_event(order_id="order_1", payment_id="pay_1")
+    result = service.handle_webhook(body=body, signature=_sign(body))
+
+    assert result.outcome == WebhookOutcome.ALREADY_PROCESSED
+    assert repo.plans_granted == [(42, "starter")]
+    assert len(credits.grants) == 1
+
+
+def test_confirm_surfaces_a_gateway_outage_as_a_502():
+    """Nothing is lost here: the founder has paid, the webhook is still coming,
+    and the caller falls back to waiting rather than showing a failure."""
+    service, repo, _, _ = _paid_service(
+        raise_on_fetch=PaymentGatewayError("razorpay: unreachable"))
+
+    with pytest.raises(PaymentGatewayUnavailableError):
+        service.confirm_checkout(42, order_id="order_1", gateway_payment_id="pay_1",
+                                 signature=_checkout_sig("order_1", "pay_1"))
+
+    assert repo.plans_granted == []
+
+
+def test_confirm_unconfigured_gateway_refuses():
+    service, _, _ = _service(gateway=None)
+    with pytest.raises(PaymentsNotConfiguredError):
+        service.confirm_checkout(42, order_id="order_1", gateway_payment_id="pay_1")

@@ -47,7 +47,17 @@ def update_goal(
     service: FounderGoalService = Depends(get_founder_goal_service),
 ) -> FounderGoalResponse:
     fields = payload.model_dump(exclude_unset=True)
-    return FounderGoalResponse.from_domain(service.update_goal(founder_id, goal_id, **fields))
+    # `completed` is a state change with a side effect, not a text field, so it
+    # is pulled out rather than passed into update_goal. Text first: a request
+    # that renames a goal AND completes it should put the new title on the
+    # achievement, not the old one.
+    completed = fields.pop("completed", None)
+    goal = service.update_goal(founder_id, goal_id, **fields) if fields else None
+    if completed is not None:
+        goal = service.set_completed(founder_id, goal_id, completed)
+    if goal is None:
+        goal = service.update_goal(founder_id, goal_id)
+    return FounderGoalResponse.from_domain(goal)
 
 
 @router.delete("/{goal_id}", status_code=204, summary="Delete a goal")

@@ -74,3 +74,28 @@ class ProcessingRestrictedError(PrivacyError):
             "Center before starting a new session or sending a message.",
             status_code=403,
         )
+
+
+class DiagnosisConsentMissingError(PrivacyError):
+    """The founder never ticked the diagnosis-consent box, so we may not run one.
+
+    SEPARATE FROM ProcessingRestrictedError on purpose. That one means "you
+    turned processing off"; this one means "you never turned it on". The
+    founder needs different words and a different action for each -- one is
+    undone in the Privacy Center, the other by giving consent.
+
+    Why this exists at all: `ConsentService.may_process_diagnosis_data()` was
+    written as "the lawful-basis check for diagnosis processing", complete with
+    a fails-closed docstring, and then called from nowhere. The checkbox was
+    presented, the answer was stored with a timestamp and a version, and the
+    diagnosis ran regardless. Storing a dated record of someone declining and
+    then proceeding is worse than never having asked.
+    """
+
+    def __init__(self, founder_id: int):
+        super().__init__(
+            "Ally needs your consent to run a diagnosis on your answers. "
+            "You can give it from your profile.",
+            status_code=403,
+        )
+        self.founder_id = founder_id

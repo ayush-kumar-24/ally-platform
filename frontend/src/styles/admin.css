@@ -106,6 +106,14 @@
 .adm-pill.granted   { background: #dcfce7; color: #166534; }
 .adm-pill.stale     { background: #fef3c7; color: var(--adm-warn); }
 .adm-pill.missing   { background: #fee2e2; color: var(--adm-danger); }
+/* Cookie banner answers. "Never answered" is grey, not red: it is an absence
+   of an answer, not a refusal, and colouring it like a refusal would tell the
+   admin something the row does not say. Rejected is a real, valid choice, so
+   it is neutral too -- only Terms use red, where missing consent is a problem. */
+.adm-pill.accepted_all   { background: #dcfce7; color: #166534; }
+.adm-pill.customised     { background: #dbeafe; color: #1e40af; }
+.adm-pill.rejected_all   { background: #e5e7eb; color: #374151; }
+.adm-pill.never_answered { background: #f3f4f6; color: #6b7280; }
 
 .adm-mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
 .adm-muted { color: var(--adm-muted); }

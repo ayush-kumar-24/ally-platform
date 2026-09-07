@@ -14,6 +14,41 @@ import { get } from './api';
 
 export const TIERS = { FREE: 'free', BASIC: 'basic', STARTER: 'starter', PRO: 'pro' };
 
+/**
+ * Tier id -> the name a founder is shown. These are NOT the same words, and the
+ * two that differ are the ones that caused a founder who had paid to be told,
+ * by our own sidebar, that they were still on "Basic":
+ *
+ *   basic   -> "Starter"   (Rs 199)
+ *   starter -> "Plus"      (Rs 499)
+ *
+ * app/plans/catalog.py says so directly -- the tier ids are internal, kept
+ * stable because renaming one means migrating every founders.plan_type row,
+ * while Plan.name "changes with marketing". Anything that builds a label out of
+ * the tier id therefore prints last season's name at best. PlatformLayout did
+ * exactly that and mapped `starter` to "Ally Starter", so the Rs 499 plan and
+ * the Rs 199 plan both rendered as "Ally Starter" -- two different plans, one
+ * label, and no way for support to tell them apart from a screenshot.
+ *
+ * This map exists so a label is right immediately, offline, and before any
+ * request resolves. The server's own plan_name still wins where it is
+ * available (see planLabel) -- that is the copy marketing actually edits.
+ */
+export const PLAN_NAMES = { free: 'Free', basic: 'Starter', starter: 'Plus', pro: 'Pro' };
+
+/**
+ * The founder-facing plan label, e.g. "Ally Starter".
+ *
+ * `serverName` is Entitlements.plan_name from GET /plans/me -- the catalog's
+ * own word for the plan, and the only one guaranteed current. Falls back to the
+ * table above, then to a bare "Ally" rather than inventing a plan name out of
+ * an internal id.
+ */
+export function planLabel(tier, serverName) {
+  const name = serverName || PLAN_NAMES[String(tier || '').toLowerCase()];
+  return name ? `Ally ${name}` : 'Ally';
+}
+
 /** Features the backend knows about — mirrors app/plans/catalog.py:Feature. */
 export const FEATURES = {
   ALLY_CHAT: 'ally_chat',

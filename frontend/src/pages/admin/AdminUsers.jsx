@@ -24,7 +24,11 @@ const COLUMNS = [
   { key: 'status', label: 'Status', sortable: true },
   { key: 'plan_type', label: 'Plan', sortable: false },
   { key: 'credits_balance', label: 'Credits', sortable: true, numeric: true },
-  { key: 'consent_status', label: 'Consent', sortable: false },
+  { key: 'consent_status', label: 'Terms', sortable: false },
+  /* Separate from Terms. A founder can accept the Terms and refuse cookies, or
+     accept the Terms and never see the banner at all -- one column could not
+     say which, and this list is where an admin comes to find exactly that. */
+  { key: 'cookie_status', label: 'Cookies', sortable: false },
   { key: 'created_at', label: 'Registered', sortable: true },
 ];
 
@@ -167,6 +171,12 @@ export default function AdminUsers() {
                       <td>{u.plan_type || '—'}</td>
                       <td className="adm-num">{u.credits_balance}</td>
                       <td><span className={`adm-pill ${u.consent_status}`}>{u.consent_status}</span></td>
+                      <td>
+                        <span className={`adm-pill ${u.cookie_status}`}>
+                          {/* "never answered" reads as a state; "never_answered" reads as a bug. */}
+                          {(u.cookie_status || 'never_answered').replace(/_/g, ' ')}
+                        </span>
+                      </td>
                       <td className="adm-muted">{fmt(u.created_at)}</td>
                     </tr>
                   ))}

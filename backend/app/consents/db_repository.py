@@ -23,6 +23,8 @@ class SqlAlchemyConsentRepository(ConsentRepository):
             privacy_version=record.privacy_version,
             agree_terms=record.agree_terms,
             agree_diagnosis=record.agree_diagnosis,
+            age_confirmed=record.age_confirmed,
+            ip_address=record.ip_address,
             consented_at=record.consented_at,
         )
         self.db.add(row)
@@ -57,5 +59,7 @@ def _to_domain(row: ConsentRow) -> ConsentRecord:
         privacy_version=row.privacy_version,
         agree_terms=row.agree_terms,
         agree_diagnosis=row.agree_diagnosis,
+        age_confirmed=row.age_confirmed,
+        ip_address=row.ip_address,
         consented_at=row.consented_at,
     )

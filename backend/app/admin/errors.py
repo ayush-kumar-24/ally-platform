@@ -32,6 +32,15 @@ class AdminFounderNotFoundError(AdminError):
                          status_code=status.HTTP_404_NOT_FOUND)
 
 
+class InvalidPlanTierError(AdminError):
+    """A plan the catalog does not have. 422 rather than a silent write: a typo
+    would otherwise put founders.plan_type into a value nothing in the product
+    recognises, and they would read as Free everywhere while looking set."""
+
+    def __init__(self, tier: str):
+        super().__init__(f"'{tier}' is not a plan.", status_code=422)
+
+
 class InvalidAnnouncementError(AdminError):
     def __init__(self, reason: str):
         super().__init__(f"Invalid announcement: {reason}.", status_code=422)

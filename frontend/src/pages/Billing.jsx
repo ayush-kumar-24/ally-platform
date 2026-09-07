@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { MOCK_PLANS } from '../data/mockData';
 import { getProfile } from '../services/profile';
 import { getCatalog, getMyPlan } from '../services/plans';
-import { openCheckout, startCheckout, validateCoupon, waitForPlanActivation } from '../services/payments';
+import { confirmPayment, openCheckout, startCheckout, validateCoupon, waitForPlanActivation } from '../services/payments';
 
 /* ─── Static data ─── */
 /** Keys must match the plan tiers served by GET /plans, which lists only the
@@ -389,7 +389,10 @@ function CheckoutView({ plan, onBack, onPaid }) {
          own browser telling us what it saw; the plan is granted by the signed
          payment.captured webhook, and the next screen is what waits for it. */
       setPayState('paid');
-      onPaid({ plan, order, razorpayPaymentId: outcome.response?.razorpay_payment_id ?? null });
+      /* The whole callback, not just the payment id: the activating screen
+         hands it back to the backend, which checks its signature and asks
+         Razorpay directly rather than waiting for the webhook. */
+      onPaid({ plan, order, callback: outcome.response ?? null });
       return;
     }
 
@@ -582,18 +585,29 @@ function CheckoutView({ plan, onBack, onPaid }) {
 }
 
 /* ═══════════════════════════════════════════
-   VIEW 2b — Activating (waiting on the webhook)
+   VIEW 2b — Activating (settling the payment)
 ═══════════════════════════════════════════ */
 /**
  * The gap between "Razorpay says paid" and "the founder is on the plan".
  *
  * Razorpay's success callback runs in the founder's own tab, so it grants
- * nothing here — the plan is granted server-side when Razorpay's signed
- * payment.captured webhook reaches the backend. This screen simply asks
- * GET /plans/me until that has happened, which is why it can honestly say
- * "activating" rather than "active".
+ * nothing here — the plan is granted server-side. Two things can do that, and
+ * this screen uses both:
+ *
+ *  1. POST /payments/confirm, fired once, immediately. It hands the backend
+ *     the callback and the backend asks Razorpay itself whether the payment
+ *     is captured. This is what normally ends the wait, about a round trip
+ *     after the founder pays.
+ *  2. The signed payment.captured webhook, which arrives on Razorpay's own
+ *     schedule — seconds, sometimes much longer.
+ *
+ * The poll below covers both: it is what confirms case 1 actually landed, and
+ * what catches case 2 if confirm could not settle it (the capture had not
+ * happened yet at Razorpay, or the confirm request itself failed). So a
+ * failed confirm costs the founder nothing but the old wait, which is exactly
+ * what makes it safe to fire and forget.
  */
-function ActivatingView({ plan, order, onActivated, onViewStatus }) {
+function ActivatingView({ plan, order, callback, onActivated, onViewStatus }) {
   const [timedOut, setTimedOut] = useState(false);
   const [attempt, setAttempt] = useState(0);
   // Bumped by "Check again", which restarts the wait rather than reloading the
@@ -605,6 +619,20 @@ function ActivatingView({ plan, order, onActivated, onViewStatus }) {
     let cancelled = false;
     setTimedOut(false);
     const ticker = setInterval(() => { if (!cancelled) setAttempt(a => a + 1); }, 1000);
+
+    /* Fire the confirmation, then wait regardless of how it goes. Its answer
+       is never read as authority here -- the poll below asks the backend what
+       tier the founder is actually on, which is the same question it asked
+       before this endpoint existed. A rejected or failed confirm therefore
+       degrades to the webhook wait rather than to an error the founder can do
+       nothing about. */
+    if (callback?.razorpay_payment_id && order?.order_id) {
+      confirmPayment({
+        order_id: order.order_id,
+        razorpay_payment_id: callback.razorpay_payment_id,
+        razorpay_signature: callback.razorpay_signature,
+      }).catch(() => { /* the webhook is still coming */ });
+    }
 
     waitForPlanActivation(plan.id, { isCancelled: () => cancelled })
       .then((result) => {
@@ -634,9 +662,9 @@ function ActivatingView({ plan, order, onActivated, onViewStatus }) {
         <>
           <h2 className="bl-success-title">Payment received — activation is taking longer than usual</h2>
           <p className="bl-success-sub">
-            Your payment went through and nothing is lost. {plan.name} is activated
-            by our payment provider&apos;s confirmation, which is running late.
-            It usually lands within a few minutes.
+            Your payment went through and nothing is lost. {plan.name} is
+            activated once our payment provider confirms the charge, and that
+            confirmation is running late. It usually lands within a few minutes.
           </p>
         </>
       ) : (
@@ -733,7 +761,40 @@ function SuccessView({ plan, order, onViewStatus }) {
 ═══════════════════════════════════════════ */
 function StatusView({ onUpgrade, currentPlan }) {
   const [cancelModal, setCancelModal] = useState(false);
-  const plan = MOCK_PLANS.find(p => p.id === currentPlan) || MOCK_PLANS[1];
+  /* MOCK_PLANS lists the three PAID tiers, so `free` matches nothing -- and the
+     old fallback was `|| MOCK_PLANS[1]`, which is Plus at Rs 499. A founder who
+     had never paid a rupee opened this page and was told, with an Active badge
+     and a Cancel Plan button, that they were on Plus. Nothing here is a
+     subscription unless a paid tier matched. */
+  const plan = MOCK_PLANS.find(p => p.id === currentPlan) || null;
+
+  if (!plan) {
+    return (
+      <div className="bl-status-wrap stagger d1">
+        <div className="bl-status-header">
+          <div>
+            <div className="bl-section-label">Current Subscription</div>
+            <h2 className="bl-status-plan-name">Ally Free</h2>
+            <p className="bl-status-renew">
+              No paid plan yet. You are on the free tier.
+            </p>
+          </div>
+          <div className="bl-status-actions">
+            <button id="upgrade-plan-btn" className="bl-action-btn primary" onClick={onUpgrade}>
+              See plans
+            </button>
+          </div>
+        </div>
+
+        <div className="bl-invoice-section">
+          <div className="bl-section-label" style={{ marginBottom: 14 }}>Billing History</div>
+          <p className="dash-empty">
+            No invoices yet. Once billing is live, your receipts will appear here.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="bl-status-wrap stagger d1">
@@ -828,6 +889,11 @@ export default function Billing() {
   // success screens can quote the charged amount and order reference rather
   // than a price recomputed from the catalog.
   const [paidOrder, setPaidOrder] = useState(null);
+  // Razorpay's own success callback, forwarded to POST /payments/confirm so the
+  // backend can settle the payment with Razorpay immediately instead of the
+  // founder waiting out the webhook. Proof of nothing on its own — the backend
+  // verifies its signature and re-reads the payment before granting.
+  const [paidCallback, setPaidCallback] = useState(null);
   // Was hardcoded to 'starter' -- every founder, on any plan, saw Starter marked
   // "Current Plan" here regardless of what they actually pay for.
   const [currentPlan, setCurrentPlan] = useState(null);
@@ -843,19 +909,22 @@ export default function Billing() {
   const handleSelectPlan = plan => {
     setSelectedPlan(plan);
     setPaidOrder(null);
+    setPaidCallback(null);
     setView('checkout');
   };
 
   /* Razorpay reported a captured payment. That is NOT authority to show the
-     plan as active: the grant happens when the signed payment.captured webhook
-     reaches the backend, so this only moves to the screen that waits for it. */
-  const handlePaid = ({ plan, order }) => {
+     plan as active: the grant happens server-side, either from the founder's
+     confirmation being checked against Razorpay or from the signed webhook, so
+     this only moves to the screen that settles it. */
+  const handlePaid = ({ plan, order, callback }) => {
     setSelectedPlan(plan);
     setPaidOrder(order);
+    setPaidCallback(callback);
     setView('activating');
   };
 
-  /* The backend itself now reports the new tier — the webhook has landed. */
+  /* The backend itself now reports the new tier. */
   const handleActivated = (entitlements) => {
     if (entitlements?.tier) setCurrentPlan(entitlements.tier);
     setView('success');
@@ -902,6 +971,7 @@ export default function Billing() {
         <ActivatingView
           plan={selectedPlan}
           order={paidOrder}
+          callback={paidCallback}
           onActivated={handleActivated}
           onViewStatus={() => setView('status')}
         />

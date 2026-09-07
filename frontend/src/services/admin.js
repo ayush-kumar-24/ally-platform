@@ -47,6 +47,11 @@ export function updateUser(id, changes) {
   return patch(`/admin/users/${id}`, changes);
 }
 
+/** Put a founder on a plan by hand. `reason` is required by the API. */
+export function setPlan(id, tier, reason) {
+  return post(`/admin/users/${id}/plan`, { tier, reason });
+}
+
 export function changeStatus(id, status, reason) {
   return post(`/admin/users/${id}/status`, { status, reason });
 }

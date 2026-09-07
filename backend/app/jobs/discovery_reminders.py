@@ -36,7 +36,7 @@ from app.core.logger import logger
 def main() -> int:
     # Imported inside main so `--help`-style introspection and import of this
     # module never require a database or a configured environment.
-    from app.db.session import SessionLocal
+    from app.db.session import SessionLocal, set_admin_rls_context
     from app.services.discovery_notifications import send_due_reminders
 
     if not settings.email_enabled:
@@ -48,6 +48,22 @@ def main() -> int:
 
     db = SessionLocal()
     try:
+        # THIS JOB HAS NO FOUNDER AND WORKS ACROSS ALL OF THEM.
+        #
+        # `discovery_calls` and `founders` are both founder-scoped under row
+        # level security, whose policy is
+        # `founder_id = get_founder_id() OR app.current_admin`. A scheduled job
+        # has no founder identity to offer, so without this the query below
+        # matched NOTHING: every run found zero calls due, logged 1h=0, exited
+        # 0, and no founder was ever reminded of the call they paid for -- with
+        # a green hourly run saying everything was fine.
+        #
+        # Invisible in development, which connects as a BYPASSRLS superuser.
+        # Same fix, and the same reason, as the notification sweep and the
+        # internal job endpoints.
+        db.begin()
+        set_admin_rls_context(db)
+
         result = send_due_reminders(db)
         db.commit()
     except Exception as exc:
@@ -60,7 +76,6 @@ def main() -> int:
     logger.info(
         "discovery reminder job complete",
         extra={"path": (
-            f"24h={result.get('24h', 0)} "
             f"1h={result.get('1h', 0)} "
             f"skipped_opted_out={result.get('skipped_pref', 0)}"
         )},

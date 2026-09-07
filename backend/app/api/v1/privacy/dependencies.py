@@ -10,7 +10,7 @@ from app.api.v1.plans.dependencies import get_current_founder_id as _plans_get_c
 from app.core.container import container
 from app.db.session import get_db
 from app.models import Founder
-from app.privacy.errors import ProcessingRestrictedError
+from app.privacy.errors import DiagnosisConsentMissingError, ProcessingRestrictedError
 from app.privacy.service import PrivacyService
 
 
@@ -41,6 +41,26 @@ def require_ai_processing_allowed(
     """
     if not privacy.may_process(founder.founder_id):
         raise ProcessingRestrictedError(founder.founder_id)
+
+
+def require_diagnosis_consent(
+    founder: Founder = Depends(get_founder_record),
+    db: Session = Depends(get_db),
+) -> None:
+    """The founder actually agreed to have a diagnosis run on their answers.
+
+    DIFFERENT QUESTION FROM require_ai_processing_allowed, which asks whether
+    they have since restricted or withdrawn. This asks whether they ever said
+    yes -- and it fails closed, so no record means no diagnosis.
+
+    Applied only where a diagnosis is STARTED or ADVANCED. Reading a diagnosis
+    that already exists is not new processing and is not gated: a founder who
+    withdraws consent must still be able to see what was produced while they
+    had given it.
+    """
+    consents = container.consent_service(db)
+    if not consents.may_process_diagnosis_data(founder.founder_id):
+        raise DiagnosisConsentMissingError(founder.founder_id)
 
 
 def require_ai_processing_allowed_for_id(

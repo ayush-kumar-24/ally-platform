@@ -5,7 +5,6 @@
 .vis-page { padding: 18px 24px 64px; max-width: 1240px; margin: 0 auto; }
 
 .vis-head { margin-bottom: 22px; }
-.vis-kicker { font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--color-emerald, #10B981); margin-bottom: 8px; }
 .vis-head h1 { font-family: var(--font-display); font-size: clamp(26px, 3.2vw, 38px); line-height: 1.08; letter-spacing: -.02em; color: var(--color-forest, #1B4332); margin: 0 0 10px; }
 .vis-sub { font-size: 13.5px; line-height: 1.6; color: var(--color-muted-2, #6c7a70); max-width: 62ch; margin: 0 0 18px; }
 .vis-head-acts { display: flex; gap: 10px; flex-wrap: wrap; }
@@ -73,9 +72,20 @@
   font: inherit; font-weight: 500; font-size: 13.5px; padding: 10px 12px;
   border-radius: 10px; border: 1px solid var(--color-bd, #e7e0d6); background: #fff; color: var(--color-ink, #16241c);
   resize: vertical;
+  /* An <input> carries an intrinsic width of about twenty characters whether
+     you want it or not, and it does not shrink to its container on its own.
+     Two of them side by side were therefore wider than the modal. */
+  width: 100%;
+  min-width: 0;
 }
 .vt-field input:focus, .vt-field textarea:focus { outline: 2px solid rgba(16,185,129,.4); outline-offset: 1px; }
-.vt-field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+/* minmax(0, 1fr), NOT 1fr. A grid track's min size is `auto`, meaning it will
+   not shrink below the intrinsic width of what is inside it -- and an <input>
+   insists on roughly twenty characters. So two `1fr` columns holding inputs
+   came to more than the 396px of content width a 440px modal actually has, and
+   the row pushed the modal wider than the screen. minmax(0, 1fr) lets the
+   track shrink; the width:100% above makes the input follow it. */
+.vt-field-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
 @media (max-width: 480px) { .vt-field-row { grid-template-columns: 1fr; } }
 .vt-editor-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 4px; }
 
@@ -178,3 +188,111 @@
   font-size: 12.5px;
   color: #b91c1c;
 }
+
+/* ---------------------------------------------------------------------------
+   Motion.
+
+   The page arrives as a reading order, not all at once: kicker, headline, sub,
+   actions, then the six territories cascading across the grid, then the summary
+   row. Each step is small (10-14px) and the whole sequence is under a second --
+   the point is to guide the eye down the page on first paint, not to make the
+   founder wait for their own vision to appear.
+
+   `backwards` rather than `both` on every entrance. `both` would hold the
+   animation's final transform after it finished, which silently wins over
+   .vt-card:hover's own translateY and kills the lift. `backwards` applies the
+   from-state during the delay and then hands the element back to its normal
+   style, so hover works the moment the entrance ends.
+
+   The cascade is indexed off the GRID, not the DOM: at three columns
+   nth-child(4) starts the second row, so the delays read as a diagonal sweep.
+   The one-column breakpoint re-times them as a straight top-to-bottom run.
+--------------------------------------------------------------------------- */
+.vis-head h1,.vis-sub,.vis-head-acts{animation:vis-rise .5s cubic-bezier(.22,1,.36,1) backwards}
+.vis-head h1{animation-delay:.02s}
+.vis-sub{animation-delay:.09s}
+.vis-head-acts{animation-delay:.16s}
+
+.vt-card{animation:vis-card-in .52s cubic-bezier(.22,1,.36,1) backwards}
+.vt-card:nth-child(1){animation-delay:.26s}
+.vt-card:nth-child(2){animation-delay:.32s}
+.vt-card:nth-child(3){animation-delay:.38s}
+.vt-card:nth-child(4){animation-delay:.34s}
+.vt-card:nth-child(5){animation-delay:.40s}
+.vt-card:nth-child(6){animation-delay:.46s}
+@media (max-width:640px){
+  .vt-card:nth-child(4){animation-delay:.44s}
+  .vt-card:nth-child(5){animation-delay:.50s}
+  .vt-card:nth-child(6){animation-delay:.56s}
+}
+.vis-sum-box{animation:vis-rise .5s cubic-bezier(.22,1,.36,1) backwards}
+.vis-sum-box:nth-child(1){animation-delay:.52s}
+.vis-sum-box:nth-child(2){animation-delay:.58s}
+.vis-sum-box:nth-child(3){animation-delay:.64s}
+
+/* Hover is where the card stops being a static tile. The existing lift stays;
+   these add the detail that makes it feel responsive -- the icon tile warms and
+   nudges up, the label darkens toward the brand green, and the empty card's
+   "Add your vision" shifts right as if the cursor were pulling it. */
+.vt-ic{transition:transform .28s cubic-bezier(.22,1,.36,1),background-color .28s ease,color .28s ease}
+.vt-card:hover .vt-ic{transform:translateY(-1px) scale(1.08);background:rgba(16,185,129,.2);color:#0a5a45}
+.vt-label{transition:color .28s ease}
+.vt-card:hover .vt-label{color:#0b6a52}
+.vt-add{transition:transform .28s cubic-bezier(.22,1,.36,1)}
+.vt-card:hover .vt-add{transform:translateX(3px)}
+.vt-edit-ic{opacity:.55;transition:opacity .28s ease,transform .28s cubic-bezier(.22,1,.36,1)}
+.vt-card:hover .vt-edit-ic{opacity:1;transform:rotate(-8deg) scale(1.08)}
+/* The footer strip is always visible (see above), so hover only deepens it
+   rather than revealing it -- discoverability on touch is unchanged. */
+.vt-talk{transition:background-color .24s ease,color .24s ease}
+.vt-card:hover .vt-talk{background:rgba(16,185,129,.11)}
+
+/* GAP is the one dark card in the row and the only number on the page the
+   founder did not type. A slow sheen drifting across it marks it as the live
+   figure without adding another colour. 9s, and opacity-only so it composites. */
+.vis-sum-box.gap{position:relative;overflow:hidden;isolation:isolate}
+.vis-sum-box.gap::after{content:"";position:absolute;inset:-40% -60%;z-index:-1;pointer-events:none;
+  background:linear-gradient(115deg,transparent 42%,rgba(52,211,153,.14) 50%,transparent 58%);
+  animation:vis-sheen 9s ease-in-out infinite}
+.vis-sum-box:hover{transform:translateY(-2px)}
+.vis-sum-box{transition:transform .28s cubic-bezier(.22,1,.36,1)}
+
+@keyframes vis-rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+@keyframes vis-card-in{from{opacity:0;transform:translateY(14px) scale(.985)}to{opacity:1;transform:none}}
+@keyframes vis-sheen{0%,62%{transform:translateX(-45%);opacity:0}70%{opacity:.9}100%{transform:translateX(45%);opacity:0}}
+
+/* Entrances are the whole point of this block, so under reduce they are removed
+   outright rather than shortened -- the page simply renders finished. */
+@media (prefers-reduced-motion:reduce){
+  .vis-head h1,.vis-sub,.vis-head-acts,.vt-card,.vis-sum-box,
+  .vis-sum-box.gap::after{animation:none}
+  .vt-card:hover .vt-ic,.vt-card:hover .vt-edit-ic,.vt-card:hover .vt-add,
+  .vis-sum-box:hover{transform:none}
+}
+
+/* Reached territories.
+
+   The footer strip now carries two actions, so it becomes a row. "Mark
+   reached" is only rendered on a written vision -- the backend answers 404
+   for an unwritten one, and a card should not offer what the server will
+   refuse.
+
+   A reached card keeps its full colour, unlike a reached goal. A goal is work
+   in progress and dimming says "closed"; a vision is the thing the founder was
+   aiming at the whole time, and the moment they land it is the moment it should
+   look most like theirs. It gains a border and a tick, not a strikethrough. */
+.vt-foot { display: flex; align-items: stretch; border-top: 1px solid var(--color-bd, #e7e0d6); }
+.vt-foot .vt-talk { flex: 1; border-top: none; }
+.vt-reach {
+  display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0;
+  padding: 9px 13px; font-size: 11.5px; font-weight: 700; cursor: pointer;
+  color: var(--color-muted-2, #6c7a70);
+  background: none; border: none; border-left: 1px solid var(--color-bd, #e7e0d6);
+  transition: .22s cubic-bezier(.2,.7,.2,1);
+}
+.vt-reach svg { width: 13px; height: 13px; }
+.vt-reach:hover:not(:disabled) { color: #0b6a52; background: rgba(16,185,129,.08); }
+.vt-reach.on { color: #0b6a52; background: rgba(16,185,129,.14); }
+.vt-reach:disabled { cursor: not-allowed; opacity: .55; }
+.vt-card.is-reached { border-color: rgba(16,185,129,.45); }
+@media (prefers-reduced-motion: reduce) { .vt-reach { transition: none; } }

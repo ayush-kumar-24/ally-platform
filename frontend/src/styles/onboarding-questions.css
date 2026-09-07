@@ -260,6 +260,29 @@
   padding: 22px;
   outline: none;
   box-shadow: 0 24px 60px rgba(0, 0, 0, .45);
+
+  /* NEVER TALLER THAN THE WINDOW, AND SCROLLS WHEN IT WANTS TO BE.
+     There was no height cap and no overflow here, so a modal with more in it
+     than the viewport simply grew past the bottom of the screen -- and because
+     the overlay is `position: fixed`, the page behind it could not scroll
+     either. The Save and Cancel buttons went off-screen with no way to reach
+     them: the founder could fill the form in and then not submit it.
+     Reproduced on the Vision Board editor, which has a textarea, two inputs and
+     a picture well.
+
+     40px is the overlay's own 20px padding, top and bottom, so the panel stops
+     short of the edge rather than butting against it.
+
+     dvh, not vh: on mobile `100vh` is the viewport WITHOUT the browser's
+     address bar, so a modal sized to it is still cut off until the bar hides.
+     The vh line below is the fallback for anything that does not know dvh. */
+  max-height: calc(100vh - 40px);
+  max-height: calc(100dvh - 40px);
+  overflow-y: auto;
+  /* Momentum scrolling on iOS, and keeps the scroll inside the panel rather
+     than handing it to the page behind once it hits the end. */
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 .modal-head { display: flex; align-items: flex-start; gap: 12px; }
 .modal-title {
@@ -422,6 +445,8 @@
 .dash-feedback-open:hover { text-decoration: underline; }
 
 @media (max-width: 480px) {
+  /* The overlay keeps its 20px padding at this width, so the base rule's
+     max-height is already correct here. Only the panel's own padding changes. */
   .modal-panel { padding: 18px; border-radius: 15px; }
   .star { width: 34px; height: 34px; }
   .star svg { width: 22px; height: 22px; }

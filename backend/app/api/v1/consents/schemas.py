@@ -23,3 +23,7 @@ class ConsentCreate(BaseModel):
     # Separate, unbundled opt-in. Defaults to false so an omitted field can never
     # be read as consent.
     agree_diagnosis: bool = False
+    #: Required going forward. Optional in the schema so a client that has
+    #: not shipped the checkbox yet still records a consent rather than
+    #: failing sign-up outright -- the service is where it is enforced.
+    age_confirmed: bool | None = None

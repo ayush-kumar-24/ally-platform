@@ -1,13 +1,24 @@
-"""PaymentService -- start_checkout (founder-initiated) and handle_webhook
-(gateway-initiated, the only path that actually grants anything).
+"""PaymentService -- start_checkout, confirm_checkout and handle_webhook.
 
-Why the plan is granted from the webhook and not from the frontend's
-post-checkout redirect: the redirect is a browser navigation the founder's
-own client controls -- closing the tab loses it, and nothing stops a request
-forged straight at a "confirm payment" endpoint from claiming success it
-never earned. The webhook is server-to-server and signed with a secret only
-Razorpay and this backend hold; it is the only signal this service trusts
-enough to hand out a plan.
+Two things can cause a grant, and both settle the question with Razorpay
+rather than with the browser:
+
+  - `handle_webhook` -- Razorpay tells us, server-to-server, signed with the
+    webhook secret. Authoritative, and the only path that works when the
+    founder closes the tab, but it arrives when it arrives: delivery is
+    Razorpay's to schedule and routinely runs tens of seconds behind the
+    founder staring at "activating".
+  - `confirm_checkout` -- the founder's tab says "Razorpay's handler fired",
+    and this service goes and ASKS Razorpay whether that is true (a signature
+    check on the callback, then a read of the payment entity under the key
+    secret). The browser is the trigger, never the evidence: a forged call
+    fails the signature, and one that somehow did not would still be answered
+    by a payment Razorpay reports as uncaptured.
+
+What must never exist is a third path where the browser's claim alone grants
+anything. Both of these end in the same `_grant_for_captured` -- idempotent by
+`gateway_payment_id`, so whichever arrives second is a no-op and a plan is
+never granted, or credits added, twice.
 """
 
 from __future__ import annotations
@@ -21,7 +32,9 @@ from app.coupons.service import CouponService
 from app.credits.models import CreditOperation
 from app.credits.service import CreditService
 from app.payments.errors import (
+    InvalidCheckoutCallbackError,
     InvalidCheckoutError,
+    PaymentNotFoundError,
     InvalidWebhookSignatureError,
     PaymentGatewayUnavailableError,
     PaymentsNotConfiguredError,
@@ -116,6 +129,10 @@ class PaymentService:
         payment_id = self.repository.create_pending(
             founder_id=founder_id, amount_inr=charge_inr, currency=_CURRENCY,
             gateway="razorpay", gateway_order_id=order.order_id,
+            # What this payment buys, recorded where the price was decided.
+            # The gateway's notes carry it too, but those come back through
+            # the browser and are not authority for a grant.
+            plan_tier=tier.value,
             coupon_id=None,
             list_amount_inr=list_amount_inr if discount_inr else None,
             discount_inr=discount_inr or None,
@@ -148,7 +165,75 @@ class PaymentService:
             coupon_code=coupon.code if coupon is not None else None,
         )
 
-    # --- gateway-initiated: the only path that grants anything --------------
+    def confirm_checkout(self, founder_id: int, *, order_id: str, gateway_payment_id: str,
+                         signature: str | None = None) -> WebhookResult:
+        """Settle a just-completed checkout now instead of waiting on the webhook.
+
+        The founder's tab calls this the moment Razorpay's handler fires. It
+        does not shortcut anything the webhook checks -- it runs the identical
+        grant -- it only removes the wait for a delivery that is entirely
+        Razorpay's to schedule. The founder therefore stops staring at
+        "activating your plan" a round trip after paying rather than however
+        long the webhook happens to take.
+
+        Ownership is checked before anything is fetched: this endpoint is
+        reachable with a founder's own token, so an order id belonging to
+        someone else must look exactly like an order id that does not exist.
+        """
+        if self.gateway is None:
+            raise PaymentsNotConfiguredError()
+
+        payment = self.repository.get_by_gateway_order_id(order_id)
+        if payment is None or payment.founder_id != founder_id:
+            raise PaymentNotFoundError()
+
+        # The webhook may well have beaten us here -- that is the happy case,
+        # not an error, and it costs a Razorpay round trip to discover the
+        # hard way.
+        if payment.status == "success":
+            return WebhookResult(outcome=WebhookOutcome.ALREADY_PROCESSED,
+                                 payment_id=payment.payment_id, founder_id=payment.founder_id)
+
+        if signature and not self.gateway.verify_checkout_signature(
+            order_id=order_id, payment_id=gateway_payment_id, signature=signature
+        ):
+            logger.warning("payments: checkout callback signature verification failed",
+                           extra={"founder_id": founder_id, "gateway_order_id": order_id,
+                                  "gateway_payment_id": gateway_payment_id})
+            raise InvalidCheckoutCallbackError()
+
+        try:
+            entity = self.gateway.fetch_payment(gateway_payment_id)
+        except PaymentGatewayError as exc:
+            # Not a failure the founder should be shown as "payment failed":
+            # they have been charged, and the webhook is still coming. The
+            # caller falls back to polling.
+            logger.warning("payments: could not confirm payment with the gateway",
+                           extra={"founder_id": founder_id, "gateway_payment_id": gateway_payment_id,
+                                  "gateway_status": exc.status_code, "error": str(exc)})
+            raise PaymentGatewayUnavailableError() from exc
+
+        # The entity must be the one this order was created for. Without this,
+        # a founder could quote someone else's captured payment id against
+        # their own pending order.
+        if entity.get("order_id") != order_id:
+            logger.error("payments: confirm quoted a payment belonging to another order",
+                         extra={"founder_id": founder_id, "gateway_order_id": order_id,
+                                "entity_order_id": entity.get("order_id")})
+            raise PaymentNotFoundError()
+
+        if entity.get("status") != "captured":
+            # Authorised-but-not-captured, or still in flight. Nothing to grant
+            # yet and nothing wrong: the webhook will land when it lands.
+            logger.info("payments: confirm found the payment not yet captured",
+                        extra={"founder_id": founder_id, "gateway_payment_id": gateway_payment_id,
+                               "gateway_status": entity.get("status")})
+            return WebhookResult(outcome=WebhookOutcome.NOT_CAPTURED,
+                                 payment_id=payment.payment_id, founder_id=payment.founder_id)
+
+        return self._grant_for_captured(entity)
+
+    # --- gateway-initiated ---------------------------------------------------
 
     def handle_webhook(self, *, body: bytes, signature: str) -> WebhookResult:
         if self.gateway is None:
@@ -162,14 +247,20 @@ class PaymentService:
         entity = ((payload.get("payload") or {}).get("payment") or {}).get("entity") or {}
 
         if event == "payment.captured":
-            return self._handle_captured(entity)
+            return self._grant_for_captured(entity)
         if event == "payment.failed":
             return self._handle_failed(entity)
 
         logger.info("payments: webhook event not handled", extra={"event": event})
         return WebhookResult(outcome=WebhookOutcome.IGNORED_EVENT)
 
-    def _handle_captured(self, entity: dict[str, Any]) -> WebhookResult:
+    def _grant_for_captured(self, entity: dict[str, Any]) -> WebhookResult:
+        """The one grant, shared by the webhook and by confirm_checkout.
+
+        Both callers have established the same fact before reaching here --
+        Razorpay says this payment entity is captured -- so neither gets its
+        own version of "what a payment buys", and the idempotency check below
+        is what makes it safe for both to arrive."""
         gateway_payment_id = entity.get("id")
         gateway_order_id = entity.get("order_id")
 
@@ -188,14 +279,43 @@ class PaymentService:
                                 "gateway_payment_id": gateway_payment_id})
             return WebhookResult(outcome=WebhookOutcome.UNKNOWN_PAYMENT)
 
+        # WHAT THIS PAYMENT BUYS COMES FROM OUR OWN ROW, written when the order
+        # was priced -- never from the gateway's notes.
+        #
+        # It used to be the notes, on the premise (gateway.py) that Razorpay
+        # copies order notes onto the payment entity. The browser's Checkout
+        # options carry their own `notes` and ours sent `{plan_name: ...}`, so
+        # `plan_tier` was not on the entity at all: this branch refused the
+        # grant on every payment made through the widget. The founder was
+        # charged and given nothing, which is exactly what happened to the
+        # founder who paid Rs 999 and stayed on the Rs 199 plan.
+        #
+        # And notes are browser-supplied, so reading the tier from them meant
+        # the amount charged and the plan granted had different authorities:
+        # buy the cheapest tier, send `plan_tier: pro`, receive Pro.
         notes = entity.get("notes") or {}
-        tier_value = notes.get("plan_tier")
+        tier_value = payment.plan_tier
+        source = "payment row"
+        if not tier_value:
+            # Rows created before payments.plan_tier existed. Fall back so an
+            # in-flight checkout from the old build still completes, and say so
+            # loudly -- this path is temporary and unverifiable.
+            tier_value = notes.get("plan_tier")
+            source = "gateway notes (legacy payment row)"
+        elif notes.get("plan_tier") and notes["plan_tier"] != tier_value:
+            # Not fatal -- our row wins and the grant proceeds -- but a
+            # mismatch is either a gateway change or someone trying it on.
+            logger.error("payments: gateway notes disagree with the recorded plan tier",
+                         extra={"payment_id": payment.payment_id,
+                                "recorded": tier_value, "notes_tier": notes.get("plan_tier")})
+
         try:
             tier = PlanTier(tier_value)
             plan = PLANS[tier]
         except (ValueError, KeyError):
-            logger.error("payments: captured payment carries no recognisable plan_tier note",
-                         extra={"payment_id": payment.payment_id, "notes": notes})
+            logger.error("payments: captured payment names no recognisable plan tier",
+                         extra={"payment_id": payment.payment_id, "source": source,
+                                "tier_value": tier_value, "notes": notes})
             return WebhookResult(outcome=WebhookOutcome.UNKNOWN_PAYMENT,
                                  payment_id=payment.payment_id, founder_id=payment.founder_id)
 

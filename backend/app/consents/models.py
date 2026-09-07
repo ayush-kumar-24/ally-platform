@@ -40,3 +40,19 @@ class ConsentRecord:
 
     # Server-stamped. Never taken from the client -- see service.record_consent.
     consented_at: datetime
+
+    #: Did they confirm they are 18 or over? None for consents captured before
+    #: the question was asked -- "not asked", which is neither a yes we can rely
+    #: on nor a no they actually gave. Last because it is the only optional
+    #: field and a dataclass cannot put a defaulted field before a required one.
+    age_confirmed: bool | None = None
+
+    #: Where the consent came from, server-stamped like consented_at and never
+    #: taken from the request body. Part of demonstrating consent under GDPR
+    #: Art 7(1) / DPDP: a record that says only "they agreed" is weaker than one
+    #: that says where and when. None for consents captured before this existed,
+    #: and for any request that arrives without a resolvable address -- "not
+    #: recorded", never a guess.
+    #:
+    #: It is evidence, not identity: nothing anywhere authorizes on it.
+    ip_address: str | None = None

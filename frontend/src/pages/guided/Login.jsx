@@ -74,6 +74,10 @@ export default function Login() {
   const [showAuthTransition, setShowAuthTransition] = useState(false);
   const [agreeTerms, setAgreeTerms] = useState(false);
   const [agreeDiagnosis, setAgreeDiagnosis] = useState(false);
+  // The Terms already say "you confirm you are at least 18" -- this is what
+  // makes that sentence something the founder actually asserted, on a date,
+  // against a version, rather than a line in a document nobody must read.
+  const [ageConfirmed, setAgeConfirmed] = useState(false);
   const [validationError, setValidationError] = useState('');
   const [notice, setNotice] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -253,6 +257,10 @@ export default function Login() {
       setValidationError('Please agree to the Terms of Service and Privacy Policy to continue.');
       return;
     }
+    if (!ageConfirmed) {
+      setValidationError('Please confirm you are 18 or over to continue.');
+      return;
+    }
     inFlight.current = true;
     setSubmitting(true);
     setValidationError('');
@@ -263,7 +271,7 @@ export default function Login() {
        finishSignIn flushes it the moment a session appears. A 422 is different:
        the server rejected the consent itself (bad version, terms not accepted),
        and that must not be waved through. */
-    const choices = { agreeTerms: true, agreeDiagnosis };
+    const choices = { agreeTerms: true, agreeDiagnosis, ageConfirmed: true };
     try {
       await recordConsent(choices);
     } catch (err) {
@@ -383,6 +391,33 @@ export default function Login() {
         </span>
       </label>
 
+      {/* REQUIRED, like the terms box. DPDP treats a child's data as a
+          different category with verifiable-parental-consent obligations and
+          the Act's highest penalty band, so this is the one attestation that
+          must be made deliberately rather than inherited from a document. A
+          self-declaration is not verification -- it is the ordinary standard
+          for a B2B product, and it is a dated, stored, versioned record where
+          before there was nothing at all. */}
+      <label className="consent-item">
+        <input
+          type="checkbox"
+          id="consent-age"
+          required
+          aria-required="true"
+          aria-invalid={validationError && !ageConfirmed ? 'true' : undefined}
+          aria-describedby={validationError ? 'consent-error' : undefined}
+          checked={ageConfirmed}
+          disabled={submitting}
+          onChange={(e) => {
+            setAgeConfirmed(e.target.checked);
+            if (e.target.checked) setValidationError('');
+          }}
+        />
+        <span className="consent-text">
+          I confirm I am 18 years of age or older <span className="req">*</span>
+        </span>
+      </label>
+
       <label className="consent-item">
         <input
           type="checkbox"
@@ -411,7 +446,7 @@ export default function Login() {
         />
       )}
       <div className="j-inner">
-        <div className="j-avatar"><img src="/ally-logo.png" alt="" /></div>
+        <div className="j-avatar"><img src="/ally-logo-mark.png" alt="" /></div>
         <div className="j-eye"><span className="lv"></span> GoXL &middot; Ally</div>
         <h1 className="j-title">Meet Ally, your <em>Founder&rsquo;s Compass</em>.</h1>
         <p className="j-sub">Your founder journey starts here &mdash; sign in, and Ally will find your next move.</p>

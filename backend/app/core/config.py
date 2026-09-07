@@ -421,6 +421,13 @@ class Settings(BaseSettings):
         return [e.strip() for e in self.SUPPORT_ALERT_EMAILS.split(",") if e.strip()]
 
     # --- CORS ---
+    # Comma-separated. PRODUCTION MUST INCLUDE THE MARKETING SITE as well as
+    # the app: the landing page's help widget calls /support/public/ask from
+    # goxlally.ai, and a missing origin here fails as a browser CORS block --
+    # no server error, no log line, the widget just quietly falls back to its
+    # nine offline answers. Both the apex and www, because the site is reachable
+    # at both:
+    #   https://app.goxlally.ai,https://goxlally.ai,https://www.goxlally.ai
     CORS_ORIGINS: str = "http://localhost:3000"
 
     # --- PDF rendering (Gotenberg headless-Chromium sidecar) ---

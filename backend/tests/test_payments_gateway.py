@@ -131,3 +131,81 @@ def test_webhook_signature_fails_closed_with_no_secret_configured():
     body = b'{"event": "payment.captured"}'
     signature = hmac.new(b"anything", body, hashlib.sha256).hexdigest()
     assert gateway.verify_webhook_signature(body=body, signature=signature) is False
+
+
+# --- verify_checkout_signature ---------------------------------------------
+
+def _checkout_sig(order_id: str, payment_id: str, secret: bytes = b"test_secret") -> str:
+    return hmac.new(secret, f"{order_id}|{payment_id}".encode(), hashlib.sha256).hexdigest()
+
+
+def test_checkout_signature_accepts_razorpays_own_callback():
+    gateway = _gateway()
+    assert gateway.verify_checkout_signature(
+        order_id="order_1", payment_id="pay_1",
+        signature=_checkout_sig("order_1", "pay_1")) is True
+
+
+def test_checkout_signature_rejects_a_payment_id_swapped_in():
+    """The signature covers `order_id|payment_id` together: quoting a real
+    signature against a different payment must not verify."""
+    gateway = _gateway()
+    assert gateway.verify_checkout_signature(
+        order_id="order_1", payment_id="pay_someone_elses",
+        signature=_checkout_sig("order_1", "pay_1")) is False
+
+
+def test_checkout_signature_rejects_an_absent_signature():
+    gateway = _gateway()
+    assert gateway.verify_checkout_signature(
+        order_id="order_1", payment_id="pay_1", signature="") is False
+    assert gateway.verify_checkout_signature(
+        order_id="order_1", payment_id="pay_1", signature=None) is False
+
+
+def test_checkout_signature_is_signed_with_the_key_secret_not_the_webhook_secret():
+    """Razorpay signs the browser callback with the KEY secret and the webhook
+    body with the WEBHOOK secret. Confusing the two would either reject every
+    real callback or accept a forged one."""
+    gateway = _gateway(webhook_secret="whsec_test")
+    assert gateway.verify_checkout_signature(
+        order_id="order_1", payment_id="pay_1",
+        signature=_checkout_sig("order_1", "pay_1", b"whsec_test")) is False
+
+
+# --- fetch_payment -----------------------------------------------------------
+
+def test_fetch_payment_reads_the_entity_under_basic_auth():
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["url"] = str(request.url)
+        seen["auth"] = request.headers.get("authorization")
+        return httpx.Response(200, json={"id": "pay_1", "order_id": "order_1",
+                                         "status": "captured",
+                                         "notes": {"plan_tier": "starter"}})
+
+    entity = _gateway(handler).fetch_payment("pay_1")
+    assert seen["url"] == "https://api.razorpay.com/v1/payments/pay_1"
+    assert seen["auth"] is not None  # key id/secret, never sent to the browser
+    assert entity["status"] == "captured"
+    assert entity["notes"]["plan_tier"] == "starter"
+
+
+def test_fetch_payment_raises_on_an_unknown_payment():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, json={"error": {"code": "BAD_REQUEST_ERROR",
+                                                   "description": "id is not a valid id"}})
+
+    with pytest.raises(PaymentGatewayError) as exc:
+        _gateway(handler).fetch_payment("pay_nope")
+    assert exc.value.status_code == 400
+    assert "not a valid id" in (exc.value.gateway_message or "")
+
+
+def test_fetch_payment_raises_on_network_failure():
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("no route to host")
+
+    with pytest.raises(PaymentGatewayError):
+        _gateway(handler).fetch_payment("pay_1")

@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
+import { dailyTokenMeter, formatTokenMeter } from '../utils/planMeter';
 import QuoteCard from '../components/QuoteCard';
 import { completionPercent, loadDashboard, markTourSeen, relativeDay } from '../services/dashboard';
+import { planLabel as planLabelFor } from '../services/plans';
 import { loadVision } from '../services/vision';
 import { listGoals } from '../services/goals';
 import { getLatestReport, getRecommendations } from '../services/reports';
 import { DnaLoading } from '../components/DnaState';
 import FeedbackPrompt from '../components/FeedbackPrompt';
 import { FEEDBACK } from '../services/feedback';
-import { useCallAccess } from '../hooks/useCallAccess';
 import { greetingNow } from '../utils/helpers';
 import {
   IconArrowRight,
@@ -124,7 +125,6 @@ export default function Dashboard() {
   // null on failure" rule so one missing piece dims one section, not the page.
   const [compassExtra, setCompassExtra] = useState(null);
   // Every discovery-call surface on this page hangs off this one signal.
-  const { canBook: canBookCall } = useCallAccess();
 
   const load = useCallback(() => {
     setLoading(true);
@@ -205,11 +205,11 @@ export default function Dashboard() {
   };
 
   const plan = data?.plan;
-  const planLabel = plan?.plan_name ? `Ally ${plan.plan_name}` : 'Ally';
+  const planLabel = planLabelFor(plan?.tier, plan?.plan_name);
   const isFree = (plan?.tier ?? 'free') === 'free';
-  const tokenPct = plan?.daily_token_limit
-    ? Math.min(100, Math.round((plan.daily_tokens_used / plan.daily_token_limit) * 100))
-    : 0;
+  // Shared with the profile page so the two can never disagree; see
+  // utils/planMeter.js for why usage can legitimately read past the ceiling.
+  const meter = dailyTokenMeter(plan);
 
   // The onboarding banner is only truthful once the profile really is complete.
   // `show_tour` is the server's answer to "have they been offered this yet",
@@ -535,19 +535,12 @@ export default function Dashboard() {
           </div>
         </section>
 
-        {/* Discovery call is now the ONLY thing left in the left column (its
-            two siblings moved into the new Bottleneck/recent-conversation
-            sections above) -- when it's hidden, the left column would render
-            empty and the grid would leave a large blank gap on the left. */}
-        <section className={`dash-grid${(canBookCall || hasCall) ? '' : ' no-left-col'}`}>
+        {/* Discovery call is the ONLY thing left in the left column (its two
+            siblings moved into the new Bottleneck/recent-conversation sections
+            above), and booking is open to every founder, so the column always
+            has something in it. */}
+        <section className="dash-grid">
           <div className="dash-stack">
-            {/* Hidden entirely when they cannot book, EXCEPT when they already
-                have a call on the books -- an existing booking is theirs and
-                hiding it would be worse than advertising the feature. Hiding
-                beats an upsell slot here: the dashboard already carries a plan
-                card doing that job, and a second one turns the page into a
-                pitch. */}
-            {(canBookCall || hasCall) && (
             <section className="dash-section">
               <div className="dash-section-head">
                 <div className="dash-section-title">Upcoming discovery call</div>
@@ -590,7 +583,6 @@ export default function Dashboard() {
                 </div>
               )}
             </section>
-            )}
           </div>
 
           <div className="dash-stack">
@@ -612,10 +604,10 @@ export default function Dashboard() {
               <div className="dash-meter">
                 <div>
                   <div className="dash-meter-row">
-                    <span>Daily tokens</span>
-                    <b>{plan ? `${plan.daily_tokens_used} / ${plan.daily_token_limit}` : '—'}</b>
+                    <span>Daily tokens{meter.atLimit && <em className="meter-note">limit reached</em>}</span>
+                    <b>{plan ? formatTokenMeter(plan) : '—'}</b>
                   </div>
-                  <div className="dash-meter-bar"><i style={{ width: `${tokenPct}%` }} /></div>
+                  <div className={`dash-meter-bar${meter.atLimit ? ' is-full' : ''}`}><i style={{ width: `${meter.pct}%` }} /></div>
                 </div>
                 <div>
                   <div className="dash-meter-row">
@@ -623,24 +615,16 @@ export default function Dashboard() {
                     <b>{plan ? plan.credits_balance : '—'}</b>
                   </div>
                 </div>
-                {/* With no allowance left this row read "₹300 per call", which
-                    quotes a price for something the founder cannot actually buy
-                    -- there is no payment flow in the app yet. Quoting a price
-                    you cannot take is worse than saying nothing. */}
-                {canBookCall && (
+                {/* Named "Discovery call", not "Free discovery calls": no tier
+                    carries an allowance, so a count of what is left is a count
+                    of zero on every plan. What a founder actually needs here is
+                    the price. */}
                 <div>
                   <div className="dash-meter-row">
-                    <span>Free discovery calls</span>
-                    <b>
-                      {plan
-                        ? (plan.free_calls_remaining > 0
-                          ? `${plan.free_calls_remaining} left`
-                          : <span className="dash-upgrade">₹{plan.call_price_inr} per call</span>)
-                        : '—'}
-                    </b>
+                    <span>Discovery call</span>
+                    <b>{plan?.call_price_inr ? `₹${plan.call_price_inr} each` : '—'}</b>
                   </div>
                 </div>
-                )}
               </div>
               <div className="dash-plan-actions">
                 <button className="btn btn-em" type="button" onClick={() => navigate('/app/billing')}>

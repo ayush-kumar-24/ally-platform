@@ -276,3 +276,53 @@ def test_usage_summary_degrades_when_tables_are_missing():
     assert s.tokens_today == 0 and s.tokens_month == 0
     assert s.avg_tokens_per_request == 0.0
     assert s.estimated_cost_month_usd == 0.0
+
+
+# --- ChatGate.record() must not lose `source` -------------------------------
+#
+# `record()` accepted a `source` and dropped it on the way to
+# record_chat_usage, so every metered call landed on the default "chat"
+# counter whatever it asked for. The streaming path was passing
+# source="stream" and had been silently recorded as "chat" the whole time --
+# visible in production as a daily_token_usage table containing chat rows and
+# nothing else, despite two sources being in the code.
+#
+# The bug was benign only by accident: "chat" is the counter chat_gate checks,
+# so streamed tokens did land somewhere enforced. The moment a caller passes a
+# source that IS budgeted separately -- planning, with its own 7,700/day
+# ceiling -- silently banking it under chat spends the wrong allowance and
+# leaves the planning ceiling unenforceable.
+
+def test_chat_gate_record_forwards_source_to_the_right_counter():
+    from app.api.v1.plans.dependencies import ChatGate
+
+    usage = InMemoryUsageRepository()
+    service = build_entitlement_service(usage, clock=lambda: T0)
+    gate = ChatGate(founder_id=UID, tier=PlanTier.PRO.value, service=service,
+                    enforced=True, reconciliation=None)
+
+    gate.record(1_000, source="planning", reason="Plan Your Day")
+    gate.record(400)  # default: chat
+
+    day = T0.date()
+    assert usage.get_daily(UID, day, source="planning").tokens_used == 1_000
+    assert usage.get_daily(UID, day, source="chat").tokens_used == 400
+
+
+def test_streaming_records_against_the_counter_the_gate_checks():
+    """Streaming is chat, not a third budget.
+
+    chat_gate checks the "chat" counter, so a streamed reply recorded anywhere
+    else would be banked where nothing reads it -- the ceiling would stop
+    applying to every streamed message.
+    """
+    usage = InMemoryUsageRepository()
+    service = build_entitlement_service(usage, clock=lambda: T0)
+
+    from app.api.v1.plans.dependencies import ChatGate
+    gate = ChatGate(founder_id=UID, tier=PlanTier.PRO.value, service=service,
+                    enforced=True, reconciliation=None)
+    # Exactly what app/api/v1/chat/router.py's stream finaliser calls.
+    gate.record(2_500, reason="Ally chat (streamed)")
+
+    assert usage.get_daily(UID, T0.date(), source="chat").tokens_used == 2_500
