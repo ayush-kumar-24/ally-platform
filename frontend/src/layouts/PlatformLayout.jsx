@@ -71,7 +71,13 @@ const NAV_GROUPS = [
     ],
   },
   {
+    /* No heading over this group. It had one -- FOUNDER DIAGNOSIS -- but it
+       covers everything from the diagnosis to Plan Your Day and a discovery
+       call, so the words described the first two items and mislabelled the
+       rest. `label` is still the React key and is still what the collapsed
+       rail groups by; only the visible heading is gone. */
     label: 'FOUNDER DIAGNOSIS',
+    hideLabel: true,
     items: [
       /* Entry point first, then the pages it produces. "Adaptive diagnosis" is
          the thing a founder runs; Founder DNA and Business DNA are written
@@ -278,7 +284,9 @@ export default function PlatformLayout() {
         <nav className="sb-nav" aria-label="Sections">
           {NAV_GROUPS.map((group) => (
             <div key={group.label}>
-              <div className="sb-group">{group.label}</div>
+              {group.hideLabel
+                ? <div className="sb-gap" aria-hidden="true" />
+                : <div className="sb-group">{group.label}</div>}
               {group.items.map(({ path, tip, icon: Icon, label, badge, needsReport, needsCallAccess, comingSoon, lockTip }) => {
                 if (needsCallAccess && !canBookCall) return null;
                 const reportLocked = needsReport && !hasReport;
