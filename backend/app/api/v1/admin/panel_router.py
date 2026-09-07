@@ -62,6 +62,7 @@ from app.api.v1.admin.panel_schemas import (
     ConfirmRequest,
     CreditAdjustRequest,
     PrivacyRequestResolveRequest,
+    SetPlanRequest,
     StatusChangeRequest,
     SubscriptionUpdateRequest,
     UserUpdateRequest,
@@ -136,6 +137,20 @@ def update_user(founder_id: int, payload: UserUpdateRequest,
                 service=Depends(get_panel_service)) -> UserSummaryResponse:
     changes = payload.model_dump(exclude_unset=True, exclude_none=True)
     return UserSummaryResponse.from_domain(service.update_user(admin, founder_id, changes, ip=ip))
+
+
+@router.post("/users/{founder_id}/plan", response_model=UserSummaryResponse,
+             summary="Put a founder on a plan by hand")
+def set_plan(founder_id: int, payload: SetPlanRequest,
+             ip: str | None = Depends(client_ip),
+             admin: PanelAdmin = Depends(get_panel_admin),
+             service=Depends(get_panel_service)) -> UserSummaryResponse:
+    """The manual grant. Its own endpoint rather than a field on the PATCH
+    above: the profile update forbids unknown fields and never carried
+    plan_type, so before this there was no way to correct a founder's plan
+    from the panel at all -- only SQL against production."""
+    return UserSummaryResponse.from_domain(
+        service.set_plan(admin, founder_id, payload.tier, reason=payload.reason, ip=ip))
 
 
 @router.post("/users/{founder_id}/status", response_model=UserSummaryResponse,

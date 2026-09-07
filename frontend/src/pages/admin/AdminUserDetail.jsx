@@ -21,6 +21,7 @@ import {
   getUser,
   resetConversations,
   resetDiagnosis,
+  setPlan,
 } from '../../services/admin';
 import {
   ConfirmDialog,
@@ -52,6 +53,18 @@ function KV({ data, keys }) {
   );
 }
 
+/* Both names, deliberately. The tier id is what the database holds and what an
+   admin will see in logs and in the users list; the plan name is what the
+   founder was sold. Two of the four differ -- basic is "Starter", starter is
+   "Plus" -- and an admin picking from names alone would grant the wrong one.
+   Mirrors app/plans/catalog.py; the API validates against it regardless. */
+const PLAN_TIERS = [
+  { value: 'free', label: 'Free (free)' },
+  { value: 'basic', label: 'Starter — ₹199 (basic)' },
+  { value: 'starter', label: 'Plus — ₹499 (starter)' },
+  { value: 'pro', label: 'Pro — ₹999 (pro)' },
+];
+
 export default function AdminUserDetail() {
   const { id } = useParams();
   const { me } = useOutletContext();
@@ -71,6 +84,10 @@ export default function AdminUserDetail() {
   const [op, setOp] = useState('add');
   const [amount, setAmount] = useState('');
   const [reason, setReason] = useState('');
+
+  // Plan form
+  const [planTier, setPlanTier] = useState('');
+  const [planReason, setPlanReason] = useState('');
 
   const load = useCallback(() => {
     setLoading(true);
@@ -107,6 +124,26 @@ export default function AdminUserDetail() {
     }
   };
 
+  const submitPlan = (e) => {
+    e.preventDefault();
+    if (!planTier || !planReason.trim()) {
+      setFlash({ error: true, message: 'Plan and reason are both required.' });
+      return;
+    }
+    const label = PLAN_TIERS.find(t => t.value === planTier)?.label ?? planTier;
+    setDialog({
+      title: 'Change this founder\u2019s plan?',
+      // Named rather than implied: this grants or removes paid access without a
+      // payment, so the admin should see exactly which plan before confirming.
+      body: `They will be moved to ${label} immediately. No payment is taken and no
+             subscription record is written; the change is recorded in the audit log.`,
+      confirmLabel: 'Change plan',
+      run: () => run(() => setPlan(id, planTier, planReason.trim()),
+                     () => `Plan changed to ${label}.`)
+        .then(() => { setPlanTier(''); setPlanReason(''); }),
+    });
+  };
+
   const submitCredits = (e) => {
     e.preventDefault();
     if (!amount || !reason.trim()) {
@@ -140,6 +177,7 @@ export default function AdminUserDetail() {
   const canCredits = can(me, 'transfer_credits');
   const canSuspend = can(me, 'suspend_user');
   const canDelete = can(me, 'delete_user');
+  const canPlan = can(me, 'modify_subscription');
   const canResetDiag = can(me, 'reset_diagnosis');
   const canResetChat = can(me, 'reset_conversations');
   const balance = ledger?.balance ?? detail.credits?.balance ?? 0;
@@ -201,6 +239,34 @@ export default function AdminUserDetail() {
           <div className="adm-stat">{balance}</div>
           <p className="adm-muted">Current balance</p>
         </div>
+      </div>
+
+      {/* ── Plan ──
+          Its own panel rather than a button in Actions: it needs a plan, a
+          reason and the current value in view, which is a form, not a verb. */}
+      <div className="adm-panel">
+        <h2>Plan</h2>
+        <p className="adm-muted" style={{ marginTop: 0 }}>
+          Currently <strong>{detail.profile?.plan_type || 'free'}</strong>. Use this when a
+          payment captured but the plan did not land — the payment itself is not altered.
+        </p>
+        {canPlan ? (
+          <form className="adm-filters" onSubmit={submitPlan}>
+            <select className="adm-select" value={planTier}
+                    onChange={e => setPlanTier(e.target.value)} aria-label="Plan">
+              <option value="">Choose a plan…</option>
+              {PLAN_TIERS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+            </select>
+            <input className="adm-input adm-search" type="text" placeholder="Reason (required)"
+                   value={planReason} onChange={e => setPlanReason(e.target.value)}
+                   aria-label="Reason for the plan change" />
+            <button className="adm-btn adm-btn--primary" type="submit" disabled={busy}>
+              Change plan
+            </button>
+          </form>
+        ) : (
+          <p className="adm-muted">Your role cannot change plans.</p>
+        )}
       </div>
 
       {/* ── Credit ledger ── */}

@@ -25,6 +25,20 @@ class UserUpdateRequest(BaseModel):
     status: UserStatus | None = None
 
 
+class SetPlanRequest(BaseModel):
+    """Put a founder on a plan by hand.
+
+    `reason` is required and not merely accepted: this writes a founder's paid
+    access from the panel, and the audit row is worth nothing without the
+    sentence that says why.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    tier: str = Field(max_length=20)
+    reason: str = Field(min_length=3, max_length=500)
+
+
 class StatusChangeRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

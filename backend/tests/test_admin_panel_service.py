@@ -5,7 +5,12 @@ from itertools import count
 
 import pytest
 
-from app.admin.errors import AdminFounderNotFoundError, AdminForbiddenError, InvalidSearchError
+from app.admin.errors import (
+    AdminFounderNotFoundError,
+    AdminForbiddenError,
+    InvalidPlanTierError,
+    InvalidSearchError,
+)
 from app.admin.panel_audit import AuditRecorder, InMemoryPanelAuditRepository
 from app.admin.panel_service import AdminPanelService
 from app.admin.rbac import Capability, PanelRole, capabilities_for, has_capability
@@ -324,3 +329,47 @@ def test_subscription_expiry_is_persisted():
     result = s.update_subscription(SUPER, 1, expires_at=when)
     assert result["changes"]["expires_at"]["applied"] is True
     assert repo.expiry_for(1) == when
+
+
+# --- setting a plan by hand -------------------------------------------------
+
+
+def test_super_admin_can_put_a_founder_on_a_plan():
+    """The panel had no way to do this at all: the profile PATCH forbids
+    unknown fields and never carried plan_type, so a founder whose payment
+    captured without granting could only be fixed with SQL."""
+    service, _, audit = build([user(1, plan="basic")])
+
+    after = service.set_plan(SUPER, 1, "pro", reason="Paid Rs 999, grant did not land")
+
+    assert after.plan_type == "pro"
+    events, _ = audit.list(limit=10)
+    entry = events[0]                       # list() is newest-first
+    assert entry.action == "user.set_plan"
+    assert entry.old_value == "basic"
+    assert entry.new_value == "pro"
+    assert entry.reason == "Paid Rs 999, grant did not land"
+
+
+def test_setting_a_plan_needs_the_subscription_capability():
+    service, _, _ = build([user(1)])
+    for actor in (ADMIN, SUPPORT):
+        with pytest.raises(AdminForbiddenError):
+            service.set_plan(actor, 1, "pro", reason="because")
+
+
+def test_a_plan_the_catalog_does_not_have_is_refused():
+    """A typo must not write a plan_type nothing recognises -- the founder
+    would read as Free everywhere while the row looked set."""
+    service, repo, _ = build([user(1, plan="basic")])
+
+    with pytest.raises(InvalidPlanTierError):
+        service.set_plan(SUPER, 1, "prro", reason="typo")
+
+    assert repo.get_summary(1).plan_type == "basic"
+
+
+def test_setting_a_plan_on_a_founder_who_does_not_exist_is_a_404():
+    service, _, _ = build([user(1)])
+    with pytest.raises(AdminFounderNotFoundError):
+        service.set_plan(SUPER, 4242, "pro", reason="nobody")
