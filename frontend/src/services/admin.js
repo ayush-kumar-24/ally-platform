@@ -204,3 +204,35 @@ export function resolvePrivacyRequest(requestId, { status, processingNotes, reje
     ...(rejectionReason ? { rejection_reason: rejectionReason } : {}),
   });
 }
+
+// --- founder feedback + support -------------------------------------------
+//
+// Everything a founder writes to us lands in `founder_feedback`: the Feedback
+// page, star ratings, and — tagged `[Support request]` — anything sent from
+// Help & Support or the help widget.
+//
+// These endpoints existed with no UI calling them, so every bug report and
+// support message was stored correctly and read by nobody, while the product
+// told the founder "our team will get back to you by email".
+
+/** Ratings and written notes, newest first. `type` filters; omit for all. */
+export function listFounderFeedback({ type = null, limit = 100 } = {}) {
+  return get('/admin/founder-feedback', {
+    params: type ? { feedback_type: type, limit } : { limit },
+  });
+}
+
+/** Counts and average rating, for the summary strip. */
+export function founderFeedbackStats({ type = null } = {}) {
+  return get('/admin/founder-feedback/stats', {
+    params: type ? { feedback_type: type } : {},
+  });
+}
+
+/**
+ * Questions the help bot could not answer, grouped by question, most-asked
+ * first. This is the list of help answers worth writing next.
+ */
+export function listSupportMisses({ limit = 100 } = {}) {
+  return get('/admin/support-misses', { params: { limit } });
+}

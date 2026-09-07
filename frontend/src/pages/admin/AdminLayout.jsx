@@ -23,6 +23,7 @@ const LINKS = [
   // tier as seeing users, and hiding it from people who can read it but
   // not action it is how a request sits unnoticed for a month.
   { to: '/admin/privacy', label: 'Privacy', capability: 'view_users' },
+  { to: '/admin/feedback', label: 'Feedback', capability: 'view_users' },
   { to: '/admin/audit', label: 'Audit Log', capability: 'view_audit' },
   { to: '/admin/system', label: 'System', capability: 'view_users' },
 ];
