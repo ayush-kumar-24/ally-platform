@@ -82,6 +82,25 @@ def usage_day(moment: datetime) -> date:
     return moment.astimezone(_reset_zone()).date()
 
 
+def day_start(moment: datetime) -> datetime:
+    """The instant the metered day containing `moment` began, in UTC.
+
+    `usage_day` answers "which day is this?"; this answers "since when?", which
+    is what a `where created_at >= :since` needs. Both resolve the boundary
+    through `_reset_zone`, so a dashboard's "today" and a founder's allowance
+    roll over at the same moment -- 00:00 IST -- rather than the dashboard
+    resetting at 05:30 IST because it quietly used UTC midnight instead.
+
+    Naive datetimes are treated as UTC, for the same reason `usage_day` does.
+    """
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    zone = _reset_zone()
+    local_midnight = datetime.combine(
+        moment.astimezone(zone).date(), time.min, tzinfo=zone)
+    return local_midnight.astimezone(timezone.utc)
+
+
 def next_daily_reset(moment: datetime) -> datetime:
     """When the daily allowance rolls over -- returned to the user in the 429.
 

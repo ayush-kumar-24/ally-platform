@@ -14,6 +14,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 from app.admin.insights import LIVE_WINDOW, SqlAlchemyInsightsRepository
+from app.plans.usage import day_start
 
 NOW = datetime(2026, 9, 3, 12, 0, tzinfo=timezone.utc)
 
@@ -71,14 +72,24 @@ def test_active_7d_reads_within_seven_days():
     assert params["week_since"] == NOW - timedelta(days=7)
 
 
-def test_active_today_still_present_and_uses_start_of_day():
+def test_active_today_uses_the_local_business_day_not_utc_midnight():
+    """The boundary a founder's own daily allowance rolls over on.
+
+    UTC midnight is 05:30 IST, so the previous behaviour reported yesterday's
+    numbers until half past five in the morning and then dropped whatever
+    happened overnight. `day_start` is the same helper the metering code uses,
+    so the two can no longer disagree.
+    """
     db = FakeDb(value=5)
     metrics = SqlAlchemyInsightsRepository(db).metrics(NOW)
     today = _by_key(metrics, "active_today")
     assert today.value == 5
 
     sql, params = next(c for c in db.calls if c[1].get("since") is not None)
-    assert params["since"] == NOW.replace(hour=0, minute=0, second=0, microsecond=0)
+    assert params["since"] == day_start(NOW)
+    # 12:00 UTC on the 3rd is 17:30 IST on the 3rd; that day began at
+    # 00:00 IST == 18:30 UTC on the 2nd.
+    assert params["since"] == datetime(2026, 9, 2, 18, 30, tzinfo=timezone.utc)
 
 
 def test_live_now_and_active_7d_and_active_today_are_three_separate_windows():
@@ -105,3 +116,68 @@ def test_a_missing_last_active_column_degrades_that_one_card_not_the_dashboard()
     assert _by_key(metrics, "live_now").available is False
     assert _by_key(metrics, "active_7d").available is False
     assert _by_key(metrics, "total_users").available is True
+
+
+def test_revenue_is_captured_payments_not_subscription_list_price():
+    """`subscriptions` says what people are ON; `payments` says what was taken.
+
+    A plan granted by an admin or a 100%-off coupon writes a subscription and
+    no payment, so summing subscriptions reported revenue that never arrived.
+    """
+    db = FakeDb(value=4999)
+    metrics = SqlAlchemyInsightsRepository(db).metrics(NOW)
+
+    keys = {m.key for m in metrics}
+    assert {"revenue_today", "revenue_total"} <= keys
+    assert "revenue" not in keys, "the ambiguous single card is gone"
+
+    revenue_sql = [sql for sql, _ in db.calls if "amount_inr" in sql]
+    assert revenue_sql, "revenue must be measured"
+    for sql in revenue_sql:
+        assert "public.payments" in sql
+        assert "status = 'success'" in sql
+        assert "subscriptions" not in sql
+
+
+def test_revenue_today_is_bounded_by_the_local_day():
+    db = FakeDb(value=0)
+    SqlAlchemyInsightsRepository(db).metrics(NOW)
+    sql, params = next(c for c in db.calls
+                       if "amount_inr" in c[0] and "paid_at" in c[0])
+    assert params["since"] == day_start(NOW)
+
+
+def test_diagnosis_sessions_are_schema_qualified():
+    """`sessions` exists in both `public` (diagnosis) and `auth` (Supabase
+    logins). Unqualified, one search_path change counts logins as diagnoses."""
+    db = FakeDb(value=1)
+    SqlAlchemyInsightsRepository(db).metrics(NOW)
+    sql, _ = next(c for c in db.calls if "started_at" in c[0])
+    assert "public.sessions" in sql
+
+
+def test_a_query_that_runs_and_answers_null_is_not_reported_as_a_broken_table():
+    """avg(latency_ms) over a day with no calls is NULL, not a missing table.
+    Labelling it "source table unavailable" sends someone hunting a healthy
+    table."""
+    db = FakeDb(value=None)
+    metrics = SqlAlchemyInsightsRepository(db).metrics(NOW)
+
+    avg = _by_key(metrics, "avg_response_ms")
+    assert avg.available is False
+    assert avg.unavailable_reason == "no model calls yet today"
+
+    db_broken = FakeDb(raise_on={"latency_ms"})
+    broken = _by_key(SqlAlchemyInsightsRepository(db_broken).metrics(NOW),
+                     "avg_response_ms")
+    assert broken.unavailable_reason == "source table unavailable"
+
+
+def test_signups_and_paid_users_are_measured():
+    db = FakeDb(value=7)
+    metrics = SqlAlchemyInsightsRepository(db).metrics(NOW)
+    assert _by_key(metrics, "signups_today").value == 7
+    assert _by_key(metrics, "paid_users").value == 7
+
+    paid_sql = next(sql for sql, _ in db.calls if "plan_type" in sql)
+    assert "<> 'free'" in paid_sql

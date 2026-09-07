@@ -4,12 +4,23 @@
  * A card whose `available` is false renders "—" with a tooltip, never 0. Showing
  * ₹0 revenue when the payments table simply isn't readable would get acted on as
  * if it were real; "—" gets investigated instead.
+ *
+ * The numbers refresh themselves. A dashboard you have to press F5 on is a
+ * screenshot, and a screenshot of "Live now" is worthless — the whole point of
+ * that card is the last five minutes. Refreshes are quiet: the cards keep their
+ * current values while the next poll is in flight, so the page never blanks, and
+ * a poll that fails leaves the last good numbers on screen with a warning rather
+ * than replacing them with an error page. Polling stops while the tab is hidden
+ * and catches up the moment it comes back, so a tab left open overnight isn't
+ * hitting the API every 30 seconds for nobody.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useOutletContext } from 'react-router-dom';
 import { getMetrics, listUsers } from '../../services/admin';
 import { ErrorState, Loading } from './AdminUI';
+
+const REFRESH_MS = 30_000;
 
 function formatValue(m) {
   if (!m.available || m.value === null) return '—';
@@ -22,32 +33,80 @@ function formatValue(m) {
   return pretty;
 }
 
+function clockTime(date) {
+  return date.toLocaleTimeString('en-IN', {
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+  });
+}
+
 export default function AdminDashboard() {
   const { me } = useOutletContext();
   const [metrics, setMetrics] = useState([]);
   const [recent, setRecent] = useState([]);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [updatedAt, setUpdatedAt] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
+  // A failed *refresh* is not a failed page: the numbers on screen are still
+  // the numbers, they're just older than they should be.
+  const [staleReason, setStaleReason] = useState(null);
+  const inFlight = useRef(false);
 
-  const load = useCallback(() => {
-    setLoading(true);
-    setError(null);
-    Promise.all([
+  const load = useCallback((opts = {}) => {
+    const { silent = false } = opts;
+    // Overlapping polls would let an older response land after a newer one and
+    // walk the dashboard backwards.
+    if (inFlight.current) return Promise.resolve();
+    inFlight.current = true;
+    if (silent) setRefreshing(true);
+    else { setLoading(true); setError(null); }
+
+    return Promise.all([
       getMetrics(),
       listUsers({ page_size: 5, sort_by: 'created_at', descending: true }),
     ])
       .then(([m, users]) => {
         setMetrics(m.metrics ?? []);
         setRecent(users.items ?? []);
+        setUpdatedAt(new Date());
+        setStaleReason(null);
+        setError(null);
       })
-      .catch(setError)
-      .finally(() => setLoading(false));
+      .catch(err => {
+        if (silent) setStaleReason(err?.detail || err?.message || 'Refresh failed.');
+        else setError(err);
+      })
+      .finally(() => {
+        inFlight.current = false;
+        setRefreshing(false);
+        setLoading(false);
+      });
   }, []);
 
-  useEffect(load, [load]);
+  useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    let timer = null;
+    const stop = () => { if (timer) { clearInterval(timer); timer = null; } };
+    const start = () => { stop(); timer = setInterval(() => load({ silent: true }), REFRESH_MS); };
+
+    const onVisibility = () => {
+      if (document.hidden) {
+        stop();
+      } else {
+        // Whatever is on screen is at least one hidden interval stale.
+        load({ silent: true });
+        start();
+      }
+    };
+
+    if (!document.hidden) start();
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => { stop(); document.removeEventListener('visibilitychange', onVisibility); };
+  }, [load]);
 
   if (loading) return <Loading label="Loading dashboard…" />;
-  if (error) return <ErrorState error={error} onRetry={load} />;
+  if (error) return <ErrorState error={error} onRetry={() => load()} />;
 
   const unavailable = metrics.filter(m => !m.available);
 
@@ -57,6 +116,22 @@ export default function AdminDashboard() {
       <p className="adm-sub">
         Signed in as {me.email} — role <strong>{me.role.replace('_', ' ')}</strong>.
       </p>
+
+      <p className="adm-sub" aria-live="polite">
+        {updatedAt ? `Updated ${clockTime(updatedAt)}` : 'Updating…'}
+        {refreshing && ' · refreshing…'}
+        {' · auto-refreshes every 30s · '}
+        <button className="adm-btn adm-btn--sm" type="button"
+                onClick={() => load({ silent: true })} disabled={refreshing}>
+          Refresh now
+        </button>
+      </p>
+
+      {staleReason && (
+        <div className="adm-flash" role="status">
+          Showing the last good numbers — the most recent refresh failed ({staleReason}).
+        </div>
+      )}
 
       <div className="adm-grid">
         {metrics.map(m => (
@@ -79,8 +154,8 @@ export default function AdminDashboard() {
         <div className="adm-panel">
           <p className="adm-muted" style={{ margin: 0 }}>
             {unavailable.length} metric{unavailable.length === 1 ? '' : 's'} could not be
-            measured — the underlying tables are missing or unpopulated in this
-            environment. These show “—” rather than zero so they aren’t mistaken for real values.
+            measured — each card says why. These show “—” rather than zero so a
+            number nobody could actually measure isn’t mistaken for a real one.
           </p>
         </div>
       )}

@@ -11,6 +11,19 @@ confident `0`, an unavailable metric is returned as `None` with a reason, and th
 shows "—". A dashboard that displays ₹0 revenue when it simply cannot see the
 payments table is worse than one that admits it does not know: the first gets acted
 on, the second gets fixed.
+
+There are three outcomes, not two, and `_scalar` keeps them apart: the query
+could not run (missing table -> "source table unavailable"), it ran and
+answered NULL (nothing recorded yet -> a reason saying so), or it answered a
+number. Collapsing the middle case into the first is how a perfectly healthy
+`llm_call_log` gets reported as broken every morning before the first call.
+
+What "today" means
+------------------
+The local day, from `app.plans.usage.day_start` -- 00:00 IST by default, the
+same boundary a founder's daily allowance rolls over on. UTC midnight is 05:30
+IST, which made every "today" card disagree with metering by five and a half
+hours in both directions.
 """
 
 from __future__ import annotations
@@ -21,6 +34,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from sqlalchemy import text
+
+from app.plans.usage import day_start
 
 #: "Online right now" -- how stale a last-seen stamp can be and still count.
 #: Matches the write side's own throttle (app/core/auth/dependencies.py,
@@ -83,24 +98,34 @@ class SqlAlchemyInsightsRepository(InsightsRepository):
 
     # --- helpers ---------------------------------------------------------
 
-    def _scalar(self, sql: str, params: dict | None = None):
-        """Run a scalar query, returning None if the source is unavailable.
+    def _scalar(self, sql: str, params: dict | None = None) -> tuple[bool, Any]:
+        """Run a scalar query. Returns `(ran, value)`.
 
         A missing table is a real possibility across environments; it must degrade
-        one card, not blow up the whole dashboard.
+        one card, not blow up the whole dashboard -- so a failure answers
+        `(False, None)`.
+
+        The pair exists because a query that RAN and answered NULL is a different
+        fact from one that could not run: `avg(latency_ms)` over a day with no
+        calls yet is NULL, and reporting that as "source table unavailable" sends
+        someone looking for a broken table that is fine. `(True, None)` says
+        "nothing to measure yet", and the caller labels it as such.
         """
         try:
-            return self.db.execute(text(sql), params or {}).scalar()
+            return True, self.db.execute(text(sql), params or {}).scalar()
         except Exception:
             self.db.rollback()
-            return None
+            return False, None
 
     def _metric(self, key: str, label: str, sql: str, params: dict | None = None,
-                unit: str = "") -> Metric:
-        value = self._scalar(sql, params)
-        if value is None:
+                unit: str = "", empty_reason: str = "no data recorded yet") -> Metric:
+        ran, value = self._scalar(sql, params)
+        if not ran:
             return Metric(key=key, label=label, value=None, unit=unit,
                           unavailable_reason="source table unavailable")
+        if value is None:
+            return Metric(key=key, label=label, value=None, unit=unit,
+                          unavailable_reason=empty_reason)
         return Metric(key=key, label=label, value=value, unit=unit)
 
     def _rows(self, sql: str, params: dict | None = None) -> list[dict]:
@@ -114,41 +139,86 @@ class SqlAlchemyInsightsRepository(InsightsRepository):
     # --- metrics ---------------------------------------------------------
 
     def metrics(self, now: datetime) -> list[Metric]:
-        day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        p = {"since": day_start}
+        """Every card, measured at `now`.
+
+        "Today" is the LOCAL day (00:00 IST by default -- see
+        `app.plans.usage.day_start`), not UTC midnight. These cards sit next to
+        a founder's own daily allowance, which has always rolled over at 00:00
+        IST; a dashboard on UTC midnight disagreed with it by 5h30m, so between
+        midnight and 05:30 IST every "today" card still reported yesterday's
+        numbers, and after 05:30 it silently dropped whatever happened in that
+        window. Both are wrong for a product whose users are in India.
+
+        Tables are schema-qualified. `sessions` in particular exists in BOTH
+        `public` (diagnosis sessions -- what this counts) and `auth` (Supabase's
+        own login sessions), so an unqualified name is one search_path away
+        from counting logins as diagnoses.
+        """
+        since = day_start(now)
+        p = {"since": since}
         return [
             self._metric("total_users", "Total users",
-                         "select count(*) from founders"),
+                         "select count(*) from public.founders"),
             # Admin Panel proposal gap #2 ("no live-user view"): `last_active_at`
-            # is now stamped on every request (app/core/auth/dependencies.py,
-            # `record_last_active`) -- before that write existed, this query ran
-            # fine and always answered 0, which is why the card read as
-            # permanently blank rather than as an honest "unavailable".
+            # is now stamped on every authenticated request
+            # (app/core/auth/dependencies.py, `record_last_active`) -- before that
+            # write existed, this query ran fine and always answered 0, which is
+            # why the card read as permanently blank rather than as an honest
+            # "unavailable". Founders who have not signed in since that write
+            # shipped still have a NULL stamp, so these three fill in as people
+            # return rather than being backfillable.
             self._metric("live_now", "Live now",
-                         "select count(*) from founders where last_active_at >= :live_since",
+                         "select count(*) from public.founders "
+                         "where last_active_at >= :live_since",
                          {"live_since": now - LIVE_WINDOW}),
             self._metric("active_today", "Active today",
-                         "select count(*) from founders where last_active_at >= :since", p),
+                         "select count(*) from public.founders "
+                         "where last_active_at >= :since", p),
             self._metric("active_7d", "Active last 7 days",
-                         "select count(*) from founders where last_active_at >= :week_since",
+                         "select count(*) from public.founders "
+                         "where last_active_at >= :week_since",
                          {"week_since": now - timedelta(days=7)}),
+            self._metric("signups_today", "Signups today",
+                         "select count(*) from public.founders "
+                         "where created_at >= :since", p),
             self._metric("diagnoses_today", "Diagnoses today",
-                         "select count(*) from sessions where started_at >= :since", p),
+                         "select count(*) from public.sessions "
+                         "where started_at >= :since", p),
             self._metric("credits_used_today", "Credits used today",
-                         """select coalesce(abs(sum(amount)), 0) from credit_transactions
+                         """select coalesce(abs(sum(amount)), 0)
+                              from public.credit_transactions
                              where created_at >= :since and amount < 0""", p),
-            self._metric("revenue", "Revenue (₹)",
-                         """select coalesce(sum(amount_inr), 0) from subscriptions
-                             where status = 'active'""", unit="₹"),
+            # Revenue is money that actually arrived: `payments` rows the
+            # Razorpay webhook marked 'success'. It used to sum `subscriptions`,
+            # which is a statement of what people are ON, not what was
+            # collected -- and which is written only by that same webhook, so
+            # any plan granted by an admin or a 100%-off coupon inflated
+            # "revenue" by its list price without a rupee being taken.
+            self._metric("revenue_today", "Revenue today",
+                         """select coalesce(sum(amount_inr), 0) from public.payments
+                             where status = 'success' and paid_at >= :since""",
+                         p, unit="₹"),
+            self._metric("revenue_total", "Revenue (all time)",
+                         """select coalesce(sum(amount_inr), 0) from public.payments
+                             where status = 'success'""", unit="₹"),
+            # Sits next to revenue deliberately: paid founders with zero
+            # captured revenue is the signature of plans granted outside
+            # checkout (or of a webhook that never landed), and the two cards
+            # only tell that story side by side.
+            self._metric("paid_users", "Paid users",
+                         "select count(*) from public.founders "
+                         "where coalesce(plan_type, 'free') <> 'free'"),
             self._metric("api_cost", "API cost today",
-                         """select coalesce(sum(estimated_cost_usd), 0) from llm_call_log
+                         """select coalesce(sum(estimated_cost_usd), 0)
+                              from public.llm_call_log
                              where created_at >= :since""", p, unit="$"),
             self._metric("active_chats", "Active chats",
-                         """select count(*) from conversations
+                         """select count(*) from public.conversations
                              where updated_at >= :since""", p),
             self._metric("avg_response_ms", "Avg response time",
-                         """select round(avg(latency_ms)) from llm_call_log
-                             where created_at >= :since""", p, unit="ms"),
+                         """select round(avg(latency_ms)) from public.llm_call_log
+                             where created_at >= :since""", p, unit="ms",
+                         empty_reason="no model calls yet today"),
         ]
 
     # --- timeline --------------------------------------------------------
