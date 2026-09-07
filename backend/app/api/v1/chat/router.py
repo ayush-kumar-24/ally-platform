@@ -171,7 +171,12 @@ def metered_stream(events, gate: ChatGate):
             yield event
     finally:
         if tokens:
-            gate.record(tokens, source="stream", reason="Ally chat (streamed)")
+            # NOT source="stream". `source` selects an independently budgeted
+            # counter (chat vs planning), not a transport: chat_gate checks the
+            # "chat" counter, so recording streamed replies anywhere else would
+            # bank them where nothing reads them and leave the ceiling
+            # unenforceable for every streamed message. Streaming is chat.
+            gate.record(tokens, reason="Ally chat (streamed)")
 
 
 # --- conversations ----------------------------------------------------------
