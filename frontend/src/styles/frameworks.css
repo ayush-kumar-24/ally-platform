@@ -116,24 +116,36 @@
 a.fw-card-link {
   text-decoration: none;
   color: inherit;
-  transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease;
+  transition: transform .16s ease, box-shadow .16s ease,
+              border-color .16s ease, background-color .16s ease;
 }
 a.fw-card-link:hover {
   /* The "pops up a little" the brief asked for. 4px with a soft shadow reads
-     as the card lifting off the page; 1-2px reads as a rendering wobble. */
+     as the card lifting off the page; 1-2px reads as a rendering wobble.
+
+     The green is not a new one. Emerald at 8% over ivory, with the border at
+     40%, is what every other hoverable card on a light surface in Ally already
+     uses (.ac-pcard:hover, .fp-choice.on in platform.css). Picking a fresh
+     green here would make hover mean two different things in one product. */
   transform: translateY(-4px);
-  border-color: var(--color-accent, #10B981);
+  background-color: rgba(16, 185, 129, .08);
+  border-color: rgba(16, 185, 129, .4);
   box-shadow: 0 12px 28px rgba(16, 24, 20, .10);
 }
 
 /* Anyone who has asked their system not to animate gets the colour change and
    the shadow, without the movement. */
 @media (prefers-reduced-motion: reduce) {
-  a.fw-card-link { transition: border-color .16s ease, box-shadow .16s ease; }
+  a.fw-card-link {
+    transition: border-color .16s ease, box-shadow .16s ease,
+                background-color .16s ease;
+  }
   a.fw-card-link:hover { transform: none; }
 }
+/* --color-accent is not a token this app defines -- only the fallback was ever
+   rendering. Named the real one. */
 a.fw-card-link:focus-visible {
-  outline: 2px solid var(--color-accent, #10B981);
+  outline: 2px solid var(--color-emerald, #10B981);
   outline-offset: 2px;
 }
 
@@ -163,7 +175,7 @@ a.fw-card-link:focus-visible {
   transition: color .16s ease, background .16s ease, border-color .16s ease;
 }
 .fw-tab:hover { color: var(--color-ink, #16241c); border-color: var(--color-muted-2, #6c7a70); }
-.fw-tab:focus-visible { outline: 2px solid var(--color-accent, #10B981); outline-offset: 2px; }
+.fw-tab:focus-visible { outline: 2px solid var(--color-emerald, #10B981); outline-offset: 2px; }
 
 .fw-tab.is-active {
   color: #fff;

@@ -1,16 +1,17 @@
 /**
  * data/watch.js — the three tabs under "Things to watch".
  *
- * NO INVENTED DESCRIPTIONS. Every field here is a fact taken from the source
- * list: the episode title, the show, the host where credited, and the date it
- * published. Nobody at GoXL has written a "why you should watch this" for these
- * yet, and inventing one for thirty episodes would put an opinion in a
- * founder's way that nobody actually holds. Most of these titles already say
- * what the episode is -- "He spent $0 on marketing for 2 years, then raised
- * $400M" needs no help from us.
+ * NO DESCRIPTIONS, BY DECISION -- NOT BY OMISSION. Written descriptions for all
+ * thirty do exist (ally-podcast-episodes-annotated.md, 7 Sep 2026), but they
+ * were written for the RAG corpus: they say what a chunk contributes to Ally's
+ * diagnosis, and several read as internal notes rather than as a
+ * recommendation. Aarya looked at the cards without them on 8 Sep and kept them
+ * that way. The titles carry it -- "He spent $0 on marketing for 2 years, then
+ * raised $400M" needs no help from us.
  *
- * When somebody has actually listened to one, add a `why`. The card renders it
- * when present and looks right without it.
+ * So every field here is a fact off the source list: title, show, host where
+ * credited, publish date. If somebody later writes a founder-facing line for
+ * one, add a `why`; the card renders it when present and looks right without.
  *
  * LINKS GO TO SOMEWHERE A FOUNDER CAN LISTEN, which is not always the same URL
  * the transcript came from. Where the source list gave both a publisher page
