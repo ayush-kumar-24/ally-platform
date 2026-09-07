@@ -63,6 +63,12 @@ class PaymentGateway(Protocol):
 
     def verify_webhook_signature(self, *, body: bytes, signature: str) -> bool: ...
 
+    def verify_checkout_signature(
+        self, *, order_id: str, payment_id: str, signature: str
+    ) -> bool: ...
+
+    def fetch_payment(self, payment_id: str) -> dict: ...
+
 
 def _error_description(resp: httpx.Response) -> str | None:
     """Razorpay's error body is `{"error": {"code": ..., "description": ...}}`.
@@ -84,16 +90,14 @@ class RazorpayGateway:
     an unsigned or wrongly-signed payload must never be trusted as "payment
     succeeded".
 
-    There is deliberately no checkout-callback signature check here. Razorpay
-    also signs `order_id|payment_id` with the key secret for the browser
-    callback, and this class used to verify it, but nothing ever called that
-    method: the plan is granted from the signed webhook alone (see
-    PaymentService.handle_webhook's own note), and the browser callback is
-    treated as a hint about what to show the founder, never as authority.
-    Verifying a signature whose verdict changes nothing is a check in name
-    only -- it invites a later caller to mistake it for the authority it
-    is not. Should a genuine use appear (say, telling a returning founder
-    whether the attempt they just made looked real), reinstate it there.
+    `verify_checkout_signature` and `fetch_payment` exist for the second,
+    founder-initiated confirmation path (PaymentService.confirm_checkout).
+    Neither makes the browser authoritative: the signature only proves the
+    callback this tab is quoting really came from Razorpay for this order,
+    and the *grant* still hangs on `fetch_payment` -- a server-to-server read
+    of Razorpay's own payment entity, authenticated with the key secret. A
+    founder who forges a callback gets a signature failure; one who somehow
+    forges past that gets a fetch that says the payment is not captured.
     """
 
     def __init__(
@@ -159,3 +163,45 @@ class RazorpayGateway:
             return False
         expected = hmac.new(self.webhook_secret.encode(), body, hashlib.sha256).hexdigest()
         return hmac.compare_digest(expected, signature or "")
+
+    def verify_checkout_signature(
+        self, *, order_id: str, payment_id: str, signature: str
+    ) -> bool:
+        """Razorpay's Checkout.js handler signature: HMAC-SHA256 of
+        `order_id|payment_id` under the KEY secret (not the webhook secret).
+
+        It proves the callback the browser is quoting was minted by Razorpay
+        for this order -- nothing more. It is not on its own permission to
+        grant a plan: `fetch_payment` below is what settles that.
+        """
+        if not order_id or not payment_id:
+            return False
+        expected = hmac.new(
+            self.key_secret.encode(), f"{order_id}|{payment_id}".encode(), hashlib.sha256
+        ).hexdigest()
+        return hmac.compare_digest(expected, signature or "")
+
+    def fetch_payment(self, payment_id: str) -> dict:
+        """Read one payment entity straight from Razorpay.
+
+        This is the authoritative answer to "did this actually get captured?"
+        -- a server-to-server call under the key secret, with the same shape of
+        entity (`id`, `order_id`, `status`, `notes`) the webhook delivers, so
+        one grant path can serve both.
+        """
+        try:
+            resp = self._client.get(f"/payments/{payment_id}")
+            resp.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            status_code = exc.response.status_code
+            gateway_message = _error_description(exc.response)
+            raise PaymentGatewayError(
+                f"razorpay: payment fetch failed: HTTP {status_code}"
+                + (f": {gateway_message}" if gateway_message else ""),
+                status_code=status_code, gateway_message=gateway_message,
+            ) from exc
+        except httpx.HTTPError as exc:
+            raise PaymentGatewayError(f"razorpay: payment fetch failed: {exc}") from exc
+
+        data = resp.json()
+        return data if isinstance(data, dict) else {}

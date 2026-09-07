@@ -178,3 +178,85 @@
   font-size: 12.5px;
   color: #b91c1c;
 }
+
+/* ---------------------------------------------------------------------------
+   Motion.
+
+   The page arrives as a reading order, not all at once: kicker, headline, sub,
+   actions, then the six territories cascading across the grid, then the summary
+   row. Each step is small (10-14px) and the whole sequence is under a second --
+   the point is to guide the eye down the page on first paint, not to make the
+   founder wait for their own vision to appear.
+
+   `backwards` rather than `both` on every entrance. `both` would hold the
+   animation's final transform after it finished, which silently wins over
+   .vt-card:hover's own translateY and kills the lift. `backwards` applies the
+   from-state during the delay and then hands the element back to its normal
+   style, so hover works the moment the entrance ends.
+
+   The cascade is indexed off the GRID, not the DOM: at three columns
+   nth-child(4) starts the second row, so the delays read as a diagonal sweep.
+   The one-column breakpoint re-times them as a straight top-to-bottom run.
+--------------------------------------------------------------------------- */
+.vis-kicker,.vis-head h1,.vis-sub,.vis-head-acts{animation:vis-rise .5s cubic-bezier(.22,1,.36,1) backwards}
+.vis-kicker{animation-delay:.02s}
+.vis-head h1{animation-delay:.08s}
+.vis-sub{animation-delay:.15s}
+.vis-head-acts{animation-delay:.22s}
+
+.vt-card{animation:vis-card-in .52s cubic-bezier(.22,1,.36,1) backwards}
+.vt-card:nth-child(1){animation-delay:.26s}
+.vt-card:nth-child(2){animation-delay:.32s}
+.vt-card:nth-child(3){animation-delay:.38s}
+.vt-card:nth-child(4){animation-delay:.34s}
+.vt-card:nth-child(5){animation-delay:.40s}
+.vt-card:nth-child(6){animation-delay:.46s}
+@media (max-width:640px){
+  .vt-card:nth-child(4){animation-delay:.44s}
+  .vt-card:nth-child(5){animation-delay:.50s}
+  .vt-card:nth-child(6){animation-delay:.56s}
+}
+.vis-sum-box{animation:vis-rise .5s cubic-bezier(.22,1,.36,1) backwards}
+.vis-sum-box:nth-child(1){animation-delay:.52s}
+.vis-sum-box:nth-child(2){animation-delay:.58s}
+.vis-sum-box:nth-child(3){animation-delay:.64s}
+
+/* Hover is where the card stops being a static tile. The existing lift stays;
+   these add the detail that makes it feel responsive -- the icon tile warms and
+   nudges up, the label darkens toward the brand green, and the empty card's
+   "Add your vision" shifts right as if the cursor were pulling it. */
+.vt-ic{transition:transform .28s cubic-bezier(.22,1,.36,1),background-color .28s ease,color .28s ease}
+.vt-card:hover .vt-ic{transform:translateY(-1px) scale(1.08);background:rgba(16,185,129,.2);color:#0a5a45}
+.vt-label{transition:color .28s ease}
+.vt-card:hover .vt-label{color:#0b6a52}
+.vt-add{transition:transform .28s cubic-bezier(.22,1,.36,1)}
+.vt-card:hover .vt-add{transform:translateX(3px)}
+.vt-edit-ic{opacity:.55;transition:opacity .28s ease,transform .28s cubic-bezier(.22,1,.36,1)}
+.vt-card:hover .vt-edit-ic{opacity:1;transform:rotate(-8deg) scale(1.08)}
+/* The footer strip is always visible (see above), so hover only deepens it
+   rather than revealing it -- discoverability on touch is unchanged. */
+.vt-talk{transition:background-color .24s ease,color .24s ease}
+.vt-card:hover .vt-talk{background:rgba(16,185,129,.11)}
+
+/* GAP is the one dark card in the row and the only number on the page the
+   founder did not type. A slow sheen drifting across it marks it as the live
+   figure without adding another colour. 9s, and opacity-only so it composites. */
+.vis-sum-box.gap{position:relative;overflow:hidden;isolation:isolate}
+.vis-sum-box.gap::after{content:"";position:absolute;inset:-40% -60%;z-index:-1;pointer-events:none;
+  background:linear-gradient(115deg,transparent 42%,rgba(52,211,153,.14) 50%,transparent 58%);
+  animation:vis-sheen 9s ease-in-out infinite}
+.vis-sum-box:hover{transform:translateY(-2px)}
+.vis-sum-box{transition:transform .28s cubic-bezier(.22,1,.36,1)}
+
+@keyframes vis-rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+@keyframes vis-card-in{from{opacity:0;transform:translateY(14px) scale(.985)}to{opacity:1;transform:none}}
+@keyframes vis-sheen{0%,62%{transform:translateX(-45%);opacity:0}70%{opacity:.9}100%{transform:translateX(45%);opacity:0}}
+
+/* Entrances are the whole point of this block, so under reduce they are removed
+   outright rather than shortened -- the page simply renders finished. */
+@media (prefers-reduced-motion:reduce){
+  .vis-kicker,.vis-head h1,.vis-sub,.vis-head-acts,.vt-card,.vis-sum-box,
+  .vis-sum-box.gap::after{animation:none}
+  .vt-card:hover .vt-ic,.vt-card:hover .vt-edit-ic,.vt-card:hover .vt-add,
+  .vis-sum-box:hover{transform:none}
+}

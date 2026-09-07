@@ -1,14 +1,23 @@
 """Founder-facing payments endpoints.
 
     POST /payments/checkout           start a Razorpay order for a paid plan
+    POST /payments/confirm            settle a just-paid order without waiting
+                                      for the webhook
     POST /payments/coupons/validate   price a discount code before committing
 
-This is the only payments endpoint a founder's own token can reach: nothing
-here grants a plan. `POST /payments/checkout` only ever creates a *pending*
-payment and hands back what the frontend needs to open Razorpay's Checkout.js
-widget -- the plan itself is granted by the signed webhook
-(app/api/v1/webhooks/razorpay.py), never from anything a founder's browser
-can claim on its own.
+`POST /payments/checkout` only ever creates a *pending* payment and hands back
+what the frontend needs to open Razorpay's Checkout.js widget.
+
+`POST /payments/confirm` is reachable with a founder's own token and can end in
+a plan grant, which makes it worth being precise about: it grants nothing the
+browser tells it. The request is a TRIGGER -- "Razorpay's handler just fired
+for this order" -- and the service answers it by asking Razorpay directly
+(callback signature under the key secret, then a server-to-server read of the
+payment entity). What it buys is time: without it the founder watches an
+"activating" spinner for as long as the webhook takes to arrive, which is
+Razorpay's schedule and not ours. The signed webhook
+(app/api/v1/webhooks/razorpay.py) remains the path that works when the founder
+closes the tab, and both end in the same idempotent grant.
 """
 
 from __future__ import annotations
@@ -18,9 +27,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.api.deps import get_founder_record
 from app.core.container import container
-from app.db.session import get_db
+from app.db.session import get_db, set_admin_rls_context
 from app.models import Founder
-from app.payments.models import CheckoutSession
+from app.payments.models import CheckoutSession, WebhookOutcome
 from app.plans.catalog import PlanTier
 
 router = APIRouter(prefix="/payments", tags=["payments"])
@@ -111,3 +120,54 @@ def start_checkout(
     session = service.start_checkout(founder.founder_id, payload.tier,
                                      coupon_code=payload.coupon_code)
     return CheckoutResponse.from_domain(session)
+
+
+class ConfirmRequest(BaseModel):
+    """Exactly what Razorpay's Checkout.js handler hands the browser. No amount,
+    no tier, no founder id: everything that decides the outcome is either
+    already on the payment row or comes back from Razorpay itself."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    order_id: str = Field(min_length=1, max_length=64)
+    razorpay_payment_id: str = Field(min_length=1, max_length=64)
+    # Optional so a widget flow that does not surface it (or a founder
+    # returning to a still-pending order later) can still be confirmed -- the
+    # gateway fetch below is what actually settles capture either way.
+    razorpay_signature: str | None = Field(default=None, max_length=128)
+
+
+class ConfirmResponse(BaseModel):
+    """`activated` is the only field the UI needs to branch on. `outcome` is
+    the service's own word for what happened, kept for support and logs."""
+
+    activated: bool
+    outcome: str
+    plan: str | None = None
+
+
+@router.post("/confirm", response_model=ConfirmResponse,
+            summary="Confirm a just-completed checkout with Razorpay")
+def confirm_checkout(
+    payload: ConfirmRequest,
+    founder: Founder = Depends(get_founder_record),
+    service=Depends(get_payment_service),
+    db=Depends(get_db),
+) -> ConfirmResponse:
+    """Same reason the webhook route sets it: granting a plan writes rows across
+    `payments`, `subscriptions`, `founders` and `credit_transactions`, and the
+    founder-isolation policies (migration d91c6e4b72aa) do not let a founder's
+    own context write the subscription and plan rows that a *system* actor
+    writes on their behalf. The elevation is narrow by construction -- the
+    service has already refused any order that is not this founder's, and it
+    grants only what Razorpay itself reports as captured. Transaction-local, so
+    it dies with this request.
+    """
+    set_admin_rls_context(db)
+    result = service.confirm_checkout(
+        founder.founder_id, order_id=payload.order_id,
+        gateway_payment_id=payload.razorpay_payment_id,
+        signature=payload.razorpay_signature,
+    )
+    activated = result.outcome in (WebhookOutcome.CAPTURED, WebhookOutcome.ALREADY_PROCESSED)
+    return ConfirmResponse(activated=activated, outcome=result.outcome, plan=result.plan)
