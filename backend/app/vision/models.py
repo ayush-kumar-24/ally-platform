@@ -38,6 +38,15 @@ class VisionTerritory:
     #: territory built from text alone is explicitly image-less rather than
     #: accidentally so.
     image_url: str | None = None
+    #: When the founder marked this territory reached, or None while it is
+    #: still ahead of them. Defaulted for the same reason as image_url, and
+    #: edited on its own request for the same reason too -- saving the words
+    #: must never silently un-reach the thing they describe.
+    completed_at: datetime | None = None
+
+    @property
+    def is_completed(self) -> bool:
+        return self.completed_at is not None
 
 
 @dataclass(frozen=True)

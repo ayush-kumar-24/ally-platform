@@ -89,8 +89,21 @@ class AchievementService:
     def create_achievement(
         self, founder_id: int, *,
         title: str, description: str = "", category: str = "", occurred_on: str = "",
+        earned: bool = False,
     ) -> Achievement:
-        if not self.get_engagement(founder_id).unlocked:
+        """`earned=True` skips the engagement gate.
+
+        The gate stops a founder FILLING this page before Ally knows anything
+        about them -- it is about authoring, not about what is true. A goal the
+        founder actually reached is not authoring: the system watched it happen
+        and is recording it. Refusing to write that would mean a founder who
+        completed three goals in week one unlocks the page later to an empty
+        list, having genuinely earned all three.
+
+        It stays False by default, so the founder-facing POST is gated exactly
+        as before and no caller gets past it by forgetting an argument.
+        """
+        if not earned and not self.get_engagement(founder_id).unlocked:
             raise AchievementsLockedError()
 
         now = self._now()

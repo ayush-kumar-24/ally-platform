@@ -37,6 +37,11 @@ class VisionTerritoryRow(Base):
     #: column orphans everything uploaded before a storage switch.
     image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     image_storage_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    #: Assigned only by set_territory_completed, never by a text save -- the
+    #: same separation the image columns above document and for the same
+    #: reason: these arrive on different requests.
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now())
 

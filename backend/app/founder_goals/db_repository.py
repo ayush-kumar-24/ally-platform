@@ -20,6 +20,7 @@ def _to_domain(row: FounderGoalRow) -> FounderGoal:
         subtitle=row.subtitle,
         created_at=row.created_at,
         updated_at=row.updated_at,
+        completed_at=row.completed_at,
     )
 
 
@@ -35,6 +36,7 @@ class SqlAlchemyFounderGoalRepository(FounderGoalRepository):
             subtitle=goal.subtitle,
             created_at=goal.created_at,
             updated_at=goal.updated_at,
+            completed_at=goal.completed_at,
         )
         self.db.add(row)
         self.db.commit()
@@ -49,6 +51,7 @@ class SqlAlchemyFounderGoalRepository(FounderGoalRepository):
         if row is None:
             return self.add(goal)
         row.title, row.subtitle, row.updated_at = goal.title, goal.subtitle, goal.updated_at
+        row.completed_at = goal.completed_at
         self.db.commit()
         return goal
 

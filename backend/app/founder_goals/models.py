@@ -34,3 +34,13 @@ class FounderGoal:
     subtitle: str
     created_at: datetime
     updated_at: datetime
+    #: When the founder marked this reached, or None while it is still open.
+    #: A timestamp rather than a boolean: "done" and "done on the 3rd" are the
+    #: same fact, and the achievement written from it needs the date anyway.
+    #: Defaulted so every existing construction site keeps compiling, the same
+    #: reasoning VisionTerritory.image_url records for itself.
+    completed_at: datetime | None = None
+
+    @property
+    def is_completed(self) -> bool:
+        return self.completed_at is not None

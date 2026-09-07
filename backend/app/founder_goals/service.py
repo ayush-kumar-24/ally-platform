@@ -46,10 +46,15 @@ class FounderGoalService:
         self,
         repository: FounderGoalRepository,
         *,
+        achievements=None,
         clock: Callable[[], datetime] | None = None,
         id_factory: Callable[[], str] | None = None,
     ):
         self.repository = repository
+        # Optional collaborator, injected rather than imported, so this service
+        # keeps its own tests hermetic and a deployment without achievements
+        # still completes goals. Same shape as PaymentService's credits/coupons.
+        self.achievements = achievements
         self._now = clock or (lambda: datetime.now(timezone.utc))
         self._new_id = id_factory or (lambda: uuid.uuid4().hex)
 
@@ -86,6 +91,64 @@ class FounderGoalService:
         )
         return self.repository.replace(updated)
 
+    def set_completed(self, founder_id: int, goal_id: str, completed: bool) -> FounderGoal:
+        """Mark a goal reached, or reopen one.
+
+        Completing writes an achievement, because a goal the founder has
+        actually hit is the clearest example of the thing that page is for --
+        and until now every entry there had to be typed a second time by hand.
+
+        Only the TRANSITION writes one. Completing an already-completed goal is
+        a no-op rather than a second trophy, which is what makes this safe to
+        call from anywhere -- a double-tap, a retried request, or (later) Ally
+        acting on something the founder said twice.
+
+        Reopening clears `completed_at` but deliberately leaves the achievement
+        standing: it records that this was reached on that date, which stays
+        true even if the founder raises the bar afterwards. Deleting it is
+        theirs to do, on the page that owns it.
+        """
+        goal = self.repository.get(goal_id)
+        if goal is None or goal.founder_id != founder_id:
+            raise FounderGoalNotFoundError(goal_id)
+
+        now = self._now()
+        if completed == goal.is_completed:
+            return goal
+
+        updated = FounderGoal(
+            goal_id=goal.goal_id,
+            founder_id=goal.founder_id,
+            title=goal.title,
+            subtitle=goal.subtitle,
+            created_at=goal.created_at,
+            updated_at=now,
+            completed_at=now if completed else None,
+        )
+        saved = self.repository.replace(updated)
+
+        if completed and self.achievements is not None:
+            try:
+                self.achievements.create_achievement(
+                    founder_id,
+                    title=goal.title,
+                    description=goal.subtitle,
+                    category="Goal reached",
+                    occurred_on=now.strftime("%b %Y"),
+                    # Earned, not authored: this founder hit the goal, so the
+                    # engagement gate on hand-written entries does not apply.
+                    earned=True,
+                )
+            except Exception:  # noqa: BLE001
+                # The goal IS complete -- that is the founder's own record of
+                # their work and it is already saved. Failing the request now
+                # would tell them otherwise over a bookkeeping problem on a
+                # page they were not even looking at.
+                from app.core.logger import logger
+                logger.error("goals: completed but could not write the achievement",
+                             extra={"founder_id": founder_id, "goal_id": goal_id})
+        return saved
+
     def delete_goal(self, founder_id: int, goal_id: str) -> None:
         goal = self.repository.get(goal_id)
         if goal is None or goal.founder_id != founder_id:
@@ -96,6 +159,7 @@ class FounderGoalService:
 def build_founder_goal_service(
     repository: FounderGoalRepository | None = None,
     *,
+    achievements=None,
     clock: Callable[[], datetime] | None = None,
     id_factory: Callable[[], str] | None = None,
 ) -> FounderGoalService:
@@ -103,4 +167,5 @@ def build_founder_goal_service(
     from app.founder_goals.repository import InMemoryFounderGoalRepository
 
     return FounderGoalService(repository or InMemoryFounderGoalRepository(),
+                              achievements=achievements,
                               clock=clock, id_factory=id_factory)

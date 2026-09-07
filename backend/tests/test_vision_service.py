@@ -150,3 +150,90 @@ def test_deterministic_execution():
         s.upsert_summary(1, target="b")
         return (s.get_territories(1)["life"].updated_at, s.get_summary(1).updated_at)
     assert run() == run()
+
+
+# --- territory completion, and the achievement it writes -------------------
+
+class RecordingAchievements:
+    def __init__(self):
+        self.created = []
+
+    def create_achievement(self, founder_id, **kw):
+        self.created.append((founder_id, kw))
+        return object()
+
+
+def _svc_with(ach):
+    return build_vision_service(InMemoryVisionRepository(), achievements=ach,
+                                clock=StepClock())
+
+
+def test_completing_a_territory_writes_one_achievement():
+    ach = RecordingAchievements()
+    s = _svc_with(ach)
+    s.upsert_territory(7, "business", statement="A ₹100Cr company",
+                       tag1="Revenue", tag2="2030")
+
+    done = s.set_territory_completed(7, "business", True)
+
+    assert done.is_completed and done.completed_at is not None
+    founder_id, kw = ach.created[0]
+    assert founder_id == 7
+    assert kw["title"] == "A ₹100Cr company"
+    assert kw["category"] == "Vision reached"
+    assert kw["description"] == "Revenue · 2030"
+    assert kw["earned"] is True
+
+
+def test_an_unwritten_territory_cannot_be_completed():
+    """None, which the router turns into a 404 -- there is nothing there to
+    have reached, and inventing a blank statement to hang it on would put an
+    empty card on the founder's page."""
+    s = _svc_with(RecordingAchievements())
+    assert s.set_territory_completed(7, "legacy", True) is None
+
+
+def test_saving_the_words_again_does_not_un_reach_a_territory():
+    """The bug this shape exists to prevent: editing a statement must not
+    silently clear the completion, exactly as it must not clear the picture."""
+    s = _svc_with(RecordingAchievements())
+    s.upsert_territory(7, "life", statement="Four days a week")
+    s.set_territory_completed(7, "life", True)
+
+    s.upsert_territory(7, "life", statement="Four days a week, no evenings")
+
+    assert s.get_territories(7)["life"].is_completed
+
+
+def test_completing_twice_writes_one_achievement():
+    ach = RecordingAchievements()
+    s = _svc_with(ach)
+    s.upsert_territory(7, "impact", statement="1,000 founders helped")
+    first = s.set_territory_completed(7, "impact", True)
+    again = s.set_territory_completed(7, "impact", True)
+    assert len(ach.created) == 1
+    assert again.completed_at == first.completed_at
+
+
+def test_reopening_clears_completion_and_keeps_the_achievement():
+    ach = RecordingAchievements()
+    s = _svc_with(ach)
+    s.upsert_territory(7, "legacy", statement="Something that outlasts me")
+    s.set_territory_completed(7, "legacy", True)
+
+    reopened = s.set_territory_completed(7, "legacy", False)
+
+    assert not reopened.is_completed
+    assert len(ach.created) == 1
+
+
+def test_an_unknown_territory_key_is_rejected():
+    s = _svc_with(RecordingAchievements())
+    with pytest.raises(InvalidVisionTerritoryError):
+        s.set_territory_completed(7, "not-a-territory", True)
+
+
+def test_a_written_territory_starts_unreached():
+    s = _svc_with(RecordingAchievements())
+    t = s.upsert_territory(7, "business", statement="A ₹100Cr company")
+    assert not t.is_completed

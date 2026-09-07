@@ -337,8 +337,14 @@ class Container:
         Tests override the endpoint dependency with an in-memory-backed
         service. Deliberately separate from planning_service() above -- see
         app/founder_goals/models.py for why the two "Goal" concepts don't
-        share a repository."""
-        return FounderGoalService(SqlAlchemyFounderGoalRepository(db))
+        share a repository.
+
+        Carries the achievement service so completing a goal records itself on
+        the Achievements page. Injected here rather than imported inside the
+        service, so the hermetic tests keep building it without one -- and so
+        this stays the single place that decides the two are connected."""
+        return FounderGoalService(SqlAlchemyFounderGoalRepository(db),
+                                  achievements=self.achievement_service(db))
 
     # --- Achievements accessor (DB-backed, per-request) --------------------
 
@@ -352,8 +358,12 @@ class Container:
 
     def vision_service(self, db: Session) -> VisionService:
         """Request-scoped VisionService over the SQLAlchemy repository. Tests
-        override the endpoint dependency with an in-memory-backed service."""
-        return VisionService(SqlAlchemyVisionRepository(db))
+        override the endpoint dependency with an in-memory-backed service.
+
+        Same achievement collaborator as founder_goal_service above, for the
+        same reason: reaching a vision belongs on that page too."""
+        return VisionService(SqlAlchemyVisionRepository(db),
+                             achievements=self.achievement_service(db))
 
     # --- Framework Usage accessor (DB-backed, per-request) ------------------
 

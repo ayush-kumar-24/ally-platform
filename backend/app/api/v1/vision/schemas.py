@@ -20,3 +20,12 @@ class VisionSummaryUpdate(BaseModel):
     target: str | None = Field(default=None, max_length=100)
     current: str | None = Field(default=None, max_length=100)
     unit: str | None = Field(default=None, max_length=100)
+
+
+class VisionTerritoryCompletion(BaseModel):
+    """Reached, or put back ahead of them. Its own request, not a field on the
+    territory save -- writing the words and reaching them are different acts,
+    and folding them together would let an edit silently un-reach a vision."""
+
+    model_config = ConfigDict(extra="forbid")
+    completed: bool
