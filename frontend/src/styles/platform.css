@@ -29,6 +29,13 @@
 .sb-toggle{width:30px;height:30px;flex-shrink:0;border-radius:9px;border:1px solid rgba(255,255,255,.13);background:rgba(255,255,255,.04);color:var(--on-dark-muted,#a7c0b4);display:grid;place-items:center;cursor:pointer;transition:background .2s,color .2s,border-color .2s;-webkit-tap-highlight-color:transparent}
 .sb-toggle:hover{background:rgba(255,255,255,.1);color:#fff;border-color:rgba(255,255,255,.22)}
 .sb-toggle .ic{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;transition:transform .3s cubic-bezier(.2,.7,.2,1)}
+/* The chevron points where the NEXT click will take the rail, so it has to flip
+   with the state. The icon is a fixed left-pointing "<<" in the markup and the
+   transition above was already here waiting for a rotation that was never
+   written -- so a collapsed rail showed "<<", i.e. "collapse further", on a rail
+   that could only expand. aria-label was already switching correctly, so this
+   was a bug sighted users hit and screen reader users did not. */
+body.sb-collapsed .sb-toggle .ic{transform:rotate(180deg)}
 /* Mark and words side by side, matching the marketing site's lockup. */
 .sb-brand{display:flex;flex-direction:row;align-items:center;gap:10px;line-height:1}
 .sb-brand .sb-words{display:flex;flex-direction:column;min-width:0}
