@@ -29,6 +29,9 @@ import {
   IconList,
   IconLightbulb,
   IconBook,
+  IconFile,
+  IconPlay,
+  IconTarget,
 } from '../utils/icons';
 
 function IconPulse(props) {
@@ -150,6 +153,14 @@ const NAV_GROUPS = [
     label: 'KNOWLEDGE',
     items: [
       { path: '/app/frameworks', tip: 'Frameworks', icon: IconBook, label: 'Frameworks', badge: null },
+      /* The three reference libraries the section was left room for. Ordered by
+         how much of a founder's time each one asks for -- an article, then a
+         talk, then a course -- so the cheapest thing to act on is nearest the
+         top. Distinct icons on purpose: three book-ish glyphs in one group
+         reads as one repeated item rather than three choices. */
+      { path: '/app/knowledge/read', tip: 'Things to read', icon: IconFile, label: 'Things to read', badge: null },
+      { path: '/app/knowledge/watch', tip: 'Things to watch', icon: IconPlay, label: 'Things to watch', badge: null },
+      { path: '/app/knowledge/learn', tip: 'Things to learn', icon: IconTarget, label: 'Things to learn', badge: null },
     ],
   },
   {

@@ -50,6 +50,7 @@ const GoalsPage = lazy(() => loadChunk(() => import('./pages/GoalsPage')));
 const RecommendationsPage = lazy(() => loadChunk(() => import('./pages/RecommendationsPage')));
 const FrameworksPage = lazy(() => loadChunk(() => import('./pages/FrameworksPage')));
 const FrameworkDetail = lazy(() => loadChunk(() => import('./pages/FrameworkDetail')));
+const KnowledgePage = lazy(() => loadChunk(() => import('./pages/KnowledgePage')));
 const BusinessDNA = lazy(() => loadChunk(() => import('./pages/BusinessDNA')));
 const NextSteps = lazy(() => loadChunk(() => import('./pages/NextSteps')));
 const DiscoveryCall = lazy(() => loadChunk(() => import('./pages/DiscoveryCall')));
@@ -248,6 +249,10 @@ export default function App() {
             <Route path="recommendations" element={<RecommendationsPage />} />
             <Route path="frameworks" element={<FrameworksPage />} />
             <Route path="frameworks/:id" element={<FrameworkDetail />} />
+            {/* read | watch | learn -- one component, section chosen by the
+                param. An unknown section renders its own "not found"
+                rather than an empty page pretending to be real. */}
+            <Route path="knowledge/:section" element={<KnowledgePage />} />
             <Route path="profile" element={<FounderProfile />} />
             <Route path="plan" element={<PlanYourDay />} />
             <Route path="know-my-energy" element={<KnowMyEnergy />} />

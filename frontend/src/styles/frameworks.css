@@ -89,3 +89,40 @@
 
 .fwd-cta { margin-top: 40px; padding-top: 24px; border-top: 1px solid var(--color-bd, #e7e0d6); }
 .fwd-cta .btn svg { width: 15px; height: 15px; }
+
+/* --- shared with the read / watch / learn libraries ------------------------
+   Those pages reuse .fw-page, .fw-grid and .fw-card wholesale; only these two
+   are new. Kept here rather than in a fourth stylesheet so a change to the card
+   cannot leave the libraries looking different from Frameworks. */
+
+/* The empty state, which these libraries will show for a while: the team is
+   only listing things it has actually read or watched, so they fill up slowly.
+   Styled as a considered sentence rather than a grey "no data" box -- the
+   emptiness is the policy, not a failure. */
+.fw-empty {
+  margin: 0;
+  padding: 28px 24px;
+  max-width: 68ch;
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--color-muted-2, #6c7a70);
+  background: var(--color-surface, #fbf7f2);
+  border: 1px dashed var(--color-bd, #e7e0d6);
+  border-radius: 14px;
+}
+
+/* A card that is itself the link, for entries that have a URL. An entry with
+   no link stays a plain <article> and must not pick up hover or pointer. */
+a.fw-card-link {
+  text-decoration: none;
+  color: inherit;
+  transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease;
+}
+a.fw-card-link:hover {
+  transform: translateY(-2px);
+  border-color: var(--color-accent, #10B981);
+}
+a.fw-card-link:focus-visible {
+  outline: 2px solid var(--color-accent, #10B981);
+  outline-offset: 2px;
+}
