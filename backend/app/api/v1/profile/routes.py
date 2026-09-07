@@ -244,7 +244,7 @@ async def serve_avatar(founder_id: int, filename: str):
 
 
 @router.patch("", response_model=FounderRead)
-async def update_profile(
+def update_profile(
     payload: FounderUpdate,
     founder: Founder = Depends(get_founder_record),
     db: Session = Depends(get_db),
@@ -270,7 +270,7 @@ async def validate(founder: Founder = Depends(get_founder_record)):
 # --- founder context / "memory" ---------------------------------------------
 
 @router.get("/context", response_model=FounderContextRead)
-async def read_context(
+def read_context(
     founder: Founder = Depends(get_founder_record),
     db: Session = Depends(get_db),
 ):
@@ -280,7 +280,7 @@ async def read_context(
 
 
 @router.put("/context", response_model=FounderContextRead)
-async def upsert_context(
+def upsert_context(
     payload: FounderContextUpdate,
     founder: Founder = Depends(get_founder_record),
     db: Session = Depends(get_db),
@@ -299,7 +299,7 @@ async def read_founder_info(founder: Founder = Depends(get_founder_record)):
 
 
 @router.patch("/founder", response_model=FounderInfoRead)
-async def update_founder_info(
+def update_founder_info(
     payload: FounderInfoUpdate,
     founder: Founder = Depends(get_founder_record),
     db: Session = Depends(get_db),
@@ -315,7 +315,7 @@ async def read_business_info(founder: Founder = Depends(get_founder_record)):
 
 
 @router.patch("/business", response_model=BusinessInfoRead)
-async def update_business_info(
+def update_business_info(
     payload: BusinessInfoUpdate,
     founder: Founder = Depends(get_founder_record),
     db: Session = Depends(get_db),
@@ -342,7 +342,7 @@ async def read_goals(founder: Founder = Depends(get_founder_record)):
 
 
 @router.patch("/goals", response_model=GoalsRead)
-async def update_goals(
+def update_goals(
     payload: GoalsUpdate,
     founder: Founder = Depends(get_founder_record),
     db: Session = Depends(get_db),

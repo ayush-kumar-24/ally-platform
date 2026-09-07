@@ -83,7 +83,7 @@ def _has_call_priority(founder: Founder, db: Session) -> bool:
 
 
 @router.get("/slots", response_model=SlotsResponse)
-async def get_slots(days: int = 7, founder: Founder = Depends(get_founder_record),
+def get_slots(days: int = 7, founder: Founder = Depends(get_founder_record),
                     db: Session = Depends(get_db)):
     """Available booking slots. Stubbed; Calendly will own real availability.
 
@@ -99,7 +99,7 @@ async def get_slots(days: int = 7, founder: Founder = Depends(get_founder_record
 
 
 @router.post("/book", response_model=CallRead, status_code=status.HTTP_201_CREATED)
-async def book_call(
+def book_call(
     payload: BookingRequest,
     background: BackgroundTasks,
     founder: Founder = Depends(get_founder_record),
@@ -156,7 +156,7 @@ async def book_call(
 
 
 @router.get("/calls", response_model=list[CallRead])
-async def list_calls(
+def list_calls(
     founder: Founder = Depends(get_founder_record),
     db: Session = Depends(get_db),
 ):
@@ -165,7 +165,7 @@ async def list_calls(
 
 
 @router.get("/calls/{call_id}", response_model=CallRead)
-async def get_call(
+def get_call(
     call_id: int,
     founder: Founder = Depends(get_founder_record),
     db: Session = Depends(get_db),
@@ -211,7 +211,7 @@ def _owned_changeable_call(db: Session, founder: Founder, call_id: int):
 
 
 @router.post("/calls/{call_id}/cancel", response_model=CallRead)
-async def cancel_call(
+def cancel_call(
     call_id: int,
     payload: CancelRequest,
     founder: Founder = Depends(get_founder_record),
@@ -240,7 +240,7 @@ async def cancel_call(
 
 @router.post("/calls/{call_id}/reschedule", response_model=CallRead,
              status_code=status.HTTP_201_CREATED)
-async def reschedule_call(
+def reschedule_call(
     call_id: int,
     payload: RescheduleRequest,
     background: BackgroundTasks,

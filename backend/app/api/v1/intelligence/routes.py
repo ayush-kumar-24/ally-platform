@@ -112,7 +112,7 @@ def _report_list_item(report) -> ReportListItem:
 
 
 @router.get("/summary", response_model=IntelligenceSummary)
-async def get_summary(
+def get_summary(
     founder: Founder = Depends(get_founder_record),
     db: Session = Depends(get_db),
 ) -> IntelligenceSummary:
@@ -147,7 +147,7 @@ async def get_summary(
 
 
 @router.get("/reports", response_model=ReportsPage)
-async def list_reports(
+def list_reports(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     active_only: bool = Query(default=False),
@@ -174,7 +174,7 @@ async def list_reports(
 
 # Declared before /reports/{report_id} so "latest" is not parsed as an id.
 @router.get("/reports/latest", response_model=ReportDetail)
-async def get_latest_report(
+def get_latest_report(
     founder: Founder = Depends(get_founder_record),
     db: Session = Depends(get_db),
 ) -> ReportDetail:
@@ -186,7 +186,7 @@ async def get_latest_report(
 
 
 @router.get("/reports/{report_id}", response_model=ReportDetail)
-async def get_report(
+def get_report(
     report_id: int,
     founder: Founder = Depends(get_founder_record),
     db: Session = Depends(get_db),
@@ -199,7 +199,7 @@ async def get_report(
 
 
 @router.get("/root-causes", response_model=DetectedRootCausesPage)
-async def list_detected_root_causes(
+def list_detected_root_causes(
     session_id: int | None = Query(default=None),
     top_only: bool = Query(default=False),
     limit: int = Query(default=100, ge=1, le=500),

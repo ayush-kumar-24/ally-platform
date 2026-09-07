@@ -28,7 +28,7 @@ class NotificationNotFoundError(AppError):
 
 
 @router.get("", response_model=NotificationListResponse)
-async def list_notifications(
+def list_notifications(
     unread_only: bool = False,
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
@@ -59,7 +59,7 @@ async def list_notifications(
 
 
 @router.post("/{notification_id}/read", response_model=NotificationRead)
-async def mark_read(
+def mark_read(
     notification_id: int,
     founder: Founder = Depends(get_founder_record),
     db: Session = Depends(get_db),
@@ -72,7 +72,7 @@ async def mark_read(
 
 
 @router.post("/read-all")
-async def mark_all_read(
+def mark_all_read(
     founder: Founder = Depends(get_founder_record),
     db: Session = Depends(get_db),
 ):
