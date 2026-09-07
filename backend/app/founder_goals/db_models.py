@@ -29,6 +29,10 @@ class FounderGoalRow(Base):
         nullable=False, index=True)
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     subtitle: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
+    #: Nullable with no default, so "still open" is genuinely absent rather
+    #: than a sentinel date every reader has to remember to special-case.
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

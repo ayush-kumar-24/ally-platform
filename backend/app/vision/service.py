@@ -48,8 +48,13 @@ def _clean_summary_field(value: str | None, field: str) -> str:
 
 
 class VisionService:
-    def __init__(self, repository: VisionRepository, *, clock: Callable[[], datetime] | None = None):
+    def __init__(self, repository: VisionRepository, *, achievements=None,
+                 clock: Callable[[], datetime] | None = None):
         self.repository = repository
+        # Optional collaborator, injected rather than imported -- same shape as
+        # FounderGoalService's, and for the same reason: the hermetic tests
+        # build this service without one and completion still works.
+        self.achievements = achievements
         self._now = clock or (lambda: datetime.now(timezone.utc))
 
     def get_territories(self, founder_id: int) -> dict[str, VisionTerritory | None]:
@@ -74,6 +79,51 @@ class VisionService:
             updated_at=self._now(),
         )
         return self.repository.upsert_territory(vt)
+
+    def set_territory_completed(
+        self, founder_id: int, territory_key: str, completed: bool,
+    ) -> VisionTerritory | None:
+        """Mark one territory reached, or put it back ahead of them.
+
+        None back means the founder has not written that territory yet -- the
+        router turns that into a 404, the same answer set_territory_image gives
+        for the same reason: there is nothing there to have reached.
+
+        Only the TRANSITION writes an achievement, so a double-tap or a retried
+        request cannot mint a second one. Reopening leaves the achievement
+        standing: it says this was reached on that date, which a later change
+        of mind does not make untrue.
+        """
+        if territory_key not in TERRITORY_KEYS:
+            raise InvalidVisionTerritoryError(territory_key)
+        existing = self.repository.get_territory(founder_id, territory_key)
+        if existing is None or not existing.statement.strip():
+            return None
+        if completed == existing.is_completed:
+            return existing
+
+        now = self._now()
+        saved = self.repository.set_territory_completed(
+            founder_id, territory_key, completed_at=now if completed else None)
+
+        if completed and saved is not None and self.achievements is not None:
+            try:
+                self.achievements.create_achievement(
+                    founder_id,
+                    title=existing.statement,
+                    description=" · ".join(t for t in (existing.tag1, existing.tag2) if t),
+                    category="Vision reached",
+                    occurred_on=now.strftime("%b %Y"),
+                    # Earned, not authored -- see the flag's own docstring.
+                    earned=True,
+                )
+            except Exception:  # noqa: BLE001
+                # The territory IS reached and that is saved. Failing here would
+                # punish the founder for a bookkeeping problem on another page.
+                from app.core.logger import logger
+                logger.error("vision: territory completed but the achievement was not written",
+                             extra={"founder_id": founder_id, "territory": territory_key})
+        return saved
 
     def set_territory_image(
         self, founder_id: int, territory_key: str, *, image_url: str | None, storage_path: str | None,
@@ -122,9 +172,11 @@ class VisionService:
 
 
 def build_vision_service(
-    repository: VisionRepository | None = None, *, clock: Callable[[], datetime] | None = None,
+    repository: VisionRepository | None = None, *, achievements=None,
+    clock: Callable[[], datetime] | None = None,
 ) -> VisionService:
     """Factory. Defaults to the in-memory repository (tests/offline)."""
     from app.vision.repository import InMemoryVisionRepository
 
-    return VisionService(repository or InMemoryVisionRepository(), clock=clock)
+    return VisionService(repository or InMemoryVisionRepository(),
+                         achievements=achievements, clock=clock)

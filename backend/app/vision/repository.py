@@ -31,6 +31,11 @@ class VisionRepository(abc.ABC):
         self, founder_id: int, territory: str, *, image_url: str | None, storage_path: str | None,
     ) -> VisionTerritory | None: ...
 
+    @abc.abstractmethod
+    def set_territory_completed(
+        self, founder_id: int, territory: str, *, completed_at,
+    ) -> VisionTerritory | None: ...
+
     def get_territory_storage_path(self, founder_id: int, territory: str) -> str | None: ...
 
     def get_summary(self, founder_id: int) -> VisionSummary | None: ...
@@ -60,17 +65,25 @@ class InMemoryVisionRepository(VisionRepository):
         return tuple(items)
 
     def upsert_territory(self, territory: VisionTerritory) -> VisionTerritory:
-        """Text only -- an existing picture survives a statement edit.
+        """Text only -- an existing picture, and an existing completion, survive
+        a statement edit.
 
-        The SQL repository gets this for free by simply not assigning the image
-        columns. Here the whole object is replaced, so the carry-over has to be
-        explicit; without it this fake would pass tests that production fails,
-        which is the one thing a fake must never do.
+        The SQL repository gets this for free by simply not assigning those
+        columns. Here the whole object is replaced, so every carry-over has to
+        be explicit; without it this fake would pass tests that production
+        fails, which is the one thing a fake must never do. `completed_at` was
+        added to that list the moment it existed -- a founder rewording a vision
+        they had already reached would otherwise have quietly un-reached it,
+        here and only here.
         """
         key = (territory.founder_id, territory.territory)
         with self._lock:
             existing = self._territories.get(key)
-            stored = replace(territory, image_url=existing.image_url if existing else territory.image_url)
+            stored = replace(
+                territory,
+                image_url=existing.image_url if existing else territory.image_url,
+                completed_at=existing.completed_at if existing else territory.completed_at,
+            )
             self._territories[key] = stored
         return stored
 
@@ -85,6 +98,18 @@ class InMemoryVisionRepository(VisionRepository):
             updated = replace(existing, image_url=image_url)
             self._territories[key] = updated
             self._storage_paths[key] = storage_path
+        return updated
+
+    def set_territory_completed(
+        self, founder_id: int, territory: str, *, completed_at,
+    ) -> VisionTerritory | None:
+        key = (founder_id, territory)
+        with self._lock:
+            existing = self._territories.get(key)
+            if existing is None:
+                return None
+            updated = replace(existing, completed_at=completed_at)
+            self._territories[key] = updated
         return updated
 
     def get_territory_storage_path(self, founder_id: int, territory: str) -> str | None:

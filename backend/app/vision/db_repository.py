@@ -19,7 +19,7 @@ def _territory_to_domain(row: VisionTerritoryRow) -> VisionTerritory:
     return VisionTerritory(
         founder_id=row.founder_id, territory=row.territory, statement=row.statement,
         tag1=row.tag1, tag2=row.tag2, updated_at=row.updated_at,
-        image_url=row.image_url,
+        image_url=row.image_url, completed_at=row.completed_at,
     )
 
 
@@ -64,6 +64,18 @@ class SqlAlchemyVisionRepository(VisionRepository):
         # VisionTerritory from the text fields alone, so returning it would
         # report image_url=None on every text save and the page would blank the
         # picture it is still storing.
+        return _territory_to_domain(row)
+
+    def set_territory_completed(
+        self, founder_id: int, territory: str, *, completed_at,
+    ) -> VisionTerritory | None:
+        """Mark one territory reached, or clear it, leaving text and picture
+        alone. None back means there is nothing written to reach yet."""
+        row = self.db.get(VisionTerritoryRow, {"founder_id": founder_id, "territory": territory})
+        if row is None:
+            return None
+        row.completed_at = completed_at
+        self.db.commit()
         return _territory_to_domain(row)
 
     def set_territory_image(

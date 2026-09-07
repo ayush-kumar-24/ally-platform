@@ -24,7 +24,11 @@ from app.api.v1.vision.dependencies import (
     require_vision,
 )
 from app.api.v1.vision.responses import VisionResponse, VisionSummaryResponse, VisionTerritoryResponse
-from app.api.v1.vision.schemas import VisionSummaryUpdate, VisionTerritoryUpdate
+from app.api.v1.vision.schemas import (
+    VisionSummaryUpdate,
+    VisionTerritoryCompletion,
+    VisionTerritoryUpdate,
+)
 from app.vision.service import VisionService
 
 router = APIRouter(prefix="/vision", tags=["vision"],
@@ -97,6 +101,26 @@ def upsert_territory(
 ) -> VisionTerritoryResponse:
     t = service.upsert_territory(
         founder_id, territory_key, statement=payload.statement, tag1=payload.tag1, tag2=payload.tag2)
+    return VisionTerritoryResponse.from_domain(territory_key, t)
+
+
+@router.patch(
+    "/territories/{territory_key}/completed",
+    response_model=VisionTerritoryResponse,
+    summary="Mark one vision territory reached",
+)
+def set_territory_completed(
+    territory_key: str,
+    payload: VisionTerritoryCompletion,
+    founder_id: int = Depends(get_current_founder_id),
+    service: VisionService = Depends(get_vision_service),
+) -> VisionTerritoryResponse:
+    """404 when the territory has no statement yet -- the same answer the image
+    endpoint gives, for the same reason: there is nothing written to reach."""
+    t = service.set_territory_completed(founder_id, territory_key, payload.completed)
+    if t is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail="Write this vision before marking it reached.")
     return VisionTerritoryResponse.from_domain(territory_key, t)
 
 

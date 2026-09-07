@@ -156,3 +156,113 @@ def test_deterministic_execution():
         s.create_goal(1, title="b")
         return [(g.title, g.created_at) for g in s.list_goals(1)]
     assert run() == run()
+
+
+# --- completion, and the achievement it writes -----------------------------
+
+class RecordingAchievements:
+    """Stands in for AchievementService. Records what it was asked to write,
+    so the tests below can assert the transition rule rather than the wording."""
+
+    def __init__(self, fail=False):
+        self.created = []
+        self._fail = fail
+
+    def create_achievement(self, founder_id, **kw):
+        if self._fail:
+            raise RuntimeError("achievements is down")
+        self.created.append((founder_id, kw))
+        return object()
+
+
+def test_completing_a_goal_writes_one_achievement():
+    ach = RecordingAchievements()
+    s = build_founder_goal_service(clock=StepClock(), id_factory=lambda: "g-1",
+                                   achievements=ach)
+    g = s.create_goal(7, title="₹5Cr annual revenue", subtitle="₹3.4Cr today")
+
+    done = s.set_completed(7, g.goal_id, True)
+
+    assert done.is_completed and done.completed_at is not None
+    assert len(ach.created) == 1
+    founder_id, kw = ach.created[0]
+    assert founder_id == 7
+    assert kw["title"] == "₹5Cr annual revenue"
+    assert kw["category"] == "Goal reached"
+    # Earned, not authored: it must not be refused by the engagement gate that
+    # applies to hand-written entries.
+    assert kw["earned"] is True
+
+
+def test_completing_twice_does_not_write_a_second_achievement():
+    """The guard that makes this safe to call from a double-tap, a retried
+    request, or anything else that can fire the same intent more than once."""
+    ach = RecordingAchievements()
+    s = build_founder_goal_service(clock=StepClock(), id_factory=lambda: "g-1",
+                                   achievements=ach)
+    g = s.create_goal(7, title="Hire an ops lead")
+
+    first = s.set_completed(7, g.goal_id, True)
+    again = s.set_completed(7, g.goal_id, True)
+
+    assert len(ach.created) == 1
+    # Unchanged, not re-stamped with a later time.
+    assert again.completed_at == first.completed_at
+
+
+def test_reopening_clears_completion_but_keeps_the_achievement():
+    ach = RecordingAchievements()
+    s = build_founder_goal_service(clock=StepClock(), id_factory=lambda: "g-1",
+                                   achievements=ach)
+    g = s.create_goal(7, title="Retention at 80%")
+    s.set_completed(7, g.goal_id, True)
+
+    reopened = s.set_completed(7, g.goal_id, False)
+
+    assert not reopened.is_completed and reopened.completed_at is None
+    # It was reached on that date. Raising the bar afterwards does not undo it.
+    assert len(ach.created) == 1
+
+
+def test_reaching_it_again_after_reopening_writes_a_second():
+    """Not a duplicate: the founder hit it, moved the goalposts, and hit it
+    again. Both are real, and the transition rule is what tells them apart."""
+    ach = RecordingAchievements()
+    s = build_founder_goal_service(clock=StepClock(), id_factory=lambda: "g-1",
+                                   achievements=ach)
+    g = s.create_goal(7, title="₹5Cr annual revenue")
+    s.set_completed(7, g.goal_id, True)
+    s.set_completed(7, g.goal_id, False)
+    s.set_completed(7, g.goal_id, True)
+    assert len(ach.created) == 2
+
+
+def test_a_failing_achievements_service_does_not_lose_the_completion():
+    """The goal is the founder's own record of their work. A bookkeeping
+    problem on another page must not tell them it did not happen."""
+    s = build_founder_goal_service(clock=StepClock(), id_factory=lambda: "g-1",
+                                   achievements=RecordingAchievements(fail=True))
+    g = s.create_goal(7, title="Ship the beta")
+
+    done = s.set_completed(7, g.goal_id, True)
+
+    assert done.is_completed
+    assert s.list_goals(7)[0].is_completed
+
+
+def test_completion_works_with_no_achievements_service_wired():
+    s = svc()
+    g = s.create_goal(7, title="Ship the beta")
+    assert s.set_completed(7, g.goal_id, True).is_completed
+
+
+def test_another_founders_goal_cannot_be_completed():
+    s = svc()
+    g = s.create_goal(7, title="Mine")
+    with pytest.raises(FounderGoalNotFoundError):
+        s.set_completed(8, g.goal_id, True)
+
+
+def test_a_new_goal_starts_open():
+    s = svc()
+    assert not s.create_goal(7, title="Anything").is_completed
