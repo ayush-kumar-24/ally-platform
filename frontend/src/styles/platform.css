@@ -380,14 +380,20 @@ body.sb-collapsed .sb-toggle .ic{transform:rotate(180deg)}
 .typing{display:flex;gap:12px;max-width:76%;align-items:flex-end}
 .typing .bubble{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);border-bottom-left-radius:5px;padding:12px 16px}
 .typing .m-av.thinking{position:relative;isolation:isolate;overflow:visible}
-.typing .m-av.thinking img{position:relative;z-index:2;animation:th-turn 1.7s cubic-bezier(.65,0,.25,1) infinite;filter:drop-shadow(0 0 6px rgba(52,211,153,.45))}
+/* No filter on the mark. A drop-shadow blurs every edge of a 30px raster
+   and, once it is also being transformed, forces the compositor to rasterise
+   the blurred version -- which is what made the logo look out of focus. The
+   glow lives on the halo behind instead, where softness is the point. */
+.typing .m-av.thinking img{position:relative;z-index:2;animation:th-turn 1.7s cubic-bezier(.65,0,.25,1) infinite;backface-visibility:hidden}
 .typing .th-orbit{position:absolute;inset:-4px;border-radius:50%;padding:1.5px;box-sizing:border-box;z-index:1;
   background:conic-gradient(from var(--th-angle,0deg),rgba(52,211,153,0) 0deg,rgba(52,211,153,.6) 60deg,rgba(167,243,208,1) 100deg,rgba(52,211,153,.5) 140deg,rgba(52,211,153,0) 210deg,rgba(52,211,153,0) 360deg);
   -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;
   mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);mask-composite:exclude;
   animation:th-orbit 2.4s linear infinite}
-.typing .th-halo{position:absolute;inset:-9px;border-radius:50%;z-index:0;
-  background:radial-gradient(closest-side,rgba(52,211,153,.32),rgba(52,211,153,0));
+/* A corona, not a disc: transparent under the mark itself so nothing tints
+   or fogs the logo, glowing only from its edge outward. */
+.typing .th-halo{position:absolute;inset:-11px;border-radius:50%;z-index:0;
+  background:radial-gradient(closest-side,rgba(52,211,153,0) 52%,rgba(52,211,153,.34) 66%,rgba(52,211,153,0) 100%);
   animation:th-halo 2.4s ease-in-out infinite}
 .typing .th-text{font-size:13.5px;font-weight:600;letter-spacing:.01em;
   background:linear-gradient(100deg,#8fb8a6 0%,#8fb8a6 35%,#d6ffe9 50%,#8fb8a6 65%,#8fb8a6 100%);
