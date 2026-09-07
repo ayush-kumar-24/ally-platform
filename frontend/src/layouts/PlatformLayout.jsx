@@ -30,7 +30,6 @@ import {
   IconLightbulb,
   IconBook,
   IconFile,
-  IconPlay,
   IconTarget,
 } from '../utils/icons';
 
