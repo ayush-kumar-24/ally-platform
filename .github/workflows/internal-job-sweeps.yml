@@ -19,8 +19,6 @@ on:
   schedule:
     # Report recovery + PDF backfill: every 10 minutes.
     - cron: "*/10 * * * *"
-    # Account erasures: once a day, 02:30 UTC (08:00 IST).
-    - cron: "30 2 * * *"
   workflow_dispatch:      # so it can be run by hand while testing
 
 concurrency:
@@ -52,7 +50,7 @@ jobs:
           SECRET: ${{ secrets.INTERNAL_JOBS_SECRET }}
 
       - name: Process due account deletions
-        if: github.event.schedule == '30 2 * * *' || github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch'
         run: |
           curl -sS -f -X POST \
             "$API/api/v1/internal/jobs/process-deletions" \
