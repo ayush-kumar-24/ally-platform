@@ -45,16 +45,20 @@ const TOUR_STEPS = [
   { nav: '/app/founder-dna-journey', emoji: '🧭', title: 'Journey', text: 'One deep diagnosis per account. This is where its findings, and your progress since, live.' },
   { nav: '/app/discovery-call', emoji: '📞', title: 'Discovery call', text: 'When you want a person in the room, book a short call with a GoXL advisor.' },
 
-  /* One stop, three items. Profile, Help and Send feedback each took their own
+  /* One stop, four items. Profile, Help and Send feedback each took their own
      step, which pushed a founder with a report to sixteen -- long enough that
      the last few stops are skipped rather than read. They sit next to each
      other at the bottom of the nav and none of them needs its own explanation,
-     so `navs` highlights all three at once and one sentence covers them. */
+     so `navs` highlights them at once and one sentence covers them.
+
+     'tour' is this tour's own item, matched on the same data-nav attribute the
+     others use. Pointing at it here is the one moment a founder is guaranteed
+     to be looking: it is how they find their way back. */
   {
-    navs: ['/app/feedback', '/app/profile', '/app/help'],
+    navs: ['/app/feedback', '/app/profile', 'tour', '/app/help'],
     emoji: '⚙️',
     title: 'Your account',
-    text: 'Down here: your profile — keep the stage current and Ally’s advice stays aimed at where you actually are — plus Help & Support, where you can replay this tour, and Send feedback, which we read.',
+    text: 'Down here: your profile — keep the stage current and Ally’s advice stays aimed at where you actually are — plus Product tour, which replays this walkthrough whenever you want it, Help & Support, and Send feedback, which we read.',
   },
 
   { final: true, emoji: '✨', title: 'You’re all set.', text: 'Ally is now your daily strategic partner.' },

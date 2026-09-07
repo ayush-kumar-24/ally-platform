@@ -20,6 +20,7 @@ import {
   IconArrowRight,
   IconCalendar,
   IconHelpCircle,
+  IconPlay,
   IconSettings,
   IconBell,
   IconEye,
@@ -164,6 +165,11 @@ const NAV_GROUPS = [
     label: 'ACCOUNT',
     items: [
       { path: '/app/profile', tip: 'Profile', icon: IconSettings, label: 'Profile', badge: null },
+      /* Not a page -- it starts the tour where the founder already is. The tour
+         spotlights the sidebar itself, so sending them somewhere first would
+         move the very thing it is about to point at. `action` is what marks an
+         item as doing something rather than going somewhere. */
+      { action: 'tour', tip: 'Replay the product tour', icon: IconPlay, label: 'Product tour', badge: null },
       { path: '/app/help', tip: 'Help & Support', icon: IconHelpCircle, label: 'Help & Support', badge: null },
     ],
   },
@@ -172,7 +178,7 @@ const NAV_GROUPS = [
 export default function PlatformLayout() {
   const { user, sidebarCollapsed, toggleSidebar, sidebarOpen, openSidebar, closeSidebar,
           notifications, clearNotifications, unreadCount, readNotification,
-          hasVision, setHasVision } = useApp();
+          hasVision, setHasVision, startTour } = useApp();
 
   // Both of these read "Ally Free" as literal text, so a paying founder was shown
   // the free badge everywhere. `user.plan` is hydrated from the server profile.
@@ -308,15 +314,15 @@ export default function PlatformLayout() {
               {group.hideLabel
                 ? <div className="sb-gap" aria-hidden="true" />
                 : <div className="sb-group">{group.label}</div>}
-              {group.items.map(({ path, tip, icon: Icon, label, badge, needsReport, comingSoon, lockTip }) => {
+              {group.items.map(({ path, action, tip, icon: Icon, label, badge, needsReport, comingSoon, lockTip }) => {
                 const reportLocked = needsReport && !hasReport;
                 const locked = reportLocked || comingSoon;
                 return (
                   <button
-                    key={path}
-                    className={`nav-item${isActive(path) ? ' active' : ''}${locked ? ' locked' : ''}`}
+                    key={path ?? action}
+                    className={`nav-item${path && isActive(path) ? ' active' : ''}${locked ? ' locked' : ''}`}
                     data-tip={comingSoon ? (lockTip || 'Coming soon') : reportLocked ? 'Finish your diagnosis to unlock' : path === '/app/vision' ? visionLabel(hasVision) : tip}
-                    data-nav={path}
+                    data-nav={path ?? action}
                     aria-disabled={reportLocked}
                     onClick={() => {
                       // A report-gated item sends them to the thing that
@@ -325,6 +331,10 @@ export default function PlatformLayout() {
                       // nothing to unlock -- it opens its own honest
                       // "coming soon" page instead of redirecting anywhere.
                       if (reportLocked) { handleNav('/app/founder-dna-journey'); return; }
+                      // An action item stays put: the tour opens over whatever
+                      // page they are on, and the drawer is left to the tour,
+                      // which opens it itself on a phone.
+                      if (action === 'tour') { startTour(); return; }
                       handleNav(path);
                     }}
                   >
