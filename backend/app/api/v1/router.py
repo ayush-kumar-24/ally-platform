@@ -10,6 +10,7 @@ from app.api.v1.vision.router import public_router as vision_public_router
 from app.api.v1.vision.router import router as vision_router
 from app.api.v1.framework_usage.router import router as framework_usage_router
 from app.api.v1.auth.routes import router as auth_router
+from app.api.v1.consents.cookies import router as cookie_prefs_router
 from app.api.v1.consents.router import router as consents_router
 from app.api.v1.privacy.router import router as privacy_router
 from app.api.v1.plans.router import router as plans_router
@@ -72,6 +73,7 @@ api_router.include_router(vision_router)
 api_router.include_router(vision_public_router)
 api_router.include_router(framework_usage_router)
 api_router.include_router(consents_router)
+api_router.include_router(cookie_prefs_router)
 api_router.include_router(privacy_router)
 api_router.include_router(voice_router)
 api_router.include_router(plans_router)
