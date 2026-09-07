@@ -10,7 +10,6 @@ import { greetingNow } from '../utils/helpers';
 import { getOverview } from '../services/dashboard';
 import { loadVision } from '../services/vision';
 import { firstSafe } from '../utils/looksLikeToken';
-import { useCallAccess } from '../hooks/useCallAccess';
 import {
   IconDashboard,
   IconMessageSquare,
@@ -136,7 +135,7 @@ const NAV_GROUPS = [
          item still advertises the feature; for the beta the instruction is to
          take discovery calls out of the free-tier UI, and a founder who cannot
          book one has nothing to unlock by clicking. */
-      { path: '/app/discovery-call', tip: 'Discovery call', icon: IconCalendar, label: 'Discovery call', badge: null, needsCallAccess: true },
+      { path: '/app/discovery-call', tip: 'Book a discovery call', icon: IconCalendar, label: 'Discovery call', badge: null },
     ],
   },
   {
@@ -189,10 +188,6 @@ export default function PlatformLayout() {
   /* Whether a diagnosis has actually produced a report yet -- what decides
      which nav items are still locked. Starts unlocked so a slow call never
      shuts a founder out of pages they have already earned. */
-  // Discovery calls are hidden for founders with no free call left -- see
-  // hooks/useCallAccess for why the plan feature flag is the wrong signal.
-  const { canBook: canBookCall } = useCallAccess();
-
   const [hasReport, setHasReport] = useState(true);
   // Independent of AppContext's user.name -- live-confirmed a real gap: right
   // after a fresh login, this header could render "there" for several
@@ -313,8 +308,7 @@ export default function PlatformLayout() {
               {group.hideLabel
                 ? <div className="sb-gap" aria-hidden="true" />
                 : <div className="sb-group">{group.label}</div>}
-              {group.items.map(({ path, tip, icon: Icon, label, badge, needsReport, needsCallAccess, comingSoon, lockTip }) => {
-                if (needsCallAccess && !canBookCall) return null;
+              {group.items.map(({ path, tip, icon: Icon, label, badge, needsReport, comingSoon, lockTip }) => {
                 const reportLocked = needsReport && !hasReport;
                 const locked = reportLocked || comingSoon;
                 return (
@@ -422,12 +416,8 @@ export default function PlatformLayout() {
                      ? 'Founder Clarity Report'
                      : location.pathname === '/app/next-steps'
                      ? 'Your next steps'
-                     /* The page is still reachable by URL when booking is not
-                        available, and titling it "Book a..." above a card that
-                        explains they cannot book is the same overclaim this
-                        change is removing. */
                      : location.pathname === '/app/discovery-call'
-                     ? (canBookCall ? 'Book a discovery call' : 'Discovery call')
+                     ? 'Book a discovery call'
                      : location.pathname === '/app/profile'
                      ? 'Founder Profile'
                      : currentLabel}

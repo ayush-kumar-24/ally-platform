@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { getOverview, markTourSeen } from '../services/dashboard';
-import { useCallAccess } from '../hooks/useCallAccess';
 import { prefersReducedMotion } from '../services/motion';
 
 /* The tour runs once the diagnosis is done, so it is the first time a founder
@@ -64,7 +63,6 @@ const TOUR_STEPS = [
 export default function ProductTour() {
   const navigate = useNavigate();
   const { tourOpen, endTour, sidebarCollapsed, toggleSidebar, sidebarOpen, openSidebar, closeSidebar } = useApp();
-  const { canBook: canBookCall } = useCallAccess();
 
   /* Same signal PlatformLayout locks the nav on, read the same way. The tour
      normally opens straight after a diagnosis, so a report exists and none of
@@ -86,10 +84,9 @@ export default function ProductTour() {
     () => TOUR_STEPS.filter((s) => {
       if (s.comingSoon) return false;
       if (s.needsReport && !hasReport) return false;
-      if (s.nav === '/app/discovery-call' && !canBookCall) return false;
       return true;
     }),
-    [canBookCall, hasReport],
+    [hasReport],
   );
   const [stepIndex, setStepIndex] = useState(0);
   const [spotStyle, setSpotStyle] = useState({ opacity: 0 });

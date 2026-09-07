@@ -1,7 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { useNavigate } from 'react-router-dom';
-import { useCallAccess } from '../hooks/useCallAccess';
 import Modal from '../components/Modal';
 import { FAQS, searchFaqs } from '../data/faqs';
 import { FEEDBACK, submitFeedback } from '../services/feedback';
@@ -11,7 +10,6 @@ import { prefersReducedMotion } from '../services/motion';
 export default function HelpSupport() {
   const { showToast } = useApp();
   const navigate = useNavigate();
-  const { canBook: canBookCall } = useCallAccess();
   const [openFaq, setOpenFaq] = useState(null);
   const [query, setQuery] = useState('');
   const [supportOpen, setSupportOpen] = useState(false);
@@ -295,24 +293,19 @@ export default function HelpSupport() {
             </svg>
             Message support
           </button>
-          {/* A support page is the worst place to offer something they cannot
-              have -- someone reaches it precisely because they are already
-              stuck. */}
-          {canBookCall && (
-            <button
-              className="hp-footer-btn-ghost"
-              onClick={() => navigate('/app/discovery-call')}
-              type="button"
-            >
-              <svg viewBox="0 0 24 24">
-                <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                <line x1="16" y1="2" x2="16" y2="6" />
-                <line x1="8" y1="2" x2="8" y2="6" />
-                <line x1="3" y1="10" x2="21" y2="10" />
-              </svg>
-              Book discovery call
-            </button>
-          )}
+          <button
+            className="hp-footer-btn-ghost"
+            onClick={() => navigate('/app/discovery-call')}
+            type="button"
+          >
+            <svg viewBox="0 0 24 24">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+              <line x1="16" y1="2" x2="16" y2="6" />
+              <line x1="8" y1="2" x2="8" y2="6" />
+              <line x1="3" y1="10" x2="21" y2="10" />
+            </svg>
+            Book discovery call
+          </button>
           <button
             className="hp-footer-btn-ghost"
             onClick={() => navigate('/app/ally-chat')}
