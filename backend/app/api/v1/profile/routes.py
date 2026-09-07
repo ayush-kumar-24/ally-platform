@@ -20,6 +20,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.api.deps import get_founder_record
 from app.core.logger import logger
@@ -117,6 +118,23 @@ async def upload_avatar(
     if not content:
         raise InvalidAvatarError("That file is empty.")
 
+    # EVERYTHING BELOW RUNS OFF THE EVENT LOOP.
+    #
+    # What follows is an S3 upload of up to 5MB, an S3 delete and a database
+    # write -- all synchronous, all network-bound. On the event loop they froze
+    # the entire server for the whole upload, so one founder changing their
+    # photo on a slow connection stalled every other founder's page. Only
+    # `file.read()` above is genuinely async; the rest gets the threadpool that
+    # a plain `def` handler would have had.
+    return await run_in_threadpool(
+        _store_avatar, db, founder, content, content_type, ext,
+        str(request.base_url),
+    )
+
+
+def _store_avatar(db: Session, founder: Founder, content: bytes, content_type: str,
+                  ext: str, base_url: str) -> AvatarUploadResponse:
+
     # jti-free, cache-busting filename: a browser (or CDN in front of this
     # later) must not keep serving yesterday's photo from cache under the
     # same URL just because the founder_id is unchanged.
@@ -147,7 +165,7 @@ async def upload_avatar(
         # /profile is mounted under the /api/v1 prefix (see app/api/v1/router.py)
         # -- this route is not, so the URL handed back must include it explicitly
         # or the browser's <img> request 404s against the bare /profile/... path.
-        avatar_url = f"{str(request.base_url).rstrip('/')}/api/v1/profile/avatar/{founder.founder_id}/{filename}"
+        avatar_url = f"{base_url.rstrip('/')}/api/v1/profile/avatar/{founder.founder_id}/{filename}"
         # Old avatar was also on S3 -- clean it up now that the new one is
         # confirmed stored. Best-effort: a leftover object is wasted space,
         # not a broken photo, so this must never fail the upload.
@@ -166,7 +184,7 @@ async def upload_avatar(
         for old in upload_dir.glob(f"{founder.founder_id}.*"):
             old.unlink(missing_ok=True)
         (upload_dir / filename).write_bytes(content)
-        avatar_url = f"{str(request.base_url).rstrip('/')}/uploads/avatars/{filename}"
+        avatar_url = f"{base_url.rstrip('/')}/uploads/avatars/{filename}"
         new_storage_path = None
         # Old avatar was on S3 but this upload fell back to disk (bucket
         # unreachable this one time) -- still worth trying to clean up.
