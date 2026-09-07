@@ -172,9 +172,19 @@ export default function AdminUserDetail() {
             : <p className="adm-muted">No subscription record.</p>}
         </div>
         <div className="adm-panel">
-          <h2>Consent</h2>
+          <h2>Terms &amp; Privacy</h2>
           {detail.consent ? <KV data={detail.consent} />
-            : <p className="adm-muted">No consent recorded.</p>}
+            : <p className="adm-muted">Never accepted.</p>}
+        </div>
+        {/* Its own panel, not folded into the one above. The cookie banner is a
+            separate consent under a separate basis, and until now the admin
+            could not see it at all -- a founder who rejected analytics looked
+            identical to one who had never been shown the banner. Those are the
+            two answers this panel now tells apart. */}
+        <div className="adm-panel">
+          <h2>Cookies</h2>
+          {detail.cookie_consent ? <KV data={detail.cookie_consent} />
+            : <p className="adm-muted">Banner never answered.</p>}
         </div>
         <div className="adm-panel">
           <h2>Activity</h2>

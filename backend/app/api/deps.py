@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import Depends, status
+from fastapi import Depends, Request, status
 from sqlalchemy.orm import Session
 
 from app.core.auth import AuthUser, get_current_founder
@@ -106,3 +106,29 @@ def require_profile_complete(
     if not result["valid"]:
         raise ProfileIncompleteError(result["missing"])
     return founder
+
+
+def client_ip(request: Request) -> str | None:
+    """The founder's IP, for the consent evidence trail.
+
+    X-Forwarded-For is honoured because the app runs behind a proxy (ALB, and
+    CloudFront in front of that), so `request.client.host` is the proxy rather
+    than the founder. Only the FIRST entry is taken -- later ones are hops.
+
+    That header is client-controllable, which is exactly why nothing is ever
+    authorized on it. It is evidence of where a consent came from, recorded
+    alongside the consent itself; it is not identity, and no access decision
+    reads it.
+
+    Truncated to 45 characters to match the column, which is sized for a full
+    IPv6 address.
+
+    There are two other copies of this logic -- middleware/rate_limit._client_ip
+    and admin/panel_dependencies.client_ip. They are deliberately left alone
+    here rather than refactored underneath a consent change; consolidating them
+    is its own commit, on its own risk.
+    """
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()[:45] or None
+    return request.client.host[:45] if request.client else None
