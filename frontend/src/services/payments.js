@@ -9,10 +9,14 @@
  *  - This module may NOT decide that a payment succeeded. Razorpay's success
  *    callback runs in the founder's own tab, so anything it reports is a claim
  *    made by the client — treating it as proof would let anyone with devtools
- *    hand themselves a plan. The plan is granted only by the signed
- *    `payment.captured` webhook Razorpay sends server-to-server (see
- *    app/payments/service.py). All the callback is used for here is knowing
- *    when to start asking the backend whether the plan has actually changed.
+ *    hand themselves a plan. What the callback is good for is being a
+ *    TRIGGER: `confirmPayment` hands it straight back to the backend, which
+ *    checks its signature and then asks Razorpay itself whether that payment
+ *    is captured before granting anything. The signed `payment.captured`
+ *    webhook still arrives and still grants (it is what covers a founder who
+ *    closes the tab), but the founder no longer waits on it — see
+ *    app/payments/service.py, where both paths end in the same idempotent
+ *    grant.
  *  - The key SECRET and the webhook secret never appear in the browser and
  *    must never be added to it. Only `key_id` — public by design — reaches the
  *    client, and it arrives in the checkout response rather than from a
@@ -51,6 +55,33 @@ export function startCheckout(tier, couponCode = null) {
  */
 export function validateCoupon(tier, code) {
   return post('/payments/coupons/validate', { tier, code });
+}
+
+/**
+ * Ask the backend to settle a just-completed checkout now.
+ *
+ * This is the whole reason activation stopped taking as long as Razorpay's
+ * webhook does: the webhook's delivery time is Razorpay's to choose and is
+ * routinely tens of seconds, all of it spent watching a spinner. This call
+ * says "your handler fired for this order, go and check" — the backend
+ * verifies the callback signature and reads the payment from Razorpay
+ * server-to-server, so nothing here is trusted on the browser's word.
+ *
+ * Resolves `{ activated, outcome, plan }`. `activated: false` is a normal
+ * answer (the capture has not landed at Razorpay yet), not a failure — the
+ * caller falls back to polling either way.
+ *
+ * @param {{order_id:string, razorpay_payment_id:string, razorpay_signature?:string}} callback
+ */
+export function confirmPayment({ order_id, razorpay_payment_id, razorpay_signature }) {
+  return post('/payments/confirm', {
+    order_id,
+    razorpay_payment_id,
+    // Omitted rather than sent as null when the widget did not supply one:
+    // the backend treats an absent signature as "no callback to verify" and
+    // still settles the outcome with Razorpay directly.
+    ...(razorpay_signature ? { razorpay_signature } : {}),
+  });
 }
 
 // Checkout.js is loaded on demand rather than from index.html: it is a
@@ -177,7 +208,10 @@ export async function waitForPlanActivation(tier, {
     } catch {
       // Keep waiting — see above.
     }
-    await sleep(intervalMs);
+    // The first few checks come fast. `confirmPayment` usually settles this
+    // within a second of the founder paying, and a founder who is already on
+    // their plan should not sit through a full interval before being told.
+    await sleep(i < 3 ? 600 : intervalMs);
   }
   return { activated: false, timedOut: true };
 }

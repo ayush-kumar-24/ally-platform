@@ -52,3 +52,24 @@ class InvalidWebhookSignatureError(PaymentError):
 
     def __init__(self):
         super().__init__("Invalid webhook signature.", status_code=status.HTTP_401_UNAUTHORIZED)
+
+
+class InvalidCheckoutCallbackError(PaymentError):
+    """The browser handed back a checkout callback whose `order_id|payment_id`
+    signature does not match the key secret. 401 for the same reason
+    InvalidWebhookSignatureError is: it is "this did not come from Razorpay",
+    not a malformed field -- and it must never be read as "payment succeeded"."""
+
+    def __init__(self):
+        super().__init__("Invalid payment confirmation signature.",
+                         status_code=status.HTTP_401_UNAUTHORIZED)
+
+
+class PaymentNotFoundError(PaymentError):
+    """No pending payment of this founder's carries that order id. 404 rather
+    than 403 on someone else's order too: a founder poking at order ids must
+    not be able to learn which ones exist."""
+
+    def __init__(self):
+        super().__init__("We could not find that payment.",
+                         status_code=status.HTTP_404_NOT_FOUND)
