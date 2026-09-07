@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { triggerTrackingScripts } from '../utils/cookieUtils';
+import { syncCookieChoice } from '../services/consents';
 
 export default function CookieBanner() {
   const [isOpen, setIsOpen] = useState(false);
@@ -25,6 +26,28 @@ export default function CookieBanner() {
       // Show the banner if no preference is saved
       setIsOpen(true);
     }
+  }, []);
+
+  /* REOPENABLE. The Privacy Policy says preferences can be changed "at any time
+     through the cookie banner", and that was untrue: once answered, this
+     component returned null forever and no control anywhere could bring it
+     back, so withdrawing consent meant clearing localStorage by hand. DPDP
+     expects withdrawal to be as easy as giving consent. Any control can now
+     fire `ally:open-cookie-preferences` to reopen it. */
+  useEffect(() => {
+    const reopen = () => {
+      try {
+        const saved = JSON.parse(localStorage.getItem('ally_cookie_consent') || 'null');
+        if (saved) {
+          setAnalytics(Boolean(saved.analytics));
+          setMarketing(Boolean(saved.marketing));
+          setShowCustomize(true);      // they came to change something, so show the detail
+        }
+      } catch { /* corrupted -- fall back to the plain banner */ }
+      setIsOpen(true);
+    };
+    window.addEventListener('ally:open-cookie-preferences', reopen);
+    return () => window.removeEventListener('ally:open-cookie-preferences', reopen);
   }, []);
 
   /* This renders over every route from App.jsx and blocks the page visually,
@@ -66,10 +89,21 @@ export default function CookieBanner() {
     };
   }, [isOpen]);
 
-  const savePreferences = (preferences) => {
+  const savePreferences = (preferences, bannerAction) => {
     localStorage.setItem('ally_cookie_consent', JSON.stringify(preferences));
     triggerTrackingScripts(preferences);
     setIsOpen(false);
+    /* Fire-and-forget. Enforcement already happened on the two lines above and
+       does not depend on this; the server call is the durable RECORD of what
+       was chosen. It holds the choice locally and retries if there is no
+       session yet, which is normal -- the banner is answered before sign-in. */
+    syncCookieChoice({
+      analytics: preferences.analytics,
+      marketing: preferences.marketing,
+      functional: preferences.functional,
+      bannerAction,
+      chosenAt: new Date().toISOString(),
+    });
   };
 
   const handleAcceptAll = () => {
@@ -79,7 +113,7 @@ export default function CookieBanner() {
       analytics: true,
       marketing: true,
     };
-    savePreferences(preferences);
+    savePreferences(preferences, 'accepted_all');
   };
 
   const handleRejectNonEssential = () => {
@@ -89,7 +123,7 @@ export default function CookieBanner() {
       analytics: false,
       marketing: false,
     };
-    savePreferences(preferences);
+    savePreferences(preferences, 'rejected_all');
   };
 
   const handleSaveCustomized = () => {
@@ -99,7 +133,7 @@ export default function CookieBanner() {
       analytics: analytics,
       marketing: marketing,
     };
-    savePreferences(preferences);
+    savePreferences(preferences, 'customised');
   };
 
   if (!isOpen) return null;

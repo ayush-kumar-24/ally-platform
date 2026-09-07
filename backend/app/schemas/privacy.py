@@ -28,6 +28,7 @@ PrivacyRequestType = Literal[
     "restrict_processing",
     "portability",
     "email_change",
+    "grievance",
 ]
 
 PrivacyRequestStatus = Literal["pending", "in_progress", "completed", "rejected"]
@@ -56,6 +57,20 @@ class PrivacyRequestCreate(BaseModel):
             "address and nothing else."
         ),
     )
+
+    @model_validator(mode="after")
+    def _grievance_says_what_is_wrong(self) -> "PrivacyRequestCreate":
+        """A complaint with no complaint in it cannot be acknowledged or resolved.
+
+        Enforced here rather than left to the Grievance Officer, because an
+        empty grievance still starts the statutory clock and still has to be
+        answered -- with nothing to answer about.
+        """
+        if self.request_type != "grievance":
+            return self
+        if not (self.request_details or "").strip():
+            raise ValueError("Please tell us what went wrong so we can look into it.")
+        return self
 
     @model_validator(mode="after")
     def _email_change_carries_an_address(self) -> "PrivacyRequestCreate":

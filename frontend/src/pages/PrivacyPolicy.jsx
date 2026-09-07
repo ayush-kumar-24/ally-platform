@@ -181,7 +181,7 @@ export default function PrivacyPolicy() {
                       </div>
                       <div className="grievance-row">
                         <span className="grievance-label">Response Time</span>
-                        <span className="grievance-value">We aim to acknowledge all complaints within 48 hours and resolve within 30 days.</span>
+                        <span className="grievance-value">We aim to acknowledge all complaints within 48 hours and resolve within 30 days. The fastest way to reach us is Privacy Center → Raise a privacy complaint inside your account, which records your complaint and its time directly with our team. You can also write to the address above.</span>
                       </div>
                     </div>
                     <p className="grievance-footer-note">

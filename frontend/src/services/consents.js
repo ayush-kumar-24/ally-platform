@@ -80,3 +80,62 @@ export async function flushPendingConsent() {
   clearPendingConsent();
   return record;
 }
+
+// ── Cookie choice ────────────────────────────────────────────────────────────
+// The banner ENFORCES the choice immediately and locally -- that part never
+// depended on the server and still does not. What this adds is the RECORD:
+// localStorage is per-device and vanishes when someone clears site data, so it
+// cannot answer "what did this founder choose, and when". DPDP expects a Data
+// Fiduciary to be able to demonstrate consent.
+//
+// Deferred for the same reason the terms consent is: the banner can be answered
+// before anyone signs in, and the row is founder-scoped. Held locally, flushed
+// when a session exists, with the ORIGINAL timestamp preserved.
+
+const PENDING_COOKIES_KEY = 'ally_pending_cookie_choice';
+
+/** Post one cookie choice. Requires a session. */
+export function recordCookieChoice({ analytics, marketing, functional, bannerAction, chosenAt }) {
+  return post('/cookie-preferences', {
+    analytics: Boolean(analytics),
+    marketing: Boolean(marketing),
+    functional: Boolean(functional),
+    banner_action: bannerAction,
+    chosen_at: chosenAt,
+  });
+}
+
+/**
+ * Record the choice if we can, hold it if we cannot.
+ *
+ * Never throws and never blocks the banner closing: enforcement already
+ * happened client-side, and a founder must not be stuck behind a consent
+ * dialog because our API had a bad moment.
+ */
+export async function syncCookieChoice(choice) {
+  const payload = { ...choice, chosenAt: choice.chosenAt || new Date().toISOString() };
+  try {
+    await recordCookieChoice(payload);
+    localStorage.removeItem(PENDING_COOKIES_KEY);
+  } catch {
+    try {
+      localStorage.setItem(PENDING_COOKIES_KEY, JSON.stringify(payload));
+    } catch { /* private mode, quota -- the local choice still stands */ }
+  }
+}
+
+/** Send a held cookie choice once a session exists. Safe to call on every start. */
+export async function flushPendingCookieChoice() {
+  let pending = null;
+  try {
+    pending = JSON.parse(localStorage.getItem(PENDING_COOKIES_KEY) || 'null');
+  } catch { return null; }
+  if (!pending) return null;
+  try {
+    const saved = await recordCookieChoice(pending);
+    localStorage.removeItem(PENDING_COOKIES_KEY);
+    return saved;
+  } catch {
+    return null;      // keep it pending, try again next start
+  }
+}

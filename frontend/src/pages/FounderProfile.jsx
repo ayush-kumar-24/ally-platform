@@ -125,6 +125,34 @@ const PRIVACY_ACTIONS = [
     },
   },
   {
+    // DPDP s.13: a readily available grievance mechanism. Before this, the
+    // Privacy Policy named a Grievance Officer and promised a 48-hour
+    // acknowledgement, and the only way to reach them was a `mailto:` -- so a
+    // complaint either left the founder's own mail client or did not exist, and
+    // nothing could acknowledge what it had never received.
+    type: 'grievance',
+    kind: 'queued',
+    label: 'Raise a privacy complaint',
+    desc: 'Unhappy with how we have handled your data? This goes straight to our Grievance Officer, who acknowledges within 48 hours.',
+    icon: (
+      <svg viewBox="0 0 24 24">
+        <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+        <line x1="12" y1="9" x2="12" y2="13" />
+        <line x1="12" y1="17" x2="12.01" y2="17" />
+      </svg>
+    ),
+    confirmTitle: 'Raise a privacy complaint',
+    confirmDesc: 'This goes to our Grievance Officer under India’s DPDP Act. We acknowledge within 48 hours and aim to resolve within 30 days.',
+    confirmColor: '#b45309',
+    confirmBg: '#fffbeb',
+    prompt: {
+      label: 'What went wrong?',
+      placeholder: 'Tell us what happened, and what you would like us to do about it.',
+      multiline: true,
+      required: true,
+    },
+  },
+  {
     type: 'portability',
     kind: 'export',
     label: 'Export for portability',
@@ -204,6 +232,7 @@ const TYPE_LABELS = {
   delete_account: 'Account deletion',
   cancel_deletion: 'Deletion cancelled',
   email_change: 'Email change',
+  grievance: 'Privacy complaint',
 };
 
 function fmtDate(iso) {
@@ -1357,7 +1386,34 @@ export default function FounderProfile() {
       {/* ── Privacy Center ── */}
       <div className="pr-sec-head stagger d5">
         <h3 className="pr-sec-title">Privacy Center</h3>
-        <span className="pr-sec-sub">Your data rights under DPDP &amp; GDPR — requests are reviewed within 30 days.</span>
+        {/* DPDP only. GDPR was claimed here and nowhere else -- not in the
+            Privacy Policy, and the team decided on 2026-09-06 that it does not
+            apply to us. Claiming a regime you do not intend to honour invites
+            the obligation without any of the preparation. */}
+        <span className="pr-sec-sub">
+          Your data rights under India&rsquo;s DPDP Act — requests are reviewed within 30 days.
+        </span>
+      </div>
+
+      {/* Makes the Privacy Policy's promise true. It says preferences can be
+          changed "at any time through the cookie banner"; until this existed
+          the banner could never be reopened, so the only way to withdraw was
+          to clear site data by hand. */}
+      <div className="pr-card stagger d5" style={{ display: 'flex', alignItems: 'center',
+                                                   justifyContent: 'space-between', gap: 16 }}>
+        <div>
+          <div style={{ fontWeight: 600 }}>Cookie preferences</div>
+          <div className="pr-sec-sub">
+            Change what you allow. Essential cookies keep you signed in and cannot be turned off.
+          </div>
+        </div>
+        <button
+          type="button"
+          className="pr-privacy-btn"
+          onClick={() => window.dispatchEvent(new Event('ally:open-cookie-preferences'))}
+        >
+          Change
+        </button>
       </div>
 
       <div className="pr-card stagger d5">
