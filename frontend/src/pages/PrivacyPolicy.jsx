@@ -36,7 +36,7 @@ const SECTIONS = [
   {
     id: 'retention',
     title: '6. Data Retention',
-    content: `We retain your personal data for as long as your account is active or as necessary to provide services. If you delete your account, we will erase or anonymise your identifiable data within 30 days, except where retention is required by law (e.g., financial records retained for 7 years as required under applicable Indian law). Anonymised, aggregated diagnostic data that cannot be linked back to you may be retained indefinitely to improve our AI models.`,
+    content: `We retain your personal data for as long as your account is active or as necessary to provide services. If you delete your account, there is a 30-day window in which you can change your mind and cancel. Once that window closes, we erase or anonymise your identifiable data within 30 days of it closing, except where retention is required by law (e.g., financial records retained for 7 years as required under applicable Indian law). Anonymised, aggregated diagnostic data that cannot be linked back to you may be retained indefinitely to improve our AI models.`,
   },
   {
     id: 'rights',
@@ -171,7 +171,7 @@ export default function PrivacyPolicy() {
                       </div>
                       <div className="grievance-row">
                         <span className="grievance-label">Address</span>
-                        <span className="grievance-value">GoXL Consulting Solutions Pvt. Ltd.,<br />Bangalore, Karnataka, India — 560001</span>
+                        <span className="grievance-value">GoXL Consulting Solutions Pvt. Ltd.,<br />513, National Plaza, RC Dutt Road, Alkapuri,<br />Vadodara, Gujarat, India — 390007</span>
                       </div>
                       <div className="grievance-row">
                         <span className="grievance-label">Email</span>
