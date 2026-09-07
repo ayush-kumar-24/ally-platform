@@ -158,7 +158,8 @@ const NAV_GROUPS = [
 
 export default function PlatformLayout() {
   const { user, sidebarCollapsed, toggleSidebar, sidebarOpen, openSidebar, closeSidebar,
-          notifications, clearNotifications, unreadCount, readNotification } = useApp();
+          notifications, clearNotifications, unreadCount, readNotification,
+          pageHeading } = useApp();
 
   // Both of these read "Ally Free" as literal text, so a paying founder was shown
   // the free badge everywhere. `user.plan` is hydrated from the server profile.
@@ -380,7 +381,10 @@ export default function PlatformLayout() {
               <>
                  <div className="ey">{ROUTE_EYE[location.pathname] || currentLabel}</div>
                  <h1>
-                   {location.pathname === '/app/report'
+                   {/* A page-set heading wins: see AppContext's pageHeading. */}
+                   {pageHeading
+                     ? pageHeading
+                     : location.pathname === '/app/report'
                      ? 'Founder DNA Report'
                      : location.pathname === '/app/next-steps'
                      ? 'Your next steps'

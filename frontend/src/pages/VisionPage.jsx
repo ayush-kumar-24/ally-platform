@@ -201,7 +201,7 @@ function TerritoryEditor({ territory, data, onSave, onUploadImage, onRemoveImage
 
 export default function VisionPage() {
   const navigate = useNavigate();
-  const { showToast } = useApp();
+  const { showToast, setPageHeading } = useApp();
   const [state, setState] = useState({ status: 'loading', vision: null, error: null });
   const [editingKey, setEditingKey] = useState(null);
 
@@ -251,6 +251,20 @@ export default function VisionPage() {
     }, 500);
   };
 
+  /* The top bar says the same thing as the section label below it, and only
+     this page knows which. Deliberately computed from `state` rather than the
+     `filledCount` further down: that lives past the early returns below, and a
+     hook cannot. While loading there is no answer yet, so the bar keeps its
+     route-derived title rather than flickering a guess. Cleared on unmount so
+     the override never outlives the page that set it. */
+  const visionWritten = state.status === 'ready'
+    && TERRITORIES.some((t) => state.vision.territories[t.key]?.statement.trim());
+  useEffect(() => {
+    if (state.status !== 'ready') return undefined;
+    setPageHeading(visionWritten ? 'Your Vision Board' : 'Build Your Vision');
+    return () => setPageHeading(null);
+  }, [state.status, visionWritten, setPageHeading]);
+
   if (state.status === 'loading') return <DnaLoading label="Loading your vision…" />;
   if (state.status === 'error') return <DnaError onRetry={load} />;
 
@@ -279,7 +293,10 @@ export default function VisionPage() {
             one. Keyed off the same filledCount the sub-copy below already uses,
             so the two can never disagree about whether a vision exists. */}
         <div className="vis-kicker">{filledCount === 0 ? 'Build Your Vision' : 'Your Vision Board'}</div>
-        <h1>Build the future you actually want.</h1>
+        {/* "Build" already opens the label above in the empty state; repeating
+            it here read as a stutter. The filled state keeps the verb, because
+            its label ("Your Vision Board") does not carry one. */}
+        <h1>{filledCount === 0 ? 'The future you actually want.' : 'Build the future you actually want.'}</h1>
         <p className="vis-sub">
           {filledCount === 0
             ? 'Six territories connect what you want with a number and the milestone that proves it is becoming real.'
