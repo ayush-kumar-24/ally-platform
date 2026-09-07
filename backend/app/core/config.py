@@ -385,19 +385,22 @@ class Settings(BaseSettings):
     EMAIL_PORT: int = 587
     EMAIL_USER: str = ""
     EMAIL_PASSWORD: str = ""
-    #: A SUBDOMAIN of goxlally.ai, deliberately -- not the root.
+    #: The SAME address founders write back to -- decided 2026-09-07.
     #:
-    #: Login codes are sent by Supabase through a SEPARATE Resend account that
-    #: owns the root goxlally.ai. Both accounts are on the free tier (100/day),
-    #: so they are split on purpose: login codes on one, product notifications
-    #: on the other, 200/day between them. Verifying the ROOT domain on this
-    #: account would TRANSFER it and revoke the other account's access --
-    #: i.e. no founder could sign in. Resend treats a subdomain as a separate
-    #: domain, so this keeps the split intact.
+    #: The root goxlally.ai is already verified for sending, on the Resend
+    #: account Supabase uses for login codes, and its MX already points at
+    #: Hostinger for receiving. So one address does both, with no DNS work and
+    #: nothing for a founder to notice: mail arrives from the address they can
+    #: reply to.
     #:
-    #: The domain here MUST be the one verified on whichever Resend account
-    #: EMAIL_PASSWORD belongs to. They are checked against each other on send.
-    EMAIL_FROM: str = "Ally by GoXL <info@mail.goxlally.ai>"
+    #: THIS MEANS EMAIL_PASSWORD MUST BE A KEY FROM THAT ACCOUNT. A key from
+    #: the other team cannot send as this domain and every send is rejected.
+    #:
+    #: The cost of merging them is a shared free-tier ceiling (100/day, 3,000/
+    #: month) with login codes -- and running out of login codes locks every
+    #: founder out, while running out of notifications merely delays one. Watch
+    #: that account's volume, and pay for it before it is close.
+    EMAIL_FROM: str = "Ally by GoXL <info@goxlally.ai>"
     EMAIL_USE_TLS: bool = True
     #: Where a founder's reply actually lands.
     #:
@@ -405,7 +408,9 @@ class Settings(BaseSettings):
     #: a founder to reply to reschedule -- so without this their reply bounces
     #: or vanishes, which is worse than never having offered. Set this to a
     #: mailbox a person actually reads.
-    EMAIL_REPLY_TO: str = "info@goxl.in"
+    #: goxlally.ai, not goxl.in -- agreed 2026-09-07. The mailbox must exist
+    #: and be read by a person: the discovery-call emails invite a reply.
+    EMAIL_REPLY_TO: str = "info@goxlally.ai"
 
     @property
     def email_enabled(self) -> bool:
