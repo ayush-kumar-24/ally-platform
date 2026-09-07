@@ -58,6 +58,13 @@ export function AppProvider({ children }) {
     () => localStorage.getItem('ally_sb_collapsed') === 'true'
   );
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  /* A heading a page can set for itself when only that page knows what it
+     should say. The Vision heading depends on whether the founder has written
+     any vision, and the layout must not fetch that: it renders on every route,
+     so reading one page's data there would cost every other page a request for
+     a string it never uses. The page that already has the data sets it and
+     clears it on unmount; everything else keeps the route-derived title. */
+  const [pageHeading, setPageHeading] = useState(null);
   const [notifications, setNotifications] = useState([]);
   // The badge counts UNREAD, not the list length. The list is everything,
   // read included, so counting it made a badge that never went down.
@@ -265,6 +272,7 @@ export function AppProvider({ children }) {
       startGuided, exitGuided,
       navigate,
       tourOpen, startTour, endTour,
+      pageHeading, setPageHeading,
     }}>
       {children}
     </AppContext.Provider>
