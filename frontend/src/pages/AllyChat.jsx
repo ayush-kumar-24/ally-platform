@@ -911,7 +911,6 @@ export default function AllyChat() {
                 <div className="typing">
                   <div className="m-av ally thinking" aria-hidden="true">
                     <span className="th-orbit" />
-                    <span className="th-halo" />
                     <img src="/ally-logo-mark.png" alt="" />
                   </div>
                   <div className="bubble th-bubble" role="status" aria-live="polite">

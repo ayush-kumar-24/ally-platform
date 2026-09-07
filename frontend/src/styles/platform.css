@@ -373,7 +373,7 @@ body.sb-collapsed .sb-toggle .ic{transform:rotate(180deg)}
    indistinguishable from 0deg, and the loop reads as a continuous, deliberate
    tick rather than a spinner. Around it, a light orbits a thin ring (the same
    registered-angle technique as the sidebar badge, on its own property so the
-   two are not coupled) and a halo breathes behind. The bubble carries the
+   two are not coupled). The bubble carries the
    words, with a slow sheen -- that text is also what assistive tech reads,
    which is why every moving part here is aria-hidden and the text is not. */
 @property --th-angle{syntax:"<angle>";initial-value:0deg;inherits:false}
@@ -390,23 +390,16 @@ body.sb-collapsed .sb-toggle .ic{transform:rotate(180deg)}
   -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;
   mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);mask-composite:exclude;
   animation:th-orbit 2.4s linear infinite}
-/* A corona, not a disc: transparent under the mark itself so nothing tints
-   or fogs the logo, glowing only from its edge outward. */
-.typing .th-halo{position:absolute;inset:-11px;border-radius:50%;z-index:0;
-  background:radial-gradient(closest-side,rgba(52,211,153,0) 52%,rgba(52,211,153,.34) 66%,rgba(52,211,153,0) 100%);
-  animation:th-halo 2.4s ease-in-out infinite}
 .typing .th-text{font-size:13.5px;font-weight:600;letter-spacing:.01em;
   background:linear-gradient(100deg,#8fb8a6 0%,#8fb8a6 35%,#d6ffe9 50%,#8fb8a6 65%,#8fb8a6 100%);
   background-size:240% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;
   animation:th-sheen 2.2s ease-in-out infinite}
 @keyframes th-turn{0%{transform:rotate(0deg)}58%{transform:rotate(90deg)}100%{transform:rotate(90deg)}}
 @keyframes th-orbit{to{--th-angle:360deg}}
-@keyframes th-halo{0%,100%{opacity:.45;transform:scale(.92)}50%{opacity:1;transform:scale(1.06)}}
 @keyframes th-sheen{0%{background-position:120% 0}100%{background-position:-120% 0}}
 @media(prefers-reduced-motion:reduce){
-  .typing .m-av.thinking img,.typing .th-orbit,.typing .th-halo,.typing .th-text{animation:none}
+  .typing .m-av.thinking img,.typing .th-orbit,.typing .th-text{animation:none}
   .typing .th-orbit{display:none}
-  .typing .th-halo{opacity:.6;transform:none}
   .typing .th-text{color:#a7c0b4;background:none;-webkit-background-clip:initial;background-clip:initial}
 }
 .suggs{display:flex;gap:8px;flex-wrap:wrap;padding:12px 26px;border-top:1px solid rgba(255,255,255,.08);position:relative;z-index:2}
