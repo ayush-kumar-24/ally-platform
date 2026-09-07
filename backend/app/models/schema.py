@@ -975,6 +975,11 @@ class Notifications(Base):
     body: Mapped[str] = mapped_column(Text, nullable=False)
     is_read: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text('false'))
     action_url: Mapped[Optional[str]] = mapped_column(String(500))
+    #: Makes a write idempotent. Unique per founder where set (d3f8b71c02a9), so
+    #: a sweep re-evaluating the same condition every few hours cannot stack up
+    #: copies. The key also encodes WHEN a notification is allowed to repeat --
+    #: see app/notifications/writer.py.
+    dedup_key: Mapped[Optional[str]] = mapped_column(String(200))
     read_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
     sent_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
     metadata_: Mapped[Optional[dict]] = mapped_column('metadata', JSONB, server_default=text("'{}'::jsonb"))

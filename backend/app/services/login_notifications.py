@@ -224,6 +224,23 @@ def note_sign_in(db: Session, founder: Founder | None, *,
 
         sent = _send(founder.email, founder.full_name or "there", label,
                      datetime.now(timezone.utc))
+
+        # The bell too. The email deliberately carries no link (see _send), and
+        # a founder who is worried enough to check will already be looking at
+        # Ally -- this is where they can act on it.
+        #
+        # Keyed on the fingerprint, so the same device does not notify twice
+        # even if the audit row is somehow written again.
+        from app.notifications import notify
+        notify(
+            db, founder_id=founder.founder_id, type="new_device_signin",
+            title="New sign-in to your account",
+            body=(f"Your account was opened from {label}, a device we have not "
+                  "seen before. If that was you, there is nothing to do."),
+            action_url="/app/profile",
+            dedup_key=f"new_device_signin:{fp}",
+            founder=founder,
+        )
         return {"recorded": True, "new_device": True, "emailed": sent}
     except Exception as exc:
         # Swallowed on purpose -- see the module docstring.

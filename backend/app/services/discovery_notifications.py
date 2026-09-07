@@ -1,10 +1,13 @@
-"""Discovery-call emails: booking confirmation + 24h/1h reminders.
+"""Discovery-call emails: booking confirmation + a single 1-hour reminder.
 
-Confirmation is transactional (always sent on booking). Reminders respect the
-founder's notification_preferences.email_reminders flag and are meant to be
-driven by a scheduled job calling `send_due_reminders` (e.g. every 15 min via
-cron / APScheduler / a Supabase scheduled function). The scheduler itself is
-deployment infra, not built here.
+Confirmation is transactional (always sent on booking). The reminder respects
+the founder's notification_preferences.email_reminders flag and is driven by a
+scheduled job calling `send_due_reminders`, which must run AT LEAST HOURLY --
+see that function for why a daily job silently sends nothing to most people.
+The scheduler itself is deployment infra, not built here.
+
+Two reminders (24h and 1h) were cut to one on 2026-09-07: two emails for one
+30-minute call is how a founder learns to filter us.
 """
 
 from datetime import datetime, timedelta, timezone
@@ -79,7 +82,8 @@ def send_booking_confirmation(to: str, name: str, scheduled_at: datetime, meetin
 
 
 def send_reminder(to: str, name: str, scheduled_at: datetime, meeting_link: str,
-                  which: str, tz: str | None = None) -> bool:
+                  which: str = "1h", tz: str | None = None) -> bool:
+    """`which` is kept so old callers and tests do not break; only "1h" is sent."""
     tz = tz or settings.DISCOVERY_TIMEZONE
     when = _fmt(scheduled_at, tz)
     label = "in 24 hours" if which == "24h" else "in 1 hour"
@@ -106,37 +110,51 @@ def _wants_email_reminders(founder: Founder) -> bool:
 
 
 def send_due_reminders(db: Session, *, now: datetime | None = None) -> dict:
-    """Send any 24h / 1h reminders that are now due. Call from a scheduled job.
+    """Send any 1h reminders that are now due. Call from a scheduled job.
 
-    A reminder is due when the call is within its window, still upcoming, not
+    ONE REMINDER, NOT TWO. There was a 24h reminder as well; it was dropped on
+    2026-09-07. Two emails for one 30-minute call is the amount of mail that
+    teaches a founder to filter us, and the 24h one is the weaker of the pair --
+    at that distance nobody changes their plans, they just note it and forget.
+    The hour-before is the one that actually gets someone to the call.
+
+    `reminder_sent_24h` is left in the table and simply never set. Dropping the
+    column would rewrite history for calls that already had one, and it costs
+    nothing to keep.
+
+    HOW OFTEN THIS MUST RUN. Hourly, at least. The window below is "within the
+    next hour", so a job that runs once a day would look once, find only the
+    calls in the next 60 minutes, and miss every other call that day entirely --
+    the reminder would simply never arrive for them. This is cheap to run: one
+    indexed query, and it sends nothing at all unless a call is actually due.
+
+    A reminder is due when the call is within the hour, still upcoming, not
     cancelled, its flag is not yet set, and the founder wants email reminders.
     Returns counts for observability.
     """
     now = now or datetime.now(timezone.utc)
-    sent = {"24h": 0, "1h": 0, "skipped_pref": 0}
+    sent = {"1h": 0, "skipped_pref": 0}
 
-    windows = [
-        ("24h", DiscoveryCalls.reminder_sent_24h, now + timedelta(hours=24)),
-        ("1h", DiscoveryCalls.reminder_sent_1h, now + timedelta(hours=1)),
-    ]
-    for which, flag_col, horizon in windows:
-        stmt = (
-            select(DiscoveryCalls, Founder)
-            .join(Founder, Founder.founder_id == DiscoveryCalls.founder_id)
-            .where(
-                flag_col.is_(False),
-                DiscoveryCalls.status.in_(["pending", "confirmed"]),
-                DiscoveryCalls.scheduled_at > now,
-                DiscoveryCalls.scheduled_at <= horizon,
-            )
+    stmt = (
+        select(DiscoveryCalls, Founder)
+        .join(Founder, Founder.founder_id == DiscoveryCalls.founder_id)
+        .where(
+            DiscoveryCalls.reminder_sent_1h.is_(False),
+            DiscoveryCalls.status.in_(["pending", "confirmed"]),
+            DiscoveryCalls.scheduled_at > now,
+            DiscoveryCalls.scheduled_at <= now + timedelta(hours=1),
         )
-        for call, founder in db.execute(stmt).all():
-            if not _wants_email_reminders(founder):
-                sent["skipped_pref"] += 1
-            elif founder.email:
-                send_reminder(founder.email, founder.full_name, call.scheduled_at, call.meeting_link, which)
-                sent[which] += 1
-            setattr(call, "reminder_sent_24h" if which == "24h" else "reminder_sent_1h", True)
-        db.commit()
+    )
+    for call, founder in db.execute(stmt).all():
+        if not _wants_email_reminders(founder):
+            sent["skipped_pref"] += 1
+        elif founder.email:
+            send_reminder(founder.email, founder.full_name, call.scheduled_at,
+                          call.meeting_link, "1h")
+            sent["1h"] += 1
+        # Flag set either way: a founder who opted out must not be re-checked
+        # every hour for the rest of the day.
+        call.reminder_sent_1h = True
+    db.commit()
 
     return sent

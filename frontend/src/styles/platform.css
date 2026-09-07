@@ -2376,3 +2376,29 @@ body.lp-done #landing-page { display:none; }
 .bl-os-discount{color:#7bd88f}
 .bl-pay-ref{display:block;margin-top:4px;font-size:11.5px;opacity:.75;
   font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+
+
+/* The explanation under a notification's title, and the clickable row.
+   Added when the bell started carrying a body and an action link -- before
+   that a row was a plain div with a title and nowhere to go. */
+.nr-sub {
+  margin-top: 3px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  opacity: .72;
+}
+.nr-clickable {
+  display: flex;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.nr-clickable:hover { background: rgba(0, 0, 0, .04); }
+.nr-clickable:focus-visible { outline: 2px solid currentColor; outline-offset: -2px; }
+.nr-pill.new { background: #dcfce7; color: #166534; }
+.nr[data-status="read"] .nr-dot { opacity: .35; }
+.np-open:disabled { opacity: .5; cursor: default; }

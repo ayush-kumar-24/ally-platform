@@ -15,6 +15,7 @@ from app.api.deps import get_founder_record
 from app.db.session import get_db
 from app.middleware.error_handler import AppError
 from app.models import Founder
+from app.notifications.generator import generate_for_founder
 from app.repositories import notification_repository
 from app.schemas.notification import NotificationListResponse, NotificationRead
 
@@ -34,7 +35,20 @@ async def list_notifications(
     founder: Founder = Depends(get_founder_record),
     db: Session = Depends(get_db),
 ):
-    """The founder's notifications, newest first, plus the unread badge count."""
+    """The founder's notifications, newest first, plus the unread badge count.
+
+    THE FEED IS BUILT WHEN THEY LOOK, not only when a cron runs. Standing
+    conditions -- credits expiring, a task overdue, a deletion counting down --
+    are evaluated here first, so what a founder sees is what is true right now.
+    A scheduled sweep does the same thing for founders who are NOT here.
+
+    Safe because every rule is idempotent on a dedup key: this writes nothing
+    the second time. Throttled per founder purely to keep a page refresh from
+    re-running eleven queries, and it never raises -- the bell must render even
+    if a rule cannot.
+    """
+    generate_for_founder(db, founder.founder_id, founder=founder, throttle=True)
+
     items = notification_repository.list_for_founder(
         db, founder.founder_id, unread_only=unread_only, limit=limit, offset=offset
     )

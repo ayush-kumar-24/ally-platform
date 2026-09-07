@@ -33,6 +33,7 @@ from app.api.v1.admin.panel_dependencies import client_ip, get_panel_admin, get_
 from app.api.v1.admin.panel_dependencies import PanelAdmin
 from app.core.logger import logger
 from app.db.session import get_db
+from app.notifications import notify
 from app.middleware.error_handler import AppError
 from app.models import Founder
 from app.models.schema import DiscoveryCalls
@@ -157,6 +158,17 @@ def confirm_call(
     db.commit()
     db.refresh(call)
 
+    # The bell, alongside the email. A founder who has Ally open when we confirm
+    # should not have to go and check their inbox to find out.
+    notify(
+        db, founder_id=call.founder_id, type="discovery_call_confirmed",
+        title="Your discovery call is confirmed",
+        body=("The team confirmed your call. The joining link is on the Discovery "
+              "call page, and it is in the email we just sent you."),
+        action_url="/app/discovery-call",
+        dedup_key=f"discovery_call_confirmed:{call_id}",
+    )
+
     service.audit.record(
         admin=admin, action="discovery_call.confirm",
         resource=f"discovery_call:{call_id}", target_user_id=call.founder_id,
@@ -203,6 +215,17 @@ def decline_call(
     call.cancellation_reason = payload.reason
     db.commit()
     db.refresh(call)
+
+    # Carries the reason. A cancellation with no explanation is the kind of
+    # thing a founder writes in to ask about, and the reason is already typed.
+    notify(
+        db, founder_id=call.founder_id, type="discovery_call_cancelled",
+        title="Your discovery call was cancelled",
+        body=(f"We had to cancel your call. {payload.reason}".strip()
+              + " You can book another slot whenever suits you."),
+        action_url="/app/discovery-call",
+        dedup_key=f"discovery_call_cancelled:{call_id}",
+    )
 
     service.audit.record(
         admin=admin, action="discovery_call.decline",
