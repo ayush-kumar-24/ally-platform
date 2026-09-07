@@ -1,3 +1,5 @@
+import { WATCH_TABS } from './watch';
+
 /**
  * data/knowledge.js — the three reference libraries under KNOWLEDGE.
  *
@@ -27,8 +29,9 @@
 /** Long-form: books, essays, papers, posts. */
 export const THINGS_TO_READ = [];
 
-/** Talks, interviews, recordings, walkthroughs. */
-export const THINGS_TO_WATCH = [];
+/* "Things to watch" is the one section with sub-tabs, because podcasts, series
+   and films are three different sizes of commitment and mixing them makes the
+   list unreadable. Its content lives in data/watch.js. */
 
 /** Courses and structured programmes -- things with a beginning and an end. */
 export const THINGS_TO_LEARN = [];
@@ -53,7 +56,10 @@ export const KNOWLEDGE_SECTIONS = {
     title: 'Worth the time.',
     sub: 'Talks and conversations that say something a blog post could not.',
     empty: 'Nothing here yet. We would rather show you three things worth watching than thirty we have not.',
-    items: THINGS_TO_WATCH,
+    /* Tabbed rather than one list -- see WATCH_TABS. `items` is unused for this
+       section and deliberately absent, so a reader does not wonder which of the
+       two the page renders. */
+    tabs: WATCH_TABS,
   },
   learn: {
     slug: 'learn',
