@@ -7,7 +7,7 @@ import { getProfile, getProgress, updateBusinessSection, updateProfile } from '.
 import { STAGE_GROUPS } from '../data/onboardingQuestions';
 import { getNotificationPreferences, updateNotificationPreferences } from '../services/settings';
 import { logout } from '../services/auth';
-import { getCatalog, getMyPlan } from '../services/plans';
+import { getCatalog, getMyPlan, planLabel as planLabelFor } from '../services/plans';
 import { dailyTokenMeter, formatTokenMeter } from '../utils/planMeter';
 import {
   deleteAccount,
@@ -271,7 +271,10 @@ export default function FounderProfile() {
   }, []);
   const planTier = plan?.tier || 'free';
   const isFreePlan = planTier === 'free';
-  const planLabel = plan?.plan_name ? `Ally ${plan.plan_name}` : 'Ally Free';
+  // Was 'Ally Free' whenever plan_name had not arrived -- so a founder who had
+  // paid was told they were on Free for as long as the request took. The
+  // helper falls back to the tier's real name instead.
+  const planLabel = planLabelFor(planTier, plan?.plan_name);
   const monthly = tiers.find(t => t.tier === planTier)?.price_inr;
   const planPrice = isFreePlan ? '₹0' : (monthly ? `₹${monthly.toLocaleString('en-IN')}` : '—');
 
