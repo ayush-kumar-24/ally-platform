@@ -16,11 +16,17 @@
  * than component state, so a founder can be sent straight to one and the back
  * button behaves.
  *
+ * TWO KINDS OF CARD. A podcast episode has a link, so its whole card is one.
+ * A film has no link worth giving (see the note in data/watch.js), and there
+ * are sixty-five of them -- printing every description at once is a wall
+ * nobody reads. Those render as title tiles that open on hover.
+ *
  * NO LOADING STATE, deliberately. This is static reference content imported at
  * build time -- there is nothing to fetch, and a spinner over data already in
  * the bundle is a lie about what is happening.
  */
 
+import { useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { KNOWLEDGE_SECTIONS } from '../data/knowledge';
 
@@ -75,8 +81,88 @@ function ResourceCard({ item }) {
   );
 }
 
-function Library({ items, empty }) {
+/**
+ * A film or series: the title at rest, everything else on hover.
+ *
+ * HOVER IS NOT THE ONLY WAY IN. A hover-only disclosure is invisible on a
+ * phone and unreachable from a keyboard, so the face is a real <button>:
+ * clicking or tapping it pins the detail open, and `aria-expanded` says so.
+ * Hover is the shortcut on top of that, not the mechanism.
+ *
+ * The detail is absolutely positioned over the tile and allowed to overhang
+ * downwards. Growing the tile in place would reflow every card in the row on
+ * a mouse-over, which looks broken even when it isn't.
+ */
+function TitleTile({ item }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div
+      className={`wt-tile${open ? ' is-open' : ''}`}
+      onMouseLeave={() => setOpen(false)}
+    >
+      <button
+        type="button"
+        className="wt-face"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        onKeyDown={(e) => { if (e.key === 'Escape') setOpen(false); }}
+      >
+        <span className="wt-name">{item.title}</span>
+        <span className="wt-sub">
+          {item.year}
+          {item.year && item.tag ? ' · ' : ''}
+          {item.tag}
+        </span>
+      </button>
+
+      {/* The panel takes pointer events so the cursor can cross it without the
+          tile losing hover and flickering. That means a second tap lands here
+          rather than on the face, so closing has to live here too. */}
+      <div className="wt-pop" onClick={() => setOpen(false)}>
+        <span className="wt-name">{item.title}</span>
+        <span className="wt-sub">
+          {item.year}
+          {item.year && item.tag ? ' · ' : ''}
+          {item.tag}
+        </span>
+
+        {item.why && <p className="wt-why">{item.why}</p>}
+
+        {item.forWhen && (
+          <p className="wt-line">
+            <span className="wt-line-label">Watch it when</span>
+            {item.forWhen}
+          </p>
+        )}
+
+        {item.ask && (
+          <p className="wt-line">
+            <span className="wt-line-label">Ask yourself after</span>
+            {item.ask}
+          </p>
+        )}
+
+        {/* Shown, not filed away. The films most likely to be misread are the
+            ones most likely to be watched, so the warning travels with the
+            title rather than living in a document nobody opens. */}
+        {item.care && <p className="wt-care">{item.care}</p>}
+      </div>
+    </div>
+  );
+}
+
+function Library({ items, empty, variant }) {
   if (!items || items.length === 0) return <p className="fw-empty">{empty}</p>;
+
+  if (variant === 'titles') {
+    return (
+      <div className="wt-grid">
+        {items.map((item) => <TitleTile key={item.id} item={item} />)}
+      </div>
+    );
+  }
+
   return (
     <div className="fw-grid">
       {items.map((item) => <ResourceCard key={item.id} item={item} />)}
@@ -140,8 +226,12 @@ export default function KnowledgePage() {
         </div>
       )}
 
+      {/* One caveat that applies to a whole list, said once. Repeating it on
+          every card would turn it into wallpaper. */}
+      {active?.standing && <p className="fw-standing">{active.standing}</p>}
+
       {tabs
-        ? <Library items={active.items} empty={active.empty} />
+        ? <Library items={active.items} empty={active.empty} variant={active.variant} />
         : <Library items={items} empty={empty} />}
     </div>
   );

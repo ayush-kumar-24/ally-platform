@@ -4,9 +4,16 @@ import { FRAMEWORKS } from '../data/frameworks';
 import { formatUsedDate, loadLastUsed, loadNotes } from '../services/frameworks';
 import { DnaError, DnaLoading } from '../components/DnaState';
 
+/* The whole card opens the framework, not just the button.
+   The card now takes the emerald hover the library cards use, and a card that
+   goes green under the cursor but only responds on one small button is a lie
+   about where you can click -- so the click moved to the card. "Use framework"
+   stays as the visible affordance and as the keyboard control; the article is
+   a mouse convenience on top of it, which is why it carries no role of its
+   own. */
 function FrameworkCard({ framework, lastUsedIso, note, onOpen }) {
   return (
-    <article className="fw-card">
+    <article className="fw-card fw-card-hover" onClick={() => onOpen(framework.id)}>
       <h3>{framework.title}</h3>
       <p className="fw-tagline">{framework.tagline}</p>
 
@@ -23,7 +30,11 @@ function FrameworkCard({ framework, lastUsedIso, note, onOpen }) {
 
       {note && <blockquote className="fw-note">{note}</blockquote>}
 
-      <button type="button" className="fw-use-btn" onClick={() => onOpen(framework.id)}>
+      <button
+        type="button"
+        className="fw-use-btn"
+        onClick={(e) => { e.stopPropagation(); onOpen(framework.id); }}
+      >
         Use framework
       </button>
     </article>

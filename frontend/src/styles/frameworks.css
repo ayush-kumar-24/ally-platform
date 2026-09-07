@@ -35,6 +35,16 @@
 }
 .fw-use-btn:hover { border-color: rgba(16,185,129,.4); background: rgba(16,185,129,.06); }
 
+/* The Frameworks list card. Same lift and same emerald wash as a library card,
+   because it does the same thing -- the whole card opens the framework, and
+   "Use framework" is the visible affordance rather than the only hit area.
+   Hover colour without a working hit area would be a lie about clickability,
+   so FrameworksPage puts the click on the card too. */
+.fw-card-hover { cursor: pointer; transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease, background-color .16s ease; }
+.fw-card-hover:hover { transform: translateY(-4px); background-color: rgba(16,185,129,.08); border-color: rgba(16,185,129,.4); box-shadow: 0 12px 28px rgba(16,24,20,.10); }
+.fw-card-hover:hover .fw-use-btn { border-color: rgba(16,185,129,.45); }
+@media (prefers-reduced-motion: reduce) { .fw-card-hover:hover { transform: none; } }
+
 /* ── Detail page ───────────────────────────────────────────────────────── */
 .fwd-page { padding: 18px 24px 80px; max-width: 760px; margin: 0 auto; }
 
@@ -201,4 +211,160 @@ a.fw-card-link:focus-visible {
   line-height: 1.5;
   color: var(--color-muted-2, #6c7a70);
   font-style: italic;
+}
+
+
+/* --- films and series: title tiles that open on hover ----------------------
+   Sixty-five titles with their descriptions printed underneath is a wall
+   nobody reads, so the tile carries the name and the detail arrives on
+   demand. */
+
+/* One caveat that applies to a whole list, said once above it. */
+.fw-standing {
+  margin: -6px 0 22px;
+  max-width: 70ch;
+  font-size: 12.5px;
+  line-height: 1.6;
+  font-style: italic;
+  color: var(--color-muted-2, #6c7a70);
+}
+
+.wt-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(232px, 1fr));
+  gap: 14px;
+  /* Room for the last row's detail to overhang. Without it the document grows
+     on hover, the scrollbar appears, and the whole page shifts sideways. */
+  padding-bottom: 200px;
+}
+
+/* A veil over the rest of the grid while one tile is open.
+   The panel overhangs the tile below it and its bottom edge lands wherever the
+   text ends, which can cut a covered tile's subtitle in half -- that reads as
+   broken layout rather than as an overlay. Dropping everything else behind a
+   wash of the page colour makes the open card the only sharp thing on screen,
+   so a half-covered tile beneath it is obviously behind, not broken. One
+   pseudo-element rather than an opacity change on sixty-five tiles. */
+.wt-grid { position: relative; }
+.wt-grid::after {
+  content: '';
+  position: absolute;
+  inset: -10px;
+  z-index: 4;
+  background: var(--color-ivory, #f7f1eb);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .16s ease;
+}
+.wt-grid:has(.wt-tile:hover)::after,
+.wt-grid:has(.wt-tile.is-open)::after { opacity: .66; }
+
+.wt-tile { position: relative; transition: transform .16s ease; }
+.wt-tile:hover, .wt-tile.is-open { transform: translateY(-4px); z-index: 5; }
+
+.wt-face {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  width: 100%;
+  /* Fill the grid row rather than only the text. A row is as tall as its
+     longest title, and without this the shorter tiles in that row stop early
+     and the row looks ragged. */
+  height: 100%;
+  min-height: 104px;
+  padding: 17px 18px;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  border-radius: 16px;
+  border: 1px solid var(--color-bd, #e7e0d6);
+  background-color: var(--color-ivory-2, #fbf7f2);
+  transition: background-color .16s ease, border-color .16s ease, box-shadow .16s ease;
+}
+.wt-tile:hover .wt-face,
+.wt-tile.is-open .wt-face {
+  background-color: rgba(16, 185, 129, .08);
+  border-color: rgba(16, 185, 129, .4);
+  box-shadow: 0 12px 28px rgba(16, 24, 20, .10);
+}
+.wt-face:focus-visible { outline: 2px solid var(--color-emerald, #10B981); outline-offset: 2px; }
+
+.wt-name {
+  font-family: var(--font-display);
+  font-size: 15px;
+  line-height: 1.32;
+  font-weight: 600;
+  color: var(--color-forest, #1B4332);
+}
+.wt-sub {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--color-muted-2, #8a958b);
+}
+
+/* The detail. Positioned over the tile and free to overhang downwards --
+   growing the tile in place would reflow the whole row on a mouse-over, which
+   looks broken even when it is not. #e8f2e9 is emerald-at-8% over the ivory
+   card, resolved to an opaque colour: the panel and the tile beneath it have
+   to be exactly the same green or the seam shows where it overhangs. */
+.wt-pop {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 17px 18px 18px;
+  border-radius: 16px;
+  border: 1px solid rgba(16, 185, 129, .4);
+  background: #e8f2e9;
+  /* Heavier than a card's own shadow on purpose. The panel overhangs the tile
+     below it and its bottom edge lands wherever the text happens to end, which
+     can slice the covered tile's subtitle in half. A soft shadow leaves that
+     reading as broken layout; a real elevation reads as one thing floating
+     over another, which is what is actually happening. */
+  box-shadow: 0 2px 6px -2px rgba(6, 20, 13, .18), 0 24px 48px -12px rgba(6, 20, 13, .34);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity .16s ease, visibility 0s linear .16s;
+}
+.wt-tile:hover .wt-pop,
+.wt-tile.is-open .wt-pop {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition: opacity .16s ease;
+}
+
+.wt-why { margin: 3px 0 0; font-size: 12.5px; line-height: 1.55; color: var(--color-ink, #16241c); }
+
+.wt-line { margin: 4px 0 0; font-size: 12px; line-height: 1.5; color: var(--color-moss, #3a5f47); }
+.wt-line-label {
+  display: block;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--color-muted-2, #8a958b);
+  margin-bottom: 2px;
+}
+
+/* The way a title is commonly misread. Warm rather than green so it separates
+   from the recommendation it is qualifying. */
+.wt-care {
+  margin: 8px 0 0;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(16, 185, 129, .35);
+  font-size: 11.5px;
+  line-height: 1.5;
+  font-style: italic;
+  color: #7a5527;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wt-tile { transition: none; }
+  .wt-tile:hover, .wt-tile.is-open { transform: none; }
 }
