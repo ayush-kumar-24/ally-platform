@@ -92,7 +92,7 @@ export default function AuthTransition({ onNavigate, onComplete }) {
     >
       {phase === 'playing' && (
         <video
-          src="/ally-animation-video.mp4"
+          src="/ally-logo-animation.mp4"
           autoPlay
           muted
           playsInline

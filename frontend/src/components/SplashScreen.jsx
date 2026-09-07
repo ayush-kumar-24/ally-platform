@@ -8,9 +8,18 @@ const EASE = 'cubic-bezier(.22,1,.3,1)';
  * Fades out and calls `onDone` when finished.
  * Uses sessionStorage so it only plays once per browser session.
  *
- * Uses ally-animation-video-hd.mp4 — the original animation re-rendered at
- * 1696×960 (2× lanczos upscale + sharpen, CRF 16) so it stays crisp when
- * stretched fullscreen. The 848×480 source is kept at ally-animation-video.mp4.
+ * Uses ally-logo-animation-hd.mp4 — the clear 1080×608 master, H.264 (see the
+ * source note below). ally-logo-animation.mp4 is the same film at 720×406 for
+ * phones. Both are muted and carry no audio track at all.
+ *
+ * WHY H.264 AND NOT THE MASTER AS DELIVERED. The clear render arrived as HEVC
+ * (H.265). Safari plays it; Chrome only where the OS supplies a decoder — a
+ * plain Windows install without the paid HEVC extension does not — and Firefox
+ * largely does not. Every one of those founders would have hit onError and
+ * been dropped straight past the splash, which fails silently and looks like
+ * nothing happened. Transcoded to H.264 High at CRF 18: SSIM 0.997 against the
+ * master, indistinguishable side by side, and 957 KB against the master's 9.1 MB.
+ * The HEVC master is not deleted, only unshipped -- it is in commit c204ad6.
  */
 export default function SplashScreen({ onDone }) {
   const [phase, setPhase] = useState('playing'); // playing → fading → done
@@ -126,11 +135,11 @@ export default function SplashScreen({ onDone }) {
           transition: `opacity 0.6s ${EASE}, transform 1.2s ${EASE}`,
         }}
       >
-        {/* The 1696x960 render exists so the film stays crisp stretched across
-            a desktop. A phone is a third of that width and was downloading
-            twice the bytes for nothing; it gets the 848x480 source. */}
-        <source src="/ally-animation-video-hd.mp4" type="video/mp4" media="(min-width: 1000px)" />
-        <source src="/ally-animation-video.mp4" type="video/mp4" />
+        {/* Full resolution for a desktop, where the film is stretched across the
+            whole window. A phone is a third of that width and would be
+            downloading two and a half times the bytes for nothing. */}
+        <source src="/ally-logo-animation-hd.mp4" type="video/mp4" media="(min-width: 1000px)" />
+        <source src="/ally-logo-animation.mp4" type="video/mp4" />
       </video>
       {/* Soft vignette keeps focus on the mark and hides upscale softness at
           the extreme edges on very wide displays. */}
