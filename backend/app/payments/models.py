@@ -32,6 +32,10 @@ class WebhookOutcome:
 
     CAPTURED = "captured"
     ALREADY_PROCESSED = "already_processed"
+    # Razorpay itself says this payment is not (yet) captured. Only
+    # PaymentService.confirm_checkout produces it: the webhook is told about
+    # captures, but a founder can ask about a payment still settling.
+    NOT_CAPTURED = "not_captured"
     FAILED_RECORDED = "failed_recorded"
     IGNORED_EVENT = "ignored_event"
     UNKNOWN_PAYMENT = "unknown_payment"
