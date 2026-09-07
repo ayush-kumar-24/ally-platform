@@ -135,6 +135,34 @@ export function deactivateBroadcast(id) {
   return del(`/admin/broadcasts/${id}`);
 }
 
+// --- coupons ---------------------------------------------------------------
+// Reading is view_users (support gets asked "how many of the 100 are left");
+// creating decides what founders pay, so it is Super Admin only.
+
+export function listCoupons({ includeInactive = true, limit = 100 } = {}) {
+  return get('/admin/coupons', { params: { include_inactive: includeInactive, limit } });
+}
+
+export function createCoupon(payload) {
+  return post('/admin/coupons', payload);
+}
+
+/** N unique single-use codes under one prefix — the partner/influencer shape.
+ *  "First 100 customers" is the opposite: ONE code with max_redemptions: 100. */
+export function bulkCoupons(payload) {
+  return post('/admin/coupons/bulk', payload);
+}
+
+/** Only the fields it is safe to change after issue: description, caps, expiry,
+ *  active. The code and its value are fixed once anyone could have seen it. */
+export function updateCoupon(couponId, payload) {
+  return patch(`/admin/coupons/${couponId}`, payload);
+}
+
+export function couponRedemptions(couponId, { limit = 200 } = {}) {
+  return get(`/admin/coupons/${couponId}/redemptions`, { params: { limit } });
+}
+
 /** System-wide token usage, estimated cost and the unbilled backlog. */
 export function getUsage(days = 30) {
   return get('/admin/usage', { params: { days } });

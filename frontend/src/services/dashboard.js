@@ -1,11 +1,10 @@
 /**
  * services/dashboard.js — the founder's home screen data.
  *
- * Independent sources, fetched together but failing -- and arriving --
- * independently: a founder with no diagnosis yet still has a profile and a
- * name, and the page must render for them. Treating any one failure as fatal
- * would make a brand-new account look like a broken app, and making the page
- * wait for all of them makes a working account look like a slow one.
+ * Three independent sources, fetched together but failing independently: a founder
+ * with no diagnosis yet still has a profile and a name, and the page must render
+ * for them. Treating any one failure as fatal would make a brand-new account look
+ * like a broken app.
  */
 
 import { get, post } from './api';
@@ -25,6 +24,11 @@ export function getIntelligenceSummary() {
   return get('/intelligence/summary');
 }
 
+/** The signed-in founder's profile. */
+export function getProfile() {
+  return get('/profile');
+}
+
 /**
  * The founder's real dashboard: journey state, stage, latest diagnosis, live
  * counts, upcoming call, recent conversations and reports.
@@ -37,6 +41,13 @@ export function getOverview() {
   return get('/dashboard/overview');
 }
 
+/**
+ * Everything the dashboard needs, in one call.
+ *
+ * Each source resolves to null on failure rather than rejecting, so one missing
+ * piece dims one card instead of blanking the page. The caller can tell "no data
+ * yet" (`available: false`) from "could not load" (`null`).
+ */
 /** The founder's real plan, credits and daily token usage. */
 export function getMyPlan() {
   return get('/plans/me');
@@ -56,46 +67,16 @@ export function markTourSeen() {
   return post('/dashboard/tour-seen', {}).catch(() => null);
 }
 
-/* No `profile` source here. AppContext already fetches GET /profile on mount
-   for the whole signed-in app (it owns the founder's name, avatar and
-   initials), so fetching it again here made the dashboard's own load two
-   identical requests -- one more round trip through the auth dependency, for
-   a value the page could already read from context. */
-const SOURCES = {
-  health: getBusinessHealth,
-  progress: getProfileProgress,
-  summary: getIntelligenceSummary,
-  overview: getOverview,
-  plan: getMyPlan,
-};
-
-/**
- * Everything the dashboard needs, in one call.
- *
- * Each source resolves to null on failure rather than rejecting, so one missing
- * piece dims one card instead of blanking the page. The caller can tell "no data
- * yet" (`available: false`) from "could not load" (`null`).
- *
- * `onPart(key, value)` fires as each source lands, so the page can paint each
- * card the moment ITS data arrives instead of waiting for all of them.
- * Awaiting the returned promise still gives the whole object, for callers
- * that want that.
- * The three states a caller reads are deliberately distinct: `undefined` means
- * still in flight, `null` means the request failed, and a value means it
- * answered -- which is what lets a card show a placeholder rather than an
- * "you have nothing yet" empty state it cannot yet stand behind.
- */
-export function loadDashboard(onPart) {
-  return Promise.all(
-    Object.entries(SOURCES).map(([key, fetchOne]) =>
-      fetchOne()
-        .catch(() => null)
-        .then((value) => {
-          onPart?.(key, value);
-          return [key, value];
-        })
-    )
-  ).then(Object.fromEntries);
+export async function loadDashboard() {
+  const [profile, health, progress, summary, overview, plan] = await Promise.all([
+    getProfile().catch(() => null),
+    getBusinessHealth().catch(() => null),
+    getProfileProgress().catch(() => null),
+    getIntelligenceSummary().catch(() => null),
+    getOverview().catch(() => null),
+    getMyPlan().catch(() => null),
+  ]);
+  return { profile, health, progress, summary, overview, plan };
 }
 
 /** "14 JUL" / "Today" / "3d ago" — dates as a person reads them. */

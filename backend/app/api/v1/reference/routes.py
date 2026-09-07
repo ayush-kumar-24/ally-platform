@@ -31,7 +31,7 @@ router = APIRouter(prefix="/reference", tags=["reference"])
 
 
 @router.get("/stages", response_model=StagesCatalog)
-def list_stages(
+async def list_stages(
     _: AuthUser = Depends(get_current_founder),
     db: Session = Depends(get_db),
 ) -> StagesCatalog:
@@ -63,7 +63,7 @@ def list_stages(
 
 
 @router.get("/industries", response_model=list[IndustryOption])
-def list_industries(
+async def list_industries(
     _: AuthUser = Depends(get_current_founder),
     db: Session = Depends(get_db),
 ) -> list[IndustryOption]:
@@ -80,7 +80,7 @@ def list_industries(
 
 
 @router.get("/business-pillars", response_model=list[BusinessPillarOption])
-def list_business_pillars(
+async def list_business_pillars(
     _: AuthUser = Depends(get_current_founder),
     db: Session = Depends(get_db),
 ) -> list[BusinessPillarOption]:

@@ -35,7 +35,7 @@ class NotFoundError(AppError):
 
 
 @router.get("/problems", response_model=list[ProblemSummary])
-def list_problems(
+async def list_problems(
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     _: AuthUser = Depends(get_current_founder),
@@ -49,7 +49,7 @@ def list_problems(
 
 
 @router.get("/problems/{problem_id}", response_model=ProblemDetail)
-def get_problem(
+async def get_problem(
     problem_id: int,
     _: AuthUser = Depends(get_current_founder),
     db: Session = Depends(get_db),
@@ -76,7 +76,7 @@ def get_problem(
 
 
 @router.get("/root-causes/{root_cause_id}", response_model=RootCauseDetail)
-def get_root_cause(
+async def get_root_cause(
     root_cause_id: int,
     _: AuthUser = Depends(get_current_founder),
     db: Session = Depends(get_db),
