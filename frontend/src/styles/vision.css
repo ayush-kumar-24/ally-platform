@@ -72,9 +72,20 @@
   font: inherit; font-weight: 500; font-size: 13.5px; padding: 10px 12px;
   border-radius: 10px; border: 1px solid var(--color-bd, #e7e0d6); background: #fff; color: var(--color-ink, #16241c);
   resize: vertical;
+  /* An <input> carries an intrinsic width of about twenty characters whether
+     you want it or not, and it does not shrink to its container on its own.
+     Two of them side by side were therefore wider than the modal. */
+  width: 100%;
+  min-width: 0;
 }
 .vt-field input:focus, .vt-field textarea:focus { outline: 2px solid rgba(16,185,129,.4); outline-offset: 1px; }
-.vt-field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+/* minmax(0, 1fr), NOT 1fr. A grid track's min size is `auto`, meaning it will
+   not shrink below the intrinsic width of what is inside it -- and an <input>
+   insists on roughly twenty characters. So two `1fr` columns holding inputs
+   came to more than the 396px of content width a 440px modal actually has, and
+   the row pushed the modal wider than the screen. minmax(0, 1fr) lets the
+   track shrink; the width:100% above makes the input follow it. */
+.vt-field-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
 @media (max-width: 480px) { .vt-field-row { grid-template-columns: 1fr; } }
 .vt-editor-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 4px; }
 
