@@ -2510,3 +2510,25 @@ body.lp-done #landing-page { display:none; }
 .nr-pill.new { background: #dcfce7; color: #166534; }
 .nr[data-status="read"] .nr-dot { opacity: .35; }
 .np-open:disabled { opacity: .5; cursor: default; }
+
+/* History: a docked column on desktop, a drawer only on mobile.
+   The slide-over above is absolute and can only ever COVER the thread, which
+   at desktop widths meant a dim, half-hidden conversation behind a panel
+   there was plenty of room to sit beside. From 768px up the panel becomes an
+   in-flow flex column that pushes the thread right; the slide is done with a
+   negative margin rather than a transform so it genuinely takes and releases
+   layout space instead of floating over it. The scrim is a drawer concept and
+   has no job here. */
+@media(min-width:768px){
+  .ac{flex-direction:row}
+  /* border-box so 302px is the WHOLE panel -- content-box put the 24px of
+     padding outside it, and the negative margin left exactly that much
+     peeking out when closed. */
+  .ac-hist{position:relative;top:auto;bottom:auto;left:auto;max-width:none;flex-shrink:0;z-index:auto;
+    box-sizing:border-box;transform:none;margin-left:-302px;
+    background:rgba(4,16,10,.62);backdrop-filter:none;-webkit-backdrop-filter:none;
+    transition:margin-left .36s cubic-bezier(.22,1,.3,1)}
+  .ac.open .ac-hist{transform:none!important;margin-left:0;box-shadow:none}
+  .ac-main{min-width:0}
+  .ac-scrim,.ac.open .ac-scrim{display:none}
+}
