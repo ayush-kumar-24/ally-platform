@@ -31,7 +31,7 @@ from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_founder_record
+from app.api.deps import client_ip, get_founder_record
 from app.db.session import get_db
 from app.models import Founder
 from app.models.schema import CookiePreferences
@@ -74,6 +74,7 @@ async def record_cookie_choice(
     payload: CookieChoice,
     founder: Founder = Depends(get_founder_record),
     db: Session = Depends(get_db),
+    ip: str | None = Depends(client_ip),
 ):
     """Store one cookie choice against the founder. Always appends.
 
@@ -92,6 +93,10 @@ async def record_cookie_choice(
         functional=bool(payload.functional),
         banner_action=action,
         banner_shown=True,
+        # Server-resolved, never from the body -- the same rule the terms
+        # consent follows, and for the same reason: a self-reported address
+        # proves nothing.
+        ip_address=ip,
         created_at=payload.chosen_at,
     )
     db.add(row)

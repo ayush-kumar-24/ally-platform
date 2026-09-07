@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Response, status
 
+from app.api.deps import client_ip
 from app.api.v1.consents.dependencies import get_consent_service, get_current_founder_id
 from app.api.v1.consents.responses import ConsentResponse, ConsentStatusResponse
 from app.api.v1.consents.schemas import ConsentCreate
@@ -26,6 +27,7 @@ def create_consent(
     response: Response,
     founder_id: int = Depends(get_current_founder_id),
     service: ConsentService = Depends(get_consent_service),
+    ip: str | None = Depends(client_ip),
 ) -> ConsentResponse:
     """Append a consent record.
 
@@ -41,6 +43,7 @@ def create_consent(
         agree_terms=payload.agree_terms,
         agree_diagnosis=payload.agree_diagnosis,
         age_confirmed=payload.age_confirmed,
+        ip_address=ip,
     )
     if not created:
         response.status_code = status.HTTP_200_OK

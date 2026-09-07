@@ -25,6 +25,7 @@ class UserSummaryResponse(BaseModel):
     credits_balance: int
     diagnosis_completed: bool
     consent_status: str
+    cookie_status: str
     created_at: datetime
     last_active_at: datetime | None = None
 
@@ -34,7 +35,8 @@ class UserSummaryResponse(BaseModel):
                    phone=u.phone, business_name=u.business_name, status=u.status.value,
                    plan_type=u.plan_type, credits_balance=u.credits_balance,
                    diagnosis_completed=u.diagnosis_completed,
-                   consent_status=u.consent_status.value, created_at=u.created_at,
+                   consent_status=u.consent_status.value,
+                   cookie_status=u.cookie_status.value, created_at=u.created_at,
                    last_active_at=u.last_active_at)
 
 
@@ -58,6 +60,7 @@ class UserDetailResponse(BaseModel):
     subscription: dict[str, Any] | None = None
     credits: dict[str, Any]
     consent: dict[str, Any] | None = None
+    cookie_consent: dict[str, Any] | None = None
     reports: list[dict]
     chat_count: int
     diagnosis_history: list[dict]
@@ -68,6 +71,7 @@ class UserDetailResponse(BaseModel):
     def from_domain(cls, d: UserDetail) -> "UserDetailResponse":
         return cls(founder_id=d.founder_id, profile=d.profile, business=d.business,
                    subscription=d.subscription, credits=d.credits, consent=d.consent,
+                   cookie_consent=d.cookie_consent,
                    reports=d.reports, chat_count=d.chat_count,
                    diagnosis_history=d.diagnosis_history, login_history=d.login_history,
                    privacy_requests=d.privacy_requests)

@@ -21,6 +21,21 @@ class ConsentStatus(str, Enum):
     MISSING = "missing"          # never consented
 
 
+class CookieStatus(str, Enum):
+    """What the founder answered on the cookie banner.
+
+    NEVER_ANSWERED is the one worth naming. It is NOT "rejected": a founder who
+    was never shown the banner, or who closed it, has given no answer at all,
+    and an admin looking for people to re-prompt needs those two apart. Before
+    this the panel rendered both as nothing.
+    """
+
+    ACCEPTED_ALL = "accepted_all"
+    REJECTED_ALL = "rejected_all"
+    CUSTOMISED = "customised"
+    NEVER_ANSWERED = "never_answered"
+
+
 class SortField(str, Enum):
     CREATED_AT = "created_at"
     LAST_ACTIVE_AT = "last_active_at"
@@ -64,6 +79,10 @@ class UserSummary:
     consent_status: ConsentStatus
     created_at: datetime
     last_active_at: datetime | None = None
+    #: Defaulted, so every existing construction of this row keeps working and a
+    #: founder with no cookie row reads as never having answered -- which is the
+    #: truth about them, not a stand-in for one.
+    cookie_status: CookieStatus = CookieStatus.NEVER_ANSWERED
 
 
 @dataclass(frozen=True)
@@ -95,6 +114,10 @@ class UserDetail:
     subscription: dict[str, Any] | None = None
     credits: dict[str, Any] = field(default_factory=dict)
     consent: dict[str, Any] | None = None
+    #: The cookie banner is a separate consent under a separate basis, so it is
+    #: a separate section rather than folded into `consent` above. None means
+    #: never answered -- not the same as answering "reject all", which is a row.
+    cookie_consent: dict[str, Any] | None = None
     reports: list[dict] = field(default_factory=list)
     chat_count: int = 0
     diagnosis_history: list[dict] = field(default_factory=list)

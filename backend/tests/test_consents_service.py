@@ -167,3 +167,49 @@ def test_deterministic_execution():
         s.record_consent(1, agree_terms=True, agree_diagnosis=False, **V)
         return s.list_history(1)
     assert run() == run()
+
+
+# --- where the consent came from -------------------------------------------
+#
+# The ledger's job is to DEMONSTRATE consent, not assert it: what was agreed,
+# to which version, when, and now from where.
+
+def test_the_address_is_stored_with_the_consent():
+    s = svc()
+    record, created = s.record_consent(7, **V, agree_terms=True, ip_address="49.36.1.2")
+    assert created and record.ip_address == "49.36.1.2"
+
+
+def test_a_consent_without_an_address_records_none_not_a_placeholder():
+    """"Not recorded" and "recorded as unknown" are different claims, and only
+    the first is true when no address could be resolved."""
+    s = svc()
+    record, _ = s.record_consent(7, **V, agree_terms=True)
+    assert record.ip_address is None
+
+
+def test_the_same_decision_from_a_new_address_does_not_append_a_record():
+    """The ledger records DECISIONS. Re-opening the app on mobile data is not a
+    new decision, and comparing the address would append a duplicate every time
+    a founder's network changed -- the exact pollution the idempotency check
+    exists to prevent."""
+    s = svc()
+    first, created = s.record_consent(7, **V, agree_terms=True, ip_address="49.36.1.2")
+    again, created_again = s.record_consent(7, **V, agree_terms=True, ip_address="203.0.113.9")
+
+    assert created is True and created_again is False
+    # The original record comes back untouched, address included.
+    assert again.consent_id == first.consent_id
+    assert again.ip_address == "49.36.1.2"
+    assert len(s.list_history(7)) == 1
+
+
+def test_a_real_change_of_mind_records_the_address_it_came_from():
+    s = svc()
+    s.record_consent(7, **V, agree_terms=True, agree_diagnosis=False, ip_address="49.36.1.2")
+    changed, created = s.record_consent(
+        7, **V, agree_terms=True, agree_diagnosis=True, ip_address="203.0.113.9")
+
+    assert created is True
+    assert changed.ip_address == "203.0.113.9"
+    assert len(s.list_history(7)) == 2
