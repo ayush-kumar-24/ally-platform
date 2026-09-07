@@ -26,7 +26,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.logger import logger
-from app.db.session import get_db
+from app.db.session import get_db, set_admin_rls_context
 from app.privacy.db_repository import SqlAlchemyPrivacyRepository
 from app.privacy.deletion_executor import AccountDeletionExecutor
 
@@ -41,12 +41,46 @@ def _verify_secret(x_internal_secret: str | None) -> None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid internal secret")
 
 
-@router.post("/process-deletions", summary="Run the account-erasure sweep for due founders")
-def process_deletions(
+def authorise_internal_job(
     x_internal_secret: str | None = Header(default=None),
     db: Session = Depends(get_db),
-) -> dict:
+) -> None:
+    """Check the shared secret, then tell the database this is a system actor.
+
+    THE TWO ARE DELIBERATELY WELDED TOGETHER. Every job here works across ALL
+    founders by definition -- that is what a sweep is -- and the docstring at
+    the top of this module already says no founder is present in the request.
+    But every table these jobs read is founder-scoped under row-level security
+    (migration d91c6e4b72aa), whose policy is
+    `founder_id = get_founder_id() OR app.current_admin`.
+
+    With neither set, `get_founder_id()` is NULL and the policy hides every
+    row. So in production these jobs found NOTHING and reported success:
+    find_due_for_deletion() returned an empty list, the sweep logged zero
+    erasures, and a founder who asked to be deleted was never deleted -- with
+    a green run every day saying otherwise. Reports were never reconciled and
+    call reminders never sent, for the same reason.
+
+    Invisible in local development, which connects as a BYPASSRLS superuser
+    and never exercises the policy at all.
+
+    Coupled into one dependency rather than left as two calls so the next job
+    added to this file cannot authenticate correctly and still sweep nothing.
+    Set with is_local = true, so it dies with this request's transaction.
+
+    ORDER MATTERS. The secret is checked FIRST: widening row-level security is
+    the privilege this endpoint's shared secret authorises, so it must be
+    unreachable by anyone who has not presented it.
+    """
     _verify_secret(x_internal_secret)
+    set_admin_rls_context(db)
+
+
+@router.post("/process-deletions", summary="Run the account-erasure sweep for due founders")
+def process_deletions(
+    db: Session = Depends(get_db),
+    _: None = Depends(authorise_internal_job),
+) -> dict:
 
     from datetime import datetime, timezone
 
@@ -77,8 +111,8 @@ def process_deletions(
 def reconcile_reports(
     older_than_minutes: int = 15,
     limit: int = 25,
-    x_internal_secret: str | None = Header(default=None),
     db: Session = Depends(get_db),
+    _: None = Depends(authorise_internal_job),
 ) -> dict:
     """The durability guarantee behind moving reasoning off the request path.
 
@@ -100,7 +134,6 @@ def reconcile_reports(
     that a founder waiting on the Thinking screen is likely still there when the
     report lands, rare enough not to trip the older_than_minutes guard.
     """
-    _verify_secret(x_internal_secret)
 
     from app.api.v1.reasoning.trigger import reconcile_missing_reports
 
@@ -115,8 +148,8 @@ def reconcile_reports(
 )
 def backfill_report_pdfs(
     limit: int = 25,
-    x_internal_secret: str | None = Header(default=None),
     db: Session = Depends(get_db),
+    _: None = Depends(authorise_internal_job),
 ) -> dict:
     """What makes "your PDF will be ready in a few minutes" a promise.
 
@@ -135,7 +168,6 @@ def backfill_report_pdfs(
     alongside reconcile-reports is the sensible cadence; the whole point is that
     a founder who was told "a few minutes" is not waiting on a human.
     """
-    _verify_secret(x_internal_secret)
 
     from app.api.v1.reports.pdf_delivery import backfill_pending_pdfs
 
@@ -147,8 +179,8 @@ def backfill_report_pdfs(
     summary="Run the system health check and alert if it just turned red",
 )
 def check_health(
-    x_internal_secret: str | None = Header(default=None),
     db: Session = Depends(get_db),
+    _: None = Depends(authorise_internal_job),
 ) -> dict:
     """Admin Panel Proposal Phase 3's other half: `GET /admin/health` (the
     panel page) is pull-based and never itself alerts anyone -- this is the
@@ -160,7 +192,6 @@ def check_health(
     one every few minutes -- and the response always reports the true
     current status regardless of whether an alert fired.
     """
-    _verify_secret(x_internal_secret)
 
     from app.core.container import container
 
@@ -183,8 +214,8 @@ def check_health(
     summary="Send any due 24h / 1h discovery-call reminders",
 )
 def send_call_reminders(
-    x_internal_secret: str | None = Header(default=None),
     db: Session = Depends(get_db),
+    _: None = Depends(authorise_internal_job),
 ) -> dict:
     """The consumer side of `send_due_reminders`, which had no caller at all.
 
@@ -204,7 +235,6 @@ def send_call_reminders(
     reports `email_configured` so a scheduler's logs make that obvious rather
     than showing a cheerful zero.
     """
-    _verify_secret(x_internal_secret)
 
     from app.services.discovery_notifications import send_due_reminders
 

@@ -30,7 +30,7 @@ from app.api.v1.reports.schemas import (
     SharedReportView, SharedSection,
 )
 from app.core.logger import logger
-from app.db.session import get_db
+from app.db.session import get_db, set_admin_rls_context
 from app.models import Founder, FounderReport
 
 
@@ -52,6 +52,34 @@ def _resolve_share_or_404(db: Session, token: str, *, route: str):
     404 to the visitor, a named cause in our logs. The token itself is never
     logged -- it is the credential.
     """
+    # THE SHARE ROUTES ARE SYSTEM ACTORS AND MUST SAY SO TO THE DATABASE.
+    #
+    # This is the one read in the product with no founder identity by design:
+    # a share link is opened by an investor, a co-founder, a stranger -- nobody
+    # who is signed in. So `get_founder_record` is deliberately not a dependency
+    # here, and therefore `set_founder_rls_context` never runs.
+    #
+    # But `report_shares` and `founder_reports` are both founder-scoped under
+    # row-level security (migration d91c6e4b72aa), whose policy is
+    # `founder_id = get_founder_id() OR app.current_admin`. With neither set,
+    # get_founder_id() is NULL, the comparison is NULL, and the policy hides
+    # EVERY row -- so the lookup below found nothing and every share link on
+    # earth answered "This shared report is not available." The row was always
+    # there. This connection simply could not see it.
+    #
+    # Not observable in local development, which connects as a BYPASSRLS
+    # superuser and never exercises the policy. Only production runs as
+    # `ally_app`, which is why this was reproducible for founders and not here.
+    #
+    # THE TOKEN IS THE ACCESS CONTROL, and it always was: a 32-character random
+    # value, looked up exactly, returning one share and its one report. Nothing
+    # here accepts a founder_id, lists anything, or widens with user input --
+    # so admin context grants this request no reach beyond the row whose token
+    # the visitor already holds. Same reasoning, and the same call, as the
+    # Razorpay webhook, which is the other genuine system actor in the app.
+    # Transaction-local, so it dies with this request.
+    set_admin_rls_context(db)
+
     share = reports_repository.get_active_share(db, token)
     if share is None:
         # Covers all three of unknown / revoked / expired: get_active_share
