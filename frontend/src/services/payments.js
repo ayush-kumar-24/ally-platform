@@ -159,7 +159,15 @@ export function openCheckout({ order, planName, prefill = {} }) {
         email: prefill.email || '',
         contact: prefill.contact || '',
       },
-      notes: { plan_name: planName },
+      /* NO `notes` HERE. Checkout's notes are set on the PAYMENT entity, and
+         this used to send `{plan_name}` -- which replaced what the order's own
+         notes would have put there, including the `plan_tier` the backend read
+         to decide what to grant. The grant was refused and founders were
+         charged for plans they never received. The backend now takes the tier
+         from its own payments row, so nothing here needs to carry it; sending
+         notes again would only re-break the entity for no gain, and anything
+         this file puts in them is browser-supplied and cannot be trusted with
+         that decision anyway. */
       theme: { color: '#1B4332' },
       handler: (response) => settle({ status: 'paid', response }),
       modal: {

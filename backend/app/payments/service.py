@@ -129,6 +129,10 @@ class PaymentService:
         payment_id = self.repository.create_pending(
             founder_id=founder_id, amount_inr=charge_inr, currency=_CURRENCY,
             gateway="razorpay", gateway_order_id=order.order_id,
+            # What this payment buys, recorded where the price was decided.
+            # The gateway's notes carry it too, but those come back through
+            # the browser and are not authority for a grant.
+            plan_tier=tier.value,
             coupon_id=None,
             list_amount_inr=list_amount_inr if discount_inr else None,
             discount_inr=discount_inr or None,
@@ -275,14 +279,43 @@ class PaymentService:
                                 "gateway_payment_id": gateway_payment_id})
             return WebhookResult(outcome=WebhookOutcome.UNKNOWN_PAYMENT)
 
+        # WHAT THIS PAYMENT BUYS COMES FROM OUR OWN ROW, written when the order
+        # was priced -- never from the gateway's notes.
+        #
+        # It used to be the notes, on the premise (gateway.py) that Razorpay
+        # copies order notes onto the payment entity. The browser's Checkout
+        # options carry their own `notes` and ours sent `{plan_name: ...}`, so
+        # `plan_tier` was not on the entity at all: this branch refused the
+        # grant on every payment made through the widget. The founder was
+        # charged and given nothing, which is exactly what happened to the
+        # founder who paid Rs 999 and stayed on the Rs 199 plan.
+        #
+        # And notes are browser-supplied, so reading the tier from them meant
+        # the amount charged and the plan granted had different authorities:
+        # buy the cheapest tier, send `plan_tier: pro`, receive Pro.
         notes = entity.get("notes") or {}
-        tier_value = notes.get("plan_tier")
+        tier_value = payment.plan_tier
+        source = "payment row"
+        if not tier_value:
+            # Rows created before payments.plan_tier existed. Fall back so an
+            # in-flight checkout from the old build still completes, and say so
+            # loudly -- this path is temporary and unverifiable.
+            tier_value = notes.get("plan_tier")
+            source = "gateway notes (legacy payment row)"
+        elif notes.get("plan_tier") and notes["plan_tier"] != tier_value:
+            # Not fatal -- our row wins and the grant proceeds -- but a
+            # mismatch is either a gateway change or someone trying it on.
+            logger.error("payments: gateway notes disagree with the recorded plan tier",
+                         extra={"payment_id": payment.payment_id,
+                                "recorded": tier_value, "notes_tier": notes.get("plan_tier")})
+
         try:
             tier = PlanTier(tier_value)
             plan = PLANS[tier]
         except (ValueError, KeyError):
-            logger.error("payments: captured payment carries no recognisable plan_tier note",
-                         extra={"payment_id": payment.payment_id, "notes": notes})
+            logger.error("payments: captured payment names no recognisable plan tier",
+                         extra={"payment_id": payment.payment_id, "source": source,
+                                "tier_value": tier_value, "notes": notes})
             return WebhookResult(outcome=WebhookOutcome.UNKNOWN_PAYMENT,
                                  payment_id=payment.payment_id, founder_id=payment.founder_id)
 

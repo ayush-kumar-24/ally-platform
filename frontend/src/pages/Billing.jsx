@@ -761,7 +761,40 @@ function SuccessView({ plan, order, onViewStatus }) {
 ═══════════════════════════════════════════ */
 function StatusView({ onUpgrade, currentPlan }) {
   const [cancelModal, setCancelModal] = useState(false);
-  const plan = MOCK_PLANS.find(p => p.id === currentPlan) || MOCK_PLANS[1];
+  /* MOCK_PLANS lists the three PAID tiers, so `free` matches nothing -- and the
+     old fallback was `|| MOCK_PLANS[1]`, which is Plus at Rs 499. A founder who
+     had never paid a rupee opened this page and was told, with an Active badge
+     and a Cancel Plan button, that they were on Plus. Nothing here is a
+     subscription unless a paid tier matched. */
+  const plan = MOCK_PLANS.find(p => p.id === currentPlan) || null;
+
+  if (!plan) {
+    return (
+      <div className="bl-status-wrap stagger d1">
+        <div className="bl-status-header">
+          <div>
+            <div className="bl-section-label">Current Subscription</div>
+            <h2 className="bl-status-plan-name">Ally Free</h2>
+            <p className="bl-status-renew">
+              No paid plan yet. You are on the free tier.
+            </p>
+          </div>
+          <div className="bl-status-actions">
+            <button id="upgrade-plan-btn" className="bl-action-btn primary" onClick={onUpgrade}>
+              See plans
+            </button>
+          </div>
+        </div>
+
+        <div className="bl-invoice-section">
+          <div className="bl-section-label" style={{ marginBottom: 14 }}>Billing History</div>
+          <p className="dash-empty">
+            No invoices yet. Once billing is live, your receipts will appear here.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="bl-status-wrap stagger d1">

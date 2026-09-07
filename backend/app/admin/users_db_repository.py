@@ -198,8 +198,9 @@ class SqlAlchemyAdminUserRepository(AdminUserRepository):
         return UserDetail(
             founder_id=founder_id,
             profile={k: f.get(k) for k in (
-                "founder_id", "full_name", "email", "phone", "status", "created_at",
-                "last_active_at", "admin_notes", "preferred_language", "profile_completed")},
+                "founder_id", "full_name", "email", "phone", "status", "plan_type",
+                "created_at", "last_active_at", "admin_notes", "preferred_language",
+                "profile_completed")},
             business={k: f.get(k) for k in (
                 "business_name", "industry", "business_model", "team_size",
                 "current_revenue", "website", "linkedin_url", "customer_segment",

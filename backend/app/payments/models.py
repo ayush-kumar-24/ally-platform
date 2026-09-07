@@ -52,6 +52,12 @@ class PaymentRecord:
     gateway_payment_id: str | None
     amount_inr: int
     subscription_id: int | None
+    #: The tier this payment was priced for, written when the order was
+    #: created. None on rows predating that column -- see PaymentService for
+    #: what happens then. It is deliberately OUR copy: the gateway's notes
+    #: come back through the browser, which must never get to choose the plan
+    #: it is granted.
+    plan_tier: str | None = None
 
 
 @dataclass(frozen=True)

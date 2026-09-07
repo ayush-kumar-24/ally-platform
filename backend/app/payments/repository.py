@@ -22,7 +22,7 @@ class PaymentRepository:
 
     def create_pending(
         self, *, founder_id: int, amount_inr: int, currency: str, gateway: str,
-        gateway_order_id: str, coupon_id: int | None = None,
+        gateway_order_id: str, plan_tier: str, coupon_id: int | None = None,
         list_amount_inr: int | None = None, discount_inr: int | None = None,
         commit: bool = True,
     ) -> int:
@@ -41,13 +41,13 @@ class PaymentRepository:
             text(
                 "INSERT INTO payments "
                 "(founder_id, amount_inr, currency, status, payment_gateway, "
-                " gateway_order_id, coupon_id, list_amount_inr, discount_inr) "
-                "VALUES (:fid, :amt, :cur, 'pending', :gw, :goid, :cid, :list, :disc) "
+                " gateway_order_id, plan_tier, coupon_id, list_amount_inr, discount_inr) "
+                "VALUES (:fid, :amt, :cur, 'pending', :gw, :goid, :tier, :cid, :list, :disc) "
                 "RETURNING payment_id"
             ),
             {"fid": founder_id, "amt": amount_inr, "cur": currency, "gw": gateway,
-             "goid": gateway_order_id, "cid": coupon_id, "list": list_amount_inr,
-             "disc": discount_inr},
+             "goid": gateway_order_id, "tier": plan_tier, "cid": coupon_id,
+             "list": list_amount_inr, "disc": discount_inr},
         ).scalar()
         if commit:
             self.db.commit()
@@ -68,7 +68,7 @@ class PaymentRepository:
         row = self.db.execute(
             text(
                 "SELECT payment_id, founder_id, status, gateway_order_id, "
-                "       gateway_payment_id, amount_inr, subscription_id "
+                "       gateway_payment_id, amount_inr, subscription_id, plan_tier "
                 "FROM payments WHERE gateway_order_id = :goid"
             ),
             {"goid": gateway_order_id},
@@ -83,7 +83,7 @@ class PaymentRepository:
         row = self.db.execute(
             text(
                 "SELECT payment_id, founder_id, status, gateway_order_id, "
-                "       gateway_payment_id, amount_inr, subscription_id "
+                "       gateway_payment_id, amount_inr, subscription_id, plan_tier "
                 "FROM payments WHERE gateway_payment_id = :gpid"
             ),
             {"gpid": gateway_payment_id},
@@ -151,4 +151,5 @@ def _to_record(row) -> PaymentRecord | None:
         payment_id=row["payment_id"], founder_id=row["founder_id"], status=row["status"],
         gateway_order_id=row["gateway_order_id"], gateway_payment_id=row["gateway_payment_id"],
         amount_inr=row["amount_inr"], subscription_id=row["subscription_id"],
+        plan_tier=row["plan_tier"] if "plan_tier" in row.keys() else None,
     )

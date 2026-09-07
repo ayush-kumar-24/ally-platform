@@ -93,13 +93,14 @@ class FakeRepository:
         self.db = _FakeDbHandle()
 
     def create_pending(self, *, founder_id, amount_inr, currency, gateway, gateway_order_id,
-                       coupon_id=None, list_amount_inr=None, discount_inr=None, commit=True):
+                       plan_tier, coupon_id=None, list_amount_inr=None, discount_inr=None,
+                       commit=True):
         pid = self._next_payment_id
         self._next_payment_id += 1
         self._payments[pid] = {
             "payment_id": pid, "founder_id": founder_id, "status": "pending",
             "gateway_order_id": gateway_order_id, "gateway_payment_id": None,
-            "amount_inr": amount_inr, "subscription_id": None,
+            "amount_inr": amount_inr, "subscription_id": None, "plan_tier": plan_tier,
             "coupon_id": coupon_id, "list_amount_inr": list_amount_inr,
             "discount_inr": discount_inr,
         }
@@ -152,7 +153,8 @@ class FakeRepository:
         return PaymentRecord(payment_id=row["payment_id"], founder_id=row["founder_id"],
                              status=row["status"], gateway_order_id=row["gateway_order_id"],
                              gateway_payment_id=row["gateway_payment_id"],
-                             amount_inr=row["amount_inr"], subscription_id=row["subscription_id"])
+                             amount_inr=row["amount_inr"], subscription_id=row["subscription_id"],
+                             plan_tier=row.get("plan_tier"))
 
 
 class _FakeDbHandle:
@@ -572,19 +574,81 @@ def test_captured_payment_for_an_unknown_order_is_not_granted():
     assert credits.grants == []
 
 
-def test_captured_payment_with_no_recognisable_plan_tier_note_is_not_granted():
+def test_a_captured_payment_with_no_notes_is_still_granted_from_our_own_row():
+    """The regression that charged a founder Rs 999 and gave them nothing.
+
+    Razorpay's payment entity carries whatever notes the BROWSER's Checkout
+    options set, not the order's -- and ours sent {plan_name}, so `plan_tier`
+    never arrived and the grant was refused on every widget payment. The tier
+    is recorded on the payment row at checkout now, so an entity with no
+    useful notes at all still grants exactly what was paid for.
+    """
     service, repo, _ = _service()
     service.start_checkout(42, PlanTier.STARTER)
     body = json.dumps({
         "event": "payment.captured",
         "payload": {"payment": {"entity": {
-            "id": "pay_1", "order_id": "order_1", "notes": {},
+            "id": "pay_1", "order_id": "order_1", "notes": {"plan_name": "Plus"},
         }}},
     }).encode()
 
     result = service.handle_webhook(body=body, signature=_sign(body))
-    assert result.outcome == WebhookOutcome.UNKNOWN_PAYMENT
-    assert repo.plans_granted == []
+    assert result.outcome == WebhookOutcome.CAPTURED
+    assert repo.plans_granted == [(42, "starter")]
+
+
+def test_gateway_notes_cannot_upgrade_a_founder_past_what_they_paid_for():
+    """Notes are browser-supplied, so they are not authority for a grant.
+
+    Before, the tier came from them: pay for the cheapest plan, put
+    `plan_tier: pro` in the Checkout notes, receive Pro. The recorded tier
+    wins, and the disagreement is logged rather than honoured.
+    """
+    service, repo, _ = _service()
+    service.start_checkout(42, PlanTier.BASIC)          # paid Rs 199
+    body = json.dumps({
+        "event": "payment.captured",
+        "payload": {"payment": {"entity": {
+            "id": "pay_1", "order_id": "order_1", "notes": {"plan_tier": "pro"},
+        }}},
+    }).encode()
+
+    result = service.handle_webhook(body=body, signature=_sign(body))
+    assert result.outcome == WebhookOutcome.CAPTURED
+    assert result.plan == "basic"
+    assert repo.plans_granted == [(42, "basic")]
+
+
+def test_a_legacy_payment_row_falls_back_to_the_notes_then_refuses():
+    """A checkout started before payments.plan_tier existed still completes if
+    the gateway happens to carry the tier, and is refused -- never guessed --
+    when nothing names it."""
+    service, repo, _ = _service()
+    service.start_checkout(42, PlanTier.STARTER)
+    repo._payments[1]["plan_tier"] = None               # a row from the old build
+
+    body = json.dumps({
+        "event": "payment.captured",
+        "payload": {"payment": {"entity": {
+            "id": "pay_1", "order_id": "order_1", "notes": {"plan_tier": "starter"},
+        }}},
+    }).encode()
+    assert service.handle_webhook(body=body, signature=_sign(body)).outcome == (
+        WebhookOutcome.CAPTURED)
+    assert repo.plans_granted == [(42, "starter")]
+
+    service2, repo2, _ = _service()
+    service2.start_checkout(42, PlanTier.STARTER)
+    repo2._payments[1]["plan_tier"] = None
+    body2 = json.dumps({
+        "event": "payment.captured",
+        "payload": {"payment": {"entity": {
+            "id": "pay_2", "order_id": "order_1", "notes": {},
+        }}},
+    }).encode()
+    assert service2.handle_webhook(body=body2, signature=_sign(body2)).outcome == (
+        WebhookOutcome.UNKNOWN_PAYMENT)
+    assert repo2.plans_granted == []
 
 
 def test_a_credit_grant_failure_does_not_undo_the_plan_grant():

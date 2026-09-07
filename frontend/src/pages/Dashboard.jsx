@@ -4,6 +4,7 @@ import { useApp } from '../context/AppContext';
 import { dailyTokenMeter, formatTokenMeter } from '../utils/planMeter';
 import QuoteCard from '../components/QuoteCard';
 import { completionPercent, loadDashboard, markTourSeen, relativeDay } from '../services/dashboard';
+import { planLabel as planLabelFor } from '../services/plans';
 import { loadVision } from '../services/vision';
 import { listGoals } from '../services/goals';
 import { getLatestReport, getRecommendations } from '../services/reports';
@@ -204,7 +205,7 @@ export default function Dashboard() {
   };
 
   const plan = data?.plan;
-  const planLabel = plan?.plan_name ? `Ally ${plan.plan_name}` : 'Ally';
+  const planLabel = planLabelFor(plan?.tier, plan?.plan_name);
   const isFree = (plan?.tier ?? 'free') === 'free';
   // Shared with the profile page so the two can never disagree; see
   // utils/planMeter.js for why usage can legitimately read past the ceiling.

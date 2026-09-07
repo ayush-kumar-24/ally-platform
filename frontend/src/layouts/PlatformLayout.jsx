@@ -3,6 +3,8 @@ import DeletionPendingGate from '../components/DeletionPendingGate';
 import PlanRequiredGate from '../components/PlanRequiredGate';
 import HelpWidget from '../components/HelpWidget';
 import { useApp } from '../context/AppContext';
+import { planLabel as planLabelFor } from '../services/plans';
+import { usePlanName } from '../hooks/usePlanName';
 import { useState, useRef, useEffect } from 'react';
 import ProductTour from '../components/ProductTour';
 import { TITLES as ROUTE_TITLES } from '../components/RouteTitle';
@@ -190,11 +192,18 @@ export default function PlatformLayout() {
           notifications, clearNotifications, unreadCount, readNotification,
           hasVision, setHasVision, startTour } = useApp();
 
-  // Both of these read "Ally Free" as literal text, so a paying founder was shown
-  // the free badge everywhere. `user.plan` is hydrated from the server profile.
+  /* Both of these read "Ally Free" as literal text, so a paying founder was
+     shown the free badge everywhere. `user.plan` is hydrated from the server
+     profile -- but it is a TIER ID, not a plan name, and the label used to be
+     built out of it: the map here had no `basic` entry, so a founder who had
+     just paid Rs 199 for the plan everything else calls "Starter" was shown
+     "Ally Basic" and reasonably concluded the payment had not applied. Worse,
+     it mapped `starter` to "Ally Starter" as well, so the Rs 499 plan and the
+     Rs 199 plan rendered identically. planLabel() reads the catalog's own
+     name, from the server where it has arrived. */
   const planTier = (user?.plan || 'free').toLowerCase();
-  const planLabel = { free: 'Ally Free', starter: 'Ally Starter', pro: 'Ally Pro' }[planTier]
-    || `Ally ${planTier.charAt(0).toUpperCase()}${planTier.slice(1)}`;
+  const serverPlanName = usePlanName();
+  const planLabel = planLabelFor(planTier, serverPlanName);
   const onTopTier = planTier === 'pro';
   const nav = useNavigate();
   const location = useLocation();

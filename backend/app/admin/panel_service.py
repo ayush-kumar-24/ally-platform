@@ -22,7 +22,11 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Callable
 
-from app.admin.errors import AdminFounderNotFoundError, InvalidSearchError
+from app.admin.errors import (
+    AdminFounderNotFoundError,
+    InvalidPlanTierError,
+    InvalidSearchError,
+)
 from app.admin.panel_audit import AuditRecorder
 from app.admin.rbac import Capability, PanelRole, require
 from app.admin.users_models import (
@@ -150,6 +154,44 @@ class AdminPanelService:
             admin=admin, action=f"user.{status.value}", resource=f"founder:{founder_id}",
             target_user_id=founder_id, ip_address=ip, reason=reason,
             old_value=before.status.value, new_value=status.value)
+        return after
+
+    def set_plan(self, admin, founder_id: int, tier: str, *, reason: str,
+                 ip: str | None = None) -> UserSummary:
+        """Put a founder on a plan by hand.
+
+        This exists because there was no way to do it at all. A founder whose
+        payment captured but whose grant did not land -- see the plan_tier
+        regression in app/payments -- could not be put right from the panel:
+        the profile PATCH forbids unknown fields and never carried plan_type,
+        so the only route was a hand-written SQL statement against production.
+
+        Deliberately its own action rather than a field on the profile update:
+        granting a plan is a subscription decision, so it sits behind
+        MODIFY_SUBSCRIPTION with the rest of them, and `reason` is REQUIRED --
+        an unexplained plan change is the one an auditor asks about later. The
+        tier is validated against the catalog here, so a typo cannot write a
+        plan_type nothing in the product recognises.
+        """
+        require(admin.role, Capability.MODIFY_SUBSCRIPTION)
+        from app.plans.catalog import PLANS, PlanTier      # local: catalog is not a panel concern
+        try:
+            plan_tier = PlanTier(tier)
+        except ValueError as exc:
+            raise InvalidPlanTierError(tier) from exc
+        if plan_tier not in PLANS:
+            raise InvalidPlanTierError(tier)
+
+        before = self._require_user(founder_id)
+        after = self.users.update_fields(founder_id, {"plan_type": plan_tier.value},
+                                         at=self._now())
+        # No subscription row is written. One would be a payment record for a
+        # payment that did not happen this way, and the panel already shows the
+        # real ones. What changed is the founder's access, and that is audited.
+        self.audit.record(
+            admin=admin, action="user.set_plan", resource=f"founder:{founder_id}",
+            target_user_id=founder_id, ip_address=ip, reason=reason,
+            old_value=before.plan_type, new_value=plan_tier.value)
         return after
 
     def reset_diagnosis(self, admin, founder_id: int, *, ip: str | None = None) -> int:
