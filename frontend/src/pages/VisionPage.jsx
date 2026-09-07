@@ -201,7 +201,7 @@ function TerritoryEditor({ territory, data, onSave, onUploadImage, onRemoveImage
 
 export default function VisionPage() {
   const navigate = useNavigate();
-  const { showToast, setPageHeading } = useApp();
+  const { showToast, setHasVision } = useApp();
   const [state, setState] = useState({ status: 'loading', vision: null, error: null });
   const [editingKey, setEditingKey] = useState(null);
 
@@ -251,19 +251,18 @@ export default function VisionPage() {
     }, 500);
   };
 
-  /* The top bar says the same thing as the section label below it, and only
-     this page knows which. Deliberately computed from `state` rather than the
-     `filledCount` further down: that lives past the early returns below, and a
-     hook cannot. While loading there is no answer yet, so the bar keeps its
-     route-derived title rather than flickering a guess. Cleared on unmount so
-     the override never outlives the page that set it. */
+  /* Keeps the shared flag honest the moment a founder writes their first
+     territory, so the sidebar renames itself without a reload. Not cleared on
+     unmount: this is a fact about the founder, not a property of the page, and
+     the sidebar outlives the page. Computed from `state` rather than the
+     `filledCount` further down, which lives past the early returns below --
+     a hook cannot. */
   const visionWritten = state.status === 'ready'
     && TERRITORIES.some((t) => state.vision.territories[t.key]?.statement.trim());
   useEffect(() => {
-    if (state.status !== 'ready') return undefined;
-    setPageHeading(visionWritten ? 'Your Vision Board' : 'Build Your Vision');
-    return () => setPageHeading(null);
-  }, [state.status, visionWritten, setPageHeading]);
+    if (state.status !== 'ready') return;
+    setHasVision(visionWritten);
+  }, [state.status, visionWritten, setHasVision]);
 
   if (state.status === 'loading') return <DnaLoading label="Loading your vision…" />;
   if (state.status === 'error') return <DnaError onRetry={load} />;
