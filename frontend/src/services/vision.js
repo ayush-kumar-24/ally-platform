@@ -16,7 +16,7 @@
  * territory starts genuinely empty until the founder writes their own.
  */
 
-import { del, get, post, put } from './api';
+import { del, get, patch, post, put } from './api';
 
 /** The six vision territories, in the order they're shown. */
 export const TERRITORIES = [
@@ -31,7 +31,13 @@ export const TERRITORIES = [
 function toTerritory(t) {
   // imageUrl is null, never '', when nothing is attached -- the card branches
   // on it, and an empty string is truthy enough to render a broken <img>.
-  return { statement: t.statement, tag1: t.tag1, tag2: t.tag2, imageUrl: t.image_url ?? null };
+  return {
+    statement: t.statement, tag1: t.tag1, tag2: t.tag2,
+    imageUrl: t.image_url ?? null,
+    // null, not false, for the same reason as imageUrl: the card shows the
+    // date it was reached, and "not reached" is the absence of one.
+    completedAt: t.completed_at ?? null,
+  };
 }
 
 function toSummary(s) {
@@ -47,6 +53,19 @@ export async function loadVision() {
     ),
     summary: toSummary(res.summary ?? { target: '', current: '', unit: '' }),
   };
+}
+
+/**
+ * Mark one territory reached, or put it back ahead of them.
+ *
+ * Its own request, not a field on saveTerritory -- writing the words and
+ * reaching them are different acts, and the backend keeps them on separate
+ * columns for exactly that reason. 404 means there is no statement written
+ * yet, which the card prevents by only offering this on a written vision.
+ */
+export async function setTerritoryCompleted(key, completed) {
+  const t = await patch(`/vision/territories/${key}/completed`, { completed });
+  return toTerritory(t);
 }
 
 export async function saveTerritory(key, { statement, tag1 = '', tag2 = '' }) {
