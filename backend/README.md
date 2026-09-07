@@ -1,7 +1,17 @@
 # Ally Platform — Backend
 
-FastAPI + SQLAlchemy on Supabase Postgres.
-(Frontend is Vite + React 19 with react-router, in `../frontend`.)
+FastAPI + SQLAlchemy on Postgres. Frontend is Vite + React 19 in `../frontend`.
+
+Two databases, and which one you are on changes what you can see:
+
+| | |
+|---|---|
+| **Development** | Supabase, connected as a superuser |
+| **Production** | AWS RDS (`ap-south-1`), connected as the restricted `ally_app` role |
+
+That difference is not a detail. Read [Row-level security](#row-level-security)
+before writing anything that reads founder data — it is the single most common
+source of bugs in this codebase, and none of them reproduce locally.
 
 ## Setup
 
@@ -11,9 +21,16 @@ pip install -r requirements.txt
 python test_connection.py     # verify the database is reachable
 ```
 
-`.env.example` also documents the optional integrations, all of which run in a
-safe stub/off mode until configured: Supabase auth (`SUPABASE_JWT_SECRET`),
-Google Calendar for discovery calls, and email/SMTP.
+`.env.example` documents every optional integration. All of them run in a safe
+stub/off mode until configured: Supabase auth, Google Calendar, SMTP email,
+object storage, payments, and each LLM provider.
+
+**Point `DATABASE_URL` at port `6543`, not `5432`.** Supabase's session-mode
+pooler on 5432 allows fifteen connections for the whole project, and this app
+alone can ask for fifteen — so a second process starves and requests block
+waiting for a connection that is not coming. That is felt as "the app is slow",
+not as an error. Port 6543 is the transaction-mode pooler; the code sets
+`prepare_threshold=0` for it automatically.
 
 ## Run
 
@@ -21,275 +38,263 @@ Google Calendar for discovery calls, and email/SMTP.
 uvicorn app.main:app --reload --port 8000
 ```
 
-- http://localhost:8000/docs — interactive API docs, and the easiest way to test
+- http://localhost:8000/docs — interactive API docs
 - http://localhost:8000/api/v1/health — app + database status
 
 ## Auth
 
-Pluggable via `AUTH_PROVIDER` in `.env`:
+**Email, a one-time code, and a password.** Not social login — Google and
+LinkedIn are not wired, and a `README` that said otherwise sent people looking
+for OAuth code that does not exist.
 
-- `dev` — every request resolves to a fixed test founder, no token needed. Send
-  any bearer token to use that string as the founder id instead. Refused at
-  startup when `ENVIRONMENT=production`.
-- `supabase` — verifies the JWT the frontend receives from Supabase Auth.
-  Requires `SUPABASE_JWT_SECRET`.
+Supabase Auth owns the credential; the backend issues its own session tokens.
+Two ways in, both ending in the same place:
 
-**Email + one-time code + password.** A founder's email address IS their login
-id; there is no separate username. Social login (Google/LinkedIn) is *supported*
-by the provider but is not how founders sign in today.
+**New founder, or forgotten password**
 
-Two token worlds, kept separate so the API never depends on the identity
-provider:
-
-- **Identity provider token** (Supabase now, Cognito on AWS later) proves who the
-  user is, *once*, at `POST /auth/session`.
-- **Backend session tokens** — the backend then issues its own access + refresh
-  JWTs (signed with `SECRET_KEY`). Every later request carries the access token.
-
-Login flow — two ways in, both ending in the same place:
-
-**New founder, or forgot password**
-1. `sendEmailOtp(email)` — Supabase emails a numeric code.
+1. `sendEmailOtp(email)` — Supabase emails an 8-digit code
 2. `verifyOtpAndSetPassword(email, code, password)` — verifies the code, stores
-   the password they just chose, and yields a real Supabase session.
-3. `POST /auth/session` with that token → backend returns `{access_token, refresh_token}`
-   (and, on the first time, creates the founder row).
+   the chosen password, then `POST /auth/session` exchanges the Supabase token
+   for ours (and creates the founder row on first sign-in)
 
 **Returning founder**
-1. `signInWithPassword(email, password)` → a Supabase session.
-2. `POST /auth/session` → the same backend tokens.
 
-From there Supabase is irrelevant: every later request carries the backend
-access token. `POST /auth/refresh` rotates it; `POST /auth/logout` revokes it.
+`signInWithPassword(email, password)` → `POST /auth/session`
 
-Moving to AWS Cognito changes only step 1 — one new `AuthProvider` in
-`app/core/auth/base.py` + `AUTH_PROVIDER=cognito`. Session tokens, routes, and
-every other endpoint stay identical.
+The founder's email **is** their login id. The OTP is 8 digits — a Supabase
+project setting, not a constant; the frontend accepts the whole configurable
+range rather than hardcoding a length.
 
-Endpoints: `POST /auth/session` (login), `POST /auth/resume` (restore from a
-stored refresh token on reload), `POST /auth/refresh` (rotate tokens),
-`POST /auth/logout`, `GET /auth/me`, `GET /auth/status`.
+After the exchange nothing about Supabase matters. Every later request carries
+our access token, verified by signature.
 
-Per-request session validation is a FastAPI **dependency** (`get_current_founder`),
-not middleware -- that is the idiomatic place for it, and it lets each route opt
-in and receive the founder, which middleware cannot do cleanly.
+`AUTH_PROVIDER` selects the verifier:
 
-Routes that touch founder data take `founder: Founder = Depends(get_founder_record)`,
-which resolves the token to the founder row.
+- `dev` — every request resolves to a fixed test founder, no token needed.
+  Refused at startup when `ENVIRONMENT=production`.
+- `supabase` — verifies the JWT. Needs `SUPABASE_JWT_SECRET`.
 
-**LinkedIn / Google** can be enabled in the Supabase dashboard (Authentication →
-Providers) without backend changes — the backend treats every provider
-identically. They are not part of the shipped sign-in flow today.
+Moving to Cognito changes only that one class. Session tokens, routes and every
+endpoint stay identical.
 
-**Provisioning** (creating a founder row on first login) is behind
-`ENABLE_FOUNDER_PROVISIONING`, off by default, so no rows are written until it is
-switched on. Real-user *auth* testing (login, refresh, logout) works without it;
-only saving founder *data* needs it on.
+Endpoints: `POST /auth/session`, `/auth/resume` (restore from a stored refresh
+token on reload), `/auth/refresh` (rotate), `/auth/logout`, `GET /auth/me`,
+`GET /auth/status`.
+
+Per-request validation is a FastAPI **dependency** (`get_current_founder`), not
+middleware — so each route opts in and receives the founder, which middleware
+cannot do cleanly. Routes touching founder data take
+`founder: Founder = Depends(get_founder_record)`.
+
+**Consent is enforced, not just recorded.** Sign-up captures three things: terms
+acceptance (required), an 18-or-over confirmation (required), and an optional
+opt-in to diagnosis processing. All three go to `founder_consents`, which is
+append-only and server-stamped. The diagnosis routes refuse to run without that
+third one — see `require_diagnosis_consent`.
+
+## Row-level security
+
+**Read this before writing any query that touches founder data.**
+
+Every founder-scoped table carries this policy, granted to `ally_app`:
+
+```sql
+founder_id = public.get_founder_id() OR app.current_admin
+```
+
+`get_founder_id()` resolves from `app.current_founder_uuid`, set per
+transaction. So a connection that declares **neither** a founder nor admin
+context sees **zero rows** — silently. No error, no warning. A query returns
+nothing and the code concludes there is nothing there.
+
+Four separate bugs of exactly this shape were found and fixed on 2026-09-07:
+
+| Where | What it looked like |
+|---|---|
+| Admin panel | Every queue appeared empty |
+| Public report share links | Every link said "This shared report is not available" |
+| Internal job endpoints | Erasures, report recovery and reminders all swept nothing and reported success |
+| Discovery reminder job | Found zero calls every hour, exited 0 |
+
+**None of them reproduce in development**, which connects as a `BYPASSRLS`
+superuser and never exercises the policy. They only appear in production.
+
+The rules:
+
+- **A request with a signed-in founder** — `get_founder_record` already calls
+  `set_founder_rls_context`. Nothing to do.
+- **A request with no founder that legitimately spans founders** — an admin
+  panel read, a public share link, a webhook, a scheduled job — must call
+  `set_admin_rls_context(db)`, *after* whatever authorises it. Both are
+  transaction-local and die with the request.
+- **A background job** (`app/jobs/*`) has no founder by definition. It must set
+  admin context or it will find nothing and look like it worked.
 
 ## Database
 
-The schema already exists — 56 logical tables (plus 36 monthly partitions),
-created by Supabase migrations, with `founders` as the hub that 66 other tables
-reference.
+Ninety-two migrations; head is `f1c8d3a26b47`. Around 56 logical tables plus monthly
+partitions, with `founders` as the hub.
 
 > ### 🔒 THE RULE — Alembic owns every schema change. No exceptions.
 >
-> **No schema change happens outside Alembic. No direct DDL — `CREATE`,
-> `ALTER`, `DROP`, indexes, constraints, RLS — through the Supabase SQL
-> editor, the Supabase MCP tool, `psql`, or any other path, by anyone
-> (human or agent).** The only sanctioned way to change the schema is an
-> Alembic revision that is reviewed and then applied with `alembic upgrade head`.
+> **No `CREATE`, `ALTER`, `DROP`, index, constraint or RLS change outside an
+> Alembic revision** — not through the Supabase SQL editor, the Supabase MCP
+> tool, `psql`, or any other path, by anyone, human or agent.
 >
-> Why this is non-negotiable: doing DDL out-of-band creates tables the
-> migration chain has no record of, so `alembic upgrade` later tries to
-> re-`CREATE` them and fails — the exact drift we had to reconcile (the live
-> DB sat at `055fcff2b6b5` with ~19 tables Alembic never recorded, while head
-> was `c3d1f0a2b7e4`). An empty migration history is indistinguishable from a
-> correct one until the day it breaks a deploy.
+> Out-of-band DDL creates objects the migration chain has no record of, so a
+> later `alembic upgrade` tries to re-create them and fails. That drift has
+> already had to be reconciled once.
 >
-> If you truly must adopt objects that already exist (e.g. created before this
-> rule), do it deliberately: write/autogenerate a revision that represents them
-> and `alembic stamp` the DB to it — never leave the two out of sync.
+> To adopt objects that already exist, write a revision representing them and
+> `alembic stamp` to it — never leave the two out of sync.
 
 ```bash
-alembic revision --autogenerate -m "what changed"   # review the file before applying
+alembic revision --autogenerate -m "what changed"   # review before applying
 alembic upgrade head
 alembic current
 ```
 
-Baseline revision `5cbf7c8fea1e` is intentionally empty — it records that Alembic
-adopted an already-populated schema rather than creating it.
+Baseline `5cbf7c8fea1e` is intentionally empty: it records that Alembic adopted
+an already-populated schema rather than creating it.
 
-Two limits to know:
+Two limits:
 
-- Alembic cannot see RLS policies, partition layouts, or database functions.
-  Write those by hand inside a revision.
-- Tables without a model in `app/models/` are ignored, not dropped
-  (see the `include_object` guard in `alembic/env.py`). This is what keeps
-  autogenerate from destroying the 56 existing tables.
+- Alembic cannot see RLS policies, partitions or database functions. Write those
+  by hand inside a revision — see `d91c6e4b72aa` for the pattern.
+- Tables with no model in `app/models/` are ignored, not dropped (the
+  `include_object` guard in `alembic/env.py`).
 
-## Discovery calls
+**CI blocks a branched migration graph** — exactly one head, or the deploy stops.
 
-A founder books a 30-minute discovery call (timezone `Asia/Kolkata`): the backend
-reads real availability from Google Calendar, creates the event, and emails a
-confirmation. Endpoints: `GET /discovery/slots`, `POST /discovery/book`,
-`GET /discovery/calls`, `GET /discovery/calls/{id}`.
+## Async and blocking
 
-**Calendar** (`app/services/calendar.py`) — Google Calendar via a service
-account. Runs in a stub (deterministic slots + placeholder link) until
-`GOOGLE_CALENDAR_ID` and a service-account key are set; then it filters slots by
-the host calendar's free/busy and creates real events. Supply the key as a file
-(`GOOGLE_CALENDAR_CREDENTIALS_FILE`, recommended) or inline JSON. On a **personal
-Gmail** calendar a service account cannot auto-create a Meet link or email
-invites (needs Google Workspace + domain-wide delegation), so a static room link
-`GOXL_MEETING_URL` is attached and `GOOGLE_CALENDAR_CREATE_MEET` /
-`GOOGLE_CALENDAR_INVITE_ATTENDEES` stay off; on Workspace, flip both to `true`
-with no code change.
+FastAPI runs an `async def` handler directly on the event loop. A synchronous
+database call inside one **blocks the entire server** until it returns, so
+concurrent requests queue instead of overlapping.
 
-**Email** (`app/services/email.py`, `app/services/discovery_notifications.py`) —
-generic SMTP with a stub fallback (logs instead of sending until `EMAIL_HOST` is
-set). Booking sends a confirmation as a background task (never blocks or breaks
-the booking); `send_due_reminders()` sends a single 1-hour reminder and respects the founder's
-`notification_preferences.email_reminders`. (A 24-hour reminder existed and was
-cut on 2026-09-07: two emails for one 30-minute call is how a founder learns to
-filter us.) Run it with `python -m app.jobs.discovery_reminders` — **hourly**,
-because the window is "within the next hour" and a daily run would miss almost
-every call. Scheduling it is deployment infra. Works with any SMTP provider; **AWS SES** later
-is a config-only swap to its SMTP endpoint, no code change.
+That was the state of 53 handlers until 2026-09-07. A page firing fifteen
+requests saw them serialise and the browser cancelled them at its 20-second
+timeout. Measured after the fix: twelve concurrent requests went from 23.4s to
+4.0s.
 
-## Three rules that are not obvious, and each one has already bitten
+**So: if a handler uses a synchronous `Session`, declare it `def`, not
+`async def`.** FastAPI then runs it in a threadpool and requests are genuinely
+concurrent. Only use `async def` when the body actually `await`s something — and
+if it also does blocking work, push that through
+`starlette.concurrency.run_in_threadpool` (see the Razorpay webhook and the
+avatar upload).
 
-### 🔴 1. Route handlers that touch the database must be `def`, never `async def`
+Six handlers in the AI pipeline are still `async def` with blocking calls
+interleaved between awaits. They are not on the page-load path but will stall
+under load; fixing them means restructuring the service layer.
 
-FastAPI runs an `async def` handler **directly on the event loop**. A synchronous
-SQLAlchemy call inside one blocks that loop -- so every other request in flight,
-for every founder, stops until it finishes. A plain `def` handler is run in a
-threadpool instead and is genuinely concurrent.
+## Modules
 
-```python
-# WRONG -- freezes the whole server for the length of the query
-@router.get("/thing")
-async def read_thing(db: Session = Depends(get_db)): ...
+One folder per feature area under `app/api/v1/`, mounted by `router.py`:
 
-# RIGHT -- FastAPI runs this in its threadpool
-@router.get("/thing")
-def read_thing(db: Session = Depends(get_db)): ...
-```
+`achievements · admin · auth · calendar · chat · consents · current_problem ·
+dashboard · diagnosis · discovery · feedback · founder_dna · founder_goals ·
+framework_usage · frontend_errors · impression · intelligence · knowledge ·
+notifications · payments · planning · plans · privacy · profile · reference ·
+reports · settings · support · vision · voice · webhooks`
 
-This is not a style preference. On 2026-09-07, 53 handlers and shared auth
-dependencies were written this way and production served requests **one at a
-time**: a page that fires 15 requests queued them all and the browser cancelled
-them at its 20-second timeout. Founders saw a permanent loading spinner.
-Measured after the fix: 12 concurrent requests went from 23.4s to 4.0s.
-
-**If a handler genuinely needs `await`** (an LLM call, `request.body()`,
-`file.read()`), keep it `async def` but push the blocking part into a thread:
-
-```python
-from starlette.concurrency import run_in_threadpool
-
-async def handler(request: Request, db: Session = Depends(get_db)):
-    body = await request.body()              # genuinely async
-    return await run_in_threadpool(_work, db, body)   # everything else
-```
-
-`app/api/v1/webhooks/razorpay.py` and `profile/routes.py::upload_avatar` are the
-worked examples.
-
-### 🔴 2. Row-level security hides rows from code that has not identified itself
-
-Every founder-scoped table carries the policy
-`founder_id = public.get_founder_id() OR app.current_admin`. A session with
-neither set sees **zero rows** -- silently, with no error.
-
-- A **request** gets founder context from `get_founder_record` automatically.
-- A **job or admin path** that legitimately works across founders must call
-  `set_admin_rls_context(db)` itself, inside the transaction.
-
-This is invisible in local development, which connects as a BYPASSRLS superuser
-and never exercises the policy. It only appears in production. Two things had
-already been built without it: the whole admin panel (every queue would have
-shown an admin only their own rows) and the notification sweep.
-
-### 🔴 3. `DATABASE_URL` must use the transaction-mode pooler, port **6543**
-
-Port 5432 is *session* mode: the whole project shares 15 connections and this
-app can demand 15 by itself, so a second process starves and requests block
-waiting for a connection that is not coming. Port 6543 borrows a connection per
-transaction and hands it straight back. The engine sets `prepare_threshold=0`
-automatically when it sees that port.
-
-## Layout
+Domain logic lives outside the API layer, in its own package: `app/credits/`,
+`app/coupons/`, `app/planning/`, `app/plans/`, `app/privacy/`, `app/consents/`,
+`app/support_bot/`, `app/notifications/`, `app/vision/`, `app/admin/`.
 
 ```
 app/
-  api/deps.py          shared route dependencies (founder resolution)
+  api/deps.py          shared route dependencies (founder resolution + RLS)
   api/v1/router.py     mounts every module's sub-router
-  api/v1/<module>/     one folder per feature area
   core/auth/           provider contract, dev/supabase providers, factory
-  core/                config, cors, logging
-  db/session.py        engine + session (do not modify)
+  core/                config, container, cors, logging
+  db/session.py        engine, session, RLS context helpers
+  jobs/                runnable background jobs (python -m app.jobs.<name>)
   models/              SQLAlchemy models — must be imported in __init__.py
   repositories/        generic CRUD base + per-model repositories
   schemas/             Pydantic request/response shapes
+  services/            email, calendar, LLM providers, object storage
   middleware/          request logging, error handling
 ```
+
+## Background jobs
+
+Run with `python -m app.jobs.<name>`. Each is idempotent and reports through its
+exit code, which is what a scheduler actually reads:
+
+| Job | Cadence | Exit codes |
+|---|---|---|
+| `discovery_reminders` | **hourly** | `0` ok · `1` failed · `2` email not configured |
+| `notification_sweep` | every 4 hours | `0` ok · `1` failed |
+| `verify_notifications` | on demand | preflight for email + calendar; `--send-to ADDRESS` sends a real test |
+
+`discovery_reminders` must be hourly: it looks for calls in the next 60 minutes,
+so a daily run would miss nearly every call.
+
+There are also HTTP-triggered sweeps under `/internal/jobs/*`, authenticated by
+`X-Internal-Secret` and called by an external scheduler — account erasure,
+report reconciliation, PDF backfill, health check, call reminders.
+
+## Email
+
+`app/services/email.py` — generic SMTP, stub fallback that logs instead of
+sending until `EMAIL_HOST` is set. Works with any provider.
+
+Production sends through Resend from `info@goxlally.ai`, with `EMAIL_REPLY_TO`
+pointing at a real monitored mailbox — the From address invites replies, and
+without a Reply-To they would bounce.
+
+What the backend sends:
+
+- Discovery call confirmation, and one reminder an hour before
+- New-device sign-in alert (new devices only, and never the first one)
+
+Founder feedback, support messages and privacy requests deliberately send **no**
+team email — they are reviewed in the admin panel instead.
+
+## Discovery calls
+
+A founder books a slot; the backend reads real availability from Google
+Calendar, creates the event, and emails a confirmation.
+`GET /discovery/slots`, `POST /discovery/book`, `GET /discovery/calls`.
+
+`app/services/calendar.py` uses a service account, running as a stub until
+`GOOGLE_CALENDAR_ID` and a key are set. On a **personal Gmail** calendar a
+service account cannot create a Meet link or invite attendees — that needs
+Google Workspace plus domain-wide delegation and
+`GOOGLE_CALENDAR_DELEGATED_USER`. Until then bookings attach the shared
+`GOXL_MEETING_URL` room.
 
 ## Tests
 
 ```bash
-pytest                       # ~2,100 tests across 154 files
-python scripts/smoke_test.py # end-to-end smoke check, PASS/FAIL summary
+pytest                       # 2,104 tests across 154 files
+python scripts/smoke_test.py # end-to-end smoke check
 ```
 
-Most are hermetic -- they fake the session and the auth provider rather than
-touching a database. A subset genuinely does hit the configured database; those
-are the ones that fail on a machine whose `DATABASE_URL` is not reachable, and
-they are not a signal that your change broke something.
+Most are hermetic — in-memory repositories and dependency overrides, no database
+and no auth backend. A handful are DB-backed and will error locally on a
+`create_founder_on_signup: missing authenticated user context` fixture problem
+that is unrelated to whatever you are changing.
 
-## Status
+**What tests cannot catch here:** row-level security, because development
+bypasses it. If a change touches who can see which rows, it has to be verified
+in production.
 
-Everything below is built and in production unless it says otherwise.
+## Deployment
 
-**Foundation** — Alembic (90 revisions), 56 logical tables + 36 monthly
-partitions, repository layer, RLS on every founder-scoped table.
+Pushing to `main` runs CI, and a green CI triggers `backend-deploy.yml`, which:
 
-**Auth** — email + OTP + password via Supabase, backend-issued session tokens
-(issue / rotate / revoke), single-use rotating refresh tokens, new-device
-sign-in alerts.
+1. blocks a branched migration graph
+2. checks a one-off task can reach the production database
+3. runs `alembic upgrade head` on a **privileged migration-only** task
+   definition — stopping the deploy if it fails
+4. only then updates the ECS service, which keeps its restricted `ally_app`
+   credentials
 
-**Diagnosis engine** — built. Adaptive question selection, answer
-interpretation, confidence scoring and routing, distress detection, root-cause
-detection, report generation (screen + PDF via a Gotenberg sidecar). Model
-routing lives in the `model_task_routing` table, not in code -- all tasks
-currently point at `claude-sonnet-5` on Anthropic.
+So migrations apply themselves. Watch the *"Run Alembic migration once"* step;
+it prints the container's own logs on failure.
 
-**Founder-facing** — profile, Founder DNA, Business DNA, Vision, Goals, Plan
-Your Day, Next Steps, Recommendations, Frameworks, Achievements, Journey,
-Ally Chat, Report, Discovery calls, Billing, Privacy Center, Help & Support.
-
-**Commercial** — plans and entitlements, subscriptions, Razorpay payments and
-webhooks, credits with expiry, coupons, daily token metering (resets at
-midnight `USAGE_RESET_TIMEZONE`, default Asia/Kolkata).
-
-**Team-facing** — admin panel: users, usage, discovery calls, privacy request
-queue, feedback and unanswered help-bot questions, coupons, audit log, system
-health.
-
-**Notifications** — in-app bell with 48 types, each switchable from the
-`notification_types` table with no deploy. Written by `app/notifications/`,
-generated both by a sweep job and when a founder opens the bell.
-
-**Support bot** — answers from `support_bot_answers` (~277 published answers
-edited in the database, not in code). Questions it cannot answer are recorded in
-`support_bot_misses`.
-
-### Known gaps
-
-- Six handlers in the AI pipeline still make blocking calls on the event loop
-  (`diagnosis/router.py`, `founder_dna/router.py`, `impression/`,
-  `incremental_confidence.py`) -- see the concurrency rule above. They are not
-  on the page-load path but should be reworked.
-- The public status page (PRD-09) does not exist.
-- Two scheduled jobs need a scheduler in AWS: `app.jobs.discovery_reminders`
-  (hourly) and `app.jobs.notification_sweep` (every few hours).
+`app.goxlally.ai` is Vercel. `api.goxlally.ai` is this service. `frontend/vercel.json`
+is load-bearing — the `/api/*` proxy, the `/r/:token` share rewrite and the SPA
+fallback all live there.
