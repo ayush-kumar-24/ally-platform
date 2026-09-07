@@ -54,7 +54,11 @@ const ROUTE_EYE = {
   '/app/goals': 'Outcomes',
   '/app/recommendations': 'What to do next',
   '/app/frameworks': 'Thinking toolkit',
-  '/app/report': 'Executive report',
+  /* A category, not a second name for the page. It used to read "Executive
+     report", which put a third name on a screen that already called itself two
+     things. The other entries in this map are categories -- Overview,
+     Conversation, Long-term -- and this one now is too. */
+  '/app/report': 'Your diagnosis',
   '/app/next-steps': 'Momentum',
   '/app/plan': 'Today',
   '/app/discovery-call': 'Talk to a human',
@@ -405,7 +409,17 @@ export default function PlatformLayout() {
                    {location.pathname === '/app/vision'
                      ? visionLabel(hasVision)
                      : location.pathname === '/app/report'
-                     ? 'Founder DNA Report'
+                     /* Matches the masthead on the report itself, which the
+                        backend renders as "Founder Clarity Report · <date>"
+                        (api/v1/reports/document.py), and the name the rest of
+                        the product uses -- billing, the FAQs, the plan catalog
+                        and the PDF all say Clarity Report.
+
+                        It used to say "Founder DNA Report", which was a second
+                        name for the same document AND collided with a real,
+                        different thing: Founder DNA is its own nav page and a
+                        section inside this report. */
+                     ? 'Founder Clarity Report'
                      : location.pathname === '/app/next-steps'
                      ? 'Your next steps'
                      /* The page is still reachable by URL when booking is not
