@@ -13,7 +13,7 @@ router = APIRouter(prefix="/feedback", tags=["feedback"])
 
 
 @router.post("", response_model=FeedbackRead, status_code=status.HTTP_201_CREATED)
-async def submit_feedback(
+def submit_feedback(
     payload: FeedbackCreate,
     founder: Founder = Depends(get_founder_record),
     db: Session = Depends(get_db),
@@ -23,11 +23,15 @@ async def submit_feedback(
     Submitting the same prompt twice updates the first answer rather than
     creating a duplicate, so a founder can change their mind.
     """
+    # NO EMAIL TO THE TEAM. Decided 2026-09-07: read in Admin > Feedback
+    # instead. Support requests are tagged and sorted first there, so nothing
+    # is lost -- but nothing arrives on its own either, so the page has to be
+    # part of somebody's day.
     return submit(db, founder.founder_id, payload)
 
 
 @router.get("", response_model=FeedbackList)
-async def read_feedback(
+def read_feedback(
     founder: Founder = Depends(get_founder_record),
     db: Session = Depends(get_db),
 ):

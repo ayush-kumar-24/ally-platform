@@ -20,6 +20,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.api.deps import get_founder_record
 from app.core.logger import logger
@@ -117,6 +118,23 @@ async def upload_avatar(
     if not content:
         raise InvalidAvatarError("That file is empty.")
 
+    # EVERYTHING BELOW RUNS OFF THE EVENT LOOP.
+    #
+    # What follows is an S3 upload of up to 5MB, an S3 delete and a database
+    # write -- all synchronous, all network-bound. On the event loop they froze
+    # the entire server for the whole upload, so one founder changing their
+    # photo on a slow connection stalled every other founder's page. Only
+    # `file.read()` above is genuinely async; the rest gets the threadpool that
+    # a plain `def` handler would have had.
+    return await run_in_threadpool(
+        _store_avatar, db, founder, content, content_type, ext,
+        str(request.base_url),
+    )
+
+
+def _store_avatar(db: Session, founder: Founder, content: bytes, content_type: str,
+                  ext: str, base_url: str) -> AvatarUploadResponse:
+
     # jti-free, cache-busting filename: a browser (or CDN in front of this
     # later) must not keep serving yesterday's photo from cache under the
     # same URL just because the founder_id is unchanged.
@@ -147,7 +165,7 @@ async def upload_avatar(
         # /profile is mounted under the /api/v1 prefix (see app/api/v1/router.py)
         # -- this route is not, so the URL handed back must include it explicitly
         # or the browser's <img> request 404s against the bare /profile/... path.
-        avatar_url = f"{str(request.base_url).rstrip('/')}/api/v1/profile/avatar/{founder.founder_id}/{filename}"
+        avatar_url = f"{base_url.rstrip('/')}/api/v1/profile/avatar/{founder.founder_id}/{filename}"
         # Old avatar was also on S3 -- clean it up now that the new one is
         # confirmed stored. Best-effort: a leftover object is wasted space,
         # not a broken photo, so this must never fail the upload.
@@ -166,7 +184,7 @@ async def upload_avatar(
         for old in upload_dir.glob(f"{founder.founder_id}.*"):
             old.unlink(missing_ok=True)
         (upload_dir / filename).write_bytes(content)
-        avatar_url = f"{str(request.base_url).rstrip('/')}/uploads/avatars/{filename}"
+        avatar_url = f"{base_url.rstrip('/')}/uploads/avatars/{filename}"
         new_storage_path = None
         # Old avatar was on S3 but this upload fell back to disk (bucket
         # unreachable this one time) -- still worth trying to clean up.
@@ -244,7 +262,7 @@ async def serve_avatar(founder_id: int, filename: str):
 
 
 @router.patch("", response_model=FounderRead)
-async def update_profile(
+def update_profile(
     payload: FounderUpdate,
     founder: Founder = Depends(get_founder_record),
     db: Session = Depends(get_db),
@@ -270,7 +288,7 @@ async def validate(founder: Founder = Depends(get_founder_record)):
 # --- founder context / "memory" ---------------------------------------------
 
 @router.get("/context", response_model=FounderContextRead)
-async def read_context(
+def read_context(
     founder: Founder = Depends(get_founder_record),
     db: Session = Depends(get_db),
 ):
@@ -280,7 +298,7 @@ async def read_context(
 
 
 @router.put("/context", response_model=FounderContextRead)
-async def upsert_context(
+def upsert_context(
     payload: FounderContextUpdate,
     founder: Founder = Depends(get_founder_record),
     db: Session = Depends(get_db),
@@ -299,7 +317,7 @@ async def read_founder_info(founder: Founder = Depends(get_founder_record)):
 
 
 @router.patch("/founder", response_model=FounderInfoRead)
-async def update_founder_info(
+def update_founder_info(
     payload: FounderInfoUpdate,
     founder: Founder = Depends(get_founder_record),
     db: Session = Depends(get_db),
@@ -315,7 +333,7 @@ async def read_business_info(founder: Founder = Depends(get_founder_record)):
 
 
 @router.patch("/business", response_model=BusinessInfoRead)
-async def update_business_info(
+def update_business_info(
     payload: BusinessInfoUpdate,
     founder: Founder = Depends(get_founder_record),
     db: Session = Depends(get_db),
@@ -342,7 +360,7 @@ async def read_goals(founder: Founder = Depends(get_founder_record)):
 
 
 @router.patch("/goals", response_model=GoalsRead)
-async def update_goals(
+def update_goals(
     payload: GoalsUpdate,
     founder: Founder = Depends(get_founder_record),
     db: Session = Depends(get_db),

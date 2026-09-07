@@ -94,10 +94,15 @@ def record_last_active(db: Session, user_id: str, *, now: datetime | None = None
                        extra={"founder_id": user_id})
 
 
-async def get_upstream_identity(
+def get_upstream_identity(
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
 ) -> AuthUser:
     """Verify the identity-provider token. Used ONLY at /auth/session.
+
+    `def`, NOT `async def`. verify_token() makes a blocking HTTP call to the
+    identity provider; on the event loop that would stall every other request in
+    the process for the duration. FastAPI runs a plain `def` dependency in a
+    threadpool, where blocking is harmless.
 
     This is the token the frontend receives from Supabase after an OTP or
     password login (or, on AWS later, from Cognito). It proves who the user is exactly
@@ -107,12 +112,27 @@ async def get_upstream_identity(
     return get_auth_provider().verify_token(_token(credentials))
 
 
-async def get_current_founder(
+def get_current_founder(
     request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
     db: Session = Depends(get_db),
 ) -> AuthUser:
     """Verify OUR session access token. Used on every protected route.
+
+    `def`, NOT `async def`, AND THIS IS THE IMPORTANT ONE. This dependency runs
+    on every authenticated request and makes two blocking database calls below
+    (is_account_active, record_last_active). Declared `async def`, those ran
+    directly on the event loop -- so every request froze the whole process
+    twice, and requests could not overlap at all.
+
+    That is what produced the production symptom on 2026-09-07: a page firing
+    fifteen XHRs got ONE answer quickly and the rest were cancelled by the
+    browser at its 20s timeout, because they had been queued behind each other
+    the entire time. It is invisible with one tester and crippling with real
+    traffic.
+
+    As a plain `def`, FastAPI runs this in a threadpool and requests overlap
+    properly. Nothing else about it changes.
 
     Dev convenience: when AUTH_PROVIDER=dev and no token is sent, this resolves
     to the fixed dev founder so you can hit endpoints from /docs without logging

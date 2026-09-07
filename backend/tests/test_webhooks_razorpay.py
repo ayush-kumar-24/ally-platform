@@ -55,6 +55,50 @@ def _captured_body() -> bytes:
     }).encode()
 
 
+def test_handler_takes_a_system_rls_context_before_touching_the_db(client, monkeypatch):
+    """The regression that let a paid founder stay on Free.
+
+    Razorpay carries no founder identity, so without a system context the
+    founder-isolation policies hide every row on payments/subscriptions/
+    founders: the order lookup returned None and the handler reported
+    "unknown order" for a payment it had created itself. It must elevate
+    BEFORE any DB work, the audit insert included -- a delivery that fails
+    verification is exactly the one worth having a row for.
+    """
+    calls: list[str] = []
+    import app.api.v1.webhooks.razorpay as route
+
+    monkeypatch.setattr(route, "set_admin_rls_context", lambda db: calls.append("rls"))
+    monkeypatch.setattr(route, "_log_webhook",
+                        lambda db, **kw: calls.append("log") or 1)
+    monkeypatch.setattr(route, "_mark_processed", lambda db, log_id, **kw: None)
+    _use(monkeypatch, FakeService(result=WebhookResult(
+        outcome=WebhookOutcome.CAPTURED, payment_id=1, founder_id=42, plan="pro")))
+
+    r = client.post(BASE, content=_captured_body(), headers={"X-Razorpay-Signature": "sig"})
+
+    assert r.status_code == 200
+    assert calls and calls[0] == "rls", (
+        f"expected the RLS context first, got {calls}")
+
+
+def test_system_rls_context_is_set_even_when_the_signature_is_rejected(client, monkeypatch):
+    """Fail-closed on the signature, still write the audit row: an unsigned or
+    forged delivery is precisely what someone investigating later needs to see."""
+    calls: list[str] = []
+    import app.api.v1.webhooks.razorpay as route
+
+    monkeypatch.setattr(route, "set_admin_rls_context", lambda db: calls.append("rls"))
+    monkeypatch.setattr(route, "_log_webhook", lambda db, **kw: calls.append("log") or 1)
+    monkeypatch.setattr(route, "_mark_processed", lambda db, log_id, **kw: None)
+    _use(monkeypatch, FakeService(raises=InvalidWebhookSignatureError()))
+
+    r = client.post(BASE, content=_captured_body(), headers={"X-Razorpay-Signature": "bad"})
+
+    assert r.status_code == 401
+    assert calls[:2] == ["rls", "log"]
+
+
 def test_captured_event_is_forwarded_to_the_service(client, monkeypatch):
     service = FakeService(result=WebhookResult(outcome=WebhookOutcome.CAPTURED, payment_id=1,
                                                founder_id=42, plan="starter"))

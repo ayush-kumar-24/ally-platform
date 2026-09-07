@@ -135,3 +135,46 @@ class SupportContentRepository:
         return [FaqEntry(question_id=r[0], question=r[1], answer=r[2],
                          group_number=r[3], group_title=r[4], links=tuple(r[5] or ()))
                 for r in rows]
+
+
+class SupportMissRepository:
+    """Writes to `support_bot_misses` -- the questions we could not answer.
+
+    SEPARATE CLASS ON PURPOSE. SupportContentRepository is read-only over the
+    content table and its docstring promises exactly that; bolting a write onto
+    it would make that promise false for the next person who reads it.
+
+    BEST EFFORT, ALWAYS. This runs on the path where a founder is already being
+    told we have no answer. Failing to record that must not turn their honest
+    "I don't know" into a 500 -- so every failure is swallowed, and the session
+    is rolled back so a poisoned transaction cannot surface later as an
+    unrelated error somewhere else in the request.
+    """
+
+    TABLE = "support_bot_misses"
+
+    def __init__(self, db: Session):
+        self.db = db
+
+    def record(self, *, founder_id: int, question: str, reason: str) -> bool:
+        question = (question or "").strip()
+        if not question:
+            return False
+        try:
+            self.db.execute(
+                text(
+                    f"INSERT INTO {self.TABLE} (founder_id, question, reason) "
+                    "VALUES (:founder_id, :question, :reason)"
+                ),
+                {"founder_id": founder_id, "question": question[:2000], "reason": reason[:40]},
+            )
+            self.db.commit()
+            return True
+        except SQLAlchemyError:
+            # Table missing on a fresh clone, RLS, anything. Never fatal.
+            logger.warning("could not record support bot miss", exc_info=True)
+            try:
+                self.db.rollback()
+            except SQLAlchemyError:
+                pass
+            return False

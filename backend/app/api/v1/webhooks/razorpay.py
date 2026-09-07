@@ -27,10 +27,11 @@ import json
 from fastapi import APIRouter, Depends, Header, Request
 from sqlalchemy import text
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.core.container import container
 from app.core.logger import logger
-from app.db.session import get_db
+from app.db.session import get_db, set_admin_rls_context
 from app.payments.errors import InvalidWebhookSignatureError, PaymentsNotConfiguredError
 from app.payments.models import WebhookOutcome
 
@@ -43,7 +44,40 @@ async def handle_razorpay_event(
     x_razorpay_signature: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ) -> dict:
+    """Reads the body, then does every blocking thing off the event loop.
+
+    STAYS `async` because `request.body()` genuinely is async -- but everything
+    after it is synchronous SQLAlchemy, and running that here would block the
+    whole server for the duration. A payment webhook is not rare or fast: it
+    verifies a signature, writes an audit row, grants a plan and marks the log,
+    and while it did so on the event loop every other founder's request stopped.
+    `run_in_threadpool` is what FastAPI does for a plain `def` handler; this
+    gets the same treatment for the part that needs it.
+
+    The Session is passed into the thread and used only there -- one thread at a
+    time, because this coroutine awaits it -- which is the usage a SQLAlchemy
+    Session supports.
+    """
     body = await request.body()
+    return await run_in_threadpool(
+        _handle_event, db, body, x_razorpay_signature or "")
+
+
+def _handle_event(db: Session, body: bytes, x_razorpay_signature: str) -> dict:
+    # Razorpay is a system actor: this request carries no founder identity, and
+    # the work it does legitimately spans founders -- it has to find a payment
+    # by gateway order id before it can know whose it is. Without a context the
+    # founder-isolation policies (migration d91c6e4b72aa) hide every row on
+    # payments, subscriptions, founders and webhook_logs, so the lookup returned
+    # None and this handler reported "captured webhook for an unknown order" for
+    # a payment it had itself created minutes earlier -- confirmed live, order
+    # order_TYu62txvqSweM4. Razorpay got its 200, retried nothing, and the
+    # founder stayed on Free having paid. Set before the audit insert on
+    # purpose: a delivery that FAILS verification is exactly the one worth
+    # having a row for, and that insert was silently failing closed too.
+    # Transaction-local, so it dies with this request's transaction and can
+    # never leak to whoever gets this pooled connection next.
+    set_admin_rls_context(db)
 
     try:
         payload = json.loads(body)
@@ -57,7 +91,7 @@ async def handle_razorpay_event(
 
     try:
         result = container.payment_service(db).handle_webhook(
-            body=body, signature=x_razorpay_signature or "")
+            body=body, signature=x_razorpay_signature)
     except InvalidWebhookSignatureError:
         _mark_processed(db, log_id, status="failed", error="invalid signature")
         raise

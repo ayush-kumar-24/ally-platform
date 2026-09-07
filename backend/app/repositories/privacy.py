@@ -42,6 +42,26 @@ class PrivacyRequestRepository(BaseRepository[PrivacyRequests]):
         )
         return db.execute(stmt).scalar_one()
 
+    def has_pending(self, db: Session, founder_id: int, *, request_type: str) -> bool:
+        """Is one of these already waiting on a human?
+
+        "Pending" means untouched. `in_progress` is deliberately NOT counted: an
+        admin who has started on a request may well need the founder to send a
+        second one (a different address, say), and blocking that would strand
+        them -- which for an email change is the whole failure this feature
+        exists to end.
+        """
+        stmt = (
+            select(PrivacyRequests.request_id)
+            .where(
+                PrivacyRequests.founder_id == founder_id,
+                PrivacyRequests.request_type == request_type,
+                PrivacyRequests.status == "pending",
+            )
+            .limit(1)
+        )
+        return db.execute(stmt).first() is not None
+
     def submit(
         self,
         db: Session,

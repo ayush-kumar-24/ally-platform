@@ -352,8 +352,32 @@ class Settings(BaseSettings):
     EMAIL_PORT: int = 587
     EMAIL_USER: str = ""
     EMAIL_PASSWORD: str = ""
-    EMAIL_FROM: str = "GoXL <no-reply@goxl.in>"
+    #: The SAME address founders write back to -- decided 2026-09-07.
+    #:
+    #: The root goxlally.ai is already verified for sending, on the Resend
+    #: account Supabase uses for login codes, and its MX already points at
+    #: Hostinger for receiving. So one address does both, with no DNS work and
+    #: nothing for a founder to notice: mail arrives from the address they can
+    #: reply to.
+    #:
+    #: THIS MEANS EMAIL_PASSWORD MUST BE A KEY FROM THAT ACCOUNT. A key from
+    #: the other team cannot send as this domain and every send is rejected.
+    #:
+    #: The cost of merging them is a shared free-tier ceiling (100/day, 3,000/
+    #: month) with login codes -- and running out of login codes locks every
+    #: founder out, while running out of notifications merely delays one. Watch
+    #: that account's volume, and pay for it before it is close.
+    EMAIL_FROM: str = "Ally by GoXL <info@goxlally.ai>"
     EMAIL_USE_TLS: bool = True
+    #: Where a founder's reply actually lands.
+    #:
+    #: EMAIL_FROM is a no-reply address, but the discovery-call emails invite
+    #: a founder to reply to reschedule -- so without this their reply bounces
+    #: or vanishes, which is worse than never having offered. Set this to a
+    #: mailbox a person actually reads.
+    #: goxlally.ai, not goxl.in -- agreed 2026-09-07. The mailbox must exist
+    #: and be read by a person: the discovery-call emails invite a reply.
+    EMAIL_REPLY_TO: str = "info@goxlally.ai"
 
     @property
     def email_enabled(self) -> bool:
@@ -368,6 +392,33 @@ class Settings(BaseSettings):
     @property
     def health_alert_emails(self) -> list[str]:
         return [e.strip() for e in self.HEALTH_ALERT_EMAILS.split(",") if e.strip()]
+
+    #: Who is told when a Privacy Center request lands on the review queue.
+    #:
+    #: Separate from HEALTH_ALERT_EMAILS on purpose: that is an on-call/ops
+    #: inbox for "the system is red", this is whoever handles founder requests
+    #: and DSARs. The same person may read both; they are not the same question.
+    #:
+    #: Unset is NOT silence -- privacy_notifications falls back to
+    #: EMAIL_REPLY_TO, because a request nobody is told about is the exact
+    #: defect that feature exists to remove.
+    PRIVACY_ALERT_EMAILS: str = ""
+
+    @property
+    def privacy_alert_emails(self) -> list[str]:
+        return [e.strip() for e in self.PRIVACY_ALERT_EMAILS.split(",") if e.strip()]
+
+    #: Who is told when a founder writes to us -- Help & Support, the help
+    #: widget, or the Feedback page.
+    #:
+    #: Falls back to PRIVACY_ALERT_EMAILS and then EMAIL_REPLY_TO, so this can
+    #: stay unset until the team wants support mail split out. It must never
+    #: resolve to nobody: the product tells the founder a person will reply.
+    SUPPORT_ALERT_EMAILS: str = ""
+
+    @property
+    def support_alert_emails(self) -> list[str]:
+        return [e.strip() for e in self.SUPPORT_ALERT_EMAILS.split(",") if e.strip()]
 
     # --- CORS ---
     CORS_ORIGINS: str = "http://localhost:3000"

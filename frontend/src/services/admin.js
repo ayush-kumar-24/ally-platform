@@ -135,6 +135,34 @@ export function deactivateBroadcast(id) {
   return del(`/admin/broadcasts/${id}`);
 }
 
+// --- coupons ---------------------------------------------------------------
+// Reading is view_users (support gets asked "how many of the 100 are left");
+// creating decides what founders pay, so it is Super Admin only.
+
+export function listCoupons({ includeInactive = true, limit = 100 } = {}) {
+  return get('/admin/coupons', { params: { include_inactive: includeInactive, limit } });
+}
+
+export function createCoupon(payload) {
+  return post('/admin/coupons', payload);
+}
+
+/** N unique single-use codes under one prefix — the partner/influencer shape.
+ *  "First 100 customers" is the opposite: ONE code with max_redemptions: 100. */
+export function bulkCoupons(payload) {
+  return post('/admin/coupons/bulk', payload);
+}
+
+/** Only the fields it is safe to change after issue: description, caps, expiry,
+ *  active. The code and its value are fixed once anyone could have seen it. */
+export function updateCoupon(couponId, payload) {
+  return patch(`/admin/coupons/${couponId}`, payload);
+}
+
+export function couponRedemptions(couponId, { limit = 200 } = {}) {
+  return get(`/admin/coupons/${couponId}/redemptions`, { params: { limit } });
+}
+
 /** System-wide token usage, estimated cost and the unbilled backlog. */
 export function getUsage(days = 30) {
   return get('/admin/usage', { params: { days } });
@@ -172,4 +200,67 @@ export function confirmCallRequest(callId) {
 /** Turn a request down. A reason is required -- the founder is owed one. */
 export function declineCallRequest(callId, reason) {
   return post(`/admin/discovery-calls/${callId}/decline`, { reason });
+}
+
+// --- privacy center review queue -------------------------------------------
+//
+// Every Privacy Center action that needs a person lands here: data corrections,
+// and email changes from founders who mistyped their address at signup and can
+// no longer receive anything we send.
+//
+// These endpoints existed on the backend with NOTHING in the UI calling them,
+// so the queue was invisible: rows accumulated `pending` and could only be seen
+// by querying the database directly.
+
+/** The review queue. `status` filters; omit it to see everything. */
+export function listPrivacyRequests({ status = 'pending', limit = 50 } = {}) {
+  return get('/admin/privacy-requests', {
+    params: status ? { status, limit } : { limit },
+  });
+}
+
+/**
+ * Move a request on: 'in_progress', 'completed' or 'rejected'.
+ *
+ * `rejection_reason` is required by the API when rejecting — the founder is
+ * owed a reason, and the endpoint refuses without one.
+ */
+export function resolvePrivacyRequest(requestId, { status, processingNotes, rejectionReason } = {}) {
+  return patch(`/admin/privacy-requests/${requestId}`, {
+    status,
+    ...(processingNotes ? { processing_notes: processingNotes } : {}),
+    ...(rejectionReason ? { rejection_reason: rejectionReason } : {}),
+  });
+}
+
+// --- founder feedback + support -------------------------------------------
+//
+// Everything a founder writes to us lands in `founder_feedback`: the Feedback
+// page, star ratings, and — tagged `[Support request]` — anything sent from
+// Help & Support or the help widget.
+//
+// These endpoints existed with no UI calling them, so every bug report and
+// support message was stored correctly and read by nobody, while the product
+// told the founder "our team will get back to you by email".
+
+/** Ratings and written notes, newest first. `type` filters; omit for all. */
+export function listFounderFeedback({ type = null, limit = 100 } = {}) {
+  return get('/admin/founder-feedback', {
+    params: type ? { feedback_type: type, limit } : { limit },
+  });
+}
+
+/** Counts and average rating, for the summary strip. */
+export function founderFeedbackStats({ type = null } = {}) {
+  return get('/admin/founder-feedback/stats', {
+    params: type ? { feedback_type: type } : {},
+  });
+}
+
+/**
+ * Questions the help bot could not answer, grouped by question, most-asked
+ * first. This is the list of help answers worth writing next.
+ */
+export function listSupportMisses({ limit = 100 } = {}) {
+  return get('/admin/support-misses', { params: { limit } });
 }

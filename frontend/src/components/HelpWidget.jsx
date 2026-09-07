@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { searchFaqs } from '../data/faqs';
-import { ApiError } from '../services/api';
+import { ApiError, getAccessToken } from '../services/api';
 import { FEEDBACK, submitFeedback } from '../services/feedback';
 import { askSupport } from '../services/support';
 import { IconClose, IconMessageSquare, IconSend } from '../utils/icons';
@@ -241,6 +241,26 @@ export default function HelpWidget() {
       setSending(false);
     }
   };
+
+  /* SIGNED-IN ONLY, enforced here rather than by where this happens to be
+     mounted.
+
+     Today the only mount is PlatformLayout, which is already behind
+     RequireAuth, so this changes nothing. It is here so that stays true: if
+     anyone ever drops <HelpWidget /> onto a public page -- a landing page, a
+     pricing page, a marketing embed -- it renders nothing instead of quietly
+     appearing to a visitor with no account.
+
+     That is a product rule (2026-09-06: the assistant is not available before
+     sign-in), and a rule that depends on nobody making a mistake in a different
+     file is not enforced. It is also the honest technical position: /support/ask
+     needs a founder session and is rate-limited per founder, so with no session
+     this could not answer anything anyway -- it would just be a button that
+     fails.
+
+     Reads the token directly rather than through context, so it holds even if
+     this is mounted outside AppProvider. */
+  if (!getAccessToken()) return null;
 
   if (location.pathname === '/app/help') return null;
 

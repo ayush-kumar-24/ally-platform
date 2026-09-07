@@ -23,7 +23,32 @@ export function markAllRead() {
 }
 
 /**
+ * How long ago, in words. "2h ago" beats a raw ISO timestamp, which is what
+ * this rendered before.
+ */
+function timeAgo(iso) {
+  if (!iso) return '';
+  const then = new Date(iso);
+  if (Number.isNaN(then.getTime())) return '';
+  const mins = Math.floor((Date.now() - then.getTime()) / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days === 1) return 'yesterday';
+  if (days < 7) return `${days}d ago`;
+  return then.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+}
+
+/**
  * Map a server notification onto the shape the bell renders.
+ *
+ * WHAT THIS USED TO DROP, and why it mattered. The server sends a `title`, a
+ * `body` explaining it, and an `action_url` -- the whole point of "6 tasks are
+ * overdue" being the click through to Plan Your Day. The old mapper kept the
+ * title alone, so the explanation was invisible and the rows went nowhere. It
+ * also passed `created_at` through raw, printing an ISO timestamp at a founder.
  *
  * Kept here rather than in the component so the wire format can change without
  * touching the UI.
@@ -32,9 +57,14 @@ export function toDisplay(n) {
   return {
     id: n.notification_id ?? n.id,
     type: n.type ?? n.category ?? 'insight',
-    status: n.read_at ? 'read' : (n.status ?? 'upcoming'),
-    time: n.created_at ?? '',
-    message: n.message ?? n.title ?? '',
+    unread: !(n.is_read ?? Boolean(n.read_at)),
+    time: timeAgo(n.created_at),
+    title: n.title ?? n.message ?? '',
+    // The sentence under the title. Empty is fine -- the row just shows a title.
+    body: n.body ?? '',
+    // Where the row goes when clicked. Null means the row is not clickable,
+    // which is correct for something purely informational.
+    href: n.action_url ?? null,
     from: n.source ?? 'Ally',
   };
 }

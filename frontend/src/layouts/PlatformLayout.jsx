@@ -151,7 +151,8 @@ const NAV_GROUPS = [
 ];
 
 export default function PlatformLayout() {
-  const { user, sidebarCollapsed, toggleSidebar, sidebarOpen, openSidebar, closeSidebar, notifications, clearNotifications } = useApp();
+  const { user, sidebarCollapsed, toggleSidebar, sidebarOpen, openSidebar, closeSidebar,
+          notifications, clearNotifications, unreadCount, readNotification } = useApp();
 
   // Both of these read "Ally Free" as literal text, so a paying founder was shown
   // the free badge everywhere. `user.plan` is hydrated from the server profile.
@@ -401,13 +402,13 @@ export default function PlatformLayout() {
                 className="tb-icon"
                 id="notifBell"
                 type="button"
-                aria-label={`Notifications${notifications.length ? `, ${notifications.length} unread` : ''}`}
+                aria-label={`Notifications${unreadCount ? `, ${unreadCount} unread` : ''}`}
                 aria-expanded={npOpen}
                 aria-controls="notif-panel"
                 onClick={() => setNpOpen(o => !o)}
               >
                 <IconBell />
-                {notifications.length > 0 && <span className="n-badge" aria-hidden="true">{notifications.length}</span>}
+                {unreadCount > 0 && <span className="n-badge" aria-hidden="true">{unreadCount}</span>}
               </button>
               {/* Panel was always in the DOM and merely hidden by the `on` class,
                   so its contents were read out on every page even when closed.
@@ -417,7 +418,7 @@ export default function PlatformLayout() {
                 <div className="np-head">
                   <div>
                     <div className="np-t">Ally Reminders</div>
-                    <div className="np-sub">{notifications.length} active</div>
+                    <div className="np-sub">{unreadCount ? `${unreadCount} unread` : 'All caught up'}</div>
                   </div>
                   <button className="np-clear" onClick={clearNotifications} type="button">Clear all</button>
                 </div>
@@ -430,23 +431,55 @@ export default function PlatformLayout() {
                       <b>You're all caught up</b>
                       <p>No pending reminders</p>
                     </div>
-                  ) : notifications.map(n => (
-                    <div key={n.id} className="nr" data-status={n.status}>
-                      <div className="nr-rail"><div className="nr-dot" /></div>
-                      <div className="nr-body">
-                        <div className="nr-top">
-                          <span className={`nr-pill ${n.status}`}>{n.status}</span>
-                          <span className="nr-time">{n.time}</span>
+                  ) : notifications.map(n => {
+                    /* A row with somewhere to go is a real button; one without
+                       is a plain div. Rendering an unclickable thing as a
+                       button is how a founder learns the panel does nothing. */
+                    const go = () => {
+                      if (n.unread) readNotification(n.id);
+                      if (n.href) { handleNav(n.href); setNpOpen(false); }
+                    };
+                    const inner = (
+                      <>
+                        <div className="nr-rail"><div className="nr-dot" /></div>
+                        <div className="nr-body">
+                          <div className="nr-top">
+                            {n.unread && <span className="nr-pill new">New</span>}
+                            <span className="nr-time">{n.time}</span>
+                          </div>
+                          <div className="nr-msg">{n.title}</div>
+                          {/* The sentence that says what to do about it. This
+                              was being dropped entirely before. */}
+                          {n.body && <div className="nr-sub">{n.body}</div>}
                         </div>
-                        <div className="nr-msg">{n.message}</div>
+                      </>
+                    );
+                    return n.href ? (
+                      <button
+                        key={n.id}
+                        className="nr nr-clickable"
+                        type="button"
+                        data-status={n.unread ? 'unread' : 'read'}
+                        onClick={go}
+                      >
+                        {inner}
+                      </button>
+                    ) : (
+                      <div key={n.id} className="nr" data-status={n.unread ? 'unread' : 'read'}>
+                        {inner}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
                 <div className="np-foot">
-                  <button className="np-open" onClick={() => { handleNav('/app/plan'); setNpOpen(false); }} type="button">
-                    <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
-                    View all in Plan
+                  {/* Was "View all in Plan", which sent a founder to Plan Your
+                      Day whatever the notification was about -- a billing alert
+                      included. Each row now goes to its own place, so the foot
+                      just offers the one thing that applies to all of them. */}
+                  <button className="np-open" onClick={clearNotifications} type="button"
+                          disabled={!unreadCount}>
+                    <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12" /></svg>
+                    Mark all as read
                   </button>
                 </div>
               </div>

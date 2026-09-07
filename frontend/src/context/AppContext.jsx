@@ -6,7 +6,7 @@ import { getAccessToken } from '../services/api';
 import { getProfile } from '../services/profile';
 import { applyReducedMotion } from '../services/motion';
 import { getNotificationPreferences } from '../services/settings';
-import { listNotifications, markAllRead, toDisplay } from '../services/notifications';
+import { listNotifications, markAllRead, markRead, toDisplay } from '../services/notifications';
 import { isDueOrOverdue, listTasks } from '../services/planning';
 import { firstSafe } from '../utils/looksLikeToken';
 
@@ -59,6 +59,9 @@ export function AppProvider({ children }) {
   );
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
+  // The badge counts UNREAD, not the list length. The list is everything,
+  // read included, so counting it made a badge that never went down.
+  const [unreadCount, setUnreadCount] = useState(0);
   const [activeView, setActiveView] = useState('dashboard');
   const [isGuided, setIsGuided] = useState(false);
   const [guidedStage, setGuidedStage] = useState('');
@@ -135,7 +138,10 @@ export function AppProvider({ children }) {
     // came back 404 rather than a clean "not signed in."
     if (!getAccessToken()) return Promise.resolve();
     return listNotifications()
-      .then(res => setNotifications((res?.items ?? []).map(toDisplay)))
+      .then(res => {
+        setNotifications((res?.items ?? []).map(toDisplay));
+        setUnreadCount(res?.unread_count ?? 0);
+      })
       .catch(() => { /* the bell is not worth failing a page over */ });
   }, []);
 
@@ -144,8 +150,19 @@ export function AppProvider({ children }) {
   // "Clear all" must reach the server, otherwise the notifications return on the
   // next load and the button looks broken.
   const clearNotifications = useCallback(() => {
-    setNotifications([]);
+    // Marks them read; it does not delete them. The list stays so a founder can
+    // still read what it said -- "clear" here means "stop badging me", and
+    // wiping the panel meant a notification glimpsed and dismissed was gone.
+    setNotifications(prev => prev.map(n => ({ ...n, unread: false })));
+    setUnreadCount(0);
     markAllRead().catch(() => refreshNotifications());
+  }, [refreshNotifications]);
+
+  /** Mark one read -- the badge should drop when a founder acts on a row. */
+  const readNotification = useCallback((id) => {
+    setNotifications(prev => prev.map(n => (n.id === id ? { ...n, unread: false } : n)));
+    setUnreadCount(c => Math.max(0, c - 1));
+    markRead(id).catch(() => refreshNotifications());
   }, [refreshNotifications]);
 
   const startTour = useCallback(() => setTourOpen(true), []);
@@ -238,6 +255,7 @@ export function AppProvider({ children }) {
       sidebarCollapsed, toggleSidebar,
       sidebarOpen, openSidebar, closeSidebar,
       notifications, setNotifications, clearNotifications, refreshNotifications,
+      unreadCount, readNotification,
       activeView, setActiveView: navigate,
       isGuided, setIsGuided,
       guidedStage, setGuidedStage: goGuidedStep,

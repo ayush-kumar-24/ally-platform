@@ -17,6 +17,13 @@ class CheckoutSession:
     amount_paise: int
     currency: str
     key_id: str
+    # Set only when a coupon was applied. `amount_paise` is always what
+    # Razorpay will actually charge, so a client that ignores these three
+    # fields still shows and charges the right number; they exist so the order
+    # summary can show the founder what they saved.
+    list_amount_paise: int | None = None
+    discount_paise: int | None = None
+    coupon_code: str | None = None
 
 
 class WebhookOutcome:

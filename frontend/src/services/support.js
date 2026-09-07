@@ -23,8 +23,17 @@ import { get, post } from './api';
  * never returns an empty one.
  */
 export async function askSupport(question) {
-  const res = await post('/support/ask', { question });
-  return res?.answer ? res : null;
+  // Catches, like the other two, because the docstring above promises it. The
+  // widget also catches, so behaviour is unchanged either way -- but a module
+  // that says "returns null rather than throwing" and then throws is how the
+  // next person wires it up somewhere without a try/catch and gets an unhandled
+  // rejection in front of a founder.
+  try {
+    const res = await post('/support/ask', { question });
+    return res?.answer ? res : null;
+  } catch {
+    return null;
+  }
 }
 
 /**

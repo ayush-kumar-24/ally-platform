@@ -49,9 +49,6 @@ class FakeGateway:
             {"amount_paise": amount_paise, "currency": currency, "receipt": receipt, "notes": notes})
         return GatewayOrder(order_id=self.order_id, amount_paise=amount_paise, currency=currency)
 
-    def verify_payment_signature(self, *, order_id, payment_id, signature):
-        return True
-
     def verify_webhook_signature(self, *, body, signature):
         expected = hmac.new(WEBHOOK_SECRET.encode(), body, hashlib.sha256).hexdigest()
         return hmac.compare_digest(expected, signature or "")
@@ -66,17 +63,28 @@ class FakeRepository:
         self._next_subscription_id = 1
         self.subscriptions_created = []
         self.plans_granted = []
+        self.commits: list[tuple[str, bool]] = []
+        self.db = _FakeDbHandle()
 
-    def create_pending(self, *, founder_id, amount_inr, currency, gateway, gateway_order_id):
+    def create_pending(self, *, founder_id, amount_inr, currency, gateway, gateway_order_id,
+                       coupon_id=None, list_amount_inr=None, discount_inr=None, commit=True):
         pid = self._next_payment_id
         self._next_payment_id += 1
         self._payments[pid] = {
             "payment_id": pid, "founder_id": founder_id, "status": "pending",
             "gateway_order_id": gateway_order_id, "gateway_payment_id": None,
             "amount_inr": amount_inr, "subscription_id": None,
+            "coupon_id": coupon_id, "list_amount_inr": list_amount_inr,
+            "discount_inr": discount_inr,
         }
         self._by_order[gateway_order_id] = pid
+        self.commits.append(("create_pending", commit))
         return pid
+
+    def attach_coupon(self, payment_id, *, coupon_id, discount_inr):
+        self._payments[payment_id]["coupon_id"] = coupon_id
+        self._payments[payment_id]["discount_inr"] = discount_inr
+        self.commits.append(("attach_coupon", True))
 
     def get_by_gateway_order_id(self, gateway_order_id):
         pid = self._by_order.get(gateway_order_id)
@@ -119,6 +127,21 @@ class FakeRepository:
                              status=row["status"], gateway_order_id=row["gateway_order_id"],
                              gateway_payment_id=row["gateway_payment_id"],
                              amount_inr=row["amount_inr"], subscription_id=row["subscription_id"])
+
+
+class _FakeDbHandle:
+    """PaymentService reaches through the repository for commit/rollback when a
+    coupon reservation has to share the payment's transaction."""
+
+    def __init__(self):
+        self.commits = 0
+        self.rollbacks = 0
+
+    def commit(self):
+        self.commits += 1
+
+    def rollback(self):
+        self.rollbacks += 1
 
 
 class FakeCredits:
@@ -223,6 +246,173 @@ def test_checkout_carries_founder_and_plan_in_the_order_notes():
     service, _, _ = _service(gateway=gateway)
     service.start_checkout(42, PlanTier.PRO)
     assert gateway.created_orders[0]["notes"] == {"founder_id": "42", "plan_tier": "pro"}
+
+
+# --- start_checkout with a coupon ------------------------------------------
+#
+# These are the money tests. The number sent to Razorpay, the number stored on
+# the payment row and the number the founder was shown must be the same number,
+# and the slot must not be claimable without a payment to claim it against.
+
+def _coupon_service(*, discount_inr=None, raises=None):
+    """A CouponService stand-in. Only quote/reserve/repository are reached."""
+    from app.plans.catalog import PLANS
+
+    class _Repo:
+        def __init__(self):
+            self.confirmed = []
+            self.released = []
+
+        def confirm_for_payment(self, payment_id, *, at):
+            self.confirmed.append(payment_id)
+
+        def release_for_payment(self, payment_id):
+            self.released.append(payment_id)
+
+    class _Coupon:
+        code = "FOUNDER100"
+        coupon_id = 7
+
+    class _Quote:
+        def __init__(self, d):
+            self.discount_inr = d
+
+    class _Service:
+        def __init__(self):
+            self.repository = _Repo()
+            self.reserved = []
+
+        def _discount(self, tier):
+            return (PLANS[tier].price_inr // 2 if discount_inr is None else discount_inr)
+
+        def quote(self, *, code, tier, founder_id):
+            if raises:
+                raise raises
+            return _Quote(self._discount(tier))
+
+        def reserve(self, *, code, tier, founder_id, payment_id):
+            if raises:
+                raise raises
+            self.reserved.append(payment_id)
+            return _Coupon(), self._discount(tier)
+
+    return _Service()
+
+
+def test_a_coupon_discounts_the_order_the_gateway_is_asked_to_create():
+    """The founder sends a CODE; the price stays the catalog's to decide."""
+    gateway = FakeGateway()
+    coupons = _coupon_service()
+    service, repo, _ = _service(gateway=gateway)
+    service.coupons = coupons
+
+    price = PLANS[PlanTier.PRO].price_inr
+    session = service.start_checkout(42, PlanTier.PRO, coupon_code="founder100")
+
+    assert gateway.created_orders[0]["amount_paise"] == (price - price // 2) * 100
+    assert session.amount_paise == (price - price // 2) * 100
+    assert session.list_amount_paise == price * 100
+    assert session.discount_paise == (price // 2) * 100
+    assert session.coupon_code == "FOUNDER100"
+
+
+def test_the_discounted_payment_row_records_all_three_numbers():
+    """list - discount = charged, stored rather than recomputed later. The admin
+    revenue views read amount_inr, so it must be what actually reached Razorpay."""
+    coupons = _coupon_service()
+    service, repo, _ = _service()
+    service.coupons = coupons
+    price = PLANS[PlanTier.PRO].price_inr
+
+    service.start_checkout(42, PlanTier.PRO, coupon_code="FOUNDER100")
+    row = repo._payments[1]
+
+    assert row["amount_inr"] == price - price // 2
+    assert row["list_amount_inr"] == price
+    assert row["discount_inr"] == price // 2
+    assert row["coupon_id"] == 7
+
+
+def test_an_undiscounted_checkout_leaves_the_coupon_columns_null():
+    """NULL, not a redundant copy of the price: "was this discounted?" is then
+    answerable by the column being set, not by comparing two numbers."""
+    service, repo, _ = _service()
+    service.coupons = _coupon_service()
+
+    service.start_checkout(42, PlanTier.PRO)
+    row = repo._payments[1]
+
+    assert row["coupon_id"] is None
+    assert row["list_amount_inr"] is None
+    assert row["discount_inr"] is None
+
+
+def test_the_payment_row_is_not_committed_until_the_slot_is_claimed():
+    """A claimed slot must never outlive the payment it was claimed for."""
+    service, repo, _ = _service()
+    service.coupons = _coupon_service()
+
+    service.start_checkout(42, PlanTier.PRO, coupon_code="FOUNDER100")
+
+    assert ("create_pending", False) in repo.commits
+    assert ("attach_coupon", True) in repo.commits
+
+
+def test_a_rejected_coupon_leaves_no_orphan_payment_row():
+    """The order exists at Razorpay but is never captured, which costs nothing.
+    What must not survive is a pending payment nobody can explain."""
+    from app.coupons.errors import CouponFullyRedeemedError
+
+    service, repo, _ = _service()
+    service.coupons = _coupon_service(raises=CouponFullyRedeemedError())
+
+    with pytest.raises(CouponFullyRedeemedError):
+        service.start_checkout(42, PlanTier.PRO, coupon_code="FOUNDER100")
+
+
+def test_a_captured_discounted_payment_confirms_the_redemption():
+    coupons = _coupon_service()
+    service, repo, _ = _service()
+    service.coupons = coupons
+    service.start_checkout(42, PlanTier.PRO, coupon_code="FOUNDER100")
+
+    service.handle_webhook(body=_captured_event(tier="pro"), signature=_sign(
+        _captured_event(tier="pro")))
+
+    assert coupons.repository.confirmed == [1]
+
+
+def test_a_failed_discounted_payment_releases_the_slot_immediately():
+    """On a capped code, waiting out the pending TTL is the difference between
+    the next founder getting in and being told it sold out."""
+    coupons = _coupon_service()
+    service, repo, _ = _service()
+    service.coupons = coupons
+    service.start_checkout(42, PlanTier.PRO, coupon_code="FOUNDER100")
+
+    service.handle_webhook(body=_failed_event(), signature=_sign(_failed_event()))
+
+    assert coupons.repository.released == [1]
+
+
+def test_a_redemption_bookkeeping_failure_never_undoes_a_granted_plan():
+    """Same rule as the credit grant: a founder who paid and got their plan must
+    not lose it because a status update failed."""
+    coupons = _coupon_service()
+
+    def boom(payment_id, *, at):
+        raise RuntimeError("db gone")
+
+    coupons.repository.confirm_for_payment = boom
+    service, repo, _ = _service()
+    service.coupons = coupons
+    service.start_checkout(42, PlanTier.PRO, coupon_code="FOUNDER100")
+
+    result = service.handle_webhook(body=_captured_event(tier="pro"),
+                                    signature=_sign(_captured_event(tier="pro")))
+
+    assert result.outcome == WebhookOutcome.CAPTURED
+    assert repo.plans_granted == [(42, "pro")]
 
 
 # --- handle_webhook: signature / configuration -----------------------------

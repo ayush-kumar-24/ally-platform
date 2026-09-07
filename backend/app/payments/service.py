@@ -17,6 +17,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from app.core.logger import logger
+from app.coupons.service import CouponService
 from app.credits.models import CreditOperation
 from app.credits.service import CreditService
 from app.payments.errors import (
@@ -46,16 +47,21 @@ class PaymentService:
         repository: PaymentRepository,
         credits: CreditService,
         *,
+        coupons: CouponService | None = None,
         clock=None,
     ):
         self.gateway = gateway
         self.repository = repository
         self.credits = credits
+        # Optional so every existing construction of this service keeps
+        # working; a checkout that passes no code never touches it.
+        self.coupons = coupons
         self._now = clock or (lambda: datetime.now(timezone.utc))
 
     # --- founder-initiated ---------------------------------------------------
 
-    def start_checkout(self, founder_id: int, tier: PlanTier) -> CheckoutSession:
+    def start_checkout(self, founder_id: int, tier: PlanTier,
+                       coupon_code: str | None = None) -> CheckoutSession:
         if self.gateway is None:
             raise PaymentsNotConfiguredError()
 
@@ -65,7 +71,23 @@ class PaymentService:
         if not plan.is_paid:
             raise InvalidCheckoutError("the free plan needs no checkout")
 
-        amount_paise = plan.price_inr * 100
+        # The price is decided HERE, from the catalog, and the founder only
+        # ever sends a code -- never an amount. A discount applied at the
+        # gateway instead would charge one number while `payments.amount_inr`
+        # recorded another, and the admin revenue views read that column.
+        list_amount_inr = plan.price_inr
+        discount_inr = 0
+        coupon = None
+        if coupon_code and self.coupons is not None:
+            # Priced now so the order is created for the right amount; the
+            # binding re-check and the slot claim happen below, against the
+            # payment row, because the last slot of a capped code can be taken
+            # between this line and that one.
+            quote = self.coupons.quote(code=coupon_code, tier=tier, founder_id=founder_id)
+            discount_inr = quote.discount_inr
+
+        charge_inr = list_amount_inr - discount_inr
+        amount_paise = charge_inr * 100
         receipt = f"founder-{founder_id}-{tier.value}-{int(self._now().timestamp())}"
 
         try:
@@ -87,13 +109,43 @@ class PaymentService:
                                 "error": str(exc)})
             raise PaymentGatewayUnavailableError() from exc
 
+        # The payment row and the coupon reservation are one transaction: a
+        # claimed slot must never outlive the payment it was claimed for, and a
+        # discounted payment must never exist without the row that justifies
+        # the discount.
         payment_id = self.repository.create_pending(
-            founder_id=founder_id, amount_inr=plan.price_inr, currency=_CURRENCY,
+            founder_id=founder_id, amount_inr=charge_inr, currency=_CURRENCY,
             gateway="razorpay", gateway_order_id=order.order_id,
+            coupon_id=None,
+            list_amount_inr=list_amount_inr if discount_inr else None,
+            discount_inr=discount_inr or None,
+            commit=coupon_code is None or self.coupons is None,
         )
+
+        if coupon_code and self.coupons is not None:
+            try:
+                coupon, confirmed_discount = self.coupons.reserve(
+                    code=coupon_code, tier=tier, founder_id=founder_id,
+                    payment_id=payment_id)
+            except Exception:
+                # The order exists at Razorpay but nothing here is committed,
+                # so the founder sees the coupon error and no orphan payment
+                # row is left behind. An uncaptured order costs nothing.
+                self.repository.db.rollback()
+                raise
+            self.repository.attach_coupon(payment_id, coupon_id=coupon.coupon_id,
+                                          discount_inr=confirmed_discount)
+            logger.info("payments: coupon applied to checkout",
+                        extra={"founder_id": founder_id, "tier": tier.value,
+                               "coupon": coupon.code, "discount_inr": confirmed_discount,
+                               "charged_inr": charge_inr})
+
         return CheckoutSession(
             payment_id=payment_id, order_id=order.order_id, amount_paise=order.amount_paise,
             currency=order.currency, key_id=self.gateway.key_id,
+            list_amount_paise=list_amount_inr * 100 if discount_inr else None,
+            discount_paise=discount_inr * 100 if discount_inr else None,
+            coupon_code=coupon.code if coupon is not None else None,
         )
 
     # --- gateway-initiated: the only path that grants anything --------------
@@ -167,6 +219,18 @@ class PaymentService:
         )
         self.repository.grant_plan(payment.founder_id, tier.value)
 
+        # The slot is spent for good. Done after the plan grant, and never in a
+        # way that can undo it: a founder who paid and got their plan must not
+        # lose it because a bookkeeping update failed.
+        if self.coupons is not None:
+            try:
+                self.coupons.repository.confirm_for_payment(payment.payment_id, at=now)
+                self.repository.db.commit()
+            except Exception as exc:  # noqa: BLE001 -- the grant above must stand
+                logger.error("payments: plan granted but coupon redemption not confirmed",
+                             extra={"payment_id": payment.payment_id,
+                                    "founder_id": payment.founder_id, "error": str(exc)})
+
         if plan.monthly_credits:
             try:
                 self.credits.adjust(
@@ -199,6 +263,16 @@ class PaymentService:
 
         reason = entity.get("error_description") or "payment failed"
         self.repository.mark_failed(payment.payment_id, reason=reason)
+
+        # Hand the slot back now rather than waiting out the pending TTL. On a
+        # capped code that difference is the next founder getting in.
+        if self.coupons is not None:
+            try:
+                self.coupons.repository.release_for_payment(payment.payment_id)
+                self.repository.db.commit()
+            except Exception as exc:  # noqa: BLE001 -- recording the failure matters more
+                logger.error("payments: could not release coupon slot for a failed payment",
+                             extra={"payment_id": payment.payment_id, "error": str(exc)})
         logger.info("payments: payment failed", extra={"payment_id": payment.payment_id,
                                                         "founder_id": payment.founder_id,
                                                         "reason": reason})

@@ -30,7 +30,7 @@ router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 
 @router.get("/overview", response_model=DashboardOverview)
-async def overview(
+def overview(
     founder: Founder = Depends(get_founder_record),
     db: Session = Depends(get_db),
 ) -> DashboardOverview:
@@ -40,7 +40,7 @@ async def overview(
 
 
 @router.get("/business-health", response_model=BusinessHealthSummary)
-async def business_health(
+def business_health(
     founder: Founder = Depends(get_founder_record),
     db: Session = Depends(get_db),
 ) -> BusinessHealthSummary:
@@ -53,7 +53,7 @@ async def business_health(
 
 
 @router.post("/tour-seen", response_model=WelcomeState)
-async def mark_tour_seen(
+def mark_tour_seen(
     founder: Founder = Depends(get_founder_record),
     db: Session = Depends(get_db),
 ) -> WelcomeState:

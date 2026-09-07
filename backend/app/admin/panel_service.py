@@ -235,6 +235,12 @@ class AdminPanelService:
             target_user_id=updated.founder_id, ip_address=ip,
             old_value=before.status if before else None, new_value=status,
         )
+
+        # Tell the founder their request moved. They asked us to do something
+        # to their own data and were given a 30-day promise -- being told when
+        # it is done is the other half of that promise. `rejection_reason` is
+        # already required by the endpoint, so a refusal always explains itself.
+        _notify_privacy_status(updated, status, rejection_reason)
         return updated
 
     def delete_user(self, admin, founder_id: int, *, reason: str | None = None,
@@ -460,3 +466,44 @@ class AdminPanelService:
 
 def _plain(value):
     return value.value if hasattr(value, "value") else value
+
+
+def _notify_privacy_status(request, status: str, rejection_reason: str | None) -> None:
+    """Bell notification for a privacy-request status change. Never raises.
+
+    Imported and sessioned inside the function: panel_service is constructed
+    with repositories rather than a Session, and a notification must never be
+    the reason an admin's resolve fails.
+    """
+    if status not in ("in_progress", "completed", "rejected"):
+        return
+    try:
+        from app.db.session import SessionLocal, set_admin_rls_context
+        from app.notifications import notify
+
+        titles = {
+            "in_progress": "We are working on your request",
+            "completed": "Your request is done",
+            "rejected": "We could not action your request",
+        }
+        bodies = {
+            "in_progress": "Someone has picked up your privacy request.",
+            "completed": "Your privacy request has been completed.",
+            "rejected": (rejection_reason or "").strip()
+                        or "Please contact us if you would like to discuss it.",
+        }
+        db = SessionLocal()
+        try:
+            db.begin()
+            set_admin_rls_context(db)
+            notify(
+                db, founder_id=request.founder_id, type="privacy_request_updated",
+                title=titles[status], body=bodies[status],
+                action_url="/app/profile",
+                dedup_key=f"privacy_request_updated:{request.request_id}:{status}",
+            )
+        finally:
+            db.close()
+    except Exception:
+        from app.core.logger import logger
+        logger.warning("privacy status notification failed", exc_info=True)

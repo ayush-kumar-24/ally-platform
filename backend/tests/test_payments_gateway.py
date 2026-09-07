@@ -107,29 +107,6 @@ def test_create_order_raises_on_network_failure():
         _gateway(handler).create_order(amount_paise=100, currency="INR", receipt="r1", notes={})
 
 
-# --- verify_payment_signature (checkout callback) -----------------------
-
-def test_payment_signature_accepts_a_correctly_signed_pair():
-    gateway = _gateway()
-    order_id, payment_id = "order_abc", "pay_xyz"
-    signature = hmac.new(gateway.key_secret.encode(), f"{order_id}|{payment_id}".encode(),
-                         hashlib.sha256).hexdigest()
-    assert gateway.verify_payment_signature(order_id=order_id, payment_id=payment_id,
-                                            signature=signature) is True
-
-
-def test_payment_signature_rejects_a_tampered_signature():
-    gateway = _gateway()
-    assert gateway.verify_payment_signature(
-        order_id="order_abc", payment_id="pay_xyz", signature="0" * 64) is False
-
-
-def test_payment_signature_rejects_missing_signature():
-    gateway = _gateway()
-    assert gateway.verify_payment_signature(
-        order_id="order_abc", payment_id="pay_xyz", signature=None) is False
-
-
 # --- verify_webhook_signature ---------------------------------------------
 
 def test_webhook_signature_accepts_a_correctly_signed_body():

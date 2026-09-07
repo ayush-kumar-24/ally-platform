@@ -190,10 +190,15 @@ def create_meeting(
 
     service = _service()
     end = scheduled_at + timedelta(minutes=duration_minutes)
+    # timeZone is sent explicitly alongside dateTime. Google falls back to the
+    # CALENDAR's default zone when it is absent and the timestamp carries no
+    # offset -- so a naive datetime would silently book at the wrong hour, and
+    # the founder would be told a time nobody is going to be on the call for.
+    # Stating it costs one line and removes the whole class of problem.
     body = {
         "summary": "GoXL Discovery Call",
-        "start": {"dateTime": scheduled_at.isoformat()},
-        "end": {"dateTime": end.isoformat()},
+        "start": {"dateTime": scheduled_at.isoformat(), "timeZone": DEFAULT_TIMEZONE},
+        "end": {"dateTime": end.isoformat(), "timeZone": DEFAULT_TIMEZONE},
     }
 
     # --- Video link ---
@@ -226,11 +231,40 @@ def create_meeting(
         sendUpdates=send_updates,
     ).execute()
 
-    meeting_link = (
-        created.get("hangoutLink")
-        or settings.GOXL_MEETING_URL
-        or created.get("htmlLink")
-    )
+    # WHICH LINK THE FOUNDER GETS, in order of preference.
+    #
+    # `htmlLink` used to be the last fallback and it is NOT a meeting link -- it
+    # opens the event in Google Calendar, which for anyone outside the calendar's
+    # organisation is a permission error rather than a call. A founder clicking
+    # "Join call" and landing on "you need access" is worse than no link at all,
+    # because it looks like the product is broken rather than misconfigured.
+    #
+    # So: the real Meet room Google just created, else the configured static
+    # room, else nothing -- and nothing is loud.
+    meeting_link = created.get("hangoutLink") or settings.GOXL_MEETING_URL
+
+    if not meeting_link:
+        logger.error(
+            "discovery call created with NO joining link",
+            extra={"path": (
+                f"event={created.get('id')} -- Google returned no hangoutLink and "
+                "GOXL_MEETING_URL is unset. Set GOOGLE_CALENDAR_CREATE_MEET=true "
+                "(needs Workspace + GOOGLE_CALENDAR_DELEGATED_USER), or set "
+                "GOXL_MEETING_URL to a permanent room."
+            )},
+        )
+    elif settings.GOOGLE_CALENDAR_CREATE_MEET and not created.get("hangoutLink"):
+        # Asked for a per-call room and did not get one: falling back to the
+        # shared room means every founder gets the same link again, silently.
+        logger.warning(
+            "per-call Meet link requested but not created; using the shared room",
+            extra={"path": (
+                f"event={created.get('id')} -- usually means the calendar is a "
+                "personal Gmail, or domain-wide delegation is not set up for "
+                "GOOGLE_CALENDAR_DELEGATED_USER."
+            )},
+        )
+
     return {
         "meeting_link": meeting_link,
         "host": GOXL_HOST,

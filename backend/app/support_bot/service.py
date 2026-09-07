@@ -44,7 +44,7 @@ from app.support_bot.prompts import (
     answer_user_prompt,
     routing_user_prompt,
 )
-from app.support_bot.repository import SupportContentRepository
+from app.support_bot.repository import SupportContentRepository, SupportMissRepository
 from app.support_bot.schemas import AnswerRef, FaqEntry, SupportReply
 
 #: Per call. Routing returns a few numbers; answering is capped at ~120 words by
@@ -99,9 +99,11 @@ def _parse_ids(text: str) -> list[int]:
 
 
 class SupportBotService:
-    def __init__(self, db: Session, repository: SupportContentRepository | None = None):
+    def __init__(self, db: Session, repository: SupportContentRepository | None = None,
+                 misses: SupportMissRepository | None = None):
         self.db = db
         self.repo = repository or SupportContentRepository(db)
+        self.misses = misses or SupportMissRepository(db)
 
     # --- public -----------------------------------------------------------
 
@@ -131,6 +133,8 @@ class SupportBotService:
         if not self.repo.is_available():
             # Content not loaded -- a fresh clone, or RDS before the SQL is run.
             logger.warning("support bot asked but content table is unavailable")
+            self.misses.record(founder_id=founder_id, question=question,
+                               reason="content_unavailable")
             return SupportReply(answer=UNAVAILABLE_REPLY, answered=False,
                                 escalate=True, reason="content_unavailable")
 
@@ -145,14 +149,47 @@ class SupportBotService:
             return SupportReply(answer=best.answer, answered=True, sources=(best,),
                                 links=best.links, reason="verbatim_fallback")
 
-        # Routing found nothing, or the model was unreachable. Keyword search is
-        # the safety net -- presented as "this might help", never as the answer.
+        # Routing found nothing, or the model was unreachable.
+        #
+        # KEYWORD HITS ARE NO LONGER RETURNED VERBATIM. They used to be, and it
+        # produced the worst failure this bot can have -- a confident, wrong,
+        # off-topic answer. Measured: "give me a recipe for biryani" came back
+        # with the credits-and-allowances answer, and "what is Ally" came back
+        # explaining which file types can be uploaded. Keyword search always has
+        # a best hit; it has no idea whether that hit answers the question.
+        #
+        # So the hits become CANDIDATES for the model rather than the reply. It
+        # uses them when they fit, ignores them when they do not, and falls back
+        # to what it knows about Ally -- or declines. An empty list is a real and
+        # useful input here: "what is this?" matches no single row well, and the
+        # ABOUT_ALLY block in the prompt is always there to answer it.
+        #
+        # This is also what makes the same question answer the same way twice.
+        # Before, two accounts asking "how will it help me" got different replies
+        # depending on which rows routing happened to grab that run.
         hits = self.repo.search(question, limit=2)
+        reply = await self._compose(question, hits)
+        if reply is not None:
+            return SupportReply(
+                answer=reply.answer, answered=True, sources=tuple(hits),
+                links=reply.links,
+                reason="keyword_grounded" if hits else "about_ally")
+
+        # The model is unreachable AND keyword search found something. Better to
+        # offer the closest published answer than nothing -- but say plainly that
+        # it might not be the right one, which the verbatim path never did.
         if hits:
             return SupportReply(
-                answer=hits[0].answer, answered=True, sources=tuple(hits),
-                links=hits[0].links, reason="keyword_fallback")
+                answer=("I could not work out a proper answer just now. This one "
+                        "might be close:\n\n" + hits[0].answer),
+                answered=True, sources=tuple(hits), links=hits[0].links,
+                reason="keyword_verbatim_degraded")
 
+        # KEPT, NOT DISCARDED. This is the list of questions founders ask that
+        # our help content does not answer -- the only honest guide to which
+        # answer to write next. It used to be thrown away here without even a
+        # log line.
+        self.misses.record(founder_id=founder_id, question=question, reason="no_match")
         return SupportReply(answer=NO_MATCH_REPLY, answered=False,
                             escalate=True, reason="no_match")
 

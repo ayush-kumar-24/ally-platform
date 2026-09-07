@@ -17,7 +17,7 @@ ours. Credentials and 2FA stay with the identity provider, surfaced read-only
 under /settings/security.
 """
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_founder_record
@@ -72,7 +72,7 @@ async def read_account(founder: Founder = Depends(get_founder_record)):
 
 
 @router.patch("/account", response_model=AccountSettingsRead)
-async def update_account(
+def update_account(
     payload: AccountSettingsUpdate,
     founder: Founder = Depends(get_founder_record),
     db: Session = Depends(get_db),
@@ -88,7 +88,7 @@ async def read_notifications(founder: Founder = Depends(get_founder_record)):
 
 
 @router.patch("/notifications", response_model=NotificationPreferencesRead)
-async def update_notifications(
+def update_notifications(
     payload: NotificationPreferencesUpdate,
     founder: Founder = Depends(get_founder_record),
     db: Session = Depends(get_db),
@@ -111,17 +111,54 @@ async def read_security(auth_user: AuthUser = Depends(get_current_founder)):
 # --- privacy center (data rights) ------------------------------------------
 
 @router.post("/privacy", response_model=PrivacyRequestRead, status_code=status.HTTP_201_CREATED)
-async def submit_privacy_request(
+def submit_privacy_request(
     payload: PrivacyRequestCreate,
     founder: Founder = Depends(get_founder_record),
     db: Session = Depends(get_db),
 ):
     """Queue a data-rights request for admin review.
 
-    Allowed types (enforced by DB constraint): view_data, download_data,
-    correct_data, withdraw_consent, restrict_processing, portability.
-    The row is created with status='pending' and routed to admins for fulfilment.
+    Allowed types are in `PrivacyRequestType`; `delete_account` and
+    `cancel_deletion` exist in the table but are NOT submittable here (see the
+    note on that Literal). The row is created with status='pending' and routed
+    to admins for fulfilment.
+
+    `email_change` is the one type with extra rules, both below. It is reviewed
+    by a human rather than applied, because changing the address on an account
+    is an account-takeover primitive and because the address lives with the auth
+    provider, not in a column this endpoint could update.
     """
+    if payload.request_type == "email_change":
+        new_email = (payload.request_details or "").strip().lower()
+
+        # Nothing to do, and it reads as a bug to whoever picks it up.
+        if new_email == (founder.email or "").strip().lower():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="That is already the address on your account.",
+            )
+
+        # One at a time. There is no rate limit on this endpoint, and a founder
+        # who is not sure the first one worked -- which is exactly the founder
+        # this feature is for, since we cannot email them a confirmation -- will
+        # press it again. Ten identical rows is a worse queue for them, not just
+        # for us.
+        if privacy_request_repository.has_pending(
+            db, founder.founder_id, request_type="email_change"
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "You already have an email change waiting for review. "
+                    "We will be in touch within 30 days."
+                ),
+            )
+
+    # NO EMAIL TO THE TEAM. Decided 2026-09-07: these are reviewed in Admin >
+    # Privacy, and an alert per request would be noise for a queue somebody
+    # opens anyway. The trade is real and accepted -- an email change from a
+    # locked-out founder now waits until someone looks, so somebody has to
+    # actually look.
     return privacy_request_repository.submit(
         db,
         founder_id=founder.founder_id,
@@ -131,7 +168,7 @@ async def submit_privacy_request(
 
 
 @router.get("/privacy", response_model=PrivacyRequestListResponse)
-async def list_privacy_requests(
+def list_privacy_requests(
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     founder: Founder = Depends(get_founder_record),
