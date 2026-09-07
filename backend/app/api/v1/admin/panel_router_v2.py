@@ -26,6 +26,9 @@ rating/outcome_text), not the real founder_feedback table this reads.
     GET    /admin/broadcasts                list
     POST   /admin/broadcasts                publish (Super Admin)
     DELETE /admin/broadcasts/{id}           deactivate (Super Admin)
+    GET    /admin/payments                  every payment attempt, filterable
+    GET    /admin/payments/summary          counts + totals per status
+    GET    /admin/users/{id}/payments       one founder's payment history
 """
 
 from __future__ import annotations
@@ -584,6 +587,99 @@ def coupon_redemptions(coupon_id: int, limit: int = Query(default=200, ge=1, le=
          "created_at": r["created_at"].isoformat() if r["created_at"] else None,
          "confirmed_at": r["confirmed_at"].isoformat() if r["confirmed_at"] else None}
         for r in rows]}
+
+
+# --- payments ---------------------------------------------------------------
+#
+# Read-only, deliberately. Nothing here refunds, retries or re-grants: those
+# belong to Razorpay and to the webhook that already owns granting a plan, and
+# a second path to "mark this paid" in an admin panel is how a plan gets
+# granted twice for one payment. What was missing was the ability to LOOK.
+#
+# VIEW_USERS, not MODIFY_SUBSCRIPTION: "did my payment go through?" is a
+# support question, and the person answering it needs to see the failed row
+# without being able to change anyone's plan.
+
+
+def _payments_repo(db: Session):
+    from app.admin.payments_repository import AdminPaymentsRepository
+    return AdminPaymentsRepository(db)
+
+
+def _payments_unavailable(exc: Exception) -> AppError:
+    """A missing table is a deployment fact, not a 500.
+
+    503 with a sentence beats a stack trace: it tells the admin the panel is
+    fine and the table is not, which is a different investigation from "no
+    payments have been recorded yet" (an empty 200).
+    """
+    logger.warning("admin: payments table unreadable", extra={"error": str(exc)})
+    return AppError("The payments table could not be read in this environment.",
+                    status_code=503)
+
+
+@router.get("/payments", response_model=dict, summary="Every payment attempt")
+def list_payments(status: str | None = Query(default=None),
+                  founder_id: int | None = Query(default=None),
+                  q: str | None = Query(default=None, max_length=200),
+                  created_after: datetime | None = Query(default=None),
+                  created_before: datetime | None = Query(default=None),
+                  limit: int = Query(default=50, ge=1, le=200),
+                  offset: int = Query(default=0, ge=0),
+                  admin: PanelAdmin = Depends(get_panel_admin),
+                  db: Session = Depends(get_db)) -> dict:
+    require(admin.role, Capability.VIEW_USERS)
+    from app.admin.payments_repository import PaymentsUnavailableError
+
+    try:
+        return _payments_repo(db).search(
+            status=status, founder_id=founder_id, search=q,
+            created_after=created_after, created_before=created_before,
+            limit=limit, offset=offset)
+    except ValueError as exc:
+        raise AppError(str(exc), status_code=422) from exc
+    except PaymentsUnavailableError as exc:
+        raise _payments_unavailable(exc) from exc
+    except SQLAlchemyError as exc:
+        db.rollback()
+        raise _payments_unavailable(exc) from exc
+
+
+@router.get("/payments/summary", response_model=dict,
+            summary="Payment counts and totals per status")
+def payments_summary(created_after: datetime | None = Query(default=None),
+                     created_before: datetime | None = Query(default=None),
+                     admin: PanelAdmin = Depends(get_panel_admin),
+                     db: Session = Depends(get_db)) -> dict:
+    require(admin.role, Capability.VIEW_USERS)
+    from app.admin.payments_repository import PaymentsUnavailableError
+
+    try:
+        return _payments_repo(db).summary(
+            created_after=created_after, created_before=created_before)
+    except PaymentsUnavailableError as exc:
+        raise _payments_unavailable(exc) from exc
+    except SQLAlchemyError as exc:
+        db.rollback()
+        raise _payments_unavailable(exc) from exc
+
+
+@router.get("/users/{founder_id}/payments", response_model=dict,
+            summary="One founder's payment history")
+def founder_payments(founder_id: int, limit: int = Query(default=50, ge=1, le=200),
+                     admin: PanelAdmin = Depends(get_panel_admin),
+                     db: Session = Depends(get_db)) -> dict:
+    require(admin.role, Capability.VIEW_USERS)
+    from app.admin.payments_repository import PaymentsUnavailableError
+
+    try:
+        items = _payments_repo(db).for_founder(founder_id, limit=limit)
+    except PaymentsUnavailableError as exc:
+        raise _payments_unavailable(exc) from exc
+    except SQLAlchemyError as exc:
+        db.rollback()
+        raise _payments_unavailable(exc) from exc
+    return {"founder_id": founder_id, "total": len(items), "items": items}
 
 
 def _validate_discount(discount_type: str, value: int) -> None:

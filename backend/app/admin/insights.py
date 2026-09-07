@@ -63,7 +63,8 @@ class Metric:
 class TimelineEvent:
     at: datetime
     kind: str                  # "account" | "diagnosis" | "report" | "subscription"
-    #                            | "credits" | "chat" | "privacy" | "admin"
+    #                            | "payment" | "credits" | "chat" | "privacy"
+    #                            | "admin"
     title: str
     detail: str = ""
     meta: dict[str, Any] = field(default_factory=dict)
@@ -232,34 +233,52 @@ class SqlAlchemyInsightsRepository(InsightsRepository):
         p = {"fid": founder_id}
         events: list[TimelineEvent] = []
 
-        for r in self._rows("select created_at, full_name, email from founders "
+        for r in self._rows("select created_at, full_name, email from public.founders "
                             "where founder_id = :fid", p):
             events.append(TimelineEvent(at=r["created_at"], kind="account",
                                         title="Account created",
                                         detail=r.get("email") or ""))
 
-        for r in self._rows("""select created_at, session_id, status from sessions
+        for r in self._rows("""select created_at, session_id, status from public.sessions
                                 where founder_id = :fid order by started_at desc limit 50""", p):
             events.append(TimelineEvent(at=r["created_at"], kind="diagnosis",
                                         title="Diagnosis session",
                                         detail=str(r.get("status") or ""),
                                         meta={"session_id": r.get("session_id")}))
 
-        for r in self._rows("""select created_at, report_id, report_type from founder_reports
+        for r in self._rows("""select created_at, report_id, report_type from public.founder_reports
                                 where founder_id = :fid order by created_at desc limit 50""", p):
             events.append(TimelineEvent(at=r["created_at"], kind="report",
                                         title="Report generated",
                                         detail=str(r.get("report_type") or ""),
                                         meta={"report_id": r.get("report_id")}))
 
-        for r in self._rows("""select created_at, plan_type, status from subscriptions
+        for r in self._rows("""select created_at, plan_type, status from public.subscriptions
                                 where founder_id = :fid order by created_at desc limit 20""", p):
             events.append(TimelineEvent(at=r["created_at"], kind="subscription",
                                         title=f"Subscription {r.get('status') or ''}".strip(),
                                         detail=str(r.get("plan_type") or "")))
 
+        # Payments, including the ones that went nowhere. A successful payment
+        # already shows up as the subscription above it; a declined card or a
+        # checkout the founder abandoned appears nowhere else at all, and "I
+        # tried to pay three times" is exactly the thing support needs to see
+        # when the founder says it.
+        for r in self._rows("""select payment_id, status, amount_inr, failure_reason,
+                                      created_at, paid_at
+                                 from public.payments where founder_id = :fid
+                                order by created_at desc nulls last, payment_id desc
+                                limit 50""", p):
+            status = str(r.get("status") or "")
+            events.append(TimelineEvent(
+                at=r.get("paid_at") if status == "success" else r.get("created_at"),
+                kind="payment",
+                title=f"Payment {status}: ₹{r.get('amount_inr')}",
+                detail=str(r.get("failure_reason") or ""),
+                meta={"payment_id": r.get("payment_id")}))
+
         for r in self._rows("""select created_at, type, amount, balance_after, reason
-                                 from credit_transactions where user_id = :fid
+                                 from public.credit_transactions where user_id = :fid
                                 order by created_at desc limit 50""", p):
             sign = "+" if (r.get("amount") or 0) >= 0 else ""
             events.append(TimelineEvent(
@@ -268,21 +287,21 @@ class SqlAlchemyInsightsRepository(InsightsRepository):
                 detail=str(r.get("reason") or ""),
                 meta={"balance_after": r.get("balance_after")}))
 
-        for r in self._rows("""select created_at, conversation_id, title from conversations
+        for r in self._rows("""select created_at, conversation_id, title from public.conversations
                                 where founder_id = :fid order by created_at desc limit 50""", p):
             events.append(TimelineEvent(at=r["created_at"], kind="chat",
                                         title="Conversation started",
                                         detail=str(r.get("title") or ""),
                                         meta={"conversation_id": r.get("conversation_id")}))
 
-        for r in self._rows("""select requested_at, request_type, status from privacy_requests
+        for r in self._rows("""select requested_at, request_type, status from public.privacy_requests
                                 where founder_id = :fid order by requested_at desc limit 50""", p):
             events.append(TimelineEvent(at=r["requested_at"], kind="privacy",
                                         title=f"Privacy request: {r.get('request_type')}",
                                         detail=str(r.get("status") or "")))
 
         for r in self._rows("""select timestamp, action, admin_email, reason
-                                 from admin_audit_log where target_user_id = :fid
+                                 from public.admin_audit_log where target_user_id = :fid
                                 order by timestamp desc limit 50""", p):
             events.append(TimelineEvent(at=r["timestamp"], kind="admin",
                                         title=f"Admin action: {r.get('action')}",

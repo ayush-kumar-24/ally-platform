@@ -110,12 +110,15 @@ export function Flash({ flash }) {
   );
 }
 
-export function Pagination({ page, pages, total, onChange, busy }) {
+// `noun` names what is being counted. It defaulted to "users" with no way to
+// say otherwise, so every list that reused this component counted its rows as
+// users -- "25 users" under a table of payments.
+export function Pagination({ page, pages, total, onChange, busy, noun = 'user' }) {
   if (!total) return null;
   return (
     <div className="adm-pagination">
       <span className="adm-muted">
-        Page {page} of {pages || 1} · {total} {total === 1 ? 'user' : 'users'}
+        Page {page} of {pages || 1} · {total} {total === 1 ? noun : `${noun}s`}
       </span>
       <div className="adm-pagination-btns">
         <button className="adm-btn" type="button" disabled={busy || page <= 1}

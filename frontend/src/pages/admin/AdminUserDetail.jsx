@@ -1,6 +1,12 @@
 /**
- * User detail — profile, business, subscription, consent, activity, plus the credit
- * ledger and the admin actions.
+ * User detail — profile, business, subscription, payments, consent, activity, plus
+ * the credit ledger and the admin actions.
+ *
+ * The Subscription panel says what this founder is ON; the Payments panel says
+ * what they were actually charged, including the attempts that failed. Only the
+ * first existed, so "No subscription record" was the whole answer to "did their
+ * payment work?" — identical for a founder who never tried to pay and one whose
+ * card was declined four times.
  *
  * Controls the caller lacks the capability for are hidden, which is convenience
  * only: the backend rejects the request regardless of what is rendered here.
@@ -16,6 +22,7 @@ import {
   changeStatus,
   CREDIT_OPS,
   deleteUser,
+  founderPayments,
   getCredits,
   getTimeline,
   getUser,
@@ -59,6 +66,7 @@ export default function AdminUserDetail() {
   const [detail, setDetail] = useState(null);
   const [ledger, setLedger] = useState(null);
   const [timeline, setTimeline] = useState([]);
+  const [payments, setPayments] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [flash, setFlash] = useFlash();
@@ -81,8 +89,18 @@ export default function AdminUserDetail() {
       getUser(id),
       getCredits(id).catch(() => null),
       getTimeline(id).catch(() => null),
+      founderPayments(id).catch(() => null),
     ])
-      .then(([d, l, t]) => { setDetail(d); setLedger(l); setTimeline(t?.events ?? []); })
+      .then(([d, l, t, pay]) => {
+        setDetail(d);
+        setLedger(l);
+        setTimeline(t?.events ?? []);
+        // null means the request failed (e.g. no payments table in this
+        // environment); an empty array means it worked and this founder has
+        // never attempted a payment. The panel says something different for
+        // each, because they send you to different places.
+        setPayments(pay ? (pay.items ?? []) : null);
+      })
       .catch(setError)
       .finally(() => setLoading(false));
   }, [id]);
@@ -170,6 +188,45 @@ export default function AdminUserDetail() {
           <h2>Subscription</h2>
           {detail.subscription ? <KV data={detail.subscription} />
             : <p className="adm-muted">No subscription record.</p>}
+        </div>
+        <div className="adm-panel">
+          <h2>Payments</h2>
+          {payments === null ? (
+            <p className="adm-muted">Payment history could not be read.</p>
+          ) : payments.length === 0 ? (
+            <p className="adm-muted">No payment attempted.</p>
+          ) : (
+            <div className="adm-table-wrap">
+              <table className="adm-table">
+                <thead>
+                  <tr>
+                    <th scope="col" className="adm-nosort adm-num">Amount</th>
+                    <th scope="col" className="adm-nosort">Status</th>
+                    <th scope="col" className="adm-nosort">When</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {payments.map(pmt => (
+                    <tr key={pmt.payment_id}>
+                      <td className="adm-num">₹{Number(pmt.amount_inr).toLocaleString('en-IN')}</td>
+                      <td>
+                        <span className={`adm-pill ${pmt.status}`}>{pmt.status}</span>
+                        {pmt.failure_reason && (
+                          <div className="adm-muted" style={{ fontSize: 12 }}>
+                            {pmt.failure_reason}
+                          </div>
+                        )}
+                      </td>
+                      <td className="adm-muted">{fmt(pmt.paid_at || pmt.created_at)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <p className="adm-muted" style={{ fontSize: 12, marginBottom: 0 }}>
+            <Link to="/admin/payments">All payments</Link>
+          </p>
         </div>
         <div className="adm-panel">
           <h2>Consent</h2>

@@ -71,6 +71,7 @@ const AdminUserDetail = lazy(() => loadChunk(() => import('./pages/admin/AdminUs
 const AdminAuditLog = lazy(() => loadChunk(() => import('./pages/admin/AdminAuditLog')));
 const AdminSystem = lazy(() => loadChunk(() => import('./pages/admin/AdminSystem')));
 const AdminCoupons = lazy(() => loadChunk(() => import('./pages/admin/AdminCoupons')));
+const AdminPayments = lazy(() => loadChunk(() => import('./pages/admin/AdminPayments')));
 const AdminUsage = lazy(() => loadChunk(() => import('./pages/admin/AdminUsage')));
 const AdminCalls = lazy(() => loadChunk(() => import('./pages/admin/AdminCalls')));
 const AdminPrivacy = lazy(() => loadChunk(() => import('./pages/admin/AdminPrivacy')));
@@ -274,6 +275,7 @@ export default function App() {
             <Route path="feedback" element={<AdminFeedback />} />
             <Route path="audit" element={<AdminAuditLog />} />
             <Route path="coupons" element={<AdminCoupons />} />
+            <Route path="payments" element={<AdminPayments />} />
             <Route path="system" element={<AdminSystem />} />
           </Route>
 

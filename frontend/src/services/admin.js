@@ -264,3 +264,56 @@ export function founderFeedbackStats({ type = null } = {}) {
 export function listSupportMisses({ limit = 100 } = {}) {
   return get('/admin/support-misses', { params: { limit } });
 }
+
+// --- payments --------------------------------------------------------------
+//
+// Read-only. The `payments` table has been written since checkout shipped and
+// read by nothing: revenue came off `subscriptions`, and a payment that failed
+// or whose webhook never landed appeared nowhere in the panel at all. These
+// three endpoints are that missing read.
+//
+// Nothing here can refund, retry or re-grant. Razorpay owns the money and the
+// signed webhook owns granting the plan; a second "mark this paid" path in an
+// admin panel is how one payment grants a plan twice.
+
+export const PAYMENT_STATUSES = ['pending', 'success', 'failed', 'refunded'];
+
+/**
+ * Every payment attempt, newest first.
+ *
+ * @param {object}  opts
+ * @param {string}  [opts.status]   one of PAYMENT_STATUSES
+ * @param {string}  [opts.q]        email, name, founder id, or a Razorpay
+ *                                  order/payment id pasted whole
+ * @param {number}  [opts.founderId]
+ */
+export function listPayments({ status = null, q = null, founderId = null,
+                               createdAfter = null, createdBefore = null,
+                               limit = 25, offset = 0 } = {}) {
+  return get('/admin/payments', {
+    params: {
+      ...(status ? { status } : {}),
+      ...(q ? { q } : {}),
+      ...(founderId != null ? { founder_id: founderId } : {}),
+      ...(createdAfter ? { created_after: createdAfter } : {}),
+      ...(createdBefore ? { created_before: createdBefore } : {}),
+      limit,
+      offset,
+    },
+  });
+}
+
+/** Counts and rupee totals per status, for the summary strip. */
+export function paymentsSummary({ createdAfter = null, createdBefore = null } = {}) {
+  return get('/admin/payments/summary', {
+    params: {
+      ...(createdAfter ? { created_after: createdAfter } : {}),
+      ...(createdBefore ? { created_before: createdBefore } : {}),
+    },
+  });
+}
+
+/** One founder's payment history, including the attempts that went nowhere. */
+export function founderPayments(founderId, limit = 50) {
+  return get(`/admin/users/${founderId}/payments`, { params: { limit } });
+}

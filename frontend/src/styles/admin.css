@@ -106,6 +106,13 @@
 .adm-pill.granted   { background: #dcfce7; color: #166534; }
 .adm-pill.stale     { background: #fef3c7; color: var(--adm-warn); }
 .adm-pill.missing   { background: #fee2e2; color: var(--adm-danger); }
+/* Payment statuses. `failed` and `pending` are the ones a person is scanning
+   the table for, so they get the two colours the eye stops on; `success` is
+   the boring case and reads like every other healthy pill. */
+.adm-pill.success   { background: #dcfce7; color: #166534; }
+.adm-pill.pending   { background: #fef3c7; color: var(--adm-warn); }
+.adm-pill.failed    { background: #fee2e2; color: var(--adm-danger); }
+.adm-pill.refunded  { background: #e0e7ff; color: #3730a3; }
 
 .adm-mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
 .adm-muted { color: var(--adm-muted); }
