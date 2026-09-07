@@ -37,52 +37,69 @@
 .sb-brand .mark i{font-style:normal;font-weight:600;color:var(--on-dark-muted,#a7c0b4)}
 .sb-brand .mark .x{color:#10B981}
 .sb-brand .sub{font-size:8.5px;letter-spacing:.06em;color:var(--on-dark-dim,#7d9488);font-weight:500;margin-top:4px;white-space:nowrap}
-/* "Ally active" -- the one animation on screen for the founder's ENTIRE session,
-   on every page. That is the whole design constraint: a 2s cycle that reads well
-   in a screenshot becomes a twitch in the corner of the eye by the second day.
-   Hence slow cycles, low amplitude, and transform/opacity only -- the previous
-   dot animated `box-shadow`, which repaints every frame forever rather than
-   compositing.
+/* Registered so the angle INTERPOLATES. An unregistered custom property is a
+   string to the animation engine and would jump 0deg -> 360deg with nothing in
+   between. The `from var(--ab-angle,0deg)` fallback means a browser without
+   @property support renders the rim static rather than losing the gradient
+   entirely. This is the one loop here that repaints rather than composites --
+   a deliberate trade for the effect, bounded to the badge's ~110x24px box. */
+@property --ab-angle{syntax:"<angle>";initial-value:0deg;inherits:false}
+/* "Ally active" -- the one animation on screen for the founder's ENTIRE
+   session, on every page, so it is tuned for longevity: nothing here is fast,
+   and everything animated is transform, opacity or filter so the loop
+   composites instead of repainting. The previous dot animated `box-shadow`,
+   which repaints every frame, forever.
 
-   The badge does NOT reuse the shared `pulse` keyframe any more. `pulse` has
-   ~15 other consumers across platform.css and onboarding-supplement.css, so
-   retuning it here would have quietly retimed every other live-dot in the
-   product. These keyframes are namespaced `ab-` and belong to this badge alone. */
-.ally-badge{position:relative;isolation:isolate;display:inline-flex;align-items:center;gap:6px;margin-top:12px;background:rgba(16,185,129,.14);border:1px solid rgba(16,185,129,.32);border-radius:999px;padding:4px 10px;font-size:11px;font-weight:700;color:#34d399;letter-spacing:.04em;
-  animation:ab-enter .6s cubic-bezier(.22,1,.36,1) both;
-  transition:color .3s ease,border-color .3s ease,transform .3s cubic-bezier(.22,1,.36,1)}
-/* Breathing glow on its own layer so the loop touches only `opacity` (composited)
-   instead of the pill's own background/border alpha (repainted). 6s against the
-   dot's 4.5s: the two never land on the same beat, which is what stops the badge
-   reading as a single mechanical tick. */
-.ally-badge::before{content:"";position:absolute;inset:-1px;z-index:-1;border-radius:999px;
-  background:radial-gradient(120% 140% at 50% 50%,rgba(52,211,153,.20),rgba(52,211,153,0) 70%);
-  box-shadow:0 0 14px 1px rgba(52,211,153,.22);
-  opacity:.3;transform:scale(1);
-  animation:ab-breathe 6s ease-in-out infinite;
-  transition:transform .35s cubic-bezier(.22,1,.36,1)}
-.ally-badge:hover{color:#6ee7b7;border-color:rgba(52,211,153,.55);transform:translateY(-1px)}
-/* `transform` is free to hover on: ab-breathe drives opacity only, so the two
-   never fight over the same property. */
-.ally-badge:hover::before{transform:scale(1.07)}
-.ally-badge .dot{position:relative;width:6px;height:6px;border-radius:50%;background:#34d399;box-shadow:0 0 5px rgba(52,211,153,.45);animation:ab-dot 4.5s ease-in-out infinite}
+   Three loops of deliberately different lengths -- 4.5s dot, 5s sheen, 6s
+   breath, 7s orbit -- so they only all realign every 630s. That is the whole
+   trick: with matching periods the badge reads as one mechanical tick, and
+   with these it never repeats the same frame twice in a sitting.
+
+   It does NOT reuse the shared `pulse` keyframe. `pulse` has ~15 other
+   consumers across platform.css and onboarding-supplement.css, so retuning it
+   here would have silently retimed every other live-dot in the product. These
+   keyframes are namespaced `ab-` and belong to this badge alone. */
+.ally-badge{position:relative;isolation:isolate;display:inline-flex;align-items:center;gap:7px;margin-top:12px;background:rgba(16,185,129,.16);border:1px solid rgba(16,185,129,.34);border-radius:999px;padding:4px 11px;font-size:11px;font-weight:700;color:#6ee7b7;letter-spacing:.04em;
+  box-shadow:0 0 18px -5px rgba(52,211,153,.5);
+  animation:ab-enter .6s cubic-bezier(.22,1,.36,1) backwards,ab-breathe 6s ease-in-out .6s infinite;
+  transition:color .3s ease,border-color .3s ease,box-shadow .3s ease}
+/* A light travelling round the rim. The GRADIENT rotates, not the element:
+   rotating a 110x24px pill spins its whole shape like a stick and throws the
+   ring off the badge entirely. Masked to a 1.5px rim with the standard
+   two-layer xor trick, because the pill's own background is only 16% alpha --
+   an unmasked conic gradient would flood straight through it. */
+.ally-badge::before{content:"";position:absolute;inset:-1.5px;box-sizing:border-box;border-radius:inherit;padding:1.5px;pointer-events:none;
+  background:conic-gradient(from var(--ab-angle,0deg),rgba(52,211,153,0) 0deg,rgba(52,211,153,.55) 55deg,rgba(167,243,208,.95) 96deg,rgba(52,211,153,.5) 140deg,rgba(52,211,153,0) 210deg,rgba(52,211,153,0) 360deg);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;
+  mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);mask-composite:exclude;
+  animation:ab-orbit 7s linear infinite}
+/* Sheen sweeps the fill. Driven by background-position rather than a transform
+   so it stays inside the border box on its own -- clipping it with
+   overflow:hidden would also clip the orbit ring, which sits outside. */
+.ally-badge::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+  background:linear-gradient(105deg,transparent 42%,rgba(190,255,225,.42) 50%,transparent 58%);
+  background-size:260% 100%;background-repeat:no-repeat;
+  animation:ab-sheen 5s ease-in-out infinite}
+.ally-badge:hover{color:#a7f3d0;border-color:rgba(52,211,153,.6);box-shadow:0 0 24px -4px rgba(52,211,153,.75)}
+.ally-badge .dot{position:relative;width:6px;height:6px;border-radius:50%;background:#6ee7b7;box-shadow:0 0 8px rgba(52,211,153,.85);animation:ab-dot 4.5s ease-in-out infinite}
 /* Two rings on one 4.5s cycle, the second offset by half of it -- a staggered
-   double ping rather than a metronome. The expansion is spent in the first 35%
-   so most of the cycle is rest, which is what keeps it calm. */
+   double ping rather than a metronome. The expansion is spent in the first 38%
+   so most of the cycle is rest, which is what keeps it from nagging. */
 .ally-badge .dot::before,
-.ally-badge .dot::after{content:"";position:absolute;inset:0;border-radius:50%;border:1px solid rgba(52,211,153,.9);opacity:0;animation:ab-ring 4.5s cubic-bezier(.22,.61,.36,1) infinite}
+.ally-badge .dot::after{content:"";position:absolute;inset:0;border-radius:50%;border:1px solid rgba(167,243,208,.95);opacity:0;animation:ab-ring 4.5s cubic-bezier(.22,.61,.36,1) infinite}
 .ally-badge .dot::after{animation-delay:2.25s}
 @keyframes ab-enter{from{opacity:0;transform:translateY(4px) scale(.96)}to{opacity:1;transform:none}}
-@keyframes ab-breathe{0%,100%{opacity:.28}50%{opacity:.68}}
-@keyframes ab-dot{0%,100%{transform:scale(1)}50%{transform:scale(1.14)}}
-@keyframes ab-ring{0%{transform:scale(1);opacity:.9}35%{transform:scale(2.4);opacity:0}100%{transform:scale(2.4);opacity:0}}
-/* The badge is permanent, so it is the single most important thing in the app to
-   honour this at -- matching how the rest of the codebase already guards motion. */
+@keyframes ab-breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.028)}}
+@keyframes ab-orbit{to{--ab-angle:360deg}}
+@keyframes ab-sheen{0%,52%{background-position:190% 0}100%{background-position:-90% 0}}
+@keyframes ab-dot{0%,100%{transform:scale(1);filter:brightness(1)}50%{transform:scale(1.22);filter:brightness(1.4)}}
+@keyframes ab-ring{0%{transform:scale(1);opacity:.95}38%{transform:scale(3);opacity:0}100%{transform:scale(3);opacity:0}}
+/* The badge is permanent, so it is the single most important thing in the app
+   to honour this at. Under reduce it becomes a plain lit dot on a static pill. */
 @media(prefers-reduced-motion:reduce){
-  .ally-badge,.ally-badge::before,.ally-badge .dot{animation:none}
+  .ally-badge,.ally-badge::before,.ally-badge::after,.ally-badge .dot{animation:none}
   .ally-badge{transform:none}
-  .ally-badge::before{opacity:.4}
-  .ally-badge:hover{transform:none}
+  .ally-badge::before,.ally-badge::after{display:none}
   .ally-badge .dot::before,.ally-badge .dot::after{display:none}
 }
 @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(52,211,153,.5)}70%{box-shadow:0 0 0 7px rgba(52,211,153,0)}100%{box-shadow:0 0 0 0 rgba(52,211,153,0)}}
