@@ -8,6 +8,7 @@ import { STAGE_GROUPS } from '../data/onboardingQuestions';
 import { getNotificationPreferences, updateNotificationPreferences } from '../services/settings';
 import { logout } from '../services/auth';
 import { getCatalog, getMyPlan } from '../services/plans';
+import { dailyTokenMeter, formatTokenMeter } from '../utils/planMeter';
 import {
   deleteAccount,
   downloadExport,
@@ -1187,18 +1188,16 @@ export default function FounderProfile() {
                 </svg>
                 Talk to Ally
               </div>
-              <span className="pr-usage-val">
-                {plan ? `${plan.daily_tokens_used ?? 0} / ${plan.daily_token_limit ?? 0} today` : '— / —'}
+              <span className={`pr-usage-val${dailyTokenMeter(plan).atLimit ? ' is-full' : ''}`}>
+                {plan
+                  ? `${formatTokenMeter(plan)}${dailyTokenMeter(plan).atLimit ? ' — limit reached' : ' today'}`
+                  : '— / —'}
               </span>
             </div>
             <div className="pr-usage-track">
               <div
-                className="pr-usage-fill"
-                style={{
-                  width: plan?.daily_token_limit
-                    ? `${Math.min(100, Math.round((plan.daily_tokens_used / plan.daily_token_limit) * 100))}%`
-                    : '0%',
-                }}
+                className={`pr-usage-fill${dailyTokenMeter(plan).atLimit ? ' is-full' : ''}`}
+                style={{ width: `${dailyTokenMeter(plan).pct}%` }}
               />
             </div>
           </div>

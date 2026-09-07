@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
+import { dailyTokenMeter, formatTokenMeter } from '../utils/planMeter';
 import QuoteCard from '../components/QuoteCard';
 import { completionPercent, loadDashboard, markTourSeen, relativeDay } from '../services/dashboard';
 import { loadVision } from '../services/vision';
@@ -207,9 +208,9 @@ export default function Dashboard() {
   const plan = data?.plan;
   const planLabel = plan?.plan_name ? `Ally ${plan.plan_name}` : 'Ally';
   const isFree = (plan?.tier ?? 'free') === 'free';
-  const tokenPct = plan?.daily_token_limit
-    ? Math.min(100, Math.round((plan.daily_tokens_used / plan.daily_token_limit) * 100))
-    : 0;
+  // Shared with the profile page so the two can never disagree; see
+  // utils/planMeter.js for why usage can legitimately read past the ceiling.
+  const meter = dailyTokenMeter(plan);
 
   // The onboarding banner is only truthful once the profile really is complete.
   // `show_tour` is the server's answer to "have they been offered this yet",
@@ -612,10 +613,10 @@ export default function Dashboard() {
               <div className="dash-meter">
                 <div>
                   <div className="dash-meter-row">
-                    <span>Daily tokens</span>
-                    <b>{plan ? `${plan.daily_tokens_used} / ${plan.daily_token_limit}` : '—'}</b>
+                    <span>Daily tokens{meter.atLimit && <em className="meter-note">limit reached</em>}</span>
+                    <b>{plan ? formatTokenMeter(plan) : '—'}</b>
                   </div>
-                  <div className="dash-meter-bar"><i style={{ width: `${tokenPct}%` }} /></div>
+                  <div className={`dash-meter-bar${meter.atLimit ? ' is-full' : ''}`}><i style={{ width: `${meter.pct}%` }} /></div>
                 </div>
                 <div>
                   <div className="dash-meter-row">
