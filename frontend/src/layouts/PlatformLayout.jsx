@@ -8,6 +8,7 @@ import ProductTour from '../components/ProductTour';
 import { TITLES as ROUTE_TITLES } from '../components/RouteTitle';
 import { greetingNow } from '../utils/helpers';
 import { getOverview } from '../services/dashboard';
+import { loadVision } from '../services/vision';
 import { firstSafe } from '../utils/looksLikeToken';
 import { useCallAccess } from '../hooks/useCallAccess';
 import {
@@ -61,6 +62,15 @@ const ROUTE_EYE = {
   '/app/profile': 'Founder identity',
   '/app/help': "We're here to help",
 };
+
+/* The vision item names what the founder has, not what the route is: an
+   invitation until the first territory is written, a possession after. null is
+   "not loaded yet" and keeps the neutral wording. Used for the sidebar label
+   and the page's own title, so the two can never disagree. */
+function visionLabel(hasVision) {
+  if (hasVision === null) return 'Your Vision';
+  return hasVision ? 'Your Vision Board' : 'Build Your Vision';
+}
 
 const NAV_GROUPS = [
   {
@@ -159,7 +169,7 @@ const NAV_GROUPS = [
 export default function PlatformLayout() {
   const { user, sidebarCollapsed, toggleSidebar, sidebarOpen, openSidebar, closeSidebar,
           notifications, clearNotifications, unreadCount, readNotification,
-          pageHeading } = useApp();
+          hasVision, setHasVision } = useApp();
 
   // Both of these read "Ally Free" as literal text, so a paying founder was shown
   // the free badge everywhere. `user.plan` is hydrated from the server profile.
@@ -198,6 +208,17 @@ export default function PlatformLayout() {
         if (o.founder_name) setFounderName(o.founder_name);
       })
       .catch(() => { /* leave unlocked rather than guess */ });
+    /* One request per session for one word in the sidebar. It rides in the
+       effect that already runs here rather than in AppContext, because this
+       component is inside the auth gate and the provider is not -- fetching
+       there would fire before there is a session to fetch with. A failure
+       leaves hasVision null, which is the neutral label, not a wrong one. */
+    loadVision()
+      .then(v => {
+        if (cancelled) return;
+        setHasVision(Object.values(v.territories).some(t => t.statement.trim()));
+      })
+      .catch(() => { /* neutral label */ });
     return () => { cancelled = true; };
   }, []);
 
@@ -296,7 +317,7 @@ export default function PlatformLayout() {
                   <button
                     key={path}
                     className={`nav-item${isActive(path) ? ' active' : ''}${locked ? ' locked' : ''}`}
-                    data-tip={comingSoon ? (lockTip || 'Coming soon') : reportLocked ? 'Finish your diagnosis to unlock' : tip}
+                    data-tip={comingSoon ? (lockTip || 'Coming soon') : reportLocked ? 'Finish your diagnosis to unlock' : path === '/app/vision' ? visionLabel(hasVision) : tip}
                     data-nav={path}
                     aria-disabled={reportLocked}
                     onClick={() => {
@@ -310,7 +331,7 @@ export default function PlatformLayout() {
                     }}
                   >
                     <Icon className="ic" />
-                    <span className="lbl">{label}</span>
+                    <span className="lbl">{path === '/app/vision' ? visionLabel(hasVision) : label}</span>
                     {locked && <IconLock className="nav-lock" />}
                     {!locked && badge && <span className="nav-badge">{badge}</span>}
                   </button>
@@ -381,9 +402,8 @@ export default function PlatformLayout() {
               <>
                  <div className="ey">{ROUTE_EYE[location.pathname] || currentLabel}</div>
                  <h1>
-                   {/* A page-set heading wins: see AppContext's pageHeading. */}
-                   {pageHeading
-                     ? pageHeading
+                   {location.pathname === '/app/vision'
+                     ? visionLabel(hasVision)
                      : location.pathname === '/app/report'
                      ? 'Founder DNA Report'
                      : location.pathname === '/app/next-steps'
