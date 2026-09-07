@@ -103,7 +103,7 @@ export default function AuthTransition({ onNavigate, onComplete }) {
 
       {phase !== 'playing' && (
         <img
-          src="/ally-logo.png"
+          src="/ally-logo-mark.png"
           alt=""
           style={{
             position: 'fixed',

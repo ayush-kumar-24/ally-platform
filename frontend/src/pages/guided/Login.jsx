@@ -446,7 +446,7 @@ export default function Login() {
         />
       )}
       <div className="j-inner">
-        <div className="j-avatar"><img src="/ally-logo.png" alt="" /></div>
+        <div className="j-avatar"><img src="/ally-logo-mark.png" alt="" /></div>
         <div className="j-eye"><span className="lv"></span> GoXL &middot; Ally</div>
         <h1 className="j-title">Meet Ally, your <em>Founder&rsquo;s Compass</em>.</h1>
         <p className="j-sub">Your founder journey starts here &mdash; sign in, and Ally will find your next move.</p>

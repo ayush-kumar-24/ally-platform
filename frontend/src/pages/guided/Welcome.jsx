@@ -47,7 +47,7 @@ export default function Welcome() {
     <>
       <section className="view j-stage active" id="v-welcome">
         <div className="j-inner wide wc-inner">
-          <div className="j-avatar"><img src="/ally-logo.png" alt="" /></div>
+          <div className="j-avatar"><img src="/ally-logo-mark.png" alt="" /></div>
           {/* AppContext hydrates the real email a beat after this page mounts;
               showing "Signed in · " with nothing after the dot is worse than
               showing nothing until it lands. */}
