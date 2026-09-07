@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { bookCall, getSlots, listCalls } from '../services/discovery';
 import { explainLimit } from '../services/plans';
 import { useCallAccess, refreshCallAccess } from '../hooks/useCallAccess';
@@ -9,9 +8,9 @@ import { useApp } from '../context/AppContext';
 /* The four fixed July dates and six fixed times that used to live here were
    props-in-name-only: the page fetched real slots, a real quote and the real
    call list, then rendered a hardcoded grid and ignored all three. "Confirm
-   booking" called showToast and never bookCall, so a free founder -- whom the
-   server refuses with 402 -- was shown a success message for a call that did
-   not exist. Everything below is driven by the API. */
+   booking" called showToast and never bookCall, so founders were shown a
+   success message for a call that did not exist. Everything below is driven by
+   the API. */
 
 const WHAT_YOU_GET = [
   ['What happens —', '30 focused minutes; your advisor arrives already briefed by Ally.'],
@@ -39,50 +38,6 @@ function InfoCard() {
             <div className="dc-info-text"><strong>{lead}</strong> {rest}</div>
           </div>
         ))}
-      </div>
-    </div>
-  );
-}
-
-/**
- * Shown when the founder has no free call left.
- *
- * Not "coming soon" -- the feature exists and works today for founders with an
- * allowance, so "coming soon" would be a straightforward lie. It says what is
- * true: this is a paid-plan benefit, and here is what a call costs.
- */
-function UpsellCard({ quote }) {
-  const navigate = useNavigate();
-  const price = quote?.price_inr;
-
-  return (
-    <div className="dc-picker-card dc-locked">
-      <div>
-        <h3 className="dc-picker-title">Available on a paid plan</h3>
-        <span className="dc-picker-sub">
-          Discovery calls aren’t included in the free plan.
-        </span>
-      </div>
-
-      {/* WAS "Paid plans include a call each month, and additional calls are
-          Rs X" -- which no plan has ever done. `free_calls_per_month` is 0 on
-          every tier in the catalog, so every call is charged and there is no
-          monthly allowance to run out of. Telling a founder their plan includes
-          one and then charging them is the kind of thing they only discover at
-          the moment they are trying to book. */}
-      <p className="dc-locked-copy">
-        A discovery call pairs you with a GoXL advisor who has already read your
-        Founder Report. Calls are {price ? `₹${price}` : 'charged'} each, on any
-        paid plan, and you can book as many as you need.
-      </p>
-
-      <div className="dc-locked-actions">
-        <button className="btn btn-em" type="button" onClick={() => navigate('/app/billing')}>
-          See plans
-        </button>
-        <button className="btn btn-ghost" type="button" onClick={() => navigate('/app/ally-chat')}>
-          Talk to Ally instead
-        </button>
       </div>
     </div>
   );
@@ -152,7 +107,7 @@ function BookedCalls({ calls }) {
   );
 }
 
-function Scheduler({ slots, timezone, onBook, onBooked }) {
+function Scheduler({ slots, timezone, price, onBook, onBooked }) {
   const { showToast } = useApp();
   const [selected, setSelected] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -196,15 +151,18 @@ function Scheduler({ slots, timezone, onBook, onBooked }) {
     setLimit(null);
     try {
       await onBook(selected, timezone);
-      showToast('Your discovery call is booked ✓');
+      // "Booked" was a promise the server had not made: the row is written
+      // `pending` and the team confirms it.
+      showToast('Requested ✓ We\u2019ll confirm your call shortly');
       onBooked?.();
     } catch (error) {
-      /* The quote said they had an allowance and the server disagreed -- a
-         stale quote, or an allowance spent in another tab. Shown in place
-         rather than as a toast: this needs a decision, and toasts vanish. */
+      /* Kept as a safety net rather than a live path: nothing entitlement-gates
+         a request today. If a limit is ever reintroduced server-side it is
+         shown in place rather than as a toast -- that needs a decision, and
+         toasts vanish. */
       const explained = explainLimit(error);
       if (explained) setLimit(explained);
-      else showToast("That didn't book. Nothing was charged — try again.");
+      else showToast("That didn't go through. Nothing was charged — try again.");
     } finally {
       setSaving(false);
     }
@@ -216,8 +174,18 @@ function Scheduler({ slots, timezone, onBook, onBooked }) {
         <h3 className="dc-picker-title">Pick a time</h3>
         <span className="dc-picker-sub">
           {timezone ? `All times ${timezone}` : 'All times local'} · 30 minutes
+          {price ? ` · ₹${price}` : ''}
         </span>
       </div>
+
+      {/* Said before they pick, not after. Asking for a slot is a request: the
+          team confirms it, and only then is there a meeting and a bill. A
+          founder who thinks they have just booked and paid finds out otherwise
+          from the status on their own booking, which is the wrong way round. */}
+      <p className="dc-request-note">
+        Choose a time and we&apos;ll confirm it. Nothing is charged when you ask
+        {price ? ` — a call is ₹${price}, payable once we confirm` : ''}.
+      </p>
 
       <div className="dc-days-row">
         {days.map((d) => {
@@ -264,23 +232,24 @@ function Scheduler({ slots, timezone, onBook, onBooked }) {
         onClick={confirm}
         disabled={!selected || saving}
       >
-        {saving ? 'Booking…' : selected ? 'Confirm booking' : 'Select a time'}
+        {/* Not "Confirm booking": the founder is not the one confirming. */}
+        {saving ? 'Requesting…' : selected ? 'Request this time' : 'Select a time'}
       </button>
     </div>
   );
 }
 
 /**
- * Booking is entitlement-gated server-side. The quote is read first so the page
- * can say what is true before anyone commits -- and so a founder with no free
- * call is never shown a scheduler that would 402 on submit.
+ * The scheduler is shown to every founder, because every founder can ask for a
+ * call: the request is not entitlement-gated and consumes no allowance. The
+ * quote is read alongside it only to name the price.
  */
 export default function DiscoveryCall() {
   const [slots, setSlots] = useState([]);
   const [timezone, setTimezone] = useState(null);
   const [calls, setCalls] = useState([]);
   const [loading, setLoading] = useState(true);
-  const { loading: quoteLoading, quote, canBook } = useCallAccess();
+  const { price } = useCallAccess();
 
   const load = useCallback(() => {
     setLoading(true);
@@ -297,20 +266,22 @@ export default function DiscoveryCall() {
 
   const book = async (scheduledAt, tz) => {
     const created = await bookCall({ scheduledAt, timezone: tz });
-    refreshCallAccess();   // the allowance just changed
+    refreshCallAccess();   // re-read the quote; the price is the team's to change
     load();
     return created;
   };
 
-  if (loading || quoteLoading) return <DnaLoading label="Loading discovery calls…" />;
+  // Only the slots and the call list gate the render. The quote supplies a
+  // price and nothing else, so a slow or failed quote must not hold up a page
+  // that works perfectly well without it.
+  if (loading) return <DnaLoading label="Loading discovery calls…" />;
 
   return (
     <div className="dc-container">
       <div className="dc-grid stagger d1">
         <InfoCard />
-        {canBook
-          ? <Scheduler slots={slots} timezone={timezone} onBook={book} onBooked={load} />
-          : <UpsellCard quote={quote} />}
+        <Scheduler slots={slots} timezone={timezone} price={price}
+                   onBook={book} onBooked={load} />
       </div>
       <BookedCalls calls={calls} />
     </div>

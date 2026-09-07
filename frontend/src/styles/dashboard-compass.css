@@ -103,12 +103,6 @@
 @media(max-width:900px){.compass-loop{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:560px){.compass-loop{grid-template-columns:1fr}}
 
-/* When the discovery-call card (the only thing left in dash-grid's left
-   column now) is hidden, collapse to one column instead of leaving a blank
-   left half -- see Dashboard.jsx's comment above dash-grid. */
-.dash-grid.no-left-col{grid-template-columns:minmax(0,1fr)}
-.dash-grid.no-left-col .dash-stack:first-child{display:none}
-
 @media(max-width:820px){
   .compass-readouts{grid-template-columns:repeat(2,1fr)}
   .compass-readout{border-top:1px solid var(--bd)}
