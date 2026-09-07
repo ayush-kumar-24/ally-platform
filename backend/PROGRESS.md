@@ -94,10 +94,12 @@ as unverified until observed in production.
    landed in an inbox. `verify_notifications --send-to <address>` settles it.
 2. **Nobody has walked the full journey on production** with a fresh account:
    signup → diagnosis → report → share → book a call.
-3. **Were founders owed a deletion?** The erasure sweep found nobody for weeks
-   while reporting success. Run `/internal/jobs/process-deletions` and read
-   `due_count`. If it is above zero, those people asked to be deleted, were told
-   it was scheduled, and were not.
+3. ~~**Were founders owed a deletion?**~~ **Answered 2026-09-07: nobody was.**
+   `/internal/jobs/process-deletions` returned `due_count = 0` on the first run
+   after the fix. The query selects anyone past their scheduled date whose
+   `deletion_executed_at` is still NULL, so a founder stranded by the broken
+   sweep would have appeared here. None did. The bug was real; it happened to
+   catch nobody.
 
 **Soon after:**
 
