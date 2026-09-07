@@ -38,8 +38,14 @@ export function IconHelpCircle(props) {
   return <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="1em" height="1em" {...props}><circle cx="12" cy="12" r="9"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"/></svg>;
 }
 
+// A gear drawn as six teeth around a hub: six arc-topped teeth, six arc valleys,
+// straight flanks between them. The previous path was a truncated copy of the
+// twelve-lobe Feather gear -- several of its arcs were missing, so it never
+// closed and rendered as a squiggle with two loose tails. Six teeth also hold
+// their shape at the 18px the sidebar draws icons at, where twelve lobes blur
+// into a blob.
 export function IconSettings(props) {
-  return <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="1em" height="1em" {...props}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-2.82 1.17V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 8 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15H4.5a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 6 9.4a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 11 4.6h.09A2 2 0 0 1 15 4.6a1.65 1.65 0 0 0 1.82-.33"/></svg>;
+  return <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="1em" height="1em" {...props}><circle cx="12" cy="12" r="3"/><path d="M20.77 9.98A9 9 0 0 1 20.77 14.02L18.22 13.9A6.5 6.5 0 0 1 16.75 16.43L18.14 18.58A9 9 0 0 1 14.63 20.61L13.46 18.33A6.5 6.5 0 0 1 10.54 18.33L9.37 20.61A9 9 0 0 1 5.86 18.58L7.25 16.43A6.5 6.5 0 0 1 5.78 13.9L3.23 14.02A9 9 0 0 1 3.23 9.98L5.78 10.1A6.5 6.5 0 0 1 7.25 7.57L5.86 5.42A9 9 0 0 1 9.37 3.39L10.54 5.67A6.5 6.5 0 0 1 13.46 5.67L14.63 3.39A9 9 0 0 1 18.14 5.42L16.75 7.57A6.5 6.5 0 0 1 18.22 10.1Z"/></svg>;
 }
 
 export function IconSearch(props) {
