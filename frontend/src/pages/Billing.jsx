@@ -206,11 +206,11 @@ function PlansView({ onSelectPlan, currentPlan }) {
       <div className="pr-trust stagger d3">
         <span>
           <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>
-          Bank-grade encryption
+          Payments secured by Razorpay
         </span>
         <span>
           <svg viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 11-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></svg>
-          100% data privacy
+          Your data is never sold
         </span>
       </div>
 
