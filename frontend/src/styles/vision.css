@@ -258,3 +258,30 @@
   .vt-card:hover .vt-ic,.vt-card:hover .vt-edit-ic,.vt-card:hover .vt-add,
   .vis-sum-box:hover{transform:none}
 }
+
+/* Reached territories.
+
+   The footer strip now carries two actions, so it becomes a row. "Mark
+   reached" is only rendered on a written vision -- the backend answers 404
+   for an unwritten one, and a card should not offer what the server will
+   refuse.
+
+   A reached card keeps its full colour, unlike a reached goal. A goal is work
+   in progress and dimming says "closed"; a vision is the thing the founder was
+   aiming at the whole time, and the moment they land it is the moment it should
+   look most like theirs. It gains a border and a tick, not a strikethrough. */
+.vt-foot { display: flex; align-items: stretch; border-top: 1px solid var(--color-bd, #e7e0d6); }
+.vt-foot .vt-talk { flex: 1; border-top: none; }
+.vt-reach {
+  display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0;
+  padding: 9px 13px; font-size: 11.5px; font-weight: 700; cursor: pointer;
+  color: var(--color-muted-2, #6c7a70);
+  background: none; border: none; border-left: 1px solid var(--color-bd, #e7e0d6);
+  transition: .22s cubic-bezier(.2,.7,.2,1);
+}
+.vt-reach svg { width: 13px; height: 13px; }
+.vt-reach:hover:not(:disabled) { color: #0b6a52; background: rgba(16,185,129,.08); }
+.vt-reach.on { color: #0b6a52; background: rgba(16,185,129,.14); }
+.vt-reach:disabled { cursor: not-allowed; opacity: .55; }
+.vt-card.is-reached { border-color: rgba(16,185,129,.45); }
+@media (prefers-reduced-motion: reduce) { .vt-reach { transition: none; } }

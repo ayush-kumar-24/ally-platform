@@ -19,7 +19,14 @@
 import { del, get, patch, post } from './api';
 
 function toGoal(g) {
-  return { id: g.goal_id, title: g.title, subtitle: g.subtitle };
+  return {
+    id: g.goal_id,
+    title: g.title,
+    subtitle: g.subtitle,
+    // The date, not just a flag: the card shows when it was reached, and the
+    // achievement written from it carries the same date.
+    completedAt: g.completed_at ?? null,
+  };
 }
 
 export async function listGoals() {
@@ -34,6 +41,19 @@ export async function createGoal({ title, subtitle = '' }) {
 
 export async function updateGoal(id, { title, subtitle }) {
   const g = await patch(`/goals/${id}`, { title, subtitle });
+  return toGoal(g);
+}
+
+/**
+ * Mark a goal reached, or reopen it.
+ *
+ * Completing writes an achievement server-side -- see
+ * backend/app/founder_goals/service.py. Only the TRANSITION does, so this is
+ * safe to fire twice; the caller does not have to guard against a double-tap
+ * to avoid a duplicate trophy.
+ */
+export async function setGoalCompleted(id, completed) {
+  const g = await patch(`/goals/${id}`, { completed });
   return toGoal(g);
 }
 

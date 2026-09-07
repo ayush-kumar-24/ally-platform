@@ -43,3 +43,38 @@
 }
 .gl-ic-btn:hover { background: rgba(0,0,0,.05); color: var(--color-forest, #1B4332); }
 .gl-ic-btn svg { width: 14px; height: 14px; }
+
+/* Reached goals.
+
+   The card dims rather than disappears: a founder who hits three goals in a
+   quarter should be able to see the three, not an emptier page than they had
+   before. Line-through on the title only -- the subtitle carries the number
+   they actually hit, which is the part still worth reading.
+
+   The tick sits at the head of the card where a checklist puts it, and is a
+   button with aria-pressed rather than a checkbox: it changes something
+   server-side, it is not a field being filled in. */
+/* The row was two children (title, actions) under space-between, so the title
+   sat left by default. Adding the tick made it three and space-between pushed
+   the title to the middle of the card. `flex:1` gives it the slack instead, so
+   it stays left where it was and the actions stay right. */
+.gl-card-top { align-items: center; }
+.gl-card-top h3 { flex: 1; min-width: 0; }
+.gl-tick {
+  width: 26px; height: 26px; flex-shrink: 0; border-radius: 50%;
+  display: grid; place-items: center; cursor: pointer;
+  border: 1.5px solid var(--color-bd, #e7e0d6); background: #fff;
+  color: transparent;
+  transition: .22s cubic-bezier(.2,.7,.2,1);
+}
+.gl-tick svg { width: 14px; height: 14px; }
+.gl-tick:hover:not(:disabled) { border-color: var(--color-emerald, #10B981); color: rgba(16,185,129,.45); }
+.gl-tick.on { background: var(--color-emerald, #10B981); border-color: var(--color-emerald, #10B981); color: #fff; }
+.gl-tick:disabled { cursor: not-allowed; opacity: .55; }
+.gl-card.is-done { opacity: .72; }
+.gl-card.is-done h3 { text-decoration: line-through; text-decoration-thickness: 1.5px; color: var(--color-muted-2, #6c7a70); }
+.gl-reached {
+  font-size: 11.5px !important; font-weight: 700; letter-spacing: .01em;
+  color: #0b6a52 !important; margin-top: 10px !important;
+}
+@media (prefers-reduced-motion: reduce) { .gl-tick { transition: none; } }

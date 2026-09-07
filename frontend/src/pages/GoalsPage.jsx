@@ -1,14 +1,45 @@
 import { useEffect, useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { createGoal, deleteGoal as deleteGoalApi, listGoals, updateGoal } from '../services/goals';
+import {
+  createGoal,
+  deleteGoal as deleteGoalApi,
+  listGoals,
+  setGoalCompleted,
+  updateGoal,
+} from '../services/goals';
 import { DnaError, DnaLoading } from '../components/DnaState';
 import Modal from '../components/Modal';
 import { IconCheck, IconEdit, IconPlus, IconTrash } from '../utils/icons';
 
-function GoalCard({ goal, onEdit, onDelete, disabled }) {
+/** "Sep 2026" -- the month, matching how the achievement it writes is dated.
+ *  A goal reached is not a calendar appointment; the day adds false precision. */
+function reachedOn(iso) {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime())
+    ? null
+    : d.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
+}
+
+function GoalCard({ goal, onEdit, onDelete, onToggle, disabled }) {
+  const done = Boolean(goal.completedAt);
+  const when = done ? reachedOn(goal.completedAt) : null;
   return (
-    <article className="gl-card">
+    <article className={`gl-card${done ? ' is-done' : ''}`}>
       <div className="gl-card-top">
+        {/* The tick leads the card, where a checklist puts it. aria-pressed
+            rather than a checkbox: this is a button that changes something
+            server-side, not a form field being filled in. */}
+        <button
+          type="button"
+          className={`gl-tick${done ? ' on' : ''}`}
+          onClick={() => onToggle(goal)}
+          disabled={disabled}
+          aria-pressed={done}
+          aria-label={done ? `Reopen ${goal.title}` : `Mark ${goal.title} reached`}
+          title={done ? 'Reopen this goal' : 'Mark this reached'}
+        >
+          <IconCheck />
+        </button>
         <h3>{goal.title}</h3>
         <div className="gl-card-acts">
           <button type="button" className="gl-ic-btn" onClick={() => onEdit(goal)} disabled={disabled} aria-label="Edit">
@@ -20,6 +51,11 @@ function GoalCard({ goal, onEdit, onDelete, disabled }) {
         </div>
       </div>
       {goal.subtitle && <p>{goal.subtitle}</p>}
+      {done && (
+        <p className="gl-reached">
+          Reached{when ? ` · ${when}` : ''} · saved to Your Achievements
+        </p>
+      )}
     </article>
   );
 }
@@ -103,6 +139,22 @@ export default function GoalsPage() {
     }
   };
 
+  const toggleGoal = async (goal) => {
+    const next = !goal.completedAt;
+    setPending(true);
+    try {
+      const updated = await setGoalCompleted(goal.id, next);
+      setState((s) => ({ ...s, goals: s.goals.map((g) => (g.id === updated.id ? updated : g)) }));
+      // Only on the way in. "Reopened" needs no celebrating, and the achievement
+      // it already wrote deliberately stays -- see the service's own note.
+      if (next) showToast('Reached — saved to Your Achievements.');
+    } catch {
+      showToast("Couldn't update that goal. Try again.");
+    } finally {
+      setPending(false);
+    }
+  };
+
   const deleteGoal = async (id) => {
     setPending(true);
     try {
@@ -125,7 +177,15 @@ export default function GoalsPage() {
 
       {state.status === 'ready' && (
         <div className="gl-toolbar">
-          <span className="gl-count">{goals.length ? `${goals.length} active` : 'No goals yet'}</span>
+          {/* A reached goal is not one you are actively moving, which is what
+              this line claims. Counting it there would tell a founder who has
+              finished everything that they still have work open. */}
+          <span className="gl-count">{
+            goals.length === 0 ? 'No goals yet'
+              : `${goals.filter((g) => !g.completedAt).length} active`
+              + (goals.some((g) => g.completedAt)
+                  ? ` · ${goals.filter((g) => g.completedAt).length} reached` : '')
+          }</span>
           <button type="button" className="btn btn-em" onClick={() => { setEditing({}); setShowEditor(true); }}>
             <IconPlus /> Add goal
           </button>
@@ -149,6 +209,7 @@ export default function GoalsPage() {
                 goal={goal}
                 onEdit={(g) => { setEditing(g); setShowEditor(true); }}
                 onDelete={deleteGoal}
+                onToggle={toggleGoal}
                 disabled={pending}
               />
             ))}

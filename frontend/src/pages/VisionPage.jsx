@@ -3,11 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import {
   computeGap, imageProblem, IMAGE_TYPES, loadVision, removeTerritoryImage,
-  saveSummary, saveTerritory, TERRITORIES, uploadTerritoryImage,
+  saveSummary, saveTerritory, setTerritoryCompleted, TERRITORIES, uploadTerritoryImage,
 } from '../services/vision';
 import { DnaError, DnaLoading } from '../components/DnaState';
 import Modal from '../components/Modal';
-import { IconAnchor, IconAward, IconChat, IconClock, IconDollar, IconEdit, IconPlus, IconTrendingUp, IconUsers } from '../utils/icons';
+import { IconAnchor, IconAward, IconChat, IconCheck, IconClock, IconDollar, IconEdit, IconPlus, IconTrendingUp, IconUsers } from '../utils/icons';
 
 // Purely decorative -- which icon marks which territory. Not a stand-in for
 // data (there is none until the founder writes their own vision), just a
@@ -23,11 +23,12 @@ const TERRITORY_ICON = {
 
 const EMPTY_TERRITORY = { statement: '', tag1: '', tag2: '' };
 
-function TerritoryCard({ territory, data, onEdit, onTalk }) {
+function TerritoryCard({ territory, data, onEdit, onTalk, onToggle, busy }) {
   const isEmpty = !data.statement.trim();
+  const done = Boolean(data.completedAt);
   const Icon = TERRITORY_ICON[territory.key];
   return (
-    <div className={`vt-card${isEmpty ? ' is-empty' : ''}`}>
+    <div className={`vt-card${isEmpty ? ' is-empty' : ''}${done ? ' is-reached' : ''}`}>
       {/* The edit surface and the "talk to Ally about this one" action are
           siblings, not nested buttons -- a <button> inside a <button> is
           invalid HTML and the inner click would also fire the outer one. */}
@@ -61,9 +62,26 @@ function TerritoryCard({ territory, data, onEdit, onTalk }) {
           </>
         )}
       </button>
-      <button type="button" className="vt-talk" onClick={() => onTalk(territory, data)}>
-        <IconChat /> {isEmpty ? 'Brainstorm this with Ally' : 'Talk to Ally about this'}
-      </button>
+      <div className="vt-foot">
+        <button type="button" className="vt-talk" onClick={() => onTalk(territory, data)}>
+          <IconChat /> {isEmpty ? 'Brainstorm this with Ally' : 'Talk to Ally about this'}
+        </button>
+        {/* Only on a written vision. The backend answers 404 for an unwritten
+            one -- there is nothing there to have reached -- so the card simply
+            does not offer it rather than letting the founder find that out. */}
+        {!isEmpty && (
+          <button
+            type="button"
+            className={`vt-reach${done ? ' on' : ''}`}
+            onClick={() => onToggle(territory.key, !done)}
+            disabled={busy}
+            aria-pressed={done}
+            title={done ? 'Reopen this vision' : 'Mark this reached'}
+          >
+            <IconCheck /> {done ? 'Reached' : 'Mark reached'}
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -204,6 +222,7 @@ export default function VisionPage() {
   const { showToast, setHasVision } = useApp();
   const [state, setState] = useState({ status: 'loading', vision: null, error: null });
   const [editingKey, setEditingKey] = useState(null);
+  const [reaching, setReaching] = useState(null);
 
   const load = () => {
     setState((s) => ({ ...s, status: 'loading', error: null }));
@@ -272,6 +291,26 @@ export default function VisionPage() {
   const gap = computeGap(vision.summary.target, vision.summary.current);
   const hasSummary = vision.summary.target.trim() || vision.summary.current.trim();
 
+  /* One territory at a time, keyed rather than a bare boolean, so a slow
+     request disables the card being toggled and not the other five. */
+  const toggleReached = async (key, next) => {
+    setReaching(key);
+    try {
+      const t = await setTerritoryCompleted(key, next);
+      setState((s) => ({
+        ...s,
+        vision: { ...s.vision, territories: { ...s.vision.territories, [key]: t } },
+      }));
+      // Only on the way in -- reopening needs no announcement, and the
+      // achievement it already wrote deliberately stays.
+      if (next) showToast('Reached — saved to Your Achievements.');
+    } catch {
+      showToast("Couldn't update that vision. Try again.");
+    } finally {
+      setReaching(null);
+    }
+  };
+
   // Opens Ally chat pre-filled with the founder's own words about that one
   // territory -- dropped into the composer for them to review/edit, never
   // sent on their behalf. No fabricated "Ally already thinks X" text; the
@@ -332,6 +371,8 @@ export default function VisionPage() {
             data={vision.territories[t.key] || EMPTY_TERRITORY}
             onEdit={setEditingKey}
             onTalk={talkAboutTerritory}
+            onToggle={toggleReached}
+            busy={reaching === t.key}
           />
         ))}
       </div>
