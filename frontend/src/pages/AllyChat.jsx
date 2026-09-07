@@ -106,11 +106,29 @@ const SUGGESTION_ACTIONS = {
   clarification: { label: 'Edit my question', refillLast: true },
 };
 
+/** Below this the history panel is a drawer over the thread; at or above it,
+ *  a docked column beside it. Mirrors the breakpoint in platform.css. */
+const HIST_DOCK_MIN = '(min-width: 768px)';
+const HIST_KEY = 'ally_chat_hist';
+const histIsDrawer = () =>
+  typeof window === 'undefined' || !window.matchMedia(HIST_DOCK_MIN).matches;
+
 export default function AllyChat() {
   const { user, showToast } = useApp();
   const location = useLocation();
   const navigate = useNavigate();
-  const [histOpen, setHistOpen] = useState(false);
+  // Desktop docks the history as a column beside the thread, so it starts
+  // OPEN there and remembers whether the founder closed it. Mobile has no
+  // room for a column: the same panel is a drawer, and a drawer that opens
+  // itself on load would cover the conversation, so it never starts open.
+  const [histOpen, setHistOpen] = useState(() => {
+    if (histIsDrawer()) return false;
+    const saved = localStorage.getItem(HIST_KEY);
+    return saved === null ? true : saved === 'true';
+  });
+  useEffect(() => {
+    if (!histIsDrawer()) localStorage.setItem(HIST_KEY, String(histOpen));
+  }, [histOpen]);
   const [activeConv, setActiveConv] = useState(null);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
@@ -214,7 +232,8 @@ export default function AllyChat() {
   }, []);
 
   const openConversation = async (id) => {
-    setHistOpen(false);
+    // Only the drawer closes on pick -- a docked column stays put.
+    if (histIsDrawer()) setHistOpen(false);
     setMenuFor(null);
     setActiveConv(id);
     setLoadingThread(true);
@@ -706,7 +725,7 @@ export default function AllyChat() {
     setSuggestions([]);
     setOlderOffset(null);
     setMenuFor(null);
-    setHistOpen(false);
+    if (histIsDrawer()) setHistOpen(false);
   };
 
   return (
