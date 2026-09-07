@@ -23,16 +23,19 @@ const PENDING_KEY = 'ally.pending_consent';
 /**
  * Persist a consent record for the signed-in founder.
  *
- * @param {{ agreeTerms: boolean, agreeDiagnosis: boolean }} choices
+ * @param {{ agreeTerms: boolean, agreeDiagnosis: boolean, ageConfirmed: boolean }} choices
  * @returns {Promise<object>} the stored consent record
  * @throws {ApiError} 422 if terms weren't accepted or a version is malformed
  */
-export function recordConsent({ agreeTerms, agreeDiagnosis }) {
+export function recordConsent({ agreeTerms, agreeDiagnosis, ageConfirmed }) {
   return post('/consents', {
     terms_version: CURRENT_VERSIONS.terms,
     privacy_version: CURRENT_VERSIONS.privacy,
     agree_terms: agreeTerms,
     agree_diagnosis: agreeDiagnosis,
+    // Stored alongside the consent so the attestation carries the same
+    // timestamp and document versions as the rest of it.
+    age_confirmed: ageConfirmed,
   });
 }
 

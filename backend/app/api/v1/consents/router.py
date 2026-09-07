@@ -40,6 +40,7 @@ def create_consent(
         privacy_version=payload.privacy_version,
         agree_terms=payload.agree_terms,
         agree_diagnosis=payload.agree_diagnosis,
+        age_confirmed=payload.age_confirmed,
     )
     if not created:
         response.status_code = status.HTTP_200_OK

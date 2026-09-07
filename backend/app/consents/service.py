@@ -54,6 +54,7 @@ class ConsentService:
         privacy_version: str,
         agree_terms: bool,
         agree_diagnosis: bool = False,
+        age_confirmed: bool | None = None,
     ) -> tuple[ConsentRecord, bool]:
         """Append a consent record. Returns (record, created).
 
@@ -72,6 +73,7 @@ class ConsentService:
             and current.privacy_version == privacy
             and current.agree_terms is True
             and current.agree_diagnosis == agree_diagnosis
+            and current.age_confirmed == age_confirmed
         ):
             return current, False
 
@@ -82,6 +84,7 @@ class ConsentService:
             privacy_version=privacy,
             agree_terms=True,
             agree_diagnosis=agree_diagnosis,
+            age_confirmed=age_confirmed,
             consented_at=self._now(),
         )
         return self.repository.add(record), True

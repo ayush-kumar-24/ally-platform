@@ -20,6 +20,7 @@ class ConsentResponse(BaseModel):
     privacy_version: str
     agree_terms: bool
     agree_diagnosis: bool
+    age_confirmed: bool | None = None
     consented_at: datetime
 
     @classmethod
@@ -31,6 +32,7 @@ class ConsentResponse(BaseModel):
             privacy_version=r.privacy_version,
             agree_terms=r.agree_terms,
             agree_diagnosis=r.agree_diagnosis,
+            age_confirmed=r.age_confirmed,
             consented_at=r.consented_at,
         )
 

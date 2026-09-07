@@ -28,5 +28,6 @@ class ConsentRow(Base):
     privacy_version: Mapped[str] = mapped_column(String(20), nullable=False)
     agree_terms: Mapped[bool] = mapped_column(Boolean, nullable=False)
     agree_diagnosis: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    age_confirmed: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     consented_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now(), index=True)

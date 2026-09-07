@@ -26,7 +26,10 @@ from app.api.v1.diagnosis.notifications import (
     get_session_completion_notifier,
 )
 from app.api.v1.diagnosis.service import DiagnosisService
-from app.api.v1.privacy.dependencies import require_ai_processing_allowed
+from app.api.v1.privacy.dependencies import (
+    require_ai_processing_allowed,
+    require_diagnosis_consent,
+)
 from app.db.session import get_db
 from app.middleware.rate_limit import founder_rate_limit
 from app.models import Founder, SessionStatus
@@ -53,7 +56,8 @@ answer_rate_limit = founder_rate_limit(
     response_model=StartSessionResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Start (or resume) a diagnosis session",
-    dependencies=[Depends(start_rate_limit), Depends(require_ai_processing_allowed), Depends(require_profile_complete)],
+    dependencies=[Depends(start_rate_limit), Depends(require_ai_processing_allowed),
+                  Depends(require_diagnosis_consent), Depends(require_profile_complete)],
 )
 def start_session(
     db: Session = Depends(get_db),
@@ -140,7 +144,8 @@ def abandon_session(
     # this in any single minute. require_ai_processing_allowed is the other
     # half: the rate limit bounds throughput, this one refuses entirely once
     # the founder has restricted processing or withdrawn consent.
-    dependencies=[Depends(answer_rate_limit), Depends(require_ai_processing_allowed)],
+    dependencies=[Depends(answer_rate_limit), Depends(require_ai_processing_allowed),
+                  Depends(require_diagnosis_consent)],
 )
 async def submit_answer(
     payload: SubmitAnswerRequest,

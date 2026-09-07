@@ -40,3 +40,9 @@ class ConsentRecord:
 
     # Server-stamped. Never taken from the client -- see service.record_consent.
     consented_at: datetime
+
+    #: Did they confirm they are 18 or over? None for consents captured before
+    #: the question was asked -- "not asked", which is neither a yes we can rely
+    #: on nor a no they actually gave. Last because it is the only optional
+    #: field and a dataclass cannot put a defaulted field before a required one.
+    age_confirmed: bool | None = None
