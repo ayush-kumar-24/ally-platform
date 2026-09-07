@@ -288,11 +288,11 @@ export default function VisionPage() {
   return (
     <div className="vis-page">
       <header className="vis-head">
-        {/* The section names what the founder has, not what the page is: with
-            nothing written there is no board yet, only the invitation to start
-            one. Keyed off the same filledCount the sub-copy below already uses,
-            so the two can never disagree about whether a vision exists. */}
-        <div className="vis-kicker">{filledCount === 0 ? 'Build Your Vision' : 'Your Vision Board'}</div>
+        {/* No kicker. It named the section -- "Build Your Vision" / "Your Vision
+            Board" -- and so does the top bar directly above it, which is where
+            that name now lives because it is state-dependent and the bar is the
+            page's actual title. Two identical lines stacked is not emphasis, it
+            is a stutter, so the headline leads the page instead. */}
         {/* "Build" already opens the label above in the empty state; repeating
             it here read as a stutter. The filled state keeps the verb, because
             its label ("Your Vision Board") does not carry one. */}

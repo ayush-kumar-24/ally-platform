@@ -5,7 +5,6 @@
 .vis-page { padding: 18px 24px 64px; max-width: 1240px; margin: 0 auto; }
 
 .vis-head { margin-bottom: 22px; }
-.vis-kicker { font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--color-emerald, #10B981); margin-bottom: 8px; }
 .vis-head h1 { font-family: var(--font-display); font-size: clamp(26px, 3.2vw, 38px); line-height: 1.08; letter-spacing: -.02em; color: var(--color-forest, #1B4332); margin: 0 0 10px; }
 .vis-sub { font-size: 13.5px; line-height: 1.6; color: var(--color-muted-2, #6c7a70); max-width: 62ch; margin: 0 0 18px; }
 .vis-head-acts { display: flex; gap: 10px; flex-wrap: wrap; }
@@ -198,11 +197,10 @@
    nth-child(4) starts the second row, so the delays read as a diagonal sweep.
    The one-column breakpoint re-times them as a straight top-to-bottom run.
 --------------------------------------------------------------------------- */
-.vis-kicker,.vis-head h1,.vis-sub,.vis-head-acts{animation:vis-rise .5s cubic-bezier(.22,1,.36,1) backwards}
-.vis-kicker{animation-delay:.02s}
-.vis-head h1{animation-delay:.08s}
-.vis-sub{animation-delay:.15s}
-.vis-head-acts{animation-delay:.22s}
+.vis-head h1,.vis-sub,.vis-head-acts{animation:vis-rise .5s cubic-bezier(.22,1,.36,1) backwards}
+.vis-head h1{animation-delay:.02s}
+.vis-sub{animation-delay:.09s}
+.vis-head-acts{animation-delay:.16s}
 
 .vt-card{animation:vis-card-in .52s cubic-bezier(.22,1,.36,1) backwards}
 .vt-card:nth-child(1){animation-delay:.26s}
@@ -255,7 +253,7 @@
 /* Entrances are the whole point of this block, so under reduce they are removed
    outright rather than shortened -- the page simply renders finished. */
 @media (prefers-reduced-motion:reduce){
-  .vis-kicker,.vis-head h1,.vis-sub,.vis-head-acts,.vt-card,.vis-sum-box,
+  .vis-head h1,.vis-sub,.vis-head-acts,.vt-card,.vis-sum-box,
   .vis-sum-box.gap::after{animation:none}
   .vt-card:hover .vt-ic,.vt-card:hover .vt-edit-ic,.vt-card:hover .vt-add,
   .vis-sum-box:hover{transform:none}
