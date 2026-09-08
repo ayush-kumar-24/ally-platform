@@ -14,16 +14,21 @@
 @media (max-width: 1000px) { .vt-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 640px) { .vt-grid { grid-template-columns: 1fr; } }
 
+/* Carries the standard card shadow at rest, not only on hover. Six tiles in a
+   3-across grid with a hairline border and no shadow read as one ruled sheet;
+   the shadow is what makes each one its own object. The heavier border does
+   the same job for the dashed empty state, which has no gradient to sit on. */
 .vt-card {
   border-radius: 18px;
-  border: 1px solid var(--color-bd, #e7e0d6);
+  border: 1px solid var(--bd-2, #d8cfc2);
   background: linear-gradient(150deg, #fff, var(--color-ivory-2, #fbf7f2));
+  box-shadow: var(--shadow-card, 0 1px 2px -1px rgba(6,20,13,.14), 0 6px 16px -6px rgba(6,20,13,.18));
   display: flex;
   flex-direction: column;
   transition: .2s cubic-bezier(.2,.7,.2,1);
   overflow: hidden;
 }
-.vt-card:hover { transform: translateY(-2px); border-color: rgba(16,185,129,.4); box-shadow: 0 1px 2px -1px rgba(6,20,13,.14), 0 6px 16px -6px rgba(6,20,13,.18); }
+.vt-card:hover { transform: translateY(-4px); border-color: rgba(16,185,129,.4); box-shadow: 0 6px 24px -8px rgba(6,20,13,.2), 0 16px 40px -12px rgba(6,20,13,.16); }
 .vt-card.is-empty { border-style: dashed; background: var(--color-ivory-2, #fbf7f2); }
 
 .vt-card-body {
