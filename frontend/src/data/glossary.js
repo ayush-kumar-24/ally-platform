@@ -1,1032 +1,1431 @@
 /**
- * data/glossary.js — the founder's glossary under "Things to learn".
+ * data/glossary.js — the founder glossary under "Things to learn".
  *
- * WHERE THIS CAME FROM. ally-founder-glossary.md (7 Sep 2026).
+ * SOURCE: GoXL_Founder_Glossary_v2.docx (September 2026) — "The Founder
+ * Glossary: every term a founder needs across all 12 areas of building a
+ * business". 243 terms.
  *
- * WRITTEN IN PLAIN ENGLISH, ON PURPOSE. The source is written in fluent,
- * idiomatic business English -- "column fodder", "a referral coat of paint",
- * "sometimes a bridge, sometimes a pier". Most of the founders reading this do
- * not have English as a first language, and a glossary that needs a glossary is
- * worthless. So every line here is rewritten short and plain: common words,
- * one idea per sentence, no idioms, spoken directly to the reader.
+ * GENERATED FROM THE DOCUMENT, NOT RETYPED. 243 entries across four fields is
+ * close to a thousand chances to introduce a silent transcription error, and a
+ * glossary whose definitions are subtly wrong is worse than no glossary. The
+ * generator is scratchpad/gen_glossary.py; re-run it when the document changes
+ * rather than hand-editing this file.
  *
- * The technical terms themselves stay exactly as they are -- those are the
- * point, and a founder needs to recognise them when an investor says them.
- * What changed is the explanation around them.
+ * THREE FIELDS PER TERM, from the document's own columns:
  *
- * `mistake` IS THE POINT, not a footnote. Any dictionary can define CAC. What
- * makes this worth having is the mistake attached to each term, which is why it
- * renders as its own line rather than being folded into the meaning.
+ *   full     the expansion, when the term is an acronym. The document uses an
+ *            em dash for terms that are not; those carry no `full` at all
+ *            rather than a dash a reader has to decode.
+ *   usedFor  the situation where the term earns its keep.
+ *   means    the plain-language explanation. The document calls this the
+ *            column that matters most, so it is what a card leads with.
  *
- * TWO SECTIONS OF THE SOURCE ARE NOT HERE.
- *
- * Section 11 is GoXL's own vocabulary -- stages, archetypes, pillars, the
- * Evolution Ladder. Its notes are internal ("unresolved", "at least three other
- * taxonomies in circulation"), it points at documents by number, and the source
- * itself says to reconcile it against those documents before use. Publishing a
- * second, slightly different definition of our own terms is exactly the problem
- * that note is warning about, so it waits for a decision.
- *
- * Section 10 IS here, with its verification date shown on the section. Those
- * facts move -- GST slabs, MSME limits and the DPDP phasing have all moved
- * inside a year -- and a founder reading a stale rate in our product would be
- * relying on us. The date is displayed rather than filed.
+ * THIS REPLACED an earlier 182-term version built from
+ * ally-founder-glossary.md. That one carried a `mistake` field — the failure
+ * mode attached to each term. This document does not have that column, so the
+ * field is gone rather than half-populated.
  */
 
 export const GLOSSARY = [
   {
-    slug: 'customer',
-    title: 'Customers and market',
-    blurb: 'Who you sell to, and how to tell one group from another.',
-    terms: [
+    "slug": "customer",
+    "title": "Customers, market and positioning",
+    "blurb": "Who you serve, how big that is, and why they should pick you. Most founder confusion downstream starts with vagueness here.",
+    "terms": [
       {
-        term: 'ICP (Ideal Customer Profile)',
-        means: 'A short description of the kind of customer you serve best — their size, industry, situation, budget, and how badly they need you.',
-        mistake: 'Most founders describe everyone who could buy. Describe who buys fastest and stays longest instead. A good ICP leaves people out. If it leaves nobody out, it is not doing its job.',
+        "term": "ICP",
+        "means": "The exact type of customer you are built to win — not everyone who could buy, but the narrow slice where you win fastest, cheapest and most profitably. A sharp ICP is a filter you say NO with.",
+        "full": "Ideal Customer Profile",
+        "usedFor": "Filtering leads, targeting ad spend, writing copy, qualifying deals, deciding what to build next"
       },
       {
-        term: 'Buyer persona',
-        means: 'The actual person inside that company who feels the problem and signs the cheque.',
-        mistake: 'This is not the same as the ICP. The company is the ICP. The tired operations manager is the persona. Selling to the wrong person inside the right company is the most common early mistake.',
+        "term": "Buyer Persona",
+        "means": "A fictional but evidence-based sketch of one real customer type. Powerful when built from actual interviews; useless when invented in a meeting room.",
+        "usedFor": "Aligning marketing, sales and product around one specific human"
       },
       {
-        term: 'Beachhead market',
-        means: 'The first small group you plan to win completely, before going wider.',
-        mistake: 'Starting wide and narrowing later almost never happens. Starting narrow is easier, not harder.',
+        "term": "TAM",
+        "means": "Every rupee that could theoretically be spent on your category. Largely a vanity number — nobody has ever captured their TAM.",
+        "full": "Total Addressable Market",
+        "usedFor": "Sizing the opportunity in a pitch deck; sanity-checking ambition"
       },
       {
-        term: 'Wedge',
-        means: 'The one sharp problem you solve first, to get in the door.',
-        mistake: 'A wedge is meant to be smaller than your full plan. Founders pitch the whole vision and win nothing.',
+        "term": "SAM",
+        "means": "The slice of TAM you can actually reach given your model, geography, language and channel.",
+        "full": "Serviceable Addressable Market",
+        "usedFor": "Realistic market sizing for strategy and investor conversations"
       },
       {
-        term: 'TAM / SAM / SOM',
-        means: 'The whole market, the part you can serve, and the part you can actually win.',
-        mistake: 'TAM is the most exaggerated number in any pitch, and investors ignore it. The number that matters is the part you can actually win, and few founders work it out honestly.',
+        "term": "SOM",
+        "means": "What you can genuinely capture given your team, capital and competition. The only market number worth planning against.",
+        "full": "Serviceable Obtainable Market",
+        "usedFor": "Setting believable 1–3 year revenue targets"
       },
       {
-        term: 'Bottom-up market sizing',
-        means: 'How many customers you can realistically get, times a realistic price, times how often they buy.',
-        mistake: 'Far more believable than saying "1% of a ten-billion-dollar market". If you cannot build the number this way, you do not know your market yet.',
+        "term": "PMF",
+        "means": "The point where customers pull the product out of your hands instead of you pushing it at them. If you are asking whether you have it, you do not.",
+        "full": "Product–Market Fit",
+        "usedFor": "Deciding when to stop iterating and start pouring fuel on growth"
       },
       {
-        term: 'PMF (Product-Market Fit)',
-        means: 'The point where customers pull the product out of your hands, instead of you pushing it at them.',
-        mistake: 'It is not a badge you keep. You can lose it. You can have it with one type of customer and not another. Revenue on its own does not prove it.',
+        "term": "JTBD",
+        "means": "People do not buy your product; they hire it to make progress in their life. Understand the job, not the demographic.",
+        "full": "Jobs To Be Done",
+        "usedFor": "Product prioritisation, messaging, understanding why people switch"
       },
       {
-        term: 'Founder-market fit',
-        means: 'Whether you are the right person for this market. Do you know it, do people there trust you, and can you stay in it long enough.',
-        mistake: 'This is separate from product-market fit. A good market you have no right to win is still the wrong market for you.',
+        "term": "USP",
+        "means": "The one thing you do that competitors cannot easily copy or credibly claim.",
+        "full": "Unique Selling Proposition",
+        "usedFor": "Ads, packaging, pitch decks, the one-line answer to 'why you?'"
       },
       {
-        term: 'Product-founder fit',
-        means: 'Whether you actually want to spend the next ten years on this problem.',
-        mistake: 'It sounds soft. It closes companies. Founders walk away from good businesses because they were bored.',
+        "term": "UVP",
+        "means": "A plain sentence stating who it is for, what it does, and why it is better. If it takes a paragraph, you do not have one yet.",
+        "full": "Unique Value Proposition",
+        "usedFor": "Homepage headline, sales deck opener, cold email first line"
       },
       {
-        term: 'JTBD (Jobs To Be Done)',
-        means: 'The job a customer is trying to get done. They "hire" your product to do it.',
-        mistake: 'It changes who you think you compete with. A restaurant may be competing with a ready-made meal, not with the restaurant next door.',
+        "term": "Positioning",
+        "means": "The space you occupy in the customer's head relative to alternatives. You do not choose it — you earn it, and the market confirms it.",
+        "usedFor": "Brand strategy, pricing power, defending against competitors"
       },
       {
-        term: 'Problem-solution fit',
-        means: 'Proof that the problem is real and that your solution fixes it. This comes before product-market fit.',
-        mistake: 'Skip it and you can spend a year measuring the wrong thing.',
+        "term": "Segmentation",
+        "means": "Cutting your market into groups that behave differently enough to deserve different treatment. If the segments behave the same, they are not segments.",
+        "usedFor": "Serving different customer groups with different offers and pricing"
       },
       {
-        term: 'Positioning',
-        means: "Where your product sits in the buyer's mind, compared with the other options.",
-        mistake: 'It is not a tagline. It is a comparison. If the buyer has nothing to compare you with, they cannot judge what you are worth.',
+        "term": "Beachhead Market",
+        "means": "The smallest market you can completely dominate before expanding. Win small deliberately so you can win big credibly.",
+        "usedFor": "Choosing where to launch first when you cannot afford to be everywhere"
       },
       {
-        term: 'Category creation',
-        means: 'Building a market that does not exist yet.',
-        mistake: 'Very slow and very expensive. It can take ten to twenty years. That makes it a decision about funding, not about marketing.',
+        "term": "VoC",
+        "means": "Structured listening to what customers literally say, in their own words — not your polished summary of it.",
+        "full": "Voice of Customer",
+        "usedFor": "Roadmap decisions, copywriting, reducing churn"
       },
       {
-        term: 'Early adopter',
-        means: 'Someone who buys on the promise, and puts up with a rough product.',
-        mistake: 'Their excitement does not prove ordinary customers will buy. Most growth dies in the gap between the two.',
+        "term": "NPS",
+        "means": "A 0–10 'would you recommend us' score, expressed as promoters minus detractors. Directionally useful, easily gamed. Watch the trend, not the number.",
+        "full": "Net Promoter Score",
+        "usedFor": "Tracking loyalty and word-of-mouth potential over time"
       },
       {
-        term: 'Design partner',
-        means: 'An early customer who helps you build, usually for a low price or for free.',
-        mistake: 'Only worth it if they give you their time, not just their permission. A free partner who gives you hours is worth more than a paying one who ignores you.',
+        "term": "CSAT",
+        "means": "How happy someone was with a single touchpoint. Tactical feedback, not a strategic signal.",
+        "full": "Customer Satisfaction Score",
+        "usedFor": "Measuring one specific interaction — a delivery, a support ticket, an onboarding call"
       },
       {
-        term: 'Voice of customer',
-        means: 'Collecting what customers say, in their own words.',
-        mistake: 'Founders rewrite what customers said into their own language, and lose the exact words that would have made the marketing work.',
+        "term": "Moat",
+        "means": "Whatever stops a better-funded competitor from copying you in six months — network effects, switching costs, brand, data, regulation, or unfair distribution.",
+        "usedFor": "Defensibility conversations with investors, and with yourself"
       },
       {
-        term: 'Segment',
-        means: 'A group of customers who behave the same way for the same reason.',
-        mistake: 'If two customers buy for different reasons, they are different segments — even if they look the same on paper.',
-      },
-    ],
+        "term": "Category Creation",
+        "means": "Inventing a new market instead of competing inside an existing one. Expensive, slow, and occasionally worth everything.",
+        "usedFor": "Long-horizon brand strategy when you refuse to be compared"
+      }
+    ]
   },
-
   {
-    slug: 'growth',
-    title: 'Growth and marketing numbers',
-    blurb: 'What it costs to get a customer, and whether they stay.',
-    terms: [
+    "slug": "product",
+    "title": "Product, build and delivery",
+    "blurb": "How an idea becomes a shipped, working thing — and the vocabulary your engineers and designers already use.",
+    "terms": [
       {
-        term: 'CAC (Customer Acquisition Cost)',
-        means: 'Everything you spent on sales and marketing, divided by the number of new customers you got in that time.',
-        mistake: "Founders count only the ad spend and leave out salaries. If someone's time went into winning that customer, their cost belongs here too.",
+        "term": "MVP",
+        "means": "The smallest thing you can build that still teaches you whether people want it. It is not a cheap version of the full product — it is an experiment with a user interface.",
+        "full": "Minimum Viable Product",
+        "usedFor": "Testing your riskiest assumption with the least possible spend"
       },
       {
-        term: 'Blended vs paid CAC',
-        means: 'Blended counts every new customer. Paid counts only the ones you paid to get.',
-        mistake: 'Blended looks great early, while word of mouth is doing the work. Track both, or you will not understand it when growth slows.',
+        "term": "MLP",
+        "means": "An MVP people actually enjoy using. In a saturated market, merely viable is invisible.",
+        "full": "Minimum Lovable Product",
+        "usedFor": "Launching into a crowded category where 'viable' is not enough"
       },
       {
-        term: 'LTV / CLV (Lifetime Value)',
-        means: 'The total profit one customer brings you over the whole time they stay.',
-        mistake: 'Use profit, not revenue. LTV built on revenue is a made-up number, and in a services business it can be very wrong.',
+        "term": "POC",
+        "means": "A deliberately throwaway build. Never ship a POC — it was not made to survive contact with real users.",
+        "full": "Proof of Concept",
+        "usedFor": "Answering 'is this even technically possible?' before committing budget"
       },
       {
-        term: 'LTV:CAC ratio',
-        means: 'How much value you get back for every rupee you spend winning a customer.',
-        mistake: 'People repeat 3:1 as a rule. Treat it as a rough direction. It means nothing until you know how fast customers really leave.',
+        "term": "Pilot",
+        "means": "A time-boxed live deployment with one or a few real customers, usually paid. The bridge between demo and contract.",
+        "usedFor": "De-risking a full rollout by running it small and real first"
       },
       {
-        term: 'CAC payback period',
-        means: 'How many months of profit it takes to earn back what you spent getting that customer.',
-        mistake: 'More useful than LTV:CAC when cash is tight. It tells you when the money comes back, not just whether it does.',
+        "term": "Roadmap",
+        "means": "An ordered set of bets, not a delivery promise. Anything more than a quarter out is a hypothesis wearing a date.",
+        "usedFor": "Aligning team, investors and clients on sequence and intent"
       },
       {
-        term: 'Funnel',
-        means: 'The steps a stranger goes through before becoming a customer.',
-        mistake: 'Founders fix the middle. The real leaks are usually at the top, where you are talking to the wrong people, or at the bottom, where you never clearly ask for the sale.',
+        "term": "Backlog",
+        "means": "The list of requested-but-not-committed work. If it only ever grows, you are collecting, not prioritising.",
+        "usedFor": "Holding everything you are consciously not doing right now"
       },
       {
-        term: 'Conversion rate',
-        means: 'The share of people who move from one step to the next.',
-        mistake: 'It means nothing without naming the steps. "20% conversion" from what, to what?',
+        "term": "Sprint",
+        "means": "A short fixed window — usually one or two weeks — in which scope is frozen and something ships.",
+        "usedFor": "Giving the team a repeatable rhythm and a fixed finish line"
       },
       {
-        term: 'MQL / SQL',
-        means: 'A lead marketing thinks is ready, and a lead sales agrees is ready.',
-        mistake: 'Only useful if both sides agree what those words mean. Usually they do not, and deals get lost at that handover.',
+        "term": "User Story",
+        "means": "'As a [user], I want [action], so that [outcome].' Forces you to state the why, not just the what.",
+        "usedFor": "Writing requirements an engineer can actually build from"
       },
       {
-        term: 'Lead',
-        means: 'Anyone who has shown any interest at all.',
-        mistake: 'This word causes more damage than any other here, because it makes someone downloading a PDF look like real demand.',
+        "term": "Acceptance Criteria",
+        "means": "The specific, testable conditions that must be true for work to count as done. Write them before the work starts.",
+        "usedFor": "Ending arguments about whether something is finished"
       },
       {
-        term: 'Churn',
-        means: 'How fast customers leave.',
-        mistake: 'Count customers lost and money lost separately. Losing ten small customers and losing one big one are very different events.',
+        "term": "Wireframe",
+        "means": "A grey-box layout showing where things go, deliberately before how they look.",
+        "usedFor": "Agreeing structure before spending money on visual design"
       },
       {
-        term: 'Retention',
-        means: 'The opposite of churn — who stays.',
-        mistake: 'If the line flattens out, you have a real product. If it keeps falling to zero, you have a leaking bucket, and money spent on growth is wasted.',
+        "term": "Prototype",
+        "means": "A clickable fake. Cheap to throw away, which is the entire point.",
+        "usedFor": "Testing a flow with real users before a line of code is written"
       },
       {
-        term: 'Cohort analysis',
-        means: 'Grouping customers by the month they joined, then following each group over time.',
-        mistake: 'The only honest way to see if the product is getting better. Totals hide a worsening product behind rising numbers.',
+        "term": "Design System",
+        "means": "A reusable kit of components, colours, type and rules so nobody reinvents the button on every screen.",
+        "usedFor": "Keeping a product visually coherent as more people touch it"
       },
       {
-        term: 'Activation',
-        means: 'The first moment a user actually gets value.',
-        mistake: 'If you cannot name that moment, you cannot fix the way new users start.',
+        "term": "Tech Debt",
+        "means": "Shortcuts taken to move faster now, on which you pay interest later. Some debt is a smart trade; unmanaged debt compounds until velocity dies.",
+        "full": "Technical Debt",
+        "usedFor": "Deciding when to slow down and clean up versus keep shipping"
       },
       {
-        term: 'North star metric',
-        means: 'The one number that best shows you are delivering real value.',
-        mistake: 'Choose one that only goes up when customers genuinely benefit. Choose badly and your whole team works on the wrong thing.',
+        "term": "Feature Creep",
+        "means": "The product quietly growing features nobody validated, usually because saying no felt impolite.",
+        "usedFor": "Diagnosing why launches keep slipping and the product feels bloated"
       },
       {
-        term: 'Vanity metric',
-        means: 'A number that keeps going up and predicts nothing — page views, downloads, followers, signups.',
-        mistake: 'Not useless, but never a reason to make a decision. If a number cannot fall when things go badly, it is not measuring anything.',
+        "term": "Scope Creep",
+        "means": "The agreed deliverable expanding while the price and deadline stay exactly where they were.",
+        "usedFor": "Protecting margin and timelines on client or agency work"
       },
       {
-        term: 'ROAS',
-        means: 'How much revenue each rupee of advertising brings in.',
-        mistake: 'That is revenue, not profit. Good ROAS on a low-margin product can still lose you money.',
+        "term": "QA",
+        "means": "Systematic testing before release. The cost of skipping it is always paid twice — once in support, once in reputation.",
+        "full": "Quality Assurance",
+        "usedFor": "Catching defects before your customer does"
       },
       {
-        term: 'CPL / CPA / CPC / CPM',
-        means: 'Cost per lead, per customer, per click, and per thousand times your ad is shown.',
-        mistake: 'Advertising words. Learn them so an agency cannot confuse you with them.',
+        "term": "UAT",
+        "means": "The actual end user confirms it solves their problem — a different question from whether the code runs.",
+        "full": "User Acceptance Testing",
+        "usedFor": "Final sign-off before go-live"
       },
       {
-        term: 'Attribution',
-        means: 'Deciding which channel gets the credit for a sale.',
-        mistake: 'Genuinely hard, and getting harder. Do not rebuild your plan around numbers you cannot check yourself.',
+        "term": "Beta",
+        "means": "A near-finished release given to a limited group who have been told things may break.",
+        "usedFor": "Controlled exposure to real users before public launch"
       },
       {
-        term: 'K-factor / virality',
-        means: 'How many new users each existing user brings in.',
-        mistake: 'True viral growth is rare. Most growth called viral is paid growth with a referral scheme on top.',
+        "term": "GA",
+        "means": "Open to everyone, fully supported, with no 'we're still testing' excuse available.",
+        "full": "General Availability",
+        "usedFor": "Marking a product as fully, publicly launched"
       },
       {
-        term: 'Organic vs paid',
-        means: 'Visitors you earned, and visitors you paid for.',
-        mistake: 'Organic looks free but is not. It costs time and content. Count that cost.',
+        "term": "Iteration",
+        "means": "One loop of build → measure → learn. Speed of iteration beats the quality of any single decision.",
+        "usedFor": "Improving something in deliberate cycles rather than one big bet"
       },
       {
-        term: 'Top of funnel / bottom of funnel',
-        means: 'Work that makes people aware of you, and work that closes sales.',
-        mistake: 'Founders short of cash usually spend too much at the top, which is exactly where the money comes back slowest.',
-      },
-    ],
+        "term": "API",
+        "means": "A defined doorway through which one system requests something from another. It is how integrations, partnerships and platforms happen.",
+        "full": "Application Programming Interface",
+        "usedFor": "Letting your product talk to other software, and partners plug into you"
+      }
+    ]
   },
-
   {
-    slug: 'revenue',
-    title: 'Revenue and repeat business',
-    blurb: 'Which money counts as steady, and which only looks like it.',
-    terms: [
+    "slug": "growth",
+    "title": "Growth, marketing and sales",
+    "blurb": "How a stranger becomes a customer, what that costs, and where the leak is.",
+    "terms": [
       {
-        term: 'MRR / ARR',
-        means: 'Revenue that repeats every month, or every year.',
-        mistake: 'Repeating means the contract says so. One-off projects and paid trials are not ARR, however much you want them to be.',
+        "term": "GTM",
+        "means": "Your complete plan for reaching and converting customers. A product without a GTM is a hobby.",
+        "full": "Go-To-Market",
+        "usedFor": "Planning a launch: who, where, how, at what price, through which channel"
       },
       {
-        term: 'ACV (Annual Contract Value)',
-        means: "One customer's contract, counted for one year.",
-        mistake: 'Do not mix it up with total contract value, which covers all the years together. Mixing them can multiply your numbers by three.',
+        "term": "Funnel",
+        "means": "The narrowing journey from awareness to purchase. You do not fix a funnel by adding traffic to a leaking stage.",
+        "usedFor": "Diagnosing where prospects drop off"
       },
       {
-        term: 'ARPU / ARPA',
-        means: 'Average revenue per user, or per account.',
-        mistake: 'One average across very different customers hides everything worth knowing. Split it up.',
+        "term": "TOFU / MOFU / BOFU",
+        "means": "Awareness, consideration and decision stages. Sending a bottom-funnel sales pitch to a top-funnel stranger is why cold outreach fails.",
+        "full": "Top / Middle / Bottom of Funnel",
+        "usedFor": "Matching content and offers to buyer readiness"
       },
       {
-        term: 'NRR / NDR (Net Revenue Retention)',
-        means: 'Money from your existing customers this year compared with last year, counting upgrades and losses together.',
-        mistake: 'Above 100% means you would still grow with no new customers. The 120% figure people quote comes from large enterprise software. Smaller businesses usually sit around 101–102%.',
+        "term": "Lead Magnet",
+        "means": "Something genuinely useful given free in exchange for an email or phone number. If nobody would pay for it, it will not convert.",
+        "usedFor": "Trading value for contact details"
       },
       {
-        term: 'GRR (Gross Revenue Retention)',
-        means: 'The same, but without counting upgrades. The honest number for what you are losing.',
-        mistake: 'NRR can look healthy while GRR is bleeding, if a few accounts are growing fast. Look at both.',
+        "term": "MQL",
+        "means": "A lead that has shown enough interest to be worth a sales conversation — but has not asked for one yet.",
+        "full": "Marketing Qualified Lead",
+        "usedFor": "Deciding which leads marketing hands to sales"
       },
       {
-        term: 'Expansion revenue',
-        means: 'More money from customers you already have.',
-        mistake: 'The cheapest revenue there is, and the one early founders ignore while chasing new names.',
+        "term": "SQL",
+        "means": "A lead sales has vetted and accepted as a genuine opportunity with budget, need and timing.",
+        "full": "Sales Qualified Lead",
+        "usedFor": "Filling the sales pipeline with real opportunities"
       },
       {
-        term: 'Gross margin',
-        means: 'What is left from your revenue after the direct cost of delivering it, shown as a percentage.',
-        mistake: 'The most telling number in a young business. A low gross margin limits everything you can afford to do later.',
+        "term": "PQL",
+        "means": "A user whose in-product behaviour shows they are ready to pay. The most reliable signal of the three.",
+        "full": "Product Qualified Lead",
+        "usedFor": "Upselling free or trial users in a self-serve product"
       },
       {
-        term: 'Contribution margin',
-        means: 'Gross margin after the extra costs of serving that particular customer.',
-        mistake: 'It tells you whether each new customer helps you or hurts you.',
+        "term": "CAC",
+        "means": "Total sales and marketing spend divided by new customers won. If CAC exceeds what a customer is worth to you, growth is just a faster way to run out of cash.",
+        "full": "Customer Acquisition Cost",
+        "usedFor": "Judging whether your marketing spend is efficient"
       },
       {
-        term: 'COGS',
-        means: 'The direct cost of delivering — hosting, materials, the staff who do the work.',
-        mistake: 'Founders put salaries in the wrong place, and then gross margin means nothing.',
+        "term": "LTV",
+        "means": "The total gross profit a customer generates across their whole relationship with you. Calculate it on margin, not revenue, or you will lie to yourself.",
+        "full": "Lifetime Value",
+        "usedFor": "Deciding how much you can afford to spend acquiring a customer"
       },
       {
-        term: 'Rule of 40',
-        means: 'Your growth rate plus your profit margin should add up to more than 40.',
-        mistake: 'The person who wrote it meant it for large companies, roughly $50 million of revenue and above. Used on a ₹5 crore business it punishes exactly the steady, profitable businesses it was never about.',
+        "term": "LTV : CAC",
+        "means": "How many rupees of value each rupee of acquisition buys. Below 3 is a warning; above 5 often means you are underinvesting in growth.",
+        "full": "Lifetime Value to Customer Acquisition Cost Ratio",
+        "usedFor": "Testing whether the business model scales"
       },
       {
-        term: 'Burn multiple',
-        means: 'How much cash you burn to add one rupee of repeating revenue.',
-        mistake: 'A test of how carefully you use money. Lower is better. There is no trustworthy standard number to compare against.',
+        "term": "Payback Period",
+        "means": "How many months of margin it takes to recover the CAC on one customer. Short payback beats a high LTV:CAC when cash is tight.",
+        "usedFor": "Understanding how fast cash comes back"
       },
       {
-        term: 'Quick ratio (SaaS)',
-        means: 'New and upgraded revenue, divided by lost and reduced revenue.',
-        mistake: 'It shows whether growth is beating losses. The benchmark numbers people quote come from nowhere you can check.',
+        "term": "AOV",
+        "means": "Average spend per transaction. Bundling, upsells and minimum-cart thresholds move this fastest.",
+        "full": "Average Order Value",
+        "usedFor": "Increasing revenue without increasing acquisition spend"
       },
       {
-        term: 'Magic number',
-        means: 'New repeating revenue, divided by what you spent on sales and marketing the period before.',
-        mistake: 'A rough check on sales efficiency. People treat it as far more exact than it is.',
+        "term": "ARPU",
+        "means": "Total revenue divided by active users in a period. Rising ARPU with flat churn is the healthiest growth signal there is.",
+        "full": "Average Revenue Per User",
+        "usedFor": "Comparing monetisation across cohorts, plans or geographies"
       },
       {
-        term: 'GMV',
-        means: 'The total value of everything sold through a marketplace.',
-        mistake: 'This is not your revenue. Your revenue is your cut of it. Confusing the two is the classic marketplace exaggeration.',
+        "term": "Conversion Rate",
+        "means": "The percentage moving from one stage to the next. Doubling a 1% conversion is usually cheaper than doubling traffic.",
+        "usedFor": "Finding the highest-leverage fix in the funnel"
       },
       {
-        term: 'Take rate',
-        means: 'Your percentage cut of what is sold.',
-        mistake: 'The number that decides whether a marketplace is a business or a charity.',
+        "term": "CTR",
+        "means": "Clicks divided by impressions. A creative and messaging signal, not a business outcome.",
+        "full": "Click-Through Rate",
+        "usedFor": "Judging whether an ad, subject line or headline earns attention"
       },
       {
-        term: 'Revenue vs bookings vs collections',
-        means: 'Money earned, contracts signed, and cash actually in the bank.',
-        mistake: 'Three different numbers, often used as if they were one. Only the cash pays salaries.',
+        "term": "CPC",
+        "means": "What you pay each time someone clicks. Rising CPC with flat conversion means your creative or targeting is fatiguing.",
+        "full": "Cost Per Click",
+        "usedFor": "Managing paid media budgets"
       },
-    ],
+      {
+        "term": "CPM",
+        "means": "What you pay to be seen a thousand times. The currency of awareness campaigns.",
+        "full": "Cost Per Mille (per thousand impressions)",
+        "usedFor": "Buying reach and brand awareness"
+      },
+      {
+        "term": "CPL",
+        "means": "Spend divided by leads generated. Cheap leads that never close are the most expensive leads you can buy.",
+        "full": "Cost Per Lead",
+        "usedFor": "Comparing channel efficiency at the top of the funnel"
+      },
+      {
+        "term": "CPA",
+        "means": "What you pay for one defined conversion action. Effectively CAC at the channel level.",
+        "full": "Cost Per Acquisition / Action",
+        "usedFor": "Performance-marketing budgeting"
+      },
+      {
+        "term": "ROAS",
+        "means": "Revenue generated per rupee of ad spend. Note it uses revenue, not profit — a 4x ROAS on a 20% margin product still loses money.",
+        "full": "Return On Ad Spend",
+        "usedFor": "Judging paid campaigns in isolation"
+      },
+      {
+        "term": "Churn Rate",
+        "means": "The percentage of customers or revenue lost in a period. High churn turns growth into a treadmill.",
+        "usedFor": "Measuring how fast you lose what you won"
+      },
+      {
+        "term": "Retention Rate",
+        "means": "The percentage who stay. Retention is the truest proxy for value delivered — it is very hard to fake.",
+        "usedFor": "Measuring whether the product actually delivers"
+      },
+      {
+        "term": "Cohort Analysis",
+        "means": "Grouping customers by when they joined and tracking each group separately. Reveals truths that blended averages hide.",
+        "usedFor": "Seeing whether the business is genuinely improving over time"
+      },
+      {
+        "term": "K-Factor",
+        "means": "How many new users each existing user brings. Above 1 means self-sustaining growth; almost nothing is above 1.",
+        "full": "Viral Coefficient",
+        "usedFor": "Assessing organic, referral-led growth"
+      },
+      {
+        "term": "Pipeline",
+        "means": "The total value of live opportunities, weighted by stage. A thin pipeline today is a bad quarter three months out.",
+        "usedFor": "Forecasting revenue and spotting a dry quarter early"
+      },
+      {
+        "term": "Sales Cycle",
+        "means": "Average time from first contact to signed deal. It is nearly always longer than founders assume.",
+        "usedFor": "Cash-flow planning and sales capacity planning"
+      },
+      {
+        "term": "Win Rate",
+        "means": "Deals closed divided by deals pursued. A low win rate with high volume usually means an unclear ICP.",
+        "usedFor": "Diagnosing sales effectiveness versus lead quality"
+      },
+      {
+        "term": "Attribution",
+        "means": "Assigning credit for a sale to the channels that touched it. Always somewhat wrong; still better than guessing.",
+        "usedFor": "Deciding where to put the next marketing rupee"
+      },
+      {
+        "term": "SEO",
+        "means": "Making your content the best answer to what your buyer searches. Slow to start, compounding once it works.",
+        "full": "Search Engine Optimisation",
+        "usedFor": "Earning traffic you do not pay for, every month, forever"
+      },
+      {
+        "term": "SEM",
+        "means": "Paid placement on search results. Instant, measurable, and it stops the moment you stop paying.",
+        "full": "Search Engine Marketing",
+        "usedFor": "Buying immediate visibility on high-intent searches"
+      },
+      {
+        "term": "Drip Campaign",
+        "means": "A pre-written sequence sent on a schedule or triggered by behaviour. The cheapest sales rep you will ever hire.",
+        "usedFor": "Nurturing leads who are not ready to buy yet"
+      }
+    ]
   },
-
   {
-    slug: 'cash',
-    title: 'Cash and accounts',
-    blurb: 'The difference between being profitable and being able to pay people.',
-    terms: [
+    "slug": "economics",
+    "title": "Unit economics and financial basics",
+    "blurb": "The numbers that decide whether scaling makes you rich or bankrupt. This section extends the original GoXL unit-economics guide.",
+    "terms": [
       {
-        term: 'Unit economics',
-        means: 'Whether one customer, one order or one project makes money after its direct costs.',
-        mistake: 'If one loses money, doing more of them makes things worse, not better. This is the most skipped sum in early business.',
+        "term": "Unit Economics",
+        "means": "The profit or loss on a single unit or a single customer. If one unit loses money, a thousand units lose a thousand times more.",
+        "usedFor": "Testing whether the business works before you scale it"
       },
       {
-        term: 'Burn rate',
-        means: 'Cash you use up each month. Gross burn is everything you spend. Net burn is spending minus income.',
-        mistake: 'Founders quote gross burn to sound careful and net burn to sound safe. Ask which one you are being told.',
+        "term": "Selling Price",
+        "means": "What you charge per unit before discounts. Pricing is a strategy decision disguised as an arithmetic one.",
+        "usedFor": "Setting positioning, margin and competitiveness"
       },
       {
-        term: 'Runway',
-        means: 'How many months you can survive at your current net burn.',
-        mistake: 'Work it out again every month. Runway based on last quarter, while you are hiring, is fiction.',
+        "term": "Effective Selling Price",
+        "means": "What you actually realise after discounts and schemes. Discounts silently erase margin while the price list stays flattering.",
+        "usedFor": "Tracking real revenue, not list-price fantasy"
       },
       {
-        term: 'Default alive / default dead',
-        means: 'Whether you reach profit on the cash you already have, without raising again.',
-        mistake: 'The most useful question a founder can ask themselves, and most cannot answer it.',
+        "term": "Variable Cost",
+        "means": "Cost that moves with every unit sold — materials, packaging, freight, payment gateway fees. Small leaks here become large at volume.",
+        "usedFor": "Calculating contribution margin"
       },
       {
-        term: 'Break-even',
-        means: 'The point where income covers costs.',
-        mistake: "Two different things: covering this month's costs, and paying back everything you have put in so far. Know which one you mean.",
+        "term": "Fixed Cost",
+        "means": "Monthly cost that exists whether you sell zero or ten thousand — rent, salaries, subscriptions. High fixed cost is high risk in a downturn.",
+        "usedFor": "Calculating breakeven and assessing downside risk"
       },
       {
-        term: 'Working capital',
-        means: 'Cash stuck in day-to-day running — stock, unpaid invoices, credit from suppliers.',
-        mistake: 'Profitable businesses die here. Growing uses up cash, which is why growing fast can bankrupt you.',
+        "term": "COGS",
+        "means": "The direct cost of producing what you sold. Excludes marketing, admin and rent.",
+        "full": "Cost of Goods Sold",
+        "usedFor": "Computing gross margin"
       },
       {
-        term: 'Cash conversion cycle',
-        means: 'The number of days between paying for something and getting paid for it.',
-        mistake: 'The real clock in any business holding stock or delivering services. Shortening it is often worth more than raising your prices.',
+        "term": "Gross Margin",
+        "means": "Revenue minus COGS, as a percentage. Services businesses run 30–50%; software runs 70–90%. It sets the ceiling on everything else.",
+        "usedFor": "Judging the fundamental quality of a business model"
       },
       {
-        term: 'DSO (Days Sales Outstanding)',
-        means: 'How many days customers take to pay you, on average.',
-        mistake: 'In Indian business and government work this is often 60 to 120 days. Plan for what happens, not for what the invoice says.',
+        "term": "Contribution Margin",
+        "means": "Revenue minus all variable costs, per unit. What each sale contributes toward fixed costs and profit. If this is near zero, volume will not save you.",
+        "usedFor": "Deciding whether selling more actually helps"
       },
       {
-        term: 'Accounts receivable / payable',
-        means: 'Money owed to you, and money you owe.',
-        mistake: 'An invoice is not cash. Never treat it as money in the bank.',
+        "term": "Net Margin",
+        "means": "What is left after every single cost, including tax and interest. The number that pays you.",
+        "usedFor": "The final answer on profitability"
       },
       {
-        term: 'EBITDA',
-        means: 'Profit before interest, tax, and the cost of things wearing out.',
-        mistake: 'A rough measure of how the business runs. It is not cash, and treating it as cash has closed real companies.',
+        "term": "Breakeven Point",
+        "means": "Fixed costs divided by contribution margin per unit — the volume at which you stop losing money. Below it you are funding customers; above it you are building a business.",
+        "usedFor": "Knowing your survival line"
       },
       {
-        term: 'Cash flow vs profit',
-        means: 'Profit is what the books say. Cash flow is what is in the bank.',
-        mistake: 'You can be profitable and unable to pay anyone in the same month. Most first-time founders learn this the hard way.',
+        "term": "Burn Rate",
+        "means": "Net cash consumed per month. Gross burn is total spend; net burn is spend minus revenue. Always know both.",
+        "usedFor": "Managing cash discipline month to month"
       },
       {
-        term: 'Accrual vs cash accounting',
-        means: 'Recording money when it is earned or owed, or only when it actually moves.',
-        mistake: 'It changes what your profit and loss statement means. Find out which one your books use before you read them.',
+        "term": "Runway",
+        "means": "Cash in bank divided by net monthly burn — months until zero. Under six months, fundraising becomes an emergency rather than a negotiation.",
+        "usedFor": "Knowing how long you have to make it work"
       },
       {
-        term: 'CapEx vs OpEx',
-        means: 'One-off purchases of things you keep, and the regular cost of running.',
-        mistake: 'It changes your tax, when cash leaves you, and how a bank sees you.',
+        "term": "OPEX",
+        "means": "Day-to-day running costs — salaries, rent, software, marketing. Hits the P&L immediately.",
+        "full": "Operating Expenses",
+        "usedFor": "Managing the ongoing cost of running the business"
       },
       {
-        term: 'Fixed vs variable cost',
-        means: 'Costs that stay the same whatever you sell, and costs that rise as you sell more.',
-        mistake: 'They set your break-even point and decide how much a bad month hurts.',
+        "term": "CAPEX",
+        "means": "Money spent on long-lived assets like machinery, fit-outs or vehicles. Sits on the balance sheet and depreciates over years.",
+        "full": "Capital Expenditure",
+        "usedFor": "Planning major asset purchases and cash outflow"
       },
       {
-        term: 'Operating leverage',
-        means: 'How fast profit grows as sales grow, given your fixed costs.',
-        mistake: 'Wonderful on the way up and brutal on the way down.',
+        "term": "EBITDA",
+        "means": "Operating profit stripped of financing and accounting effects. A proxy for core performance — and a favourite hiding place for genuine costs.",
+        "full": "Earnings Before Interest, Taxes, Depreciation and Amortisation",
+        "usedFor": "Comparing operating performance across companies; valuation in traditional industries"
       },
       {
-        term: 'Depreciation / amortisation',
-        means: 'Spreading the cost of something you bought across the years you use it.',
-        mistake: 'This is why your profit statement and your bank balance never agree.',
+        "term": "P&L",
+        "means": "Revenue minus expenses over a period. Shows profitability, and says nothing about whether the cash actually arrived.",
+        "full": "Profit and Loss Statement",
+        "usedFor": "Answering 'did we make money this period?'"
       },
       {
-        term: 'Bootstrapping',
-        means: "Growing on your own money and your customers' money, instead of investors'.",
-        mistake: 'A real strategy, not second best. It changes which numbers matter — how fast you get your money back matters more than lifetime value.',
+        "term": "Balance Sheet",
+        "means": "A snapshot at a single date: assets, liabilities and equity. The health-of-the-business document.",
+        "usedFor": "Answering 'what do we own and what do we owe?'"
       },
-    ],
+      {
+        "term": "Cash Flow Statement",
+        "means": "Actual cash in and out. Profitable companies die from cash-flow failure far more often than from unprofitability.",
+        "usedFor": "Answering 'where did the money actually go?'"
+      },
+      {
+        "term": "Working Capital",
+        "means": "Current assets minus current liabilities. Inventory-heavy businesses can be profitable and still starved of working capital.",
+        "usedFor": "Funding day-to-day operations without borrowing"
+      },
+      {
+        "term": "Cash Conversion Cycle",
+        "means": "Days from paying your supplier to collecting from your customer. The longer it is, the more cash growth consumes.",
+        "usedFor": "Diagnosing why a growing business feels cash-poor"
+      },
+      {
+        "term": "DSO",
+        "means": "Average days customers take to pay you. Every extra day is an interest-free loan you gave without agreeing to.",
+        "full": "Days Sales Outstanding",
+        "usedFor": "Chasing receivables and forecasting collections"
+      },
+      {
+        "term": "Accrual vs Cash Accounting",
+        "means": "Accrual records when it is earned or incurred; cash records when money moves. Accrual shows the truth of performance; cash shows the truth of survival.",
+        "usedFor": "Choosing how you recognise revenue and cost"
+      },
+      {
+        "term": "Depreciation",
+        "means": "A non-cash expense recognising that assets wear out. Reduces taxable profit without reducing cash.",
+        "usedFor": "Spreading the cost of an asset across its useful life"
+      },
+      {
+        "term": "ROI",
+        "means": "Gain from an investment relative to its cost. Simple, universal, and easy to manipulate by choosing a flattering time window.",
+        "full": "Return On Investment",
+        "usedFor": "Comparing where to put the next rupee"
+      }
+    ]
   },
-
   {
-    slug: 'funding',
-    title: 'Raising money and shares',
-    blurb: 'The words in a term sheet, and which ones actually cost you.',
-    terms: [
+    "slug": "revenue",
+    "title": "Revenue models and recurring revenue",
+    "blurb": "If you sell subscriptions, retainers or contracts, this is the scoreboard investors and operators actually use.",
+    "terms": [
       {
-        term: 'Pre-money / post-money valuation',
-        means: 'What the company is worth before the new money goes in, and after. Post-money is pre-money plus the investment.',
-        mistake: 'Founders agree a number without saying which one they mean, and lose several percent of the company doing it.',
+        "term": "MRR",
+        "means": "Normalised, repeatable monthly revenue. One-off project fees do not belong in it, however tempting.",
+        "full": "Monthly Recurring Revenue",
+        "usedFor": "Tracking predictable monthly income and growth rate"
       },
       {
-        term: 'Dilution',
-        means: 'Your share of the company getting smaller when new shares are created.',
-        mistake: 'A smaller share of a bigger company is fine. A smaller share of the same company is not. Track it at every round.',
+        "term": "ARR",
+        "means": "MRR multiplied by twelve. Meaningful only if the revenue genuinely recurs.",
+        "full": "Annual Recurring Revenue",
+        "usedFor": "Headline metric for subscription businesses and investors"
       },
       {
-        term: 'Cap table',
-        means: 'The list of who owns what.',
-        mistake: 'Keep it clean and up to date from day one. A messy one kills more deals during checks than bad numbers do.',
+        "term": "ACV",
+        "means": "The annualised value of one customer contract. Rising ACV usually means you are moving upmarket.",
+        "full": "Annual Contract Value",
+        "usedFor": "Comparing deal sizes and setting sales targets"
       },
       {
-        term: 'ESOP pool',
-        means: 'Shares set aside for employees.',
-        mistake: 'The trap: investors usually want the pool created before their money goes in, so the existing owners — mostly you — pay for it. Negotiate how big it is and when it is created.',
+        "term": "TCV",
+        "means": "The complete value of a contract across its whole term, including one-offs.",
+        "full": "Total Contract Value",
+        "usedFor": "Understanding the full commitment in multi-year deals"
       },
       {
-        term: 'Vesting / cliff',
-        means: 'Earning your shares over time. The cliff is the waiting period before you earn any at all.',
-        mistake: 'Founders should vest too. Splitting shares between co-founders with no vesting is the most common cause of serious early fights.',
+        "term": "Deferred Revenue",
+        "means": "Money received in advance for service not yet delivered. It is cash in your account and a liability on your balance sheet.",
+        "usedFor": "Managing cash collected but not yet earned"
       },
       {
-        term: 'Term sheet',
-        means: 'A short summary of the main terms of an investment. It does not bind anyone yet.',
-        mistake: 'Everyone reads the money terms. The control terms decide how you will live. Read those more carefully.',
+        "term": "Logo Churn",
+        "means": "The percentage of customers who left, regardless of their size.",
+        "usedFor": "Counting customers lost"
       },
       {
-        term: 'Priced round',
-        means: 'A round where you agree what the company is worth and issue shares now.',
-        mistake: 'The other option is to delay agreeing a value, using an instrument that converts later.',
+        "term": "Revenue Churn",
+        "means": "The percentage of recurring revenue lost. Losing one large account can look fine on logo churn and be catastrophic here.",
+        "usedFor": "Measuring the financial impact of losses"
       },
       {
-        term: 'Convertible note',
-        means: 'A loan that turns into shares at a later round.',
-        mistake: 'In India these come under FEMA rules, with special conditions for foreign investors. Get advice before using one across borders.',
+        "term": "GRR",
+        "means": "Revenue retained from existing customers, excluding upsells. Caps at 100% — it can only reveal leakage.",
+        "full": "Gross Revenue Retention",
+        "usedFor": "Measuring how well you hold what you have"
       },
       {
-        term: 'SAFE / iSAFE',
-        means: 'Money now, shares later. No interest and no repayment date. The Indian version is usually called an iSAFE.',
-        mistake: 'Popular because it is fast. Signing several without working out the final dilution is a very common and very expensive mistake.',
+        "term": "NRR / NDR",
+        "means": "Retained revenue including expansion. Above 100% means you grow from existing customers alone, even with zero new sales.",
+        "full": "Net Revenue Retention / Net Dollar Retention",
+        "usedFor": "The single strongest signal of product value"
       },
       {
-        term: 'CCPS / CCD',
-        means: 'The standard Indian instruments used when institutional investors put money in at an agreed valuation.',
-        mistake: 'Indian investors often prefer these to plain shares because of the extra rights attached. Understand what those rights let them do.',
+        "term": "Expansion Revenue",
+        "means": "Additional revenue from existing customers via upgrades, seats or add-ons. The cheapest revenue in the business.",
+        "usedFor": "Growing accounts without new acquisition cost"
       },
       {
-        term: 'Valuation cap / discount',
-        means: 'Limits on the price at which a note or SAFE turns into shares, protecting the early investor.',
-        mistake: 'The cap usually ends up becoming the valuation. Set it as if it were one.',
+        "term": "Land and Expand",
+        "means": "Start with a small deployment, prove value, then grow inside the account. Slower to start, far cheaper to scale.",
+        "usedFor": "Entering large organisations through a small door"
       },
       {
-        term: 'Liquidation preference',
-        means: 'Who gets paid first when the company is sold, and how much.',
-        mistake: '"1x non-participating" is the founder-friendly version. "Participating" means investors get their money back and a share of the rest — on a small sale you can walk away with almost nothing.',
+        "term": "Freemium",
+        "means": "A permanently free tier that converts a small percentage to paid. Only works with very low serving costs and a clear upgrade trigger.",
+        "usedFor": "Acquiring users at near-zero marginal cost"
       },
       {
-        term: 'Participating vs non-participating',
-        means: 'Whether the investor gets paid twice when the company is sold.',
-        mistake: 'This can be worth more than several crore of valuation, and most first-time founders never check it.',
+        "term": "Rule of 40",
+        "means": "Growth rate plus profit margin should exceed 40. Below it, you are neither growing fast enough nor profitable enough to justify the trade.",
+        "usedFor": "Balancing growth against profitability"
       },
       {
-        term: 'Anti-dilution',
-        means: 'Protection for investors if you later raise money at a lower price.',
-        mistake: '"Full ratchet" is harsh. "Broad-based weighted average" is normal. Know which one you signed.',
+        "term": "Magic Number",
+        "means": "New recurring revenue generated per rupee of sales and marketing spend. Above roughly 0.75 signals it is safe to spend more.",
+        "usedFor": "Assessing sales and marketing efficiency"
       },
       {
-        term: 'Pro-rata rights',
-        means: "An investor's right to keep their percentage by investing again in later rounds.",
-        mistake: 'Fair to give. Just remember it takes space away from future investors.',
+        "term": "Quick Ratio (SaaS)",
+        "means": "New plus expansion revenue divided by churned plus contracted revenue. Above 4 is healthy; near 1 means you are running to stand still.",
+        "usedFor": "Checking whether growth is real or just replacing losses"
       },
       {
-        term: 'Down round',
-        means: 'Raising money at a lower value than last time.',
-        mistake: 'You can survive it, but it triggers anti-dilution and hurts the team. Usually caused by raising too high, too early.',
+        "term": "Usage-Based Pricing",
+        "means": "Customers pay for what they consume. Lowers the barrier to entry, makes revenue harder to forecast.",
+        "usedFor": "Aligning price with value delivered"
       },
       {
-        term: 'Bridge round',
-        means: 'Money to get you from one proper round to the next.',
-        mistake: 'Ask honestly what it is getting you to. If there is nothing waiting on the other side, it is not a bridge.',
+        "term": "Tiered Pricing",
+        "means": "Good/Better/Best packaging. The middle tier is usually designed to be chosen; the top tier exists to make it look reasonable.",
+        "usedFor": "Serving different willingness-to-pay with one product"
       },
       {
-        term: 'Runway-to-milestone',
-        means: 'Raising enough to reach a specific proof point, not just to stay alive.',
-        mistake: '"Eighteen months of runway" with no goal attached is just panic postponed.',
-      },
-      {
-        term: 'Lead investor',
-        means: 'The investor who sets the terms and puts in the biggest cheque.',
-        mistake: 'Without one, a round rarely closes. Chasing ten small cheques with no lead wastes months.',
-      },
-      {
-        term: 'Due diligence',
-        means: 'The investor checking everything — legal, financial, technical, and calling your customers.',
-        mistake: 'Clean books and contracts make this quick. A mess can kill the deal.',
-      },
-      {
-        term: 'Data room',
-        means: 'The organised folder of documents investors read.',
-        mistake: 'Build it before you start raising, not during.',
-      },
-      {
-        term: 'Drag-along / tag-along',
-        means: 'The majority can force the minority to sell. The minority can join a sale by the majority.',
-        mistake: 'Normal terms, but read the thresholds carefully.',
-      },
-      {
-        term: 'Board seat / observer',
-        means: 'A vote in how the company is run, or the right to attend without a vote.',
-        mistake: 'Who sits on your board matters more than any single term in the paperwork.',
-      },
-      {
-        term: 'Secondary',
-        means: 'Selling shares you already own, instead of creating new ones.',
-        mistake: 'This is how founders take some money out. Usually not allowed until later rounds.',
-      },
-      {
-        term: 'Angel / pre-seed / seed / Series A',
-        means: 'Rough names for the stages of raising money.',
-        mistake: 'The names have drifted a lot. What matters is the proof expected at each stage, not what it is called.',
-      },
-      {
-        term: 'Venture debt',
-        means: 'A loan for companies that already have investors.',
-        mistake: 'It does not cost you shares, but it is still a loan. It has conditions, and it must be repaid whatever happens.',
-      },
-      {
-        term: 'Revenue-based financing',
-        means: 'Money you repay as a share of your monthly revenue.',
-        mistake: 'Useful when revenue is steady. Expensive if growth stops.',
-      },
-      {
-        term: 'Grant / subsidy',
-        means: 'Government or institutional money you do not repay and do not give shares for.',
-        mistake: 'Slow and full of paperwork, and genuinely free. Indian founders apply for far too few of these.',
-      },
-    ],
+        "term": "Seat-Based Pricing",
+        "means": "Price per user. Predictable and easy to sell, but it quietly penalises the customer for rolling you out widely.",
+        "usedFor": "Monetising team adoption inside an organisation"
+      }
+    ]
   },
-
   {
-    slug: 'sales',
-    title: 'Selling',
-    blurb: 'How a deal really moves, and how to tell a real one from a polite one.',
-    terms: [
+    "slug": "funding",
+    "title": "Fundraising, valuation and cap table",
+    "blurb": "The language of raising outside money. Read this before your first investor call, not during it.",
+    "terms": [
       {
-        term: 'Pipeline',
-        means: 'All the live deals you are working on, with their stage and value.',
-        mistake: 'A pipeline with no defined stages and no next dates is a wish list.',
+        "term": "Bootstrapping",
+        "means": "Funding the business from revenue and personal savings. Slower, and you keep control and every rupee of upside.",
+        "usedFor": "Growing without outside capital"
       },
       {
-        term: 'Sales cycle',
-        means: 'How long it takes from the first conversation to a signed contract.',
-        mistake: 'Six to twelve months is normal for large companies. Founders without funding regularly underestimate this and run out of cash halfway through.',
+        "term": "Pre-Money Valuation",
+        "means": "The agreed value of the company before new money arrives. This number, not the cheque size, determines your dilution.",
+        "usedFor": "Negotiating what your company is worth before investment"
       },
       {
-        term: 'Discovery call',
-        means: 'The call where you learn about the customer before you pitch anything.',
-        mistake: 'If you spoke more than they did, it was not discovery.',
+        "term": "Post-Money Valuation",
+        "means": "Pre-money valuation plus the amount invested. Investor ownership equals investment divided by post-money.",
+        "usedFor": "Calculating ownership after a round"
       },
       {
-        term: 'Qualification (BANT / MEDDIC)',
-        means: 'Ways of checking whether a deal is real. Is there budget, is this the person who decides, is the need real, is there a date.',
-        mistake: 'Founders skip this because every conversation feels precious. Then they spend six months on a deal that never had any budget.',
+        "term": "Dilution",
+        "means": "The reduction of your ownership percentage as new shares are issued. A smaller slice of a much larger pie is usually the right trade — but do the arithmetic first.",
+        "usedFor": "Understanding what each round costs you in ownership"
       },
       {
-        term: 'Champion',
-        means: 'The person inside the customer who wants this and will argue for it.',
-        mistake: 'No champion, no deal. Someone friendly is not a champion. A champion spends their own reputation on you.',
+        "term": "Cap Table",
+        "means": "The record of every shareholder and their stake. A messy cap table in the early years kills good deals later.",
+        "full": "Capitalisation Table",
+        "usedFor": "Tracking who owns what, and modelling future rounds"
       },
       {
-        term: 'Economic buyer',
-        means: 'The person who can actually release the money.',
-        mistake: 'Often not the person you have been talking to.',
+        "term": "SAFE",
+        "means": "An instrument converting to equity at a future priced round. No interest, no maturity date, and it will dilute you more than you expect if you stack several.",
+        "full": "Simple Agreement for Future Equity",
+        "usedFor": "Raising early money fast without setting a valuation"
       },
       {
-        term: 'POC / pilot',
-        means: 'A short trial before a full purchase.',
-        mistake: 'A real pilot has a budget, a business owner involved, agreed measures of success, and a clear route to buying if it works. Without those four it is theatre, and it will eat three months.',
+        "term": "Convertible Note",
+        "means": "A loan that converts into shares at the next round, usually with a discount and a cap. Unlike a SAFE, it carries interest and a maturity date.",
+        "usedFor": "Bridging to a priced round with debt that becomes equity"
       },
       {
-        term: 'Land and expand',
-        means: 'Win a small deal first, then grow inside that customer.',
-        mistake: 'It works because the hard parts — paperwork, security checks, setup — only have to be done once, however small the first deal.',
+        "term": "Valuation Cap",
+        "means": "The maximum valuation at which a SAFE or note converts. Rewards early risk; can cause severe founder dilution if set too low.",
+        "usedFor": "Protecting early investors from paying a high later price"
       },
       {
-        term: 'PLG vs SLG',
-        means: 'Customers try the product and then buy, or a salesperson sells it to them.',
-        mistake: 'Not a matter of taste. Your price, your buyer, and how obvious the value is decide it for you.',
+        "term": "Term Sheet",
+        "means": "A mostly non-binding summary of the investment terms. The economics matter; the control and preference clauses matter more.",
+        "usedFor": "Agreeing deal terms before legal drafting begins"
       },
       {
-        term: 'Inbound / outbound',
-        means: 'Customers find you, or you go and find them.',
-        mistake: 'Inbound takes longer to build and costs less to run. Outbound is the opposite. Most early companies need both.',
+        "term": "Due Diligence",
+        "means": "A deep review of your financials, legal, tech, customers and team. Clean books and organised documents shorten it by weeks.",
+        "usedFor": "The investor's verification process before wiring funds"
       },
       {
-        term: 'SDR / AE / CSM',
-        means: 'One person books meetings, one closes deals, one keeps customers happy and growing.',
-        mistake: 'Splitting these into three jobs too early is a classic over-hire. The founder does all three until the process is proven.',
+        "term": "Data Room",
+        "means": "A structured, permissioned folder of everything an investor will ask for. Build it before you need it.",
+        "usedFor": "Running an efficient fundraise"
       },
       {
-        term: 'Win rate',
-        means: 'Deals won, out of deals you seriously chased.',
-        mistake: 'A low win rate with a lot of activity usually means you are chasing the wrong people, not working too little.',
+        "term": "Lead Investor",
+        "means": "The investor who sets terms, writes the largest cheque and brings others along. Rounds without a lead tend not to close.",
+        "usedFor": "Getting a round moving"
       },
       {
-        term: 'Free trial vs freemium',
-        means: 'Full access for a limited time, or a limited version that is free forever.',
-        mistake: 'Very different economics. Free forever works for consumers. It usually fails when the buyer needs security, compliance and control.',
+        "term": "Liquidation Preference",
+        "means": "The investor's right to recover their money before common shareholders. A 1x non-participating preference is standard; anything more is a red flag.",
+        "usedFor": "Determining who gets paid first in an exit"
       },
       {
-        term: 'Discount / price integrity',
-        means: 'Cutting your price to close the deal.',
-        mistake: "Every discount teaches the customer what you are really worth, and next year's price starts from there.",
+        "term": "Participating Preferred",
+        "means": "The investor takes their money back AND shares the remainder. Also called double-dipping; resist it.",
+        "usedFor": "Understanding a harsher preference structure"
       },
       {
-        term: 'RFP / tender',
-        means: 'A formal buying process, common in government and large companies.',
-        mistake: "If you did not help write the requirements, you are usually there to make someone else's bid look competitive.",
+        "term": "Anti-Dilution",
+        "means": "Adjusts an investor's share price downward in a down round. Full-ratchet is punishing; broad-based weighted average is fair.",
+        "usedFor": "Protecting investors if you raise at a lower price later"
       },
       {
-        term: 'MSA / SOW / NDA / LOI',
-        means: 'Master agreement, description of the work, confidentiality agreement, letter of intent.',
-        mistake: 'A letter of intent is not revenue. An NDA is not a commitment. Know which document actually binds anyone.',
+        "term": "Down Round",
+        "means": "Signals trouble, triggers anti-dilution, and damages morale. Usually preferable to running out of cash.",
+        "usedFor": "Raising at a lower valuation than last time"
       },
       {
-        term: 'Procurement / vendor onboarding',
-        means: "The customer's own buying and approval process.",
-        mistake: 'For a small supplier this is often the longest part of the sale. Plan in months, not weeks.',
+        "term": "Bridge Round",
+        "means": "Short-term capital to reach a milestone. If you cannot name the milestone it bridges to, it is not a bridge — it is a delay.",
+        "usedFor": "Buying time between two priced rounds"
       },
       {
-        term: 'Reference customer',
-        means: 'A customer willing to speak for you publicly.',
-        mistake: 'The most valuable thing you can have when selling to large companies, and the thing founders forget to ask for while the customer is still happy.',
+        "term": "Pro-Rata Rights",
+        "means": "The right to invest again in future rounds to avoid dilution. Standard for meaningful investors.",
+        "usedFor": "Letting existing investors maintain their percentage"
       },
       {
-        term: 'Channel partner / reseller',
-        means: 'Someone who sells on your behalf.',
-        mistake: 'Rarely works before you can sell it yourself. Partners make a working process bigger. They do not create one.',
+        "term": "ESOP",
+        "means": "Shares reserved for employees. Note that investors usually require the pool be created pre-money — meaning you fund it out of your own dilution.",
+        "full": "Employee Stock Option Pool",
+        "usedFor": "Attracting and retaining talent you cannot outbid in cash"
       },
-    ],
+      {
+        "term": "Vesting",
+        "means": "Shares that become yours gradually, typically over four years. Founders should vest too — it protects the company from an early departure.",
+        "usedFor": "Ensuring equity is earned over time, not gifted upfront"
+      },
+      {
+        "term": "Cliff",
+        "means": "A minimum period, usually one year, before any equity vests at all. Leave before it and you leave with nothing.",
+        "usedFor": "Protecting the cap table from short tenures"
+      },
+      {
+        "term": "Drag-Along / Tag-Along",
+        "means": "Drag-along forces minorities to join a majority-approved sale. Tag-along lets minorities join a majority's sale on the same terms.",
+        "usedFor": "Governing how shares behave in an exit"
+      },
+      {
+        "term": "Venture Debt",
+        "means": "A loan for venture-backed companies, usually alongside equity. Cheaper in dilution, expensive in covenants and repayment pressure.",
+        "usedFor": "Extending runway without giving up equity"
+      },
+      {
+        "term": "Revenue-Based Financing",
+        "means": "Capital repaid as a fixed percentage of monthly revenue. Non-dilutive and increasingly common for e-commerce and subscription businesses.",
+        "usedFor": "Funding growth from predictable revenue"
+      },
+      {
+        "term": "Traction",
+        "means": "Demonstrated, measurable customer demand — revenue, retention, usage growth. It is the only pitch-deck slide that cannot be argued with.",
+        "usedFor": "The evidence that persuades investors"
+      },
+      {
+        "term": "DPIIT Recognition",
+        "means": "Government recognition granting tax exemptions, easier compliance and access to schemes. Free to apply and worth doing early.",
+        "full": "Department for Promotion of Industry and Internal Trade",
+        "usedFor": "Accessing Indian startup benefits"
+      }
+    ]
   },
-
   {
-    slug: 'product',
-    title: 'Product and delivery',
-    blurb: 'Building the right thing, and finishing it without losing money.',
-    terms: [
+    "slug": "legal",
+    "title": "Legal, compliance and company structure (India)",
+    "blurb": "The paperwork layer. Getting this wrong is rarely fatal on day one and frequently fatal at diligence.",
+    "terms": [
       {
-        term: 'MVP',
-        means: 'The smallest thing you can build to test the belief most likely to be wrong.',
-        mistake: 'It is not "version one, but worse". If it does not test a belief, it is just unfinished.',
+        "term": "Pvt Ltd",
+        "means": "A separate legal entity with limited liability, shareholders and directors. Higher compliance burden, but the only structure most investors will fund.",
+        "full": "Private Limited Company",
+        "usedFor": "The default structure for any business that intends to raise capital or scale"
       },
       {
-        term: 'Riskiest assumption test',
-        means: 'Deliberately testing the belief that would kill the business if it turned out to be wrong.',
-        mistake: 'Often a better idea than an MVP, because it forces you to say out loud what the risk actually is.',
+        "term": "LLP",
+        "means": "Partnership flexibility with limited liability. Cheaper to maintain than a Pvt Ltd, but you cannot issue equity shares to investors.",
+        "full": "Limited Liability Partnership",
+        "usedFor": "Professional services and partner-led firms not seeking equity investment"
       },
       {
-        term: 'Iteration / build-measure-learn',
-        means: 'Short cycles of building something, watching what happens, and changing it.',
-        mistake: 'The cycle only works if you decide beforehand what result would change your mind.',
+        "term": "OPC",
+        "means": "A Pvt Ltd with a single shareholder. A reasonable starting point; convert before raising.",
+        "full": "One Person Company",
+        "usedFor": "A solo founder wanting limited liability without a co-founder"
       },
       {
-        term: 'Roadmap',
-        means: 'The order in which you plan to build things.',
-        mistake: 'A roadmap that never changes is not listening to customers. One that changes every week is not a plan.',
+        "term": "MoA",
+        "means": "The charter document stating your objects and scope. Draft the objects clause broadly, or you will amend it later.",
+        "full": "Memorandum of Association",
+        "usedFor": "Defining what the company is legally allowed to do"
       },
       {
-        term: 'Backlog',
-        means: 'The queue of things not built yet.',
-        mistake: 'It grows forever. The skill is deleting things, not ordering them.',
+        "term": "AoA",
+        "means": "The internal rulebook — share transfers, board powers, meetings. Investors will amend it at your first priced round.",
+        "full": "Articles of Association",
+        "usedFor": "Governing how the company runs internally"
       },
       {
-        term: 'Scope creep',
-        means: 'The work quietly growing after you agreed the price.',
-        mistake: 'The main reason services and project businesses lose money.',
+        "term": "CIN",
+        "means": "The unique 21-character registration number issued by the Registrar of Companies.",
+        "full": "Corporate Identity Number",
+        "usedFor": "Identifying your company in all official filings"
       },
       {
-        term: 'Technical debt',
-        means: 'Shortcuts taken now that cost more later.',
-        mistake: 'Sometimes the right choice, made on purpose. Dangerous when it happens by accident and nobody writes it down.',
+        "term": "DIN",
+        "means": "A unique number every director must hold. Required before appointment.",
+        "full": "Director Identification Number",
+        "usedFor": "Legally serving as a company director"
       },
       {
-        term: 'SLA / uptime',
-        means: 'A promise in the contract about how reliable your service will be.',
-        mistake: 'Large customers ask early. Promising 99.9% without knowing what that costs you to deliver is a trap.',
+        "term": "DSC",
+        "means": "The digital equivalent of your signature for MCA and tax filings.",
+        "full": "Digital Signature Certificate",
+        "usedFor": "Signing statutory filings electronically"
       },
       {
-        term: 'Feature vs product vs company',
-        means: 'One useful thing, a whole thing someone buys, and a repeatable business built around it.',
-        mistake: 'Many startups are features. Useful, but they cannot hold up a company on their own.',
+        "term": "ROC",
+        "means": "The government office your company legally answers to. Missed ROC filings attract per-day penalties that compound quietly.",
+        "full": "Registrar of Companies",
+        "usedFor": "All company registrations, filings and annual returns"
       },
       {
-        term: 'Customisation vs configuration',
-        means: 'Building something special for one customer, or letting them change settings themselves.',
-        mistake: 'Building something special feels like a win and quietly destroys your ability to sell the same thing again.',
+        "term": "GST / GSTIN",
+        "means": "India's indirect tax. Registration is mandatory above the turnover threshold, and effectively mandatory to sell B2B or on marketplaces.",
+        "full": "Goods and Services Tax / GST Identification Number",
+        "usedFor": "Charging, collecting and claiming input tax on sales"
       },
-    ],
+      {
+        "term": "TDS",
+        "means": "You deduct tax before paying and deposit it with the government. Non-compliance disallows the expense and attracts interest.",
+        "full": "Tax Deducted at Source",
+        "usedFor": "Withholding tax on payments you make to vendors and staff"
+      },
+      {
+        "term": "PAN / TAN",
+        "means": "PAN identifies the entity for income tax; TAN is required specifically to deduct and deposit TDS.",
+        "full": "Permanent Account Number / Tax Deduction Account Number",
+        "usedFor": "Direct tax identity and TDS compliance"
+      },
+      {
+        "term": "Udyam / MSME",
+        "means": "Free registration granting MSME benefits, including a statutory right to interest on delayed customer payments.",
+        "full": "Udyam Registration (Micro, Small and Medium Enterprises)",
+        "usedFor": "Accessing priority lending, subsidies and delayed-payment protection"
+      },
+      {
+        "term": "IEC",
+        "means": "A mandatory code for import or export. Without it, no shipment clears customs.",
+        "full": "Importer Exporter Code",
+        "usedFor": "Any cross-border movement of goods"
+      },
+      {
+        "term": "FSSAI",
+        "means": "The licensing authority for food businesses. Category and labelling rules are strict and enforced.",
+        "full": "Food Safety and Standards Authority of India",
+        "usedFor": "Anything ingested, and many things applied to the body"
+      },
+      {
+        "term": "DPDP Act 2023",
+        "means": "India's data privacy law. Requires consent, purpose limitation, breach notification and defined data-fiduciary duties.",
+        "full": "Digital Personal Data Protection Act, 2023",
+        "usedFor": "Handling any personal data of Indian users"
+      },
+      {
+        "term": "NDA",
+        "means": "A contract binding parties to secrecy. Standard with vendors and employees; most serious investors will decline to sign one.",
+        "full": "Non-Disclosure Agreement",
+        "usedFor": "Protecting confidential information in early conversations"
+      },
+      {
+        "term": "MoU",
+        "means": "A statement of mutual intent, usually non-binding. Useful for alignment, useless for enforcement.",
+        "full": "Memorandum of Understanding",
+        "usedFor": "Recording intent before a binding contract exists"
+      },
+      {
+        "term": "LOI",
+        "means": "A preliminary document outlining proposed terms. Typically non-binding except for confidentiality and exclusivity clauses.",
+        "full": "Letter of Intent",
+        "usedFor": "Signalling serious intent to transact"
+      },
+      {
+        "term": "SLA",
+        "means": "Committed standards — uptime, response time, resolution time — usually with penalties. Enterprise clients will insist on one.",
+        "full": "Service Level Agreement",
+        "usedFor": "Defining what 'good service' contractually means"
+      },
+      {
+        "term": "SHA",
+        "means": "Defines rights, exits, board composition and what happens in a dispute. The document that decides who controls the company.",
+        "full": "Shareholders' Agreement",
+        "usedFor": "Governing the relationship between owners"
+      },
+      {
+        "term": "Founders' Agreement",
+        "means": "A written agreement on equity split, roles, vesting and exit between co-founders. Sign it while everyone still likes each other.",
+        "usedFor": "Preventing the most common cause of startup death"
+      },
+      {
+        "term": "Trademark",
+        "means": "A registered mark giving exclusive rights in a class of goods or services. ™ signals a claim; ® means it is registered and enforceable.",
+        "usedFor": "Protecting your brand name, logo and tagline"
+      },
+      {
+        "term": "Patent",
+        "means": "A 20-year monopoly on an invention in exchange for public disclosure. Expensive, slow, and irrelevant to most service businesses.",
+        "usedFor": "Protecting a genuinely novel invention"
+      },
+      {
+        "term": "Copyright",
+        "means": "Automatic on creation for original work. Registration is not required but makes enforcement far easier.",
+        "usedFor": "Protecting written, visual and code assets"
+      },
+      {
+        "term": "Indemnity Clause",
+        "means": "A promise to cover the other party's losses in defined situations. Read every uncapped indemnity twice.",
+        "usedFor": "Allocating who pays when something goes wrong"
+      },
+      {
+        "term": "Force Majeure",
+        "means": "A clause suspending obligations during events outside anyone's control. Post-2020, expect it to be negotiated seriously.",
+        "usedFor": "Excusing performance in genuinely extraordinary events"
+      }
+    ]
   },
-
   {
-    slug: 'people',
-    title: 'People and hiring',
-    blurb: 'Hiring, delegating, and the paperwork that protects you.',
-    terms: [
+    "slug": "operations",
+    "title": "Operations, supply chain and fulfilment",
+    "blurb": "How the promise gets delivered. Product businesses live or die here; service businesses underestimate it.",
+    "terms": [
       {
-        term: 'Scorecard (hiring)',
-        means: 'A written list of what the person in this role must actually achieve, agreed before you start interviewing.',
-        mistake: 'Most hiring runs on a list of duties, which predicts nothing. Results predict.',
+        "term": "SOP",
+        "means": "A documented step-by-step method for a recurring task. The difference between a business and a job you own.",
+        "full": "Standard Operating Procedure",
+        "usedFor": "Making quality repeatable without the founder in the room"
       },
       {
-        term: 'Structured interview',
-        means: 'The same questions, in the same order, scored the same way, for every candidate.',
-        mistake: 'Far better at predicting who will do well than a free conversation, and almost nobody does it.',
+        "term": "SKU",
+        "means": "A unique code for one specific sellable variant — size, colour, pack. SKU sprawl silently destroys margin and warehouse sanity.",
+        "full": "Stock Keeping Unit",
+        "usedFor": "Tracking inventory, pricing and sales by exact variant"
       },
       {
-        term: 'Reference check',
-        means: 'Talking to people who actually worked with the candidate.',
-        mistake: 'The most skipped and most useful step in hiring. Ask what the person did, not what they were like.',
+        "term": "BOM",
+        "means": "The complete list of components and quantities needed to make one unit. Your true COGS starts here.",
+        "full": "Bill of Materials",
+        "usedFor": "Costing a product accurately before you price it"
       },
       {
-        term: 'Ramp time',
-        means: 'How long a new person takes to become useful.',
-        mistake: 'For senior roles, expect nine to twelve months. The skill is noticing when someone is not getting there.',
+        "term": "MOQ",
+        "means": "The smallest quantity a supplier will produce. High MOQs lock up working capital in slow-moving stock.",
+        "full": "Minimum Order Quantity",
+        "usedFor": "Negotiating with suppliers and planning cash"
       },
       {
-        term: 'Span of control',
-        means: 'How many people report to one manager.',
-        mistake: 'Past about seven, you stop being able to actually manage them. That is a structure problem, not a personal failing.',
+        "term": "Lead Time",
+        "means": "Time from placing an order to receiving usable goods. Underestimating it causes stockouts; overestimating it causes dead capital.",
+        "usedFor": "Planning when to reorder"
       },
       {
-        term: 'Founder-led everything',
-        means: 'The stage where you personally do sales, hiring, support and product.',
-        mistake: 'Right at the start. It becomes the thing holding the whole business back at a predictable point, usually between fifteen and thirty people.',
+        "term": "Inventory Turnover",
+        "means": "How many times you sell and replace inventory in a year. Low turnover means your cash is sitting on a shelf.",
+        "usedFor": "Measuring how efficiently stock converts to cash"
       },
       {
-        term: 'Delegation vs abdication',
-        means: 'Handing over a decision with context and accountability, or just dropping it on someone.',
-        mistake: 'Founders swing between the two. Real delegation means allowing them the same room to make mistakes that you allow yourself.',
+        "term": "Safety Stock",
+        "means": "Buffer inventory held against surprises. Insurance you pay for in working capital.",
+        "usedFor": "Absorbing demand and supply variability"
       },
       {
-        term: 'Attrition',
-        means: 'How fast employees leave.',
-        mistake: 'Separate the people you wanted to keep from the people you did not. Some leaving is the system working.',
+        "term": "Stockout",
+        "means": "Running out of a sellable item. Costs the sale, the customer, and often the marketplace ranking.",
+        "usedFor": "Diagnosing lost revenue you never see in reports"
       },
       {
-        term: 'PIP (Performance Improvement Plan)',
-        means: 'A written process to help someone improve before you let them go.',
-        mistake: 'In India the paperwork matters legally. Handle exits properly, or they become expensive.',
+        "term": "Dead Stock",
+        "means": "Inventory that will not sell at full price. Discount it and free the cash; holding it hoping is not a strategy.",
+        "usedFor": "Cleaning the balance sheet"
       },
       {
-        term: 'Contractor vs employee',
-        means: 'Two different sets of legal, tax and benefit obligations.',
-        mistake: 'Calling an employee a contractor to save money creates real risk. Get it right from the start.',
+        "term": "Landed Cost",
+        "means": "Product cost plus freight, duties, insurance and handling. Founders who price off ex-factory cost usually price too low.",
+        "usedFor": "Knowing what a unit truly costs you"
       },
       {
-        term: 'ESOP (employee)',
-        means: 'Share options given to staff.',
-        mistake: 'Only motivating if the person understands the price, the waiting period, what it costs to buy them, and the tax. An unexplained ESOP keeps nobody.',
+        "term": "JIT",
+        "means": "Receiving goods only as needed. Excellent for cash, fragile against supply disruption.",
+        "full": "Just-In-Time",
+        "usedFor": "Minimising inventory holding cost"
       },
       {
-        term: 'Sweat equity',
-        means: 'Shares given for work instead of cash.',
-        mistake: 'Regulated in India, with limits and a proper process. Never do it on a handshake.',
+        "term": "3PL",
+        "means": "A partner who stores, packs and ships for you. Buys speed and reach; costs margin and direct control.",
+        "full": "Third-Party Logistics",
+        "usedFor": "Outsourcing warehousing and fulfilment"
       },
       {
-        term: 'Founder agreement / co-founder split',
-        means: 'The written terms between founders — shares, roles, vesting, and what happens if someone leaves.',
-        mistake: 'The most important document you will avoid writing. Write it while everyone still likes each other.',
+        "term": "Reverse Logistics",
+        "means": "The entire process of getting a returned item back, inspected and restocked or written off. Almost always more expensive than founders model.",
+        "usedFor": "Handling returns without bleeding margin"
       },
       {
-        term: 'POSH compliance',
-        means: "A legal requirement under India's law on sexual harassment at work.",
-        mistake: 'Compulsory once you pass the employee limit, including setting up an Internal Committee. Small firms miss it constantly.',
+        "term": "TAT",
+        "means": "Time from request to completion. Publish it only if you can consistently beat it.",
+        "full": "Turnaround Time",
+        "usedFor": "Setting and meeting customer expectations"
       },
       {
-        term: 'Culture',
-        means: 'The behaviour that actually gets rewarded and allowed.',
-        mistake: 'Not the values printed on the wall. It is what you do when your best performer behaves badly.',
+        "term": "OTIF",
+        "means": "The percentage of orders delivered complete and on schedule. The metric large buyers actually score you on.",
+        "full": "On Time In Full",
+        "usedFor": "Measuring delivery reliability, especially for B2B clients"
       },
-    ],
+      {
+        "term": "Capacity Utilisation",
+        "means": "How much of your available production or service capacity is being used. Consistently above 85% means you are about to have a quality problem.",
+        "usedFor": "Deciding when to invest in more capacity"
+      },
+      {
+        "term": "Bottleneck",
+        "means": "The slowest step in a process. Improving anything other than the bottleneck improves nothing overall.",
+        "usedFor": "Finding the one constraint limiting the whole system"
+      },
+      {
+        "term": "QC",
+        "means": "Inspecting output against a defined standard. Distinct from QA — QC checks the product, QA fixes the process.",
+        "full": "Quality Control",
+        "usedFor": "Catching defects before dispatch"
+      },
+      {
+        "term": "Batch / Lot Number",
+        "means": "A code identifying a production run. Legally required for food, cosmetics and pharma; commercially essential for any recall.",
+        "usedFor": "Traceability and recall management"
+      }
+    ]
   },
-
   {
-    slug: 'strategy',
-    title: 'Strategy and competition',
-    blurb: 'Why you win, why you lose, and the thinking traps in between.',
-    terms: [
+    "slug": "people",
+    "title": "People, team and performance",
+    "blurb": "The system that lets the business run without you being the answer to every question.",
+    "terms": [
       {
-        term: 'Moat',
-        means: 'A structural reason a competitor cannot easily take your customers.',
-        mistake: 'Being better is not a moat. Being hard to leave is.',
+        "term": "JD",
+        "means": "A written statement of the role, responsibilities and outcomes. Vague JDs produce vague performance.",
+        "full": "Job Description",
+        "usedFor": "Hiring the right person and holding them to a clear standard"
       },
       {
-        term: 'Switching cost',
-        means: 'What it costs a customer to leave you — money, data, retraining, risk.',
-        mistake: 'Often the only real protection a small business can build. Design for it on purpose.',
+        "term": "KRA",
+        "means": "The 3–5 areas where a person must deliver results. Broad, stable and role-defining.",
+        "full": "Key Result Area",
+        "usedFor": "Defining what a role is fundamentally accountable for"
       },
       {
-        term: 'Network effect',
-        means: 'The product gets more useful as more people use it.',
-        mistake: 'Genuinely rare. Most claimed network effects are just size.',
+        "term": "KPI",
+        "means": "The specific measurable numbers under each KRA. If you cannot count it, it is not a KPI.",
+        "full": "Key Performance Indicator",
+        "usedFor": "Measuring whether a KRA is being met"
       },
       {
-        term: 'Economies of scale',
-        means: 'The cost of each unit falls as you make more of them.',
-        mistake: 'Real in manufacturing, weaker in services, and sometimes not there at all.',
+        "term": "OKR",
+        "means": "One ambitious objective with 3–5 measurable key results. Designed for stretch and alignment, not for calculating bonuses.",
+        "full": "Objectives and Key Results",
+        "usedFor": "Focusing an entire company on a few quarterly outcomes"
       },
       {
-        term: 'Differentiation',
-        means: 'A difference the customer can see, and cares about.',
-        mistake: 'If they cannot see it, it does not exist commercially, however real it is technically.',
+        "term": "RACI",
+        "means": "A matrix assigning roles per task. Exactly one person is Accountable — that is the entire value of the framework.",
+        "full": "Responsible, Accountable, Consulted, Informed",
+        "usedFor": "Ending 'I thought you were doing it'"
       },
       {
-        term: 'Commoditisation',
-        means: 'When all the options look the same and only price matters.',
-        mistake: 'Every market ends up here eventually. Set your prices today as if it is coming.',
+        "term": "Span of Control",
+        "means": "How many direct reports one manager has. Beyond seven or eight, coaching quality collapses.",
+        "usedFor": "Designing a manageable org structure"
       },
       {
-        term: 'Parity tax',
-        means: 'Having to rebuild the boring features the big player already has, before anyone cares about what makes you different.',
-        mistake: 'You pay this when replacing someone. You do not when the customer is starting fresh. Budget for it.',
+        "term": "Attrition Rate",
+        "means": "The percentage of employees leaving in a period. Sudden spikes are a management signal long before they are an HR one.",
+        "usedFor": "Measuring whether people stay"
       },
       {
-        term: 'First-mover advantage',
-        means: 'Being first into a market.',
-        mistake: 'Overrated, and often the opposite. The ones who come next learn from your expensive mistakes.',
+        "term": "Onboarding",
+        "means": "The structured first 30–90 days. Weak onboarding is the single largest predictor of early attrition.",
+        "usedFor": "Getting a new hire productive fast"
       },
       {
-        term: 'Incumbent',
-        means: 'The established player already in your market.',
-        mistake: 'Their weakness is rarely the product. It is usually the business model or the costs they cannot walk away from.',
+        "term": "PIP",
+        "means": "A documented plan with specific targets and a deadline. Use it to genuinely help or to exit cleanly — never as a delay tactic.",
+        "full": "Performance Improvement Plan",
+        "usedFor": "Formally addressing sustained underperformance"
       },
       {
-        term: 'Counter-positioning',
-        means: 'Using a business model the big player cannot copy without damaging what they already have.',
-        mistake: 'The most reliable way for a small company to beat a large one.',
+        "term": "1:1",
+        "means": "A recurring private conversation between manager and report. The cheapest retention tool available and the first thing founders cancel.",
+        "full": "One-on-One",
+        "usedFor": "Maintaining trust, context and early warning signals"
       },
       {
-        term: 'Vertical vs horizontal',
-        means: 'Serving one industry deeply, or doing one job for many industries.',
-        mistake: 'For Indian SMEs, going deep in one industry is often the advantage, because relationships inside one sector build on each other.',
+        "term": "CTC",
+        "means": "Total annual cost of employing someone, including benefits and employer contributions. Always higher than take-home, which causes endless offer-stage friction.",
+        "full": "Cost To Company",
+        "usedFor": "Budgeting and communicating compensation in India"
       },
       {
-        term: 'Opportunity cost',
-        means: 'The value of the best thing you gave up in order to do this.',
-        mistake: 'It is in every decision you make, and it never appears in your accounts.',
+        "term": "Bus Factor",
+        "means": "How many people would have to disappear before the business stops. A bus factor of one is the most common founder blind spot.",
+        "usedFor": "Assessing key-person risk"
       },
       {
-        term: 'Two-way vs one-way door',
-        means: 'Decisions you can undo, and decisions you cannot.',
-        mistake: 'Moving fast is right for the ones you can undo, and reckless for the ones you cannot. Most founders use one speed for both.',
+        "term": "Founder-Market Fit",
+        "means": "The match between your experience, network and obsessions and the market you chose. Investors weigh it more heavily than founders expect.",
+        "usedFor": "Judging whether you are the right person for this problem"
       },
       {
-        term: 'Sunk cost fallacy',
-        means: 'Carrying on because of what you have already spent.',
-        mistake: 'The most expensive habit in business. Money and years already gone tell you nothing about the future.',
+        "term": "A-Player",
+        "means": "Someone who raises the average performance of the team they join. One A-player usually outperforms three adequate hires.",
+        "usedFor": "Setting a hiring bar"
       },
       {
-        term: 'Survivorship bias',
-        means: 'Learning only from the ones who made it.',
-        mistake: 'Why most business books mislead. The people who failed did many of the same things. Nobody wrote their story down.',
+        "term": "Culture Add",
+        "means": "Hiring people who bring something the culture lacks — as opposed to 'culture fit', which quietly selects for people like you.",
+        "usedFor": "Hiring for strength rather than sameness"
       },
       {
-        term: "Goodhart's law",
-        means: 'Once a measurement becomes a target, it stops being a good measurement.',
-        mistake: 'Give a team a number and they will hit it — sometimes by damaging the thing you actually wanted.',
-      },
-      {
-        term: 'Confirmation bias',
-        means: 'Looking for evidence that you were right.',
-        mistake: 'Especially dangerous in customer conversations, where founders ask questions designed to get a yes.',
-      },
-    ],
+        "term": "Delegation",
+        "means": "Transferring ownership of an outcome, not just a task. Handing over tasks while keeping every decision is not delegation; it is supervision.",
+        "usedFor": "Removing yourself as the bottleneck"
+      }
+    ]
   },
-
   {
-    slug: 'india',
-    title: 'India: legal, tax and compliance',
-    blurb: 'The registrations, filings and deadlines nobody tells you about.',
-    /* Displayed, not filed. Every fact in this section was verified on one day
-       and several have already moved once inside a year. A founder reading a
-       stale rate here would be relying on us for it. */
-    note: 'Checked on 29 August 2026. These rules change often — GST rates, MSME limits and the DPDP dates have all moved within a year. Please confirm anything here before acting on it.',
-    terms: [
+    "slug": "strategy",
+    "title": "Strategy and decision-making",
+    "blurb": "The thinking tools. These decide which problems you take on — and which you refuse.",
+    "terms": [
       {
-        term: 'Pvt Ltd / LLP / OPC / sole proprietorship',
-        means: 'The main types of business you can register in India.',
-        mistake: 'Your choice affects tax, whether you can raise money, how much paperwork you carry, and whether your personal assets are at risk. In practice investors only fund a Pvt Ltd. The rules forcing an OPC to convert were removed in 2021, and many websites still say otherwise.',
+        "term": "Vision",
+        "means": "The future you are trying to create. Long-range, directional, and largely unmeasurable — that is fine.",
+        "usedFor": "Giving the company a destination"
       },
       {
-        term: 'CIN / DIN / PAN / TAN',
-        means: 'Company number, director number, tax number, and tax-deduction number.',
-        mistake: 'Basic identity numbers you will be asked for again and again.',
+        "term": "Mission",
+        "means": "The concrete work you undertake in service of the vision.",
+        "usedFor": "Explaining what you do about it every day"
       },
       {
-        term: 'MOA / AOA',
-        means: 'The two founding documents that say what the company is and how it is run.',
-        mistake: 'The AOA controls who can sell shares and who decides what. Investors will want it changed — read what changes.',
+        "term": "Values",
+        "means": "The behaviours you reward and refuse. Values are only real when they cost you something — a client, a hire, a shortcut.",
+        "usedFor": "Deciding behaviour when no rule applies"
       },
       {
-        term: 'ROC / MCA filings',
-        means: 'The yearly filings every company must make with the Registrar of Companies.',
-        mistake: 'Not optional, and there are penalties. Late fees add up fast.',
+        "term": "North Star Metric",
+        "means": "The single metric that best captures the value you deliver to customers. Choose one that gets better only when customers genuinely win.",
+        "usedFor": "Aligning every team on one number"
       },
       {
-        term: 'DIR-3 KYC',
-        means: 'The identity filing that every company director has to make.',
-        mistake: 'Now once every three years, due 30 June, from 31 March 2026 — no longer every year by 30 September. Your cycle depends on the year your director number was issued.',
+        "term": "Flywheel",
+        "means": "A loop where each turn makes the next turn easier. Slow to start, near-unstoppable once spinning.",
+        "usedFor": "Designing compounding rather than linear growth"
       },
       {
-        term: 'DPIIT recognition / Startup India',
-        means: 'Official government recognition as a startup, which unlocks certain benefits.',
-        mistake: 'The rules changed in February 2026 — the turnover limit went up to ₹200 crore, and a deep-tech category was added at 20 years and ₹300 crore. Most guides online are out of date.',
+        "term": "SWOT",
+        "means": "A four-box audit of internal and external factors. Useful as a conversation starter, dangerous as a conclusion.",
+        "full": "Strengths, Weaknesses, Opportunities, Threats",
+        "usedFor": "Structuring a fast strategic review"
       },
       {
-        term: 'Section 80-IAC',
-        means: 'A tax holiday for startups that have DPIIT recognition.',
-        mistake: 'A new Income-tax Act replaced the old one on 1 April 2026. The rates did not change but the section numbers did — this is now section 140.',
+        "term": "Porter's Five Forces",
+        "means": "Analysis of supplier power, buyer power, new entrants, substitutes and rivalry. Explains why some hard-working businesses never make money.",
+        "usedFor": "Assessing whether an industry is worth entering"
       },
       {
-        term: 'Angel tax',
-        means: 'Tax on money you raised above the assessed value of your shares, from Indian investors.',
-        mistake: 'Removed from AY 2025-26, which is FY 2024-25. Often reported a year out, including in decks still being sent around.',
+        "term": "Blue Ocean",
+        "means": "Creating uncontested market space rather than fighting for share in a bloody one.",
+        "usedFor": "Competing where nobody else is"
       },
       {
-        term: 'GST / GSTIN',
-        means: 'The tax on goods and services, and your registration number for it.',
-        mistake: 'The rates are now 5, 18 and 40, plus zero, since 22 September 2025. The 12% and 28% rates were removed.',
+        "term": "First Principles Thinking",
+        "means": "Breaking a problem to its irreducible truths and reasoning up from there, instead of reasoning by analogy to what others do.",
+        "usedFor": "Solving problems nobody has solved for you"
       },
       {
-        term: 'ITC (Input Tax Credit)',
-        means: 'Using the GST you paid on purchases to reduce the GST you owe.',
-        mistake: 'Two things quietly cancel the benefit: some purchases are blocked, and suppliers who do not file properly.',
+        "term": "Opportunity Cost",
+        "means": "The value of the best option you gave up by choosing this one. For a founder, the scarcest resource is attention, not money.",
+        "usedFor": "Evaluating what a yes actually costs"
       },
       {
-        term: 'LUT (Letter of Undertaking)',
-        means: 'A form that lets an exporter supply without paying IGST upfront.',
-        mistake: 'Important if you export services. It is about cash flow, not about paperwork.',
+        "term": "Sunk Cost Fallacy",
+        "means": "Continuing because of what you have already spent. Money already gone is irrelevant to whether the next rupee is well spent.",
+        "usedFor": "Killing projects that should have died months ago"
       },
       {
-        term: 'RCM (Reverse Charge Mechanism)',
-        means: 'The buyer pays the GST instead of the seller.',
-        mistake: 'It applies to many services bought from abroad. One rule about intermediaries was removed from 30 March 2026, which changed things for Indian firms serving foreign clients.',
+        "term": "Pivot",
+        "means": "A structured change of product, market or model based on evidence. A pivot keeps one foot planted; abandoning everything is a restart.",
+        "usedFor": "Changing direction while keeping what you learned"
       },
       {
-        term: 'TDS',
-        means: 'Tax your customer takes out of your payment and sends to the government on your behalf.',
-        mistake: 'It affects your cash flow, and matching it all up at the year end is real work.',
+        "term": "Type 1 / Type 2 Decision",
+        "means": "Type 1 is irreversible and deserves deliberation; Type 2 is reversible and deserves speed. Most founders treat Type 2 decisions as Type 1 and stall.",
+        "usedFor": "Matching decision speed to decision stakes"
       },
       {
-        term: 'MSME / Udyam registration',
-        means: 'Registering as a micro, small or medium business.',
-        mistake: 'The limits changed on 1 April 2025: micro is ₹2.5 crore investment and ₹10 crore turnover; small is ₹25 crore and ₹100 crore; medium is ₹125 crore and ₹500 crore. The 45-day payment rule gives you real power over large customers — but only if you are micro or small, and not if you are a trader.',
+        "term": "Second-Order Thinking",
+        "means": "Asking 'and then what happens?' at least twice. Discounts fix this quarter and destroy next year's pricing power.",
+        "usedFor": "Avoiding solutions that create bigger problems"
       },
       {
-        term: 'DPDP Act / Rules',
-        means: "India's data protection law.",
-        mistake: 'The rules came in November 2025 and arrive in stages — consent managers around November 2026, the main duties around May 2027. The older IT Act rules still apply until then, so there is no gap where nothing applies.',
+        "term": "Pre-Mortem",
+        "means": "Imagining the project has already failed, then listing why. Gets honest objections out of people who would not otherwise raise them.",
+        "usedFor": "Surfacing risk before you commit"
       },
       {
-        term: 'FSSAI licence',
-        means: 'The licence you need to run a food business.',
-        mistake: 'Turnover bands went up on 1 April 2026 and renewal was removed, so the licence now lasts indefinitely. But the yearly fee stayed, and not paying it suspends you automatically. Anyone selling food online, and any brand owner’s head office, needs a Central Licence at any turnover — so most direct-to-consumer brands get no relief. The brand owner is fully responsible and cannot pass the blame to the factory.',
+        "term": "Pareto Principle",
+        "means": "Roughly 80% of results come from 20% of causes. Applies to customers, revenue, defects and, uncomfortably, to your team.",
+        "full": "80/20 Rule",
+        "usedFor": "Finding disproportionate leverage"
       },
       {
-        term: 'EPF / ESI',
-        means: 'Compulsory provident fund and employee insurance.',
-        mistake: 'The wage limits of ₹15,000 and ₹21,000 had not changed as of August 2026, despite a lot of news saying otherwise. They can now be changed by notification alone, so they could move quickly.',
+        "term": "Theory of Constraints",
+        "means": "Any system is limited by one constraint at a time. Find it, fix it, then find the next one.",
+        "usedFor": "Improving a system rather than a step"
       },
       {
-        term: 'Labour Codes',
-        means: "Four laws that combine India's older labour laws into one set.",
-        mistake: 'In force since 21 November 2025, but most of the detailed rules have not been issued yet, so practice is still settling.',
-      },
-      {
-        term: 'FEMA / FDI / ODI',
-        means: 'The rules for money coming into India from abroad, and going out.',
-        mistake: 'Any foreign investor, foreign subsidiary or overseas holding company brings these in. Get advice before, not after.',
-      },
-      {
-        term: 'FIRC',
-        means: 'A certificate proving you received money from abroad.',
-        mistake: 'You need it for export benefits, and when investors check your books.',
-      },
-      {
-        term: 'SISFS (Startup India Seed Fund Scheme)',
-        means: 'Government seed money, given out through approved incubators.',
-        mistake: 'Cheap or free money that Indian founders apply for far too rarely.',
-      },
-      {
-        term: 'Incubator / accelerator',
-        means: 'Long-term support and space, or a fixed-length programme usually taken in exchange for shares.',
-        mistake: 'Two different things, often confused. Judge either one on the people it actually introduces you to, not on its name.',
-      },
-    ],
+        "term": "Optionality",
+        "means": "Preserving future choices at low present cost. Valuable when the future is unclear, expensive when it becomes an excuse not to commit.",
+        "usedFor": "Staying flexible in uncertainty"
+      }
+    ]
   },
+  {
+    "slug": "psychology",
+    "title": "Founder psychology, clarity and capacity",
+    "blurb": "The layer most glossaries ignore and most businesses are actually limited by. GoXL's core thesis: the founder is the system.",
+    "terms": [
+      {
+        "term": "Founder Bottleneck",
+        "means": "The point where everything waits on one person's attention or approval. Almost always the real constraint before capital or market is.",
+        "usedFor": "Diagnosing why growth stalled despite demand"
+      },
+      {
+        "term": "Clarity Debt",
+        "means": "Accumulated unmade decisions and undefined priorities. Like technical debt, it compounds — and it is paid in wasted team effort.",
+        "usedFor": "Explaining why a busy team produces little"
+      },
+      {
+        "term": "Working ON vs IN the Business",
+        "means": "Working IN is doing the work; working ON is building the system that does the work. Most founders are trapped in the first and call it commitment.",
+        "usedFor": "Deciding how a founder should spend the week"
+      },
+      {
+        "term": "Owner's Trap",
+        "means": "A business that cannot operate or be sold without you. Revenue can look healthy while enterprise value stays near zero.",
+        "usedFor": "Recognising when you have built a job, not an asset"
+      },
+      {
+        "term": "Decision Fatigue",
+        "means": "The degradation of decision quality across a day of continuous choosing. Why the 6pm decision is usually the worst one.",
+        "usedFor": "Protecting the quality of important choices"
+      },
+      {
+        "term": "Context Switching",
+        "means": "The mental cost of jumping between unrelated tasks. Each switch carries a real reload penalty measured in minutes.",
+        "usedFor": "Understanding why a full day produced nothing"
+      },
+      {
+        "term": "Deep Work",
+        "means": "Extended, undistracted focus on cognitively demanding work. Strategy, positioning and product thinking cannot be done in fifteen-minute gaps.",
+        "usedFor": "Producing the output only you can produce"
+      },
+      {
+        "term": "Bandwidth",
+        "means": "Your genuine available capacity, not your available hours. Founders routinely commit to calendar space they have no mental capacity to use.",
+        "usedFor": "Honest capacity planning"
+      },
+      {
+        "term": "Shiny Object Syndrome",
+        "means": "Chasing each new opportunity before finishing the last. Feels like ambition; functions as avoidance.",
+        "usedFor": "Explaining why three initiatives are all 60% done"
+      },
+      {
+        "term": "Analysis Paralysis",
+        "means": "Over-researching to postpone commitment. Usually a confidence problem presenting itself as a data problem.",
+        "usedFor": "Breaking a stalled decision"
+      },
+      {
+        "term": "Founder Dependency",
+        "means": "The degree to which revenue, relationships and knowledge live only with the founder. The number one discount applied by acquirers.",
+        "usedFor": "Assessing business resilience and saleability"
+      },
+      {
+        "term": "Sustainable Pace",
+        "means": "An operating intensity you can maintain for years rather than months. Endurance, not effort, is the actual scarce resource.",
+        "usedFor": "Building a company that outlasts your energy"
+      },
+      {
+        "term": "Founder-Business Alignment",
+        "means": "The match between how you want to spend your life and what your business demands of you. Misalignment shows up as revenue growth alongside declining motivation.",
+        "usedFor": "Checking whether the business still fits the person"
+      }
+    ]
+  },
+  {
+    "slug": "goxl",
+    "title": "The GoXL vocabulary",
+    "blurb": "Proprietary GoXL language. Use these terms consistently across the platform, decks, proposals and the Ally knowledge library.",
+    "terms": [
+      {
+        "term": "Clarity Before Action",
+        "means": "Diagnose before you prescribe. Action taken without clarity is not speed — it is expensive motion.",
+        "usedFor": "The GoXL operating philosophy across every engagement"
+      },
+      {
+        "term": "3D Method",
+        "means": "Understand the real problem, define the specific outcome, then execute. Most consulting starts at Deliver, which is why most consulting fails.",
+        "full": "Diagnose → Define → Deliver",
+        "usedFor": "The standard GoXL engagement structure"
+      },
+      {
+        "term": "Founder Clarity Canvas",
+        "means": "The GoXL 15-box framework mapping a founder's clarity across the business. The diagnostic instrument behind the Ally engine.",
+        "usedFor": "Structured founder diagnosis"
+      },
+      {
+        "term": "Five Pillars",
+        "means": "The five layers a business is assessed against. Weakness at a lower pillar cannot be fixed by effort at a higher one.",
+        "full": "Founder, Clarity, Structure, Execution, Scale",
+        "usedFor": "Organising diagnosis and intervention"
+      },
+      {
+        "term": "The GoXL Chain",
+        "means": "Growth flows in one direction. Trying to scale before systems exist is the most common and most expensive founder error.",
+        "full": "Founder → Clarity → Systems → Execution → Scale",
+        "usedFor": "Explaining the GoXL causal model"
+      },
+      {
+        "term": "Founder DNA",
+        "means": "The behavioural, decision-making and energy profile of the individual founder — cross-validated against self-report, not just taken from it.",
+        "usedFor": "Profiling how a specific founder operates"
+      },
+      {
+        "term": "Business DNA",
+        "means": "The structural, operational and market character of the business, assessed as a counterpart to Founder DNA.",
+        "usedFor": "Profiling the business alongside its founder"
+      },
+      {
+        "term": "PID",
+        "means": "The diagnostic layer that identifies the real underlying problem rather than the presenting symptom.",
+        "full": "Problem Identification & Diagnosis",
+        "usedFor": "The reasoning engine inside GoXL Ally"
+      },
+      {
+        "term": "RCA",
+        "means": "Structured investigation of why a problem exists, powered in GoXL by a curated root-cause database. Treating symptoms guarantees recurrence.",
+        "full": "Root Cause Analysis",
+        "usedFor": "Getting past symptoms to causes"
+      },
+      {
+        "term": "Ally",
+        "means": "The Founder's Compass — an AI that understands the founder, the business and the situation before advising. Always written in full, never abbreviated.",
+        "usedFor": "The GoXL AI founder companion product"
+      },
+      {
+        "term": "Founder Clinic",
+        "means": "A structured diagnostic session format delivered to founder cohorts and institutional partners.",
+        "usedFor": "GoXL's institutional and campus programme format"
+      },
+      {
+        "term": "Growth Partner",
+        "means": "Not a vendor, not a consultant — an accountable partner in the outcome. The framing used across all GoXL proposals.",
+        "usedFor": "How GoXL positions itself with clients"
+      },
+      {
+        "term": "Grow10XLife",
+        "means": "The public rallying identity behind GoXL's mission to help a million entrepreneurs build meaningful businesses.",
+        "usedFor": "The GoXL movement identity"
+      }
+    ]
+  }
 ];
 
 /** Every term, counted once — used for the heading and the search count. */

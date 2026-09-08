@@ -182,9 +182,9 @@ function TitleTile({ item }) {
  * matches the term, the meaning and the mistake, so "who gets paid first" finds
  * the entry even though those words are not in its name.
  *
- * The failure mode gets its own line rather than being folded into the meaning.
- * Any dictionary can define CAC; the mistake attached to it is the reason this
- * is worth having.
+ * Each term shows what it MEANS first, then what it is USED FOR. The source
+ * calls the meaning column the one that matters most, so the card leads with
+ * it; the situation is the supporting line rather than the headline.
  */
 function Glossary({ sections }) {
   const [q, setQ] = useState('');
@@ -197,7 +197,8 @@ function Glossary({ sections }) {
 
   const shown = useMemo(() => {
     if (!query) return sections;
-    const hit = (t) => `${t.term} ${t.means} ${t.mistake}`.toLowerCase().includes(query);
+    const hit = (t) => `${t.term} ${t.full || ''} ${t.usedFor || ''} ${t.means}`
+      .toLowerCase().includes(query);
     return sections
       .map((s) => ({ ...s, terms: s.terms.filter(hit) }))
       .filter((s) => s.terms.length > 0);
@@ -270,10 +271,21 @@ function Glossary({ sections }) {
           <dl className="gl-list">
             {s.terms.map((t) => (
               <div className="gl-row" key={t.term}>
-                <dt className="gl-term">{t.term}</dt>
+                <dt className="gl-term">
+                  {t.term}
+                  {/* Only for actual acronyms. The source marks non-acronyms
+                      with an em dash; those carry no `full` at all rather than
+                      a dash the reader has to decode. */}
+                  {t.full && <span className="gl-full">{t.full}</span>}
+                </dt>
                 <dd className="gl-def">
                   <span className="gl-means">{t.means}</span>
-                  {t.mistake && <span className="gl-miss">{t.mistake}</span>}
+                  {t.usedFor && (
+                    <span className="gl-used">
+                      <span className="gl-used-label">Used for</span>
+                      {t.usedFor}
+                    </span>
+                  )}
                 </dd>
               </div>
             ))}
