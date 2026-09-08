@@ -117,36 +117,36 @@ def test_slots_returns_future_weekday_slots(founder_client):
 
 
 def test_requesting_a_call_is_not_blocked_by_the_paywall(founder_client):
-    """Requesting a call is free on every plan, and creates a REQUEST.
+    """Booking a call is free on every plan, and confirms straight away.
 
     This used to be a 402: no plan includes a free call, so the entitlement gate
-    refused every founder and there was no way to pay past it -- checkout does
-    not exist. Discovery calls were unbookable by anyone. The gate now sits after
-    the team confirms, where payment actually happens.
+    refused every founder and there was no way to pay past it. Booking is free
+    again, and there is no approval step left to put a gate behind -- when
+    checkout exists it belongs immediately before the meeting is created.
     """
     from app.api.deps import get_founder_record
     founder = founder_client.get("/api/v1/profile").json()
     app.dependency_overrides[get_founder_record] = lambda: SimpleNamespace(
         founder_id=founder["founder_id"], plan_type="free")
     try:
-        when = (datetime.now(timezone.utc) + timedelta(days=2)).isoformat()
+        when = founder_client.get("/api/v1/discovery/slots").json()["slots"][0]
         r = founder_client.post("/api/v1/discovery/book", json={"scheduled_at": when})
         assert r.status_code == 201, r.text
-        assert r.json()["status"] == "pending"
+        assert r.json()["status"] == "confirmed"
     finally:
         app.dependency_overrides.pop(get_founder_record, None)
 
 
-def test_book_creates_a_pending_request(founder_client):
-    when = (datetime.now(timezone.utc) + timedelta(days=2)).isoformat()
+def test_book_confirms_immediately_with_a_joining_link(founder_client):
+    """Booking a published slot confirms it. No approval queue any more."""
+    when = founder_client.get("/api/v1/discovery/slots").json()["slots"][0]
     r = founder_client.post("/api/v1/discovery/book", json={"scheduled_at": when})
     assert r.status_code == 201, r.text
     body = r.json()
-    # A request, not a booking. No calendar event exists until the team
-    # confirms -- the old flow created the meeting first and left orphans behind
-    # when the insert then failed.
-    assert body["status"] == "pending"
-    assert body["meeting_link"] is None
+    assert body["status"] == "confirmed"
+    # The founder leaves with a way to join. Stub mode still returns one, so
+    # this asserts the wiring rather than Google.
+    assert body["meeting_link"]
     call_id = body["call_id"]
 
     # confirmation read-back
@@ -162,6 +162,24 @@ def test_book_rejects_past_slot(founder_client):
     assert r.status_code == 422
 
 
+def test_book_rejects_a_time_we_never_offered(founder_client):
+    """Mattered less when a human approved every request; now it is the only
+    thing stopping a confirmed 3am call."""
+    odd = (datetime.now(timezone.utc) + timedelta(days=3)).replace(
+        hour=3, minute=17, second=0, microsecond=0)
+    r = founder_client.post("/api/v1/discovery/book",
+                            json={"scheduled_at": odd.isoformat()})
+    assert r.status_code == 422
+
+
+def test_second_founder_cannot_take_the_same_slot(founder_client):
+    when = founder_client.get("/api/v1/discovery/slots").json()["slots"][0]
+    first = founder_client.post("/api/v1/discovery/book", json={"scheduled_at": when})
+    assert first.status_code == 201, first.text
+    again = founder_client.post("/api/v1/discovery/book", json={"scheduled_at": when})
+    assert again.status_code == 409
+
+
 def test_cannot_read_another_founders_call(founder_client):
     # a call id that doesn't belong to this founder -> 404, not leaked
     assert founder_client.get("/api/v1/discovery/calls/999999999").status_code == 404
@@ -174,3 +192,68 @@ def test_available_slots_skips_weekends_and_starts_tomorrow():
     slots = available_slots(ref, days=7)
     assert all(s > ref for s in slots)
     assert all(s.weekday() < 5 for s in slots)  # no weekends
+
+
+# --- slot claiming, without the API ----------------------------------------
+#
+# These exercise _claim_slot directly with a stub session, so they run even
+# where the founder fixture cannot.
+
+class _FakeResult:
+    def __init__(self, row=None):
+        self._row = row
+
+    def first(self):
+        return self._row
+
+
+class _FakeDB:
+    """Answers the advisory lock, then reports whether the slot is taken."""
+
+    def __init__(self, taken=False):
+        self.taken = taken
+        self.statements = []
+
+    def execute(self, statement, params=None):
+        text = str(statement)
+        self.statements.append(text)
+        if "pg_advisory_xact_lock" in text:
+            return _FakeResult()
+        return _FakeResult((1,) if self.taken else None)
+
+
+def _first_offered_slot():
+    """The same grid _claim_slot builds for a founder without priority.
+
+    Must use STANDARD_CALL_LEAD_DAYS rather than a hand-picked number: a
+    priority founder's window opens two business days earlier, so a slot taken
+    from the wrong grid is genuinely not on offer and the test would fail for
+    the right reason about the wrong thing.
+    """
+    from app.plans.catalog import STANDARD_CALL_LEAD_DAYS
+    from app.services.calendar import available_slots
+    return available_slots(datetime.now(timezone.utc), 30,
+                           lead_days=STANDARD_CALL_LEAD_DAYS)[0]
+
+
+def test_claim_slot_accepts_a_published_free_slot(monkeypatch):
+    from app.api.v1.discovery import routes
+    monkeypatch.setattr(routes, "_has_call_priority", lambda founder, db: False)
+    db = _FakeDB(taken=False)
+    routes._claim_slot(db, _first_offered_slot(), object())
+    assert any("pg_advisory_xact_lock" in s for s in db.statements)
+
+
+def test_claim_slot_refuses_a_time_not_on_the_grid(monkeypatch):
+    from app.api.v1.discovery import routes
+    monkeypatch.setattr(routes, "_has_call_priority", lambda founder, db: False)
+    odd = _first_offered_slot() + timedelta(minutes=17)
+    with pytest.raises(routes.SlotNotOfferedError):
+        routes._claim_slot(_FakeDB(), odd, object())
+
+
+def test_claim_slot_refuses_a_slot_someone_already_has(monkeypatch):
+    from app.api.v1.discovery import routes
+    monkeypatch.setattr(routes, "_has_call_priority", lambda founder, db: False)
+    with pytest.raises(routes.SlotTakenError):
+        routes._claim_slot(_FakeDB(taken=True), _first_offered_slot(), object())

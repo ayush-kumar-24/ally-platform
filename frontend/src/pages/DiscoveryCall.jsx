@@ -47,6 +47,9 @@ function InfoCard() {
  *  of the database ("pending", "no_show"), which tells someone waiting on a paid
  *  call almost nothing about what happens next. */
 const STATUS_COPY = {
+  /* Nothing creates a pending call any more -- booking confirms itself. Kept
+     for rows written before that change, which are still real bookings a
+     founder can open. */
   pending: 'Waiting for us to confirm',
   confirmed: 'Confirmed',
   rescheduled: 'Moved — waiting for us to confirm',
@@ -151,9 +154,10 @@ function Scheduler({ slots, timezone, price, onBook, onBooked }) {
     setLimit(null);
     try {
       await onBook(selected, timezone);
-      // "Booked" was a promise the server had not made: the row is written
-      // `pending` and the team confirms it.
-      showToast('Requested ✓ We\u2019ll confirm your call shortly');
+      // The server confirms on the spot now, so this can say so. It used to
+      // write the row `pending` and wait for someone on the team to press
+      // Confirm, which is why this said "requested".
+      showToast('Booked ✓ The joining link is in your email');
       onBooked?.();
     } catch (error) {
       /* Kept as a safety net rather than a live path: nothing entitlement-gates
@@ -162,7 +166,15 @@ function Scheduler({ slots, timezone, price, onBook, onBooked }) {
          toasts vanish. */
       const explained = explainLimit(error);
       if (explained) setLimit(explained);
-      else showToast("That didn't go through. Nothing was charged — try again.");
+      /* The one a founder will actually hit: two people picking the same slot
+         within a few seconds, or a page left open until the slot aged out of
+         the window. Branching on `code` rather than the status because the
+         backend sends the exact error class, and "try again" is wrong advice
+         when the answer is "pick a different time". */
+      else if (error?.code === 'SlotTakenError' || error?.code === 'SlotNotOfferedError') {
+        showToast(error.detail || 'That slot has gone. Please pick another time.');
+        onBooked?.();   // re-reads availability, so the gone slot disappears
+      } else showToast("That didn't go through. Nothing was charged — try again.");
     } finally {
       setSaving(false);
     }
@@ -178,13 +190,12 @@ function Scheduler({ slots, timezone, price, onBook, onBooked }) {
         </span>
       </div>
 
-      {/* Said before they pick, not after. Asking for a slot is a request: the
-          team confirms it, and only then is there a meeting and a bill. A
-          founder who thinks they have just booked and paid finds out otherwise
-          from the status on their own booking, which is the wrong way round. */}
+      {/* Said before they pick, not after. The slots shown ARE the offer --
+          picking one books it and sends the joining link. */}
       <p className="dc-request-note">
-        Choose a time and we&apos;ll confirm it. Nothing is charged when you ask
-        {price ? ` — a call is ₹${price}, payable once we confirm` : ''}.
+        Pick a time and it&apos;s booked. We&apos;ll email you the joining link
+        straight away. Nothing is charged
+        {price ? `; a call is ₹${price}` : ''}.
       </p>
 
       <div className="dc-days-row">
@@ -232,8 +243,7 @@ function Scheduler({ slots, timezone, price, onBook, onBooked }) {
         onClick={confirm}
         disabled={!selected || saving}
       >
-        {/* Not "Confirm booking": the founder is not the one confirming. */}
-        {saving ? 'Requesting…' : selected ? 'Request this time' : 'Select a time'}
+        {saving ? 'Booking…' : selected ? 'Book this time' : 'Select a time'}
       </button>
     </div>
   );

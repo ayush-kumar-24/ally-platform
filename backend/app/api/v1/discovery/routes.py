@@ -1,9 +1,12 @@
 """Discovery call endpoints.
 
-Booking runs through Calendly in production; the calendar integration is stubbed
-today (see app/services/calendar.py) so the flow works end to end. Swapping in
-Calendly changes only that service -- these endpoints and the discovery_calls
-storage stay the same.
+Booking is self-serve and immediate: the founder picks one of the fixed slots we
+publish, the meeting is created, and the confirmation email goes out. Nobody has
+to approve it.
+
+Availability comes from app/services/calendar.py -- a fixed weekday grid, minus
+anything the host calendar is already busy with, minus anything another founder
+has taken.
 
     GET  /discovery/slots        available time slots (stub)
     POST /discovery/book         create a booking
@@ -16,6 +19,7 @@ storage stay the same.
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, BackgroundTasks, Depends, status
+from sqlalchemy import text as _sql
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_founder_record
@@ -32,6 +36,7 @@ from app.schemas.discovery import (
 )
 from app.services.calendar import DEFAULT_TIMEZONE, available_slots, create_meeting
 from app.services.discovery_notifications import send_booking_confirmation
+from app.notifications import notify
 from app.api.v1.plans.dependencies import enforcement_enabled
 from app.core.container import container
 from app.core.logger import logger
@@ -53,6 +58,35 @@ class CallNotFoundError(AppError):
 class SlotInPastError(AppError):
     def __init__(self):
         super().__init__("scheduled_at must be in the future", status_code=422)
+
+
+class SlotNotOfferedError(AppError):
+    """A time that is not one of the published slots.
+
+    Mattered less when a human confirmed every request and could simply decline
+    an odd one. Now that booking confirms itself, this is the only thing between
+    us and a founder holding a confirmed 3am Sunday call.
+    """
+
+    def __init__(self):
+        super().__init__(
+            "That time is not one of our available slots. Pick one from the list.",
+            status_code=422,
+        )
+
+
+class SlotTakenError(AppError):
+    """Somebody else got there first.
+
+    409 rather than 422: nothing is wrong with the request, the world just
+    changed between the founder loading the page and pressing the button.
+    """
+
+    def __init__(self):
+        super().__init__(
+            "Someone just booked that slot. Please choose another time.",
+            status_code=409,
+        )
 
 
 class CallNotChangeableError(AppError):
@@ -82,6 +116,66 @@ def _has_call_priority(founder: Founder, db: Session) -> bool:
     )
 
 
+# Namespace for the advisory locks below, so a slot lock can never collide with
+# some other advisory lock added later. Arbitrary, just has to be unique.
+_SLOT_LOCK_NAMESPACE = 4711
+
+
+def _claim_slot(db: Session, scheduled: datetime, founder: Founder,
+                exclude_call_id: int | None = None) -> None:
+    """Refuse the booking unless this exact slot is published and still free.
+
+    WHY A LOCK. Two founders pressing Book on the same slot within the same
+    second would both read "nothing booked here" and both be confirmed, and
+    with no human approving requests any more there is nothing downstream to
+    catch it. The advisory lock is taken on the slot itself, so it serialises
+    only the founders competing for that one time and holds until this
+    transaction ends.
+    """
+    minute_key = int(scheduled.timestamp()) // 60      # fits int4 for ~4000 years
+    db.execute(_sql("select pg_advisory_xact_lock(:ns, :key)"),
+               {"ns": _SLOT_LOCK_NAMESPACE, "key": minute_key})
+
+    # Published grid, over the whole bookable window rather than the 7 days the
+    # page happens to show, so a founder deep-linking a real later slot is not
+    # refused for a time we would have offered.
+    lead = (PRIORITY_CALL_LEAD_DAYS if _has_call_priority(founder, db)
+            else STANDARD_CALL_LEAD_DAYS)
+    offered = available_slots(datetime.now(timezone.utc), 30, lead_days=lead)
+    if scheduled not in offered:
+        raise SlotNotOfferedError()
+
+    # 'rescheduled' is not here on purpose: that row has been superseded by the
+    # new one it points at, so it no longer holds its old time.
+    sql = """
+        select call_id from discovery_calls
+         where scheduled_at = :at
+           and status in ('pending', 'confirmed')
+    """
+    params = {"at": scheduled}
+    if exclude_call_id is not None:
+        sql += " and call_id <> :exclude"
+        params["exclude"] = exclude_call_id
+    if db.execute(_sql(sql + " limit 1"), params).first():
+        raise SlotTakenError()
+
+
+def _send_confirmation(founder_email: str | None, name: str | None,
+                       scheduled: datetime, link: str | None, call_id: int) -> None:
+    """Email the founder. Never raises -- the call is booked either way.
+
+    Runs in a background task so a slow mail server does not hold the founder on
+    a spinner after their booking has already been written.
+    """
+    if not founder_email:
+        return
+    try:
+        send_booking_confirmation(founder_email, name, scheduled, link)
+    except Exception:                                  # noqa: BLE001
+        logger.warning("discovery confirmation email failed",
+                       extra={"call_id": call_id})
+
+
 @router.get("/slots", response_model=SlotsResponse)
 def get_slots(days: int = 7, founder: Founder = Depends(get_founder_record),
                     db: Session = Depends(get_db)):
@@ -105,31 +199,26 @@ def book_call(
     founder: Founder = Depends(get_founder_record),
     db: Session = Depends(get_db),
 ):
-    """REQUEST a discovery call. The team confirms it; payment follows that.
+    """Book a discovery call. Confirmed immediately -- no approval step.
 
-    This used to book and confirm in one step, which did not match how the calls
-    actually run and could not work at all under the current plans:
+    HOW THIS USED TO WORK, AND WHY IT CHANGED. A founder used to REQUEST a slot;
+    the row was written `pending`, it appeared in an admin queue, and somebody on
+    the team had to press Confirm before the meeting was created and the email
+    sent. That was built when no plan included a call and payment was expected to
+    sit in the gap. It made every booking wait on a person, and a founder who
+    booked on Friday evening heard nothing until Monday.
 
-      * No plan includes a free call any more, so the entitlement gate refused
-        every founder with a 402 and there was no way to pay past it -- checkout
-        does not exist. Discovery calls were unbookable by anyone.
-      * It created the Google Meet BEFORE the row was written. When the insert
-        then failed (see the merge migration 499814b9067a -- `is_priority` had
-        never been added to the table) the founder got a 500 and we were left
-        with a meeting nobody was going to attend.
+    Now: the slots we publish ARE the offer. Picking one books it.
 
-    So a founder now REQUESTS a slot and the row is written `pending`. Nothing is
-    charged, no calendar event is created, and no allowance is consumed. The team
-    confirms from the admin side, and only then is the meeting made and the
-    founder emailed -- see `confirm_call` in the admin panel router.
+    ORDER MATTERS. The meeting is created before the row is written, so a
+    calendar failure means the founder sees an error and can try again, rather
+    than holding a confirmed call with no way to join it. Nothing is left behind
+    on the calendar that way either -- the insert is what makes it real.
 
-    Slots offered are already the team's real availability: `available_slots`
-    removes anything overlapping the host calendar's busy blocks.
-
-    PAYMENT IS DELIBERATELY NOT HERE. It belongs after confirmation, through
-    Razorpay, and is owned by whoever is building checkout for the subscription
-    plans. The seam is `payment_reference` on the request and the `pending` ->
-    `confirmed` transition; neither needs to change when payment lands.
+    STILL FREE. Nothing is charged and no allowance is consumed, which is the
+    same as before; removing the approval step did not add a payment step. When
+    checkout exists, the charge belongs immediately before `create_meeting` here
+    and the refund belongs in `cancel_call`.
     """
     scheduled = payload.scheduled_at
     if scheduled.tzinfo is None:
@@ -137,22 +226,47 @@ def book_call(
     if scheduled <= datetime.now(timezone.utc):
         raise SlotInPastError()
 
+    # Held for the rest of this transaction, so the check and the insert below
+    # cannot be interleaved with another founder taking the same slot.
+    _claim_slot(db, scheduled, founder)
+
+    meeting = create_meeting(
+        founder.founder_id, scheduled, founder_email=getattr(founder, "email", None),
+    )
+
     data = {
         "founder_id": founder.founder_id,
         "scheduled_at": scheduled,
-        # A request, not a booking. The founder is told this plainly in the UI:
-        # nothing is agreed until the team confirms.
-        "status": "pending",
-        "booking_source": "founder_request",
+        "status": "confirmed",
+        "meeting_link": meeting["meeting_link"],
+        "goxml_host": meeting["host"],
+        "booking_source": meeting["provider"],
         "notes_pre_call": payload.notes_pre_call,
-        # Recorded on the row, not derived at read time: the founder's plan can
-        # change after the request, and what the queue needs to know is whether
-        # this request was priority WHEN IT WAS MADE.
+        # Stamped at booking time, not derived later: the founder's plan can
+        # change afterwards, and what matters is what was true when they booked.
         "is_priority": _has_call_priority(founder, db),
     }
     if payload.timezone:
         data["timezone"] = payload.timezone
-    return discovery_call_repository.create(db, data)
+    call = discovery_call_repository.create(db, data)
+
+    # The bell as well as the email. A founder who has Ally open when they book
+    # should not have to go to their inbox to see that it worked.
+    notify(
+        db, founder_id=founder.founder_id, type="discovery_call_confirmed",
+        title="Your discovery call is booked",
+        body=("Your call is confirmed. The joining link is on the Discovery call "
+              "page, and it is in the email we just sent you."),
+        action_url="/app/discovery-call",
+        dedup_key=f"discovery_call_confirmed:{call.call_id}",
+    )
+
+    background.add_task(
+        _send_confirmation, getattr(founder, "email", None),
+        getattr(founder, "full_name", None), scheduled, call.meeting_link,
+        call.call_id,
+    )
+    return call
 
 
 @router.get("/calls", response_model=list[CallRead])
@@ -266,15 +380,20 @@ def reschedule_call(
 
     old = _owned_changeable_call(db, founder, call_id)
 
-    # A moved request is still a request. Only a call the team had already
-    # confirmed gets a new meeting -- creating one for a pending request would
-    # put an event on the host calendar for a call nobody has agreed to yet,
-    # which is the thing this whole flow was changed to stop.
+    # Same two rules as booking: it has to be a slot we publish, and it has to
+    # still be free. Excluding this call's own row, so moving a call to the time
+    # it already holds is not refused as a clash with itself.
+    _claim_slot(db, scheduled, founder, exclude_call_id=call_id)
+
+    # New meeting first. If the calendar refuses, the founder still has the call
+    # they started with rather than neither.
+    #
+    # `was_confirmed` survives for rows created before booking confirmed itself:
+    # anything still sitting `pending` from the old approval queue keeps that
+    # status when it moves, rather than being silently upgraded by a reschedule.
     was_confirmed = old.status == "confirmed"
     meeting = None
     if was_confirmed:
-        # New meeting first. If the calendar refuses, the founder still has the
-        # call they started with rather than neither.
         meeting = create_meeting(founder.founder_id, scheduled, founder_email=founder.email)
 
     new_call = discovery_call_repository.create(db, {
