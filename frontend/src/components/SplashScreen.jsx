@@ -5,16 +5,16 @@ import { prefersReducedMotion } from '../services/motion';
 const EASE = 'cubic-bezier(.22,1,.3,1)';
 
 /**
- * SplashScreen – the Ally splash, once per browser session, on whichever page
- * the founder arrives at. Holds for SPLASH_MS, fades out, calls `onDone`.
- * App.jsx owns the once-per-session rule (sessionStorage) and mounts this only
- * when it applies.
+ * SplashScreen – the Ally splash for a founder arriving from the landing site.
+ * Holds for SPLASH_MS, fades out, calls `onDone`. App.jsx decides when it
+ * applies -- the arrival mark on the URL, once per browser session -- and
+ * mounts this only then.
  *
  * This used to play a seven-second film with a Skip button, and had to be kept
  * off the sign-in page because that was too much to put in front of a founder
  * who had just clicked "Log in". It is now the drawn splash from AllySplash --
- * the same one that plays after sign-in -- at two seconds and a bit, so it
- * plays on the sign-in page too. The film's other guards went with it: there
+ * at two seconds and a bit, so it can stand on the sign-in page, which is
+ * where the landing site sends people. The film's other guards went with it: there
  * is no frame to wait for, so nothing can be "not ready", and nothing needs a
  * Skip control at this length (WCAG 2.2.2 starts at five seconds).
  *

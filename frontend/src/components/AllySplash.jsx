@@ -2,8 +2,8 @@
  * The Ally splash: the mark rising in behind a soft glow, the two words, and
  * three dots keeping time. Drawn, not filmed.
  *
- * Two places show it -- SplashScreen when a founder first arrives, and
- * AuthTransition in the moment after they sign in -- and they must look the
+ * Two places show it -- SplashScreen when a founder arrives from the landing
+ * site, and AuthTransition on the way into onboarding -- and they must look the
  * same, so the picture lives here and each of them supplies only the timing
  * around it. Built from the splash in assests/GoXL Ally standalone.html: its
  * gradient, its glow, its rise and its dot stagger, drawn with the app's own

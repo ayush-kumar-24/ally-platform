@@ -92,6 +92,35 @@ function splashAlreadyShown() {
   }
 }
 
+/* The landing site's /go/login redirect sends founders here as
+   /guided/login?from=landing. That, and only that, is the arrival the splash
+   marks: a direct visit, a bookmark, a refresh or a link from an email gets
+   the page straight away. Read once at mount, then taken back out of the URL
+   so that a refresh, a copied link or the back button does not carry the mark
+   around -- it describes an arrival, not an address. */
+const ARRIVAL_KEY = 'from';
+const ARRIVAL_FROM_LANDING = 'landing';
+
+function arrivedFromLanding() {
+  try {
+    return new URLSearchParams(window.location.search).get(ARRIVAL_KEY) === ARRIVAL_FROM_LANDING;
+  } catch {
+    return false;
+  }
+}
+
+function dropArrivalMark() {
+  try {
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has(ARRIVAL_KEY)) return;
+    url.searchParams.delete(ARRIVAL_KEY);
+    /* history.state is React Router's; the hash may be an invite's #email=. Both kept. */
+    window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash);
+  } catch {
+    /* the mark stays in the address bar; nothing else reads it */
+  }
+}
+
 /* Route chunks are small and served from the same origin, so this is visible
    for a frame or two at most -- long enough to avoid a flash of nothing, short
    enough that a spinner would be more distracting than the blank it replaces. */
@@ -136,11 +165,13 @@ function HomeGate() {
 export default function App() {
   const { toast } = useApp();
   const [showSplash, setShowSplash] = useState(
-    /* On every route, the sign-in page included. It was kept off sign-in
-       while it was a seven-second film; it is a two-second drawn splash now,
-       and the page a founder arrives at is exactly where it belongs. */
-    () => !splashAlreadyShown(),
+    /* Only for a founder who has just come over from the landing site by way
+       of its Sign in button -- see arrivedFromLanding. Once per session on top
+       of that, so going back to the landing site and returning does not
+       replay it. */
+    () => !splashAlreadyShown() && arrivedFromLanding(),
   );
+  useEffect(() => { dropArrivalMark(); }, []);
   const navigate = useNavigate();
 
   // A session that can't be recovered (no refresh token, or the server rejects
