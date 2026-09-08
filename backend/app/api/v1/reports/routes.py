@@ -427,11 +427,45 @@ def export_pdf(report_id: int, founder: Founder = Depends(get_founder_record),
 
 @router.post("/{report_id}/share", response_model=ShareCreated, status_code=status.HTTP_201_CREATED)
 def share_report(
-    report_id: int, request: Request,
+    report_id: int, request: Request, response: Response,
     founder: Founder = Depends(get_founder_record),
     db: Session = Depends(get_db),
 ) -> ShareCreated:
+    """The founder's link to this report, minting one only if none is live.
+
+    This used to create a new token on every call, and the Share button calls it
+    on every click -- so a founder who pressed it a dozen times had a dozen live
+    thirty-day links to a document that opens with no sign-in, eleven of which
+    they never sent anyone and could not tell apart from the one they did.
+    Sharing twice is not a request to publish twice.
+
+    Reusing the newest live share keeps the link stable, which is also what a
+    founder means by "the link to my report": pressing Share again hands them
+    the same URL they already sent, rather than quietly widening who can read
+    them. Revoking still kills the link outright, and the next Share after a
+    revocation or an expiry correctly mints a fresh one.
+
+    The URL is rebuilt from the token rather than read off the row: share_url is
+    a cached rendering of configuration (see share_url_for), so a row written
+    before SHARE_LINK_BASE_URL was set would otherwise hand back the broken link
+    that setting exists to fix.
+    """
     _owned_report(db, founder, report_id)  # ownership before creating a public link
+
+    live = reports_repository.list_active_shares(
+        db, founder_id=founder.founder_id, report_id=report_id,
+    )
+    if live:
+        existing = live[0]                      # newest first, per the repository
+        # 200, not the route's declared 201: nothing was created, and a client
+        # that trusts 201 to mean "a new link now exists" should not be told so.
+        response.status_code = status.HTTP_200_OK
+        return ShareCreated(
+            share_token=existing.share_token,
+            share_url=share_url_for(existing.share_token, request),
+            expires_at=existing.expires_at,
+        )
+
     token = secrets.token_urlsafe(24)
     share = reports_repository.create_share(
         db, founder_id=founder.founder_id, report_id=report_id, token=token,
