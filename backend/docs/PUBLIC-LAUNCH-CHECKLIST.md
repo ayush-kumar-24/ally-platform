@@ -49,6 +49,15 @@ It can be put back inside a minute if something is wrong.
 `plan_type = 'free'`. The moment Free empties, they lose the product along with
 everyone else.
 
+> **Done for the team's own accounts by migration `c7e4b19d5a20`**, which runs
+> in the deploy alongside the flip rather than waiting for someone to open a
+> psql session in the window between the two. The eighteen addresses are listed
+> in that file. It reports any that had no `founders` row into the deploy log
+> and leaves them alone — those need an approval in the panel and a plan set by
+> hand. Anyone added to the team later needs the same treatment; the SQL below
+> is still the recipe, and a migration in the shape of `c7e4b19d5a20` is the
+> durable version of it.
+
 Check who that affects:
 
 ```sql
