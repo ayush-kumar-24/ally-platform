@@ -210,10 +210,6 @@ function PlansView({ onSelectPlan, currentPlan }) {
           Payments secured by Razorpay
         </span>
         <span>
-          <svg viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 11-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></svg>
-          Your data is never sold
-        </span>
-        <span>
           <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="10" rx="2" /><path d="M7 11V7a5 5 0 0110 0v4" /></svg>
           End-to-end encryption
         </span>
