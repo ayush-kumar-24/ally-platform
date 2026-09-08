@@ -56,7 +56,7 @@ export const FAQS = [
   },
   {
     q: 'Can I export, download or share my report?',
-    a: 'Yes. The report page has a download button that gives you the report as a PDF, and a share button that creates a link anyone can open without signing in. Shared links are listed under "Links you have shared" on the same page, and you can revoke one there at any time. To export everything Ally holds about you — not just this report — use Profile → Privacy Center → "Download my data", which arrives as a JSON file immediately.',
+    a: 'Yes. The report page has a download button that gives you the report as a PDF, and a share button that creates a link anyone can open without signing in. A shared link stops working on its own after 30 days; to turn one off sooner, contact support. To export everything Ally holds about you — not just this report — use Profile → Privacy Center → "Download my data", which arrives as a JSON file immediately.',
     keywords: 'pdf save print share copy export download report link revoke send',
   },
   {
