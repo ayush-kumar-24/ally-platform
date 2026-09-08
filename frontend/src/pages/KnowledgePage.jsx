@@ -27,6 +27,7 @@
  * the bundle is a lie about what is happening.
  */
 
+import { useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { KNOWLEDGE_SECTIONS } from '../data/knowledge';
 
@@ -168,6 +169,107 @@ function TitleTile({ item }) {
   );
 }
 
+/**
+ * The glossary: a searchable list, not a grid of tiles.
+ *
+ * WHY THIS IS A DIFFERENT SHAPE FROM THE OTHER SECTIONS. A film or a book is a
+ * title you leave the page for; a definition is the content itself, and there
+ * is nowhere better to send anyone. Tiles would hide the only thing of value
+ * behind a hover, and 180-odd of them would be unreadable either way.
+ *
+ * SEARCH IS THE PRIMARY WAY IN, because that is how a glossary gets used --
+ * somebody hears "liquidation preference" in a meeting and wants it now. It
+ * matches the term, the meaning and the mistake, so "who gets paid first" finds
+ * the entry even though those words are not in its name.
+ *
+ * The failure mode gets its own line rather than being folded into the meaning.
+ * Any dictionary can define CAC; the mistake attached to it is the reason this
+ * is worth having.
+ */
+function Glossary({ sections }) {
+  const [q, setQ] = useState('');
+  const query = q.trim().toLowerCase();
+
+  const total = useMemo(
+    () => sections.reduce((n, s) => n + s.terms.length, 0),
+    [sections],
+  );
+
+  const shown = useMemo(() => {
+    if (!query) return sections;
+    const hit = (t) => `${t.term} ${t.means} ${t.mistake}`.toLowerCase().includes(query);
+    return sections
+      .map((s) => ({ ...s, terms: s.terms.filter(hit) }))
+      .filter((s) => s.terms.length > 0);
+  }, [sections, query]);
+
+  const found = shown.reduce((n, s) => n + s.terms.length, 0);
+
+  return (
+    <div className="gl">
+      <div className="gl-bar">
+        <input
+          type="search"
+          className="gl-search"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Search — try churn, ESOP, runway, GST"
+          aria-label="Search the glossary"
+        />
+        <span className="gl-count" aria-live="polite">
+          {query ? `${found} of ${total}` : `${total} terms`}
+        </span>
+      </div>
+
+      {/* Jump links while browsing. They would be noise during a search, where
+          the filtered list is already short. */}
+      {!query && (
+        <nav className="gl-jump" aria-label="Glossary sections">
+          {sections.map((s) => (
+            <a key={s.slug} className="gl-chip" href={`#gl-${s.slug}`}>
+              {s.title}
+              <span className="gl-chip-n">{s.terms.length}</span>
+            </a>
+          ))}
+        </nav>
+      )}
+
+      {found === 0 && (
+        <p className="fw-empty">
+          Nothing matches “{q}”. It may simply not be in here yet — the glossary
+          covers the vocabulary founders are expected to know, not everything.
+        </p>
+      )}
+
+      {shown.map((s) => (
+        <section className="gl-section" key={s.slug} id={`gl-${s.slug}`}>
+          <h2 className="gl-h">
+            {s.title}
+            <span className="gl-h-n">{s.terms.length}</span>
+          </h2>
+
+          {/* Shown, not filed. Several of these facts have already moved once
+              inside a year, and a founder reading a stale rate here would be
+              relying on us for it. */}
+          {s.note && <p className="gl-note">{s.note}</p>}
+
+          <dl className="gl-list">
+            {s.terms.map((t) => (
+              <div className="gl-row" key={t.term}>
+                <dt className="gl-term">{t.term}</dt>
+                <dd className="gl-def">
+                  <span className="gl-means">{t.means}</span>
+                  {t.mistake && <span className="gl-miss">{t.mistake}</span>}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+      ))}
+    </div>
+  );
+}
+
 function Library({ items, empty, variant }) {
   if (!items || items.length === 0) return <p className="fw-empty">{empty}</p>;
 
@@ -246,9 +348,11 @@ export default function KnowledgePage() {
           every card would turn it into wallpaper. */}
       {active?.standing && <p className="fw-standing">{active.standing}</p>}
 
-      {tabs
-        ? <Library items={active.items} empty={active.empty} variant={active.variant} />
-        : <Library items={items} empty={empty} />}
+      {section.variant === 'glossary'
+        ? <Glossary sections={section.glossary} />
+        : tabs
+          ? <Library items={active.items} empty={active.empty} variant={active.variant} />
+          : <Library items={items} empty={empty} />}
     </div>
   );
 }

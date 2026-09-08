@@ -1,5 +1,6 @@
 import { WATCH_TABS } from './watch';
 import { READ_TABS } from './read';
+import { GLOSSARY, GLOSSARY_TERM_COUNT } from './glossary';
 
 /**
  * data/knowledge.js — the three reference libraries under KNOWLEDGE.
@@ -35,8 +36,8 @@ import { READ_TABS } from './read';
    and films are three different sizes of commitment and mixing them makes the
    list unreadable. Its content lives in data/watch.js. */
 
-/** Courses and structured programmes -- things with a beginning and an end. */
-export const THINGS_TO_LEARN = [];
+/* "Things to learn" is a glossary rather than a list of courses -- a searchable
+   reference, not something you click out to. See data/glossary.js. */
 
 /**
  * One place that describes all three sections, so the nav, the routes and the
@@ -66,9 +67,10 @@ export const KNOWLEDGE_SECTIONS = {
   learn: {
     slug: 'learn',
     kicker: 'Things to learn',
-    title: 'Worth the effort.',
-    sub: 'Courses and programmes for when a gap needs more than an afternoon.',
-    empty: 'Nothing here yet. These take longer to vet than a link, so they arrive one at a time.',
-    items: THINGS_TO_LEARN,
+    title: 'Worth knowing.',
+    sub: `${GLOSSARY_TERM_COUNT} terms an early founder is expected to know and usually is not told. Search it, or read a section.`,
+    empty: 'Nothing here yet.',
+    variant: 'glossary',
+    glossary: GLOSSARY,
   },
 };
