@@ -297,3 +297,27 @@ export function approveRegistration(registrationId) {
 export function rejectRegistration(registrationId, reason) {
   return post(`/admin/waitlist/${registrationId}/reject`, { reason });
 }
+
+/**
+ * Who opening `slots` places would let in — the front of the queue, oldest
+ * first, in the order they would be approved. Changes nothing.
+ *
+ * Its own call rather than a flag on openWaitlistSlots: the screen shows this
+ * list and waits for a person to read it, because the act it precedes mints
+ * that many logins and sends that many emails.
+ */
+export function previewWaitlistSlots(slots) {
+  return get('/admin/waitlist/slots/preview', { params: { slots } });
+}
+
+/**
+ * Open `slots` places and let the front of the queue into them. Super admin
+ * only, and not idempotent — two calls open twice as many places.
+ *
+ * Returns { slots, approved, failures, cap }. `failures` is per person and is
+ * not an error: one identity call failing does not deny the rest their place,
+ * and those rows stay pending at the front of the queue.
+ */
+export function openWaitlistSlots(slots) {
+  return post('/admin/waitlist/slots/open', { slots });
+}

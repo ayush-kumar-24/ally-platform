@@ -4,6 +4,8 @@ actually granted.
     GET  /admin/waitlist                the queue, oldest request first
     POST /admin/waitlist/{id}/approve   create their login and email them
     POST /admin/waitlist/{id}/reject    turn it down, with a reason
+    GET  /admin/waitlist/slots/preview  who the next N slots would let in
+    POST /admin/waitlist/slots/open     open N slots, approve those N
 
 Two different tiers on purpose. Reading the queue is VIEW_USERS, the same tier
 as seeing users, so Support can answer "did my registration arrive?" without
@@ -27,9 +29,15 @@ from sqlalchemy.orm import Session
 from app.admin.rbac import Capability, require
 from app.api.v1.admin.panel_dependencies import PanelAdmin, get_panel_admin
 from app.db.session import get_db
-from app.models.waitlist import STATUSES, WaitlistRegistration
+from app.models.waitlist import PENDING, STATUSES, WaitlistRegistration
 from app.services import supabase_admin
-from app.services.waitlist import approve, cap_status, reject
+from app.services.waitlist import (
+    approve,
+    cap_status,
+    next_in_queue,
+    open_slots,
+    reject,
+)
 
 router = APIRouter(prefix="/admin/waitlist", tags=["admin"])
 
@@ -60,6 +68,11 @@ class RegistrationOut(BaseModel):
 class CapOut(BaseModel):
     approved: int
     cap: int
+    #: Where the cap came from: the environment's starting size, plus every
+    #: slot opened from the panel since. Shown apart so the number reads as a
+    #: decision somebody made rather than a constant.
+    base_cap: int
+    slots_opened: int
     remaining: int
     is_full: bool
     #: Whether approving can create a login at all right now. False means
@@ -164,3 +177,106 @@ def reject_registration(
         admin_email=admin.email,
     )
     return RegistrationOut.model_validate(row)
+
+
+class OpenSlotsRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    #: Upper bound is a guard against a typed zero, not a policy: 500 logins
+    #: and 500 emails from one click is already far past anything the team
+    #: means to do in one sitting.
+    slots: int = Field(ge=1, le=500)
+
+
+class SlotFailureOut(BaseModel):
+    email: str
+    full_name: str
+    #: The API's own message for why this one did not go through, passed
+    #: straight to the panel: "already approved" and "identity provider is not
+    #: configured" need different answers from a human.
+    reason: str
+
+
+class SlotPreviewOut(BaseModel):
+    slots: int
+    #: Exactly who would be let in, in the order they would be -- the same
+    #: order the queue is displayed in.
+    would_approve: list[RegistrationOut]
+    pending_total: int
+    #: Slots that would go unused because the queue is shorter than the number
+    #: asked for. They stay available for whoever registers next.
+    unused_slots: int
+    cap: CapOut
+
+
+class SlotsOpenedOut(BaseModel):
+    slots: int
+    approved: list[RegistrationOut]
+    failures: list[SlotFailureOut]
+    cap: CapOut
+
+
+@router.get("/slots/preview", response_model=SlotPreviewOut)
+def preview_slots(
+    slots: int = Query(ge=1, le=500),
+    admin: PanelAdmin = Depends(get_panel_admin),
+    db: Session = Depends(get_db),
+):
+    """Who opening `slots` places would let in, without letting them in.
+
+    A GET because it changes nothing, and a separate call rather than a flag on
+    the open endpoint: the panel shows this list and waits for a human to read
+    it. Opening slots mints logins and sends email, so the one thing worth
+    spending a round trip on is being sure about who.
+    """
+    require(admin.role, Capability.OPEN_WAITLIST_SLOTS)
+
+    queue = next_in_queue(db, slots)
+    pending_total = int(
+        db.execute(
+            select(func.count())
+            .select_from(WaitlistRegistration)
+            .where(WaitlistRegistration.status == PENDING)
+        ).scalar_one()
+    )
+    cap = cap_status(db)
+    # The preview reports the cap as it stands now, not as it would be. What
+    # the admin is deciding is "these people, in", and a projected ceiling on
+    # the same screen reads as though it had already moved.
+    return SlotPreviewOut(
+        slots=slots,
+        would_approve=[RegistrationOut.model_validate(r) for r in queue],
+        pending_total=pending_total,
+        unused_slots=max(slots - len(queue), 0),
+        cap=CapOut(**cap, can_grant_access=supabase_admin.is_configured()),
+    )
+
+
+@router.post("/slots/open", response_model=SlotsOpenedOut)
+def open_waitlist_slots(
+    payload: OpenSlotsRequest,
+    admin: PanelAdmin = Depends(get_panel_admin),
+    db: Session = Depends(get_db),
+):
+    """Open places and let the front of the queue into them.
+
+    Not idempotent, and cannot be: each call is a separate decision to grow the
+    list. Two clicks open twice as many slots, which is why the panel puts a
+    named list of people behind a confirmation rather than a bare number behind
+    a button.
+    """
+    require(admin.role, Capability.OPEN_WAITLIST_SLOTS)
+
+    result = open_slots(
+        db,
+        slots=payload.slots,
+        admin_id=admin.admin_id,
+        admin_email=admin.email,
+        admin_role=admin.role,
+    )
+    return SlotsOpenedOut(
+        slots=result["slots"],
+        approved=[RegistrationOut.model_validate(r) for r in result["approved"]],
+        failures=[SlotFailureOut(**f) for f in result["failures"]],
+        cap=CapOut(**result["cap"], can_grant_access=supabase_admin.is_configured()),
+    )
