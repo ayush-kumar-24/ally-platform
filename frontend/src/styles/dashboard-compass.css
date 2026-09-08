@@ -33,8 +33,11 @@
 
 /* Readouts */
 .compass-readouts{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--bd);border-bottom:1px solid var(--bd)}
-.compass-readout{padding:20px 24px 18px;border-left:1px solid var(--bd)}
+.compass-readout{padding:20px 24px 18px;border-left:1px solid var(--bd);transition:background .2s var(--ease)}
 .compass-readout:first-child{border-left:0;padding-left:0}
+/* Same emerald tint the rest of the app uses for a hovered surface
+   (.sugg:hover, .ac-pcard:hover in platform.css) rather than a new green. */
+.compass-readout:hover{background:rgba(16,185,129,.08)}
 .compass-readout .crl{display:block;font-family:var(--body);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
 .compass-readout .crv{display:block;font-size:32px;font-weight:600;letter-spacing:-.03em;line-height:1;margin:10px 0 8px;font-variant-numeric:tabular-nums;color:var(--forest-deep)}
 .compass-readout .crs{display:block;font-size:12px;color:var(--muted)}
@@ -73,7 +76,7 @@
 .compass-stone .cs-ix{font-family:var(--body);font-size:10px;letter-spacing:.12em;color:var(--muted-2)}
 .compass-stone .cs-title{font-size:13.5px;font-weight:600;letter-spacing:-.01em;color:var(--ink);margin-top:4px}
 .compass-stone .cs-sub{font-size:12px;color:var(--muted)}
-.compass-stone:hover{background:#fff}
+.compass-stone:hover{background:rgba(16,185,129,.08)}
 @media(max-width:900px){.compass-stones{grid-template-columns:repeat(2,1fr)}.compass-stone{border-top:1px solid var(--bd)}.compass-stone:nth-child(odd){border-left:0}}
 @media(max-width:560px){.compass-stones{grid-template-columns:1fr}.compass-stone{border-left:0}}
 

@@ -1,5 +1,5 @@
 /**
- * "Good morning" / "Good afternoon" / "Good evening" for right now.
+ * "Good Morning" / "Good Afternoon" / "Good Evening" for right now.
  *
  * There were three of these: the dashboard computed it, Ally Chat computed it
  * with a different afternoon cutoff, and the platform header just hardcoded
@@ -8,9 +8,9 @@
  */
 export function greetingNow(date = new Date()) {
   const h = date.getHours();
-  if (h < 12) return 'Good morning';
-  if (h < 18) return 'Good afternoon';
-  return 'Good evening';
+  if (h < 12) return 'Good Morning';
+  if (h < 18) return 'Good Afternoon';
+  return 'Good Evening';
 }
 
 /**
