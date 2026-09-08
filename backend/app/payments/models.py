@@ -39,6 +39,14 @@ class WebhookOutcome:
     FAILED_RECORDED = "failed_recorded"
     IGNORED_EVENT = "ignored_event"
     UNKNOWN_PAYMENT = "unknown_payment"
+    # Recurring outcomes. Kept distinct from IGNORED_EVENT because they are
+    # not the same fact and the difference matters when reading webhook_logs
+    # after an incident: "we mirrored Razorpay's state and granted nothing"
+    # is a handled event, whereas an ignored one is a delivery nothing in this
+    # codebase claims.
+    STATE_SYNCED = "state_synced"
+    SUBSCRIPTION_ENDED = "subscription_ended"
+    INVOICE_RECORDED = "invoice_recorded"
 
 
 @dataclass(frozen=True)

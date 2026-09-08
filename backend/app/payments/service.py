@@ -19,6 +19,15 @@ What must never exist is a third path where the browser's claim alone grants
 anything. Both of these end in the same `_grant_for_captured` -- idempotent by
 `gateway_payment_id`, so whichever arrives second is a no-op and a plan is
 never granted, or credits added, twice.
+
+SCOPE. This service owns the ONE-TIME path: Starter Rs 199, where the money
+arrives once and buys a diagnosis and its report. The renewing tiers (Plus
+Rs 499, Pro Rs 999) are a Razorpay Subscription and live in
+app/payments/subscriptions.py -- `start_checkout` refuses them outright, since
+selling a renewing plan as a single order is the failure that module was
+written to fix. `handle_webhook` still fronts both: it is the one place a
+Razorpay signature is verified, and it dispatches subscription and invoice
+events onward once it has.
 """
 
 from __future__ import annotations
@@ -61,6 +70,7 @@ class PaymentService:
         credits: CreditService,
         *,
         coupons: CouponService | None = None,
+        subscriptions=None,
         clock=None,
     ):
         self.gateway = gateway
@@ -69,6 +79,14 @@ class PaymentService:
         # Optional so every existing construction of this service keeps
         # working; a checkout that passes no code never touches it.
         self.coupons = coupons
+        #: SubscriptionService, when the recurring tiers are wired. Held here
+        #: rather than given its own webhook route because there is exactly ONE
+        #: signature verification in this codebase and it happens below --
+        #: a second entry point for subscription events would be a second place
+        #: to get that wrong. Optional so existing constructions keep working;
+        #: without it a subscription event is reported as unhandled rather than
+        #: crashing the delivery.
+        self.subscriptions = subscriptions
         self._now = clock or (lambda: datetime.now(timezone.utc))
 
     # --- founder-initiated ---------------------------------------------------
@@ -83,6 +101,17 @@ class PaymentService:
             raise InvalidCheckoutError(f"unknown plan {tier!r}")
         if not plan.is_paid:
             raise InvalidCheckoutError("the free plan needs no checkout")
+        if not plan.one_time:
+            # A ONE-TIME ORDER FOR A RENEWING PLAN IS THE BUG THIS REFUSAL
+            # EXISTS TO PREVENT. It is what this codebase did: Plus and Pro
+            # were sold through this method, the founder was charged once, no
+            # mandate was ever created, and the second month simply never came.
+            # It looks like it works -- the money arrives and the plan is
+            # granted -- which is why it survived, and why the refusal has to
+            # be here rather than a note in a docstring. Recurring tiers go
+            # through SubscriptionService.start_subscription.
+            raise InvalidCheckoutError(
+                f"{plan.name} renews monthly -- start a subscription instead of a one-time order")
 
         # The price is decided HERE, from the catalog, and the founder only
         # ever sends a code -- never an amount. A discount applied at the
@@ -247,9 +276,27 @@ class PaymentService:
         entity = ((payload.get("payload") or {}).get("payment") or {}).get("entity") or {}
 
         if event == "payment.captured":
+            # A subscription's own charges arrive as `subscription.charged`,
+            # which carries the period dates this one does not. Razorpay sends
+            # BOTH for a recurring charge, so without this guard the same money
+            # would be handled twice -- once here, granting a flat 30 days from
+            # today, and once by the subscription path with the real period.
+            # The idempotency check would catch the second, meaning whichever
+            # arrived first won and the access date was a coin toss.
+            if entity.get("subscription_id"):
+                logger.info("payments: payment.captured belongs to a subscription, "
+                            "deferring to subscription.charged",
+                            extra={"gateway_payment_id": entity.get("id"),
+                                   "gateway_subscription_id": entity.get("subscription_id")})
+                return WebhookResult(outcome=WebhookOutcome.IGNORED_EVENT)
             return self._grant_for_captured(entity)
         if event == "payment.failed":
             return self._handle_failed(entity)
+
+        if self.subscriptions is not None and isinstance(event, str) and (
+            event.startswith("subscription.") or event.startswith("invoice.")
+        ):
+            return self.subscriptions.handle_event(event, payload)
 
         logger.info("payments: webhook event not handled", extra={"event": event})
         return WebhookResult(outcome=WebhookOutcome.IGNORED_EVENT)
@@ -328,10 +375,17 @@ class PaymentService:
         one_time = plan.one_time
         expires_at = None if one_time else now + timedelta(days=_BILLING_CYCLE_DAYS)
 
+        # A recurring tier reaching THIS path is a legacy in-flight order --
+        # one created before start_checkout refused them. It still has to
+        # complete (the founder has been charged), but it buys the month it
+        # paid for and no more: `access_until` is what the expiry sweep reads,
+        # and leaving it NULL is precisely how "paid Rs 499 once, kept Plus
+        # forever" happened. A one-time tier gets no clock because it buys a
+        # deliverable, not a period.
         subscription_id = self.repository.create_subscription(
             founder_id=payment.founder_id, plan_type=tier.value, amount_inr=payment.amount_inr,
             billing_cycle="one_time" if one_time else "monthly",
-            expires_at=expires_at, gateway="razorpay",
+            expires_at=expires_at, gateway="razorpay", access_until=expires_at,
         )
         self.repository.mark_captured(
             payment.payment_id, gateway_payment_id=gateway_payment_id, paid_at=now,

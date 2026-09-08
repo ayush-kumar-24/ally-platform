@@ -2,10 +2,13 @@
 #
 # Nothing else calls them. Without this: a founder whose reasoning task died
 # mid-pipeline (any deploy kills in-flight ones) is stranded with a COMPLETED
-# session, no report, and their one lifetime diagnosis already spent -- and
-# scheduled account erasures under DPDP never actually execute.
+# session, no report, and their one lifetime diagnosis already spent; scheduled
+# account erasures under DPDP never actually execute; and paid access never
+# ends -- a cancelled or halted subscription keeps its features forever,
+# because `subscriptions.access_until` is a date nothing reads until
+# expire-subscriptions runs.
 #
-# All three endpoints are idempotent and take a shared secret, so running them
+# Every endpoint here is idempotent and takes a shared secret, so running them
 # more often than needed is safe and a missed run costs only latency.
 #
 # GitHub's scheduled runs are best-effort and can be delayed under load, and
@@ -19,6 +22,13 @@ on:
   schedule:
     # Report recovery + PDF backfill: every 10 minutes.
     - cron: "*/10 * * * *"
+    # Subscription expiry: once a day, shortly after midnight IST (18:30 UTC).
+    # Deliberately not more often. `subscriptions.access_until` already carries
+    # a grace window past the period end, so nobody is cut off the moment a
+    # charge is late, and the sweep re-checks each subscription with Razorpay
+    # before expiring it -- a few hours of latency here costs a few hours of
+    # unpaid access, which is the cheap side of the trade.
+    - cron: "45 18 * * *"
   workflow_dispatch:      # so it can be run by hand while testing
 
 concurrency:
@@ -44,6 +54,16 @@ jobs:
         run: |
           curl -sS -f -X POST \
             "$API/api/v1/internal/jobs/backfill-report-pdfs" \
+            -H "X-Internal-Secret: $SECRET"
+        env:
+          API: ${{ vars.ALLY_API_BASE || 'https://api.goxlally.ai' }}
+          SECRET: ${{ secrets.INTERNAL_JOBS_SECRET }}
+
+      - name: Expire lapsed subscriptions
+        if: github.event.schedule == '45 18 * * *' || github.event_name == 'workflow_dispatch'
+        run: |
+          curl -sS -f -X POST \
+            "$API/api/v1/internal/jobs/expire-subscriptions" \
             -H "X-Internal-Secret: $SECRET"
         env:
           API: ${{ vars.ALLY_API_BASE || 'https://api.goxlally.ai' }}

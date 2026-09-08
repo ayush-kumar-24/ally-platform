@@ -427,7 +427,38 @@ class Container:
         from app.payments.repository import PaymentRepository
         from app.payments.service import PaymentService
         return PaymentService(self.payment_gateway(), PaymentRepository(db),
-                              self.credit_service(db), coupons=self.coupon_service(db))
+                              self.credit_service(db), coupons=self.coupon_service(db),
+                              subscriptions=self.subscription_service(db))
+
+    def subscription_service(self, db: Session):
+        """The recurring half. Shares the PaymentRepository with
+        PaymentService on purpose: a subscription charge must grant a plan
+        through the same `grant_plan` an admin and a one-time payment write,
+        or "what plan is this founder on" would have two answers."""
+        from app.payments.repository import PaymentRepository
+        from app.payments.subscription_repository import SubscriptionRepository
+        from app.payments.subscriptions import SubscriptionService
+        return SubscriptionService(self.payment_gateway(), SubscriptionRepository(db),
+                                   PaymentRepository(db), self.credit_service(db))
+
+    def subscription_expiry_sweep(self, db: Session):
+        """Both repositories are built on the SAME session so the sweep's
+        "mark expired and downgrade in one transaction" claim is true -- two
+        sessions would make it two transactions and a crash between them would
+        strand a founder on a plan nobody is paying for."""
+        from app.payments.expiry import SubscriptionExpirySweep
+        from app.payments.repository import PaymentRepository
+        from app.payments.subscription_repository import SubscriptionRepository
+        return SubscriptionExpirySweep(
+            SubscriptionRepository(db), PaymentRepository(db),
+            subscriptions=self.subscription_service(db))
+
+    def billing_profile_service(self, db: Session):
+        from app.payments.billing_profile import (
+            BillingProfileRepository,
+            BillingProfileService,
+        )
+        return BillingProfileService(BillingProfileRepository(db))
 
     def admin_panel_service(self, db: Session) -> AdminPanelService:
         """Request-scoped panel service. The audit repository is DB-backed so the

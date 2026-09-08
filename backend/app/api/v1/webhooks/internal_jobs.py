@@ -1,6 +1,7 @@
-"""Internal-only endpoint an external scheduler calls to run the account-
-deletion sweep -- the consumer side of deletion_scheduled_at that never
-existed before.
+"""Internal-only endpoints an external scheduler calls to run the sweeps --
+account deletion, report reconciliation, PDF backfill and subscription
+expiry. Each is the consumer side of a column that would otherwise be written
+and never read.
 
 Why an HTTP endpoint and not a Celery task: there is no task-queue
 infrastructure in this codebase (checked -- no Celery import, no worker
@@ -25,6 +26,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.container import container
 from app.core.logger import logger
 from app.db.session import get_db, set_admin_rls_context
 from app.privacy.db_repository import SqlAlchemyPrivacyRepository
@@ -240,3 +242,31 @@ def send_call_reminders(
 
     result = send_due_reminders(db)
     return {**result, "email_configured": settings.email_enabled}
+
+
+@router.post(
+    "/expire-subscriptions",
+    summary="End paid access for subscriptions whose paid period has run out",
+)
+def expire_subscriptions(
+    limit: int = 200,
+    db: Session = Depends(get_db),
+    _: None = Depends(authorise_internal_job),
+) -> dict:
+    """What makes cancellation, the grace window and the billing period real.
+
+    Without this endpoint every date billing writes is decoration: a founder
+    who cancelled kept their features, a halted subscription kept its
+    features, and a month bought once lasted forever. This is the consumer
+    side of `subscriptions.access_until`, in the same shape as the sweeps
+    above -- shared secret, admin RLS context, idempotent, and safe to run as
+    often as a scheduler likes.
+
+    DAILY IS THE RIGHT CADENCE, hourly is fine. It is not urgent work: the
+    grace window built into `access_until` already means nobody is cut off the
+    instant a charge is late, so the cost of running this a few hours after a
+    period ends is a few hours of unpaid access, and the cost of running it
+    too eagerly is nil because it re-checks each subscription with Razorpay
+    before expiring anything.
+    """
+    return container.subscription_expiry_sweep(db).run(limit=limit).as_dict()

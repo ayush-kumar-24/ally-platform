@@ -14,6 +14,7 @@ from app.api.v1.consents.cookies import router as cookie_prefs_router
 from app.api.v1.consents.router import router as consents_router
 from app.api.v1.privacy.router import router as privacy_router
 from app.api.v1.plans.router import router as plans_router
+from app.api.v1.payments.billing_router import router as billing_router
 from app.api.v1.payments.router import router as payments_router
 from app.api.v1.support.public import router as public_support_router
 from app.api.v1.support.router import router as support_router
@@ -79,6 +80,10 @@ api_router.include_router(privacy_router)
 api_router.include_router(voice_router)
 api_router.include_router(plans_router)
 api_router.include_router(payments_router)
+# Same /payments prefix, split by concern -- one-time checkout above,
+# subscriptions/invoices/history/billing identity here. Registered after
+# so the paths in router.py keep priority if the two ever collide.
+api_router.include_router(billing_router)
 api_router.include_router(support_router)
 api_router.include_router(public_support_router)
 # The Phase 12 admin router (/admin/founders, /admin/dashboard, /admin/audit,

@@ -26,6 +26,11 @@ rating/outcome_text), not the real founder_feedback table this reads.
     GET    /admin/broadcasts                list
     POST   /admin/broadcasts                publish (Super Admin)
     DELETE /admin/broadcasts/{id}           deactivate (Super Admin)
+    GET    /admin/billing                   MRR, subscribers, churn, failed payments
+    GET    /admin/billing/at-risk           founders whose renewal is failing
+    GET    /admin/billing/subscriptions     live subscriptions
+    GET    /admin/billing/razorpay-plans    registered Razorpay Plan ids
+    POST   /admin/billing/razorpay-plans    create/register one (Super Admin)
 """
 
 from __future__ import annotations
@@ -630,3 +635,148 @@ def _coupon_row(r: dict) -> dict:
         "remaining": None if cap is None else max(0, cap - confirmed - pending),
         "discount_given_inr": int(r["discount_given_inr"] or 0),
     }
+
+
+# --- billing ----------------------------------------------------------------
+#
+#     GET  /admin/billing                MRR, subscribers, churn, failed payments
+#     GET  /admin/billing/at-risk        founders whose renewal is failing
+#     GET  /admin/billing/subscriptions  live subscriptions
+#     GET  /admin/billing/razorpay-plans registered Razorpay Plan ids
+#     POST /admin/billing/razorpay-plans create/register one (Super Admin)
+
+class RazorpayPlanRequest(BaseModel):
+    """Register the Razorpay Plan a tier's subscriptions are billed on.
+
+    `razorpay_plan_id` is optional: leave it out and this backend CREATES the
+    plan at Razorpay for the catalog price, which is guide step 4 done from
+    here instead of by hand in the dashboard. Pass one to adopt a plan someone
+    already made -- useful when the plans predate this endpoint, and the only
+    way to register a plan in an environment whose keys cannot create one.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    tier: str = Field(pattern="^(basic|starter|pro)$")
+    razorpay_plan_id: str | None = Field(default=None, max_length=200)
+    notes: str | None = Field(default=None, max_length=500)
+
+
+@router.get("/billing", response_model=dict, summary="Billing dashboard")
+def billing_dashboard(days: int = Query(default=30, ge=1, le=365),
+                      admin: PanelAdmin = Depends(get_panel_admin),
+                      db=Depends(get_db)) -> dict:
+    """Every figure is computed from our own payment and subscription rows, not
+    from the catalog's list prices times a headcount -- see
+    app/admin/billing_metrics.py for why that distinction is load-bearing."""
+    require(admin.role, Capability.VIEW_USERS)
+    from app.admin.billing_metrics import BillingMetricsService
+    return BillingMetricsService(db).summary(days=days).as_dict()
+
+
+@router.get("/billing/at-risk", response_model=dict,
+            summary="Subscriptions whose renewal is failing")
+def billing_at_risk(limit: int = Query(default=50, ge=1, le=200),
+                    admin: PanelAdmin = Depends(get_panel_admin),
+                    db=Depends(get_db)) -> dict:
+    require(admin.role, Capability.VIEW_USERS)
+    from app.admin.billing_metrics import BillingMetricsService
+    return {"subscriptions": BillingMetricsService(db).at_risk(limit=limit)}
+
+
+@router.get("/billing/subscriptions", response_model=dict,
+            summary="Live subscriptions")
+def billing_subscriptions(limit: int = Query(default=50, ge=1, le=200),
+                          admin: PanelAdmin = Depends(get_panel_admin),
+                          db=Depends(get_db)) -> dict:
+    require(admin.role, Capability.VIEW_USERS)
+    from app.admin.billing_metrics import BillingMetricsService
+    return {"subscriptions": BillingMetricsService(db).recent_subscriptions(limit=limit)}
+
+
+@router.get("/billing/razorpay-plans", response_model=dict,
+            summary="Registered Razorpay Plan ids")
+def list_razorpay_plans(admin: PanelAdmin = Depends(get_panel_admin),
+                        db=Depends(get_db)) -> dict:
+    """Shows both modes and both active and superseded rows.
+
+    Superseded ones matter: a Razorpay plan's amount is immutable, so a price
+    change makes a new plan and the old id stays valid for everyone still
+    billed on it. Hiding them would make "why is this founder paying Rs 450"
+    unanswerable from the panel.
+    """
+    require(admin.role, Capability.VIEW_USERS)
+    from app.core.config import settings
+    from app.payments.subscription_repository import SubscriptionRepository
+    return {"mode": settings.razorpay_mode,
+            "plans": SubscriptionRepository(db).list_plan_map()}
+
+
+@router.post("/billing/razorpay-plans", response_model=dict, status_code=201,
+             summary="Create or register a Razorpay Plan for a tier (Super Admin)")
+def create_razorpay_plan(payload: RazorpayPlanRequest,
+                         admin: PanelAdmin = Depends(get_panel_admin),
+                         db=Depends(get_db)) -> dict:
+    """Super Admin only, and for the usual reason: this decides what every
+    future subscriber on that tier is charged every month.
+
+    The mode is derived from the configured key, never taken from the request.
+    An operator who could name the mode could register a live plan id against
+    a test backend, and the first person to subscribe would be charged real
+    money against a plan nobody meant to use.
+    """
+    require(admin.role, Capability.MODIFY_SUBSCRIPTION)
+    from app.core.config import settings
+    from app.payments.gateway import PaymentGatewayError
+    from app.payments.subscription_repository import SubscriptionRepository
+    from app.plans.catalog import PLANS, PlanTier
+
+    tier = PlanTier(payload.tier)
+    plan = PLANS[tier]
+    if plan.one_time:
+        raise AppError(f"{plan.name} is a one-time purchase and has no recurring plan.",
+                       status_code=422)
+
+    repository = SubscriptionRepository(db)
+    mode = settings.razorpay_mode
+    razorpay_plan_id = payload.razorpay_plan_id
+    created_remotely = False
+
+    if not razorpay_plan_id:
+        gateway = container.payment_gateway()
+        if gateway is None:
+            raise NotConfiguredError("Razorpay is not configured in this environment.")
+        try:
+            created = gateway.create_plan(
+                period="monthly", interval=1, amount_paise=plan.price_inr * 100,
+                currency="INR", name=f"GoXL Ally {plan.name}",
+                description=f"GoXL Ally {plan.name} -- AI Founder Companion",
+                notes={"goxl_tier": tier.value, "mode": mode},
+            )
+        except PaymentGatewayError as exc:
+            logger.error("admin: razorpay plan creation failed",
+                         extra={"tier": tier.value, "gateway_status": exc.status_code,
+                                "gateway_message": exc.gateway_message})
+            raise AppError("Razorpay refused to create the plan. Check the keys and try again.",
+                           status_code=502) from exc
+        # Read back what Razorpay actually created. If it differs from the
+        # catalog price, registering it anyway would silently start billing an
+        # amount nobody chose.
+        if created.amount_paise != plan.price_inr * 100:
+            raise AppError(
+                f"Razorpay created the plan for Rs {created.amount_paise / 100:.2f} but "
+                f"{plan.name} is Rs {plan.price_inr}. Not registering it.",
+                status_code=502)
+        razorpay_plan_id = created.plan_id
+        created_remotely = True
+
+    plan_map_id = repository.register_plan(
+        tier=tier.value, mode=mode, razorpay_plan_id=razorpay_plan_id,
+        amount_inr=plan.price_inr, notes=payload.notes)
+    logger.info("admin: razorpay plan registered",
+                extra={"admin": admin.email, "tier": tier.value, "mode": mode,
+                       "razorpay_plan_id": razorpay_plan_id,
+                       "created_remotely": created_remotely})
+    return {"plan_map_id": plan_map_id, "tier": tier.value, "mode": mode,
+            "razorpay_plan_id": razorpay_plan_id, "amount_inr": plan.price_inr,
+            "created_at_razorpay": created_remotely}

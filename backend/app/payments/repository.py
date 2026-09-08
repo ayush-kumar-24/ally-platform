@@ -116,18 +116,22 @@ class PaymentRepository:
 
     def create_subscription(
         self, *, founder_id: int, plan_type: str, amount_inr: int, billing_cycle: str,
-        expires_at: datetime | None, gateway: str,
+        expires_at: datetime | None, gateway: str, access_until: datetime | None = None,
     ) -> int:
+        """`access_until` is the clock the expiry sweep reads; `expires_at` is
+        the older column that nothing enforced. They are written together and
+        usually to the same value -- kept separate only because `expires_at`
+        predates this and the admin panel still writes it directly."""
         subscription_id = self.db.execute(
             text(
                 "INSERT INTO subscriptions "
                 "(founder_id, plan_type, status, billing_cycle, amount_inr, "
-                " expires_at, payment_gateway) "
-                "VALUES (:fid, :plan, 'active', :cycle, :amt, :exp, :gw) "
+                " expires_at, access_until, payment_gateway) "
+                "VALUES (:fid, :plan, 'active', :cycle, :amt, :exp, :until, :gw) "
                 "RETURNING subscription_id"
             ),
             {"fid": founder_id, "plan": plan_type, "cycle": billing_cycle, "amt": amount_inr,
-             "exp": expires_at, "gw": gateway},
+             "exp": expires_at, "until": access_until, "gw": gateway},
         ).scalar()
         self.db.commit()
         return subscription_id

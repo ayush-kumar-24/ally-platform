@@ -507,10 +507,36 @@ class Settings(BaseSettings):
     # (set on the Razorpay dashboard's own webhook config), not the same value
     # used to sign the checkout-callback or to authenticate API calls.
     RAZORPAY_WEBHOOK_SECRET: str = ""
+    #: How many monthly cycles a new subscription is created for. Razorpay has
+    #: no "until cancelled" -- `total_count` is required and finite -- so this
+    #: is a horizon long enough that cancellation, not exhaustion, is always
+    #: what ends a subscription. Ten years. Reaching it fires
+    #: `subscription.completed`, which is handled (access ends cleanly) rather
+    #: than silently stopping the billing.
+    RAZORPAY_SUBSCRIPTION_TOTAL_COUNT: int = 120
+    #: Days a founder keeps paid access after a renewal charge fails, before
+    #: the subscription being halted takes it away. Razorpay runs its own retry
+    #: schedule inside this window and we do not duplicate it (guide step 12:
+    #: "Do not invent retry behavior in GoXL if Razorpay is already controlling
+    #: it") -- this is only how long we keep the lights on while it does.
+    SUBSCRIPTION_GRACE_DAYS: int = 5
 
     @property
     def payments_enabled(self) -> bool:
         return bool(self.RAZORPAY_KEY_ID and self.RAZORPAY_KEY_SECRET)
+
+    @property
+    def razorpay_mode(self) -> str:
+        """'test' or 'live', read off the key id rather than configured
+        separately.
+
+        Razorpay stamps the mode into the key itself (`rzp_test_...` /
+        `rzp_live_...`), so deriving it here means the mode and the credentials
+        can never disagree. A second RAZORPAY_MODE env var could -- and the way
+        it would fail is charging real money against test plan ids, or the
+        reverse, both of which are worse than anything a derived value costs.
+        """
+        return "test" if self.RAZORPAY_KEY_ID.startswith("rzp_test") else "live"
 
     # --- Google Calendar sync (per-founder, Plan Your Day) ---
     # Separate from GOOGLE_CALENDAR_* above: those are a SERVICE ACCOUNT on

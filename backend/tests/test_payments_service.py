@@ -133,13 +133,13 @@ class FakeRepository:
         self._payments[payment_id]["failure_reason"] = reason
 
     def create_subscription(self, *, founder_id, plan_type, amount_inr, billing_cycle,
-                            expires_at, gateway):
+                            expires_at, gateway, access_until=None):
         sid = self._next_subscription_id
         self._next_subscription_id += 1
         self.subscriptions_created.append(
             {"subscription_id": sid, "founder_id": founder_id, "plan_type": plan_type,
              "amount_inr": amount_inr, "billing_cycle": billing_cycle, "expires_at": expires_at,
-             "gateway": gateway})
+             "gateway": gateway, "access_until": access_until})
         return sid
 
     def grant_plan(self, founder_id, plan_type):
@@ -198,7 +198,7 @@ def _sign(body: bytes, secret: str = WEBHOOK_SECRET) -> str:
     return hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
 
 
-def _captured_event(*, order_id="order_1", payment_id="pay_1", tier="starter") -> bytes:
+def _captured_event(*, order_id="order_1", payment_id="pay_1", tier="basic") -> bytes:
     return json.dumps({
         "event": "payment.captured",
         "payload": {"payment": {"entity": {
@@ -220,7 +220,7 @@ def _failed_event(*, order_id="order_1", reason="card declined") -> bytes:
 def test_checkout_unconfigured_gateway_refuses():
     service, _, _ = _service(gateway=None)
     with pytest.raises(PaymentsNotConfiguredError):
-        service.start_checkout(1, PlanTier.STARTER)
+        service.start_checkout(1, PlanTier.BASIC)
 
 
 def test_checkout_refuses_the_free_plan():
@@ -231,14 +231,14 @@ def test_checkout_refuses_the_free_plan():
 
 def test_checkout_creates_a_pending_payment_and_a_real_order():
     service, repo, _ = _service()
-    session = service.start_checkout(42, PlanTier.STARTER)
+    session = service.start_checkout(42, PlanTier.BASIC)
 
     # Read from the catalog rather than pinned to a literal: what matters is
     # that the order is created for exactly the catalog price in paise, not
     # what that price happens to be this quarter. A hard-coded copy here only
     # asserts that someone remembered to edit two places -- which is what it
     # did when Plus moved from Rs 450 to Rs 499.
-    price = PLANS[PlanTier.STARTER].price_inr
+    price = PLANS[PlanTier.BASIC].price_inr
 
     assert session.order_id == "order_1"
     assert session.amount_paise == price * 100
@@ -261,7 +261,7 @@ def test_checkout_gateway_failure_is_a_502_and_records_no_payment():
         status_code=401, gateway_message="Authentication failed"))
     service, repo, _ = _service(gateway=gateway)
     with pytest.raises(PaymentGatewayUnavailableError) as info:
-        service.start_checkout(42, PlanTier.STARTER)
+        service.start_checkout(42, PlanTier.BASIC)
     assert info.value.status_code == 502
     assert isinstance(info.value.__cause__, PaymentGatewayError)
     assert repo._payments == {}
@@ -272,8 +272,8 @@ def test_checkout_carries_founder_and_plan_in_the_order_notes():
     has no plan_type column, see app/payments/service.py's own note."""
     gateway = FakeGateway()
     service, _, _ = _service(gateway=gateway)
-    service.start_checkout(42, PlanTier.PRO)
-    assert gateway.created_orders[0]["notes"] == {"founder_id": "42", "plan_tier": "pro"}
+    service.start_checkout(42, PlanTier.BASIC)
+    assert gateway.created_orders[0]["notes"] == {"founder_id": "42", "plan_tier": "basic"}
 
 
 # --- start_checkout with a coupon ------------------------------------------
@@ -334,8 +334,8 @@ def test_a_coupon_discounts_the_order_the_gateway_is_asked_to_create():
     service, repo, _ = _service(gateway=gateway)
     service.coupons = coupons
 
-    price = PLANS[PlanTier.PRO].price_inr
-    session = service.start_checkout(42, PlanTier.PRO, coupon_code="founder100")
+    price = PLANS[PlanTier.BASIC].price_inr
+    session = service.start_checkout(42, PlanTier.BASIC, coupon_code="founder100")
 
     assert gateway.created_orders[0]["amount_paise"] == (price - price // 2) * 100
     assert session.amount_paise == (price - price // 2) * 100
@@ -350,9 +350,9 @@ def test_the_discounted_payment_row_records_all_three_numbers():
     coupons = _coupon_service()
     service, repo, _ = _service()
     service.coupons = coupons
-    price = PLANS[PlanTier.PRO].price_inr
+    price = PLANS[PlanTier.BASIC].price_inr
 
-    service.start_checkout(42, PlanTier.PRO, coupon_code="FOUNDER100")
+    service.start_checkout(42, PlanTier.BASIC, coupon_code="FOUNDER100")
     row = repo._payments[1]
 
     assert row["amount_inr"] == price - price // 2
@@ -367,7 +367,7 @@ def test_an_undiscounted_checkout_leaves_the_coupon_columns_null():
     service, repo, _ = _service()
     service.coupons = _coupon_service()
 
-    service.start_checkout(42, PlanTier.PRO)
+    service.start_checkout(42, PlanTier.BASIC)
     row = repo._payments[1]
 
     assert row["coupon_id"] is None
@@ -380,7 +380,7 @@ def test_the_payment_row_is_not_committed_until_the_slot_is_claimed():
     service, repo, _ = _service()
     service.coupons = _coupon_service()
 
-    service.start_checkout(42, PlanTier.PRO, coupon_code="FOUNDER100")
+    service.start_checkout(42, PlanTier.BASIC, coupon_code="FOUNDER100")
 
     assert ("create_pending", False) in repo.commits
     assert ("attach_coupon", True) in repo.commits
@@ -395,17 +395,17 @@ def test_a_rejected_coupon_leaves_no_orphan_payment_row():
     service.coupons = _coupon_service(raises=CouponFullyRedeemedError())
 
     with pytest.raises(CouponFullyRedeemedError):
-        service.start_checkout(42, PlanTier.PRO, coupon_code="FOUNDER100")
+        service.start_checkout(42, PlanTier.BASIC, coupon_code="FOUNDER100")
 
 
 def test_a_captured_discounted_payment_confirms_the_redemption():
     coupons = _coupon_service()
     service, repo, _ = _service()
     service.coupons = coupons
-    service.start_checkout(42, PlanTier.PRO, coupon_code="FOUNDER100")
+    service.start_checkout(42, PlanTier.BASIC, coupon_code="FOUNDER100")
 
-    service.handle_webhook(body=_captured_event(tier="pro"), signature=_sign(
-        _captured_event(tier="pro")))
+    service.handle_webhook(body=_captured_event(tier="basic"), signature=_sign(
+        _captured_event(tier="basic")))
 
     assert coupons.repository.confirmed == [1]
 
@@ -416,7 +416,7 @@ def test_a_failed_discounted_payment_releases_the_slot_immediately():
     coupons = _coupon_service()
     service, repo, _ = _service()
     service.coupons = coupons
-    service.start_checkout(42, PlanTier.PRO, coupon_code="FOUNDER100")
+    service.start_checkout(42, PlanTier.BASIC, coupon_code="FOUNDER100")
 
     service.handle_webhook(body=_failed_event(), signature=_sign(_failed_event()))
 
@@ -434,13 +434,13 @@ def test_a_redemption_bookkeeping_failure_never_undoes_a_granted_plan():
     coupons.repository.confirm_for_payment = boom
     service, repo, _ = _service()
     service.coupons = coupons
-    service.start_checkout(42, PlanTier.PRO, coupon_code="FOUNDER100")
+    service.start_checkout(42, PlanTier.BASIC, coupon_code="FOUNDER100")
 
-    result = service.handle_webhook(body=_captured_event(tier="pro"),
-                                    signature=_sign(_captured_event(tier="pro")))
+    result = service.handle_webhook(body=_captured_event(tier="basic"),
+                                    signature=_sign(_captured_event(tier="basic")))
 
     assert result.outcome == WebhookOutcome.CAPTURED
-    assert repo.plans_granted == [(42, "pro")]
+    assert repo.plans_granted == [(42, "basic")]
 
 
 # --- handle_webhook: signature / configuration -----------------------------
@@ -465,27 +465,31 @@ def test_webhook_missing_signature_is_rejected():
 
 # --- handle_webhook: payment.captured ---------------------------------------
 
-def test_captured_payment_grants_the_plan_and_credits():
-    service, repo, credits = _service()
-    service.start_checkout(42, PlanTier.STARTER)   # creates the pending payment for order_1
+def test_captured_payment_grants_the_plan():
+    """The one-time path end to end.
 
-    body = _captured_event(order_id="order_1", payment_id="pay_1", tier="starter")
+    Starter is the only tier this path sells now -- the renewing ones are a
+    Razorpay Subscription and `start_checkout` refuses them -- and Starter's
+    catalog entry grants no credits, so none are granted here. Asserted
+    explicitly rather than left unsaid: a credit grant appearing on a tier
+    whose allowance is zero would mean the grant had stopped reading the
+    catalog.
+    """
+    service, repo, credits = _service()
+    service.start_checkout(42, PlanTier.BASIC)   # creates the pending payment for order_1
+
+    body = _captured_event(order_id="order_1", payment_id="pay_1", tier="basic")
     result = service.handle_webhook(body=body, signature=_sign(body))
 
     assert result.outcome == WebhookOutcome.CAPTURED
     assert result.founder_id == 42
-    assert result.plan == "starter"
+    assert result.plan == "basic"
 
-    assert repo.plans_granted == [(42, "starter")]
+    assert repo.plans_granted == [(42, "basic")]
     assert len(repo.subscriptions_created) == 1
-    assert repo.subscriptions_created[0]["plan_type"] == "starter"
-    assert credits.grants[0]["founder_id"] == 42
-    assert credits.grants[0]["operation"] == CreditOperation.ADD
-    # Read from the catalog, not pinned to a literal: the grant IS the catalog's
-    # monthly_credits, and a hard-coded copy here only asserts that someone
-    # remembered to edit two places. This number moved once already when the
-    # Rs 450 tier's daily ceiling changed and its credit grant had to follow.
-    assert credits.grants[0]["amount"] == PLANS[PlanTier.STARTER].monthly_credits
+    assert repo.subscriptions_created[0]["plan_type"] == "basic"
+    assert PLANS[PlanTier.BASIC].monthly_credits == 0
+    assert credits.grants == []
 
 
 def test_basic_is_recorded_as_a_one_time_subscription_with_no_expiry():
@@ -511,10 +515,22 @@ def test_basic_is_recorded_as_a_one_time_subscription_with_no_expiry():
     assert sub["expires_at"] is None
 
 
-def test_recurring_plans_still_get_a_monthly_cycle_and_an_expiry():
-    """The one-time path must not have quietly changed Plus and Pro."""
+def test_a_legacy_recurring_order_completes_but_only_buys_the_month_it_paid_for():
+    """`start_checkout` refuses recurring tiers now, but an order created before
+    that refusal shipped may still be sitting open at Razorpay -- and the
+    founder completing it has been charged, so the capture must still grant.
+
+    What changed is the ending. The row it writes now carries `access_until`,
+    which the expiry sweep reads, so the month bought lapses when it is over.
+    Leaving that NULL is exactly how "paid Rs 499 once, kept Plus forever"
+    happened, and it is the whole reason this branch is worth a test rather
+    than a deletion.
+    """
     service, repo, _ = _service()
-    service.start_checkout(42, PlanTier.PRO)
+    # Built directly: this state cannot be reached through start_checkout any
+    # more, which is the point.
+    repo.create_pending(founder_id=42, amount_inr=999, currency="INR", gateway="razorpay",
+                        gateway_order_id="order_1", plan_tier="pro")
 
     body = _captured_event(order_id="order_1", payment_id="pay_1", tier="pro")
     service.handle_webhook(body=body, signature=_sign(body))
@@ -523,6 +539,7 @@ def test_recurring_plans_still_get_a_monthly_cycle_and_an_expiry():
     assert sub["plan_type"] == "pro"
     assert sub["billing_cycle"] == "monthly"
     assert sub["expires_at"] is not None
+    assert sub["access_until"] == sub["expires_at"]
 
 
 def test_every_sold_tier_is_writable_to_the_subscriptions_table():
@@ -550,16 +567,20 @@ def test_captured_payment_is_idempotent_on_retry():
     """Razorpay retries webhook deliveries -- the same payment must never
     grant a plan or credits twice."""
     service, repo, credits = _service()
-    service.start_checkout(42, PlanTier.STARTER)
-    body = _captured_event(order_id="order_1", payment_id="pay_1", tier="starter")
+    service.start_checkout(42, PlanTier.BASIC)
+    body = _captured_event(order_id="order_1", payment_id="pay_1", tier="basic")
 
     first = service.handle_webhook(body=body, signature=_sign(body))
     second = service.handle_webhook(body=body, signature=_sign(body))
 
     assert first.outcome == WebhookOutcome.CAPTURED
     assert second.outcome == WebhookOutcome.ALREADY_PROCESSED
-    assert repo.plans_granted == [(42, "starter")]      # only once
-    assert len(credits.grants) == 1                      # only once
+    assert repo.plans_granted == [(42, "basic")]      # only once
+    # Starter's catalog allowance is zero, so there is no credit grant on this
+    # path at all. The "never twice" property for credits is covered where
+    # credits actually flow -- see test_payments_subscriptions.py's
+    # redelivered-charge test.
+    assert credits.grants == []
 
 
 def test_captured_payment_for_an_unknown_order_is_not_granted():
@@ -584,7 +605,7 @@ def test_a_captured_payment_with_no_notes_is_still_granted_from_our_own_row():
     useful notes at all still grants exactly what was paid for.
     """
     service, repo, _ = _service()
-    service.start_checkout(42, PlanTier.STARTER)
+    service.start_checkout(42, PlanTier.BASIC)
     body = json.dumps({
         "event": "payment.captured",
         "payload": {"payment": {"entity": {
@@ -594,7 +615,7 @@ def test_a_captured_payment_with_no_notes_is_still_granted_from_our_own_row():
 
     result = service.handle_webhook(body=body, signature=_sign(body))
     assert result.outcome == WebhookOutcome.CAPTURED
-    assert repo.plans_granted == [(42, "starter")]
+    assert repo.plans_granted == [(42, "basic")]
 
 
 def test_gateway_notes_cannot_upgrade_a_founder_past_what_they_paid_for():
@@ -624,7 +645,7 @@ def test_a_legacy_payment_row_falls_back_to_the_notes_then_refuses():
     the gateway happens to carry the tier, and is refused -- never guessed --
     when nothing names it."""
     service, repo, _ = _service()
-    service.start_checkout(42, PlanTier.STARTER)
+    service.start_checkout(42, PlanTier.BASIC)
     repo._payments[1]["plan_tier"] = None               # a row from the old build
 
     body = json.dumps({
@@ -635,10 +656,12 @@ def test_a_legacy_payment_row_falls_back_to_the_notes_then_refuses():
     }).encode()
     assert service.handle_webhook(body=body, signature=_sign(body)).outcome == (
         WebhookOutcome.CAPTURED)
+    # The notes ARE the authority here and only here -- the row predates
+    # payments.plan_tier, so there is nothing of ours to prefer.
     assert repo.plans_granted == [(42, "starter")]
 
     service2, repo2, _ = _service()
-    service2.start_checkout(42, PlanTier.STARTER)
+    service2.start_checkout(42, PlanTier.BASIC)
     repo2._payments[1]["plan_tier"] = None
     body2 = json.dumps({
         "event": "payment.captured",
@@ -656,20 +679,20 @@ def test_a_credit_grant_failure_does_not_undo_the_plan_grant():
     the time credits are attempted -- a credit-service hiccup must not roll
     it back or crash the whole webhook."""
     service, repo, _ = _service(credits=FakeCredits(raise_on_adjust=RuntimeError("ledger down")))
-    service.start_checkout(42, PlanTier.STARTER)
-    body = _captured_event(order_id="order_1", payment_id="pay_1", tier="starter")
+    service.start_checkout(42, PlanTier.BASIC)
+    body = _captured_event(order_id="order_1", payment_id="pay_1", tier="basic")
 
     result = service.handle_webhook(body=body, signature=_sign(body))
 
     assert result.outcome == WebhookOutcome.CAPTURED
-    assert repo.plans_granted == [(42, "starter")]
+    assert repo.plans_granted == [(42, "basic")]
 
 
 # --- handle_webhook: payment.failed -----------------------------------------
 
 def test_failed_payment_is_recorded_without_granting_anything():
     service, repo, credits = _service()
-    service.start_checkout(42, PlanTier.STARTER)
+    service.start_checkout(42, PlanTier.BASIC)
     body = _failed_event(order_id="order_1")
 
     result = service.handle_webhook(body=body, signature=_sign(body))
@@ -703,7 +726,7 @@ def _checkout_sig(order_id: str, payment_id: str, secret: str = KEY_SECRET) -> s
                     hashlib.sha256).hexdigest()
 
 
-def _captured_entity(*, order_id="order_1", payment_id="pay_1", tier="starter",
+def _captured_entity(*, order_id="order_1", payment_id="pay_1", tier="basic",
                      status="captured") -> dict:
     return {"id": payment_id, "order_id": order_id, "status": status,
             "notes": {"founder_id": "42", "plan_tier": tier}}
@@ -715,7 +738,7 @@ def _paid_service(*, entity=None, raise_on_fetch=None):
     entity = entity if entity is not None else _captured_entity()
     gateway = FakeGateway(entities={entity["id"]: entity}, raise_on_fetch=raise_on_fetch)
     service, repo, credits = _service(gateway=gateway)
-    service.start_checkout(42, PlanTier.STARTER)
+    service.start_checkout(42, PlanTier.BASIC)
     return service, repo, credits, gateway
 
 
@@ -726,8 +749,8 @@ def test_confirm_grants_the_plan_without_waiting_for_the_webhook():
                                       signature=_checkout_sig("order_1", "pay_1"))
 
     assert result.outcome == WebhookOutcome.CAPTURED
-    assert repo.plans_granted == [(42, "starter")]
-    assert credits.grants[0]["amount"] == PLANS[PlanTier.STARTER].monthly_credits
+    assert repo.plans_granted == [(42, "basic")]
+    assert credits.grants == []          # Starter's allowance is zero
     # The grant hangs on Razorpay's own answer, not on the caller's claim.
     assert gateway.fetched == ["pay_1"]
 
@@ -786,7 +809,7 @@ def test_confirm_refuses_a_payment_belonging_to_a_different_order():
     entity = _captured_entity(order_id="order_somebody_else", payment_id="pay_9")
     gateway = FakeGateway(entities={"pay_9": entity})
     service, repo, _ = _service(gateway=gateway)
-    service.start_checkout(42, PlanTier.STARTER)
+    service.start_checkout(42, PlanTier.BASIC)
 
     with pytest.raises(PaymentNotFoundError):
         service.confirm_checkout(42, order_id="order_1", gateway_payment_id="pay_9",
@@ -801,14 +824,14 @@ def test_confirm_after_the_webhook_already_granted_is_a_no_op():
     service, repo, credits, gateway = _paid_service()
     service.handle_webhook(body=_captured_event(order_id="order_1", payment_id="pay_1"),
                            signature=_sign(_captured_event(order_id="order_1", payment_id="pay_1")))
-    assert repo.plans_granted == [(42, "starter")]
+    assert repo.plans_granted == [(42, "basic")]
 
     result = service.confirm_checkout(42, order_id="order_1", gateway_payment_id="pay_1",
                                       signature=_checkout_sig("order_1", "pay_1"))
 
     assert result.outcome == WebhookOutcome.ALREADY_PROCESSED
-    assert repo.plans_granted == [(42, "starter")]
-    assert len(credits.grants) == 1
+    assert repo.plans_granted == [(42, "basic")]
+    assert credits.grants == []
     assert gateway.fetched == []  # settled from our own row, no round trip needed
 
 
@@ -823,8 +846,8 @@ def test_the_webhook_after_confirm_already_granted_is_a_no_op():
     result = service.handle_webhook(body=body, signature=_sign(body))
 
     assert result.outcome == WebhookOutcome.ALREADY_PROCESSED
-    assert repo.plans_granted == [(42, "starter")]
-    assert len(credits.grants) == 1
+    assert repo.plans_granted == [(42, "basic")]
+    assert credits.grants == []
 
 
 def test_confirm_surfaces_a_gateway_outage_as_a_502():

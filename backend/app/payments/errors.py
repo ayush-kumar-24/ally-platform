@@ -73,3 +73,63 @@ class PaymentNotFoundError(PaymentError):
     def __init__(self):
         super().__init__("We could not find that payment.",
                          status_code=status.HTTP_404_NOT_FOUND)
+
+
+class SubscriptionPlanNotConfiguredError(PaymentError):
+    """No Razorpay Plan id is registered for this tier in this mode.
+
+    503 for the same reason PaymentsNotConfiguredError is: the request was
+    fine, the environment is not finished. Distinct from it because the fix is
+    different and an operator reading a log needs to know which -- keys are set
+    here, but nobody has run the "create the Rs 499 plan and register its id"
+    step (guide step 2). Faking a subscription against a guessed plan id would
+    charge a founder an amount nobody chose."""
+
+    def __init__(self, plan_name: str):
+        super().__init__(
+            f"{plan_name} subscriptions are not available yet. Please email info@goxl.in "
+            "and we will get you set up.",
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+
+
+class SubscriptionAlreadyActiveError(PaymentError):
+    """This founder already has a live mandate.
+
+    409, and refused rather than stacked: two mandates means two charges every
+    month, and the founder would not find out until their card statement. The
+    message names the date their current access runs to so the billing page can
+    show a real next step rather than a dead end.
+
+    A plan CHANGE (Plus -> Pro) lands here too, deliberately. Doing it properly
+    means cancelling one mandate and starting another with a defensible answer
+    for the overlap the founder already paid for, and that is a pricing
+    decision rather than a coding one. Refusing is the honest interim: nobody
+    is double-charged, and support can cancel and re-subscribe on request."""
+
+    def __init__(self, plan_name: str, access_until=None):
+        until = f" Your current access runs to {access_until:%d %b %Y}." if access_until else ""
+        super().__init__(
+            f"You already have an active {plan_name} subscription.{until} "
+            "Cancel it first if you want to move to a different plan.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
+class NoActiveSubscriptionError(PaymentError):
+    """Nothing to cancel. 404 rather than 400: from the founder's side the
+    thing they asked to act on does not exist."""
+
+    def __init__(self):
+        super().__init__("You do not have an active subscription to cancel.",
+                         status_code=status.HTTP_404_NOT_FOUND)
+
+
+class InvalidBillingProfileError(PaymentError):
+    """A GSTIN or billing field that cannot be right. 422, and refused at write
+    time on purpose -- a malformed GSTIN discovered on an invoice is one the
+    customer cannot claim input credit against, and by then the invoice is
+    already issued."""
+
+    def __init__(self, reason: str):
+        super().__init__(f"Billing details could not be saved: {reason}.", status_code=422)
