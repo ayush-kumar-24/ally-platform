@@ -116,16 +116,28 @@ Anyone still on `free` after this will be sent to the plans page.
 * **Feature gating itself.** It is already enforced server-side and has been for
   some time. Launch only changes what the Free tier contains.
 
-## Still open when this was written
+## Was open when this was written — now closed
 
-* **Is Rs 199 monthly or one-time?** The catalog labels it per month; the pricing
-  proposal recommended one-time, on the grounds that a second month of "one
-  diagnosis and its report" delivers nothing new. Both readings are still in the
-  repo. The billing page cannot avoid answering it.
-* **Checkout.** Razorpay is not wired. Until it is, nobody can move themselves
-  off the empty Free tier without someone setting their plan by hand — so either
-  checkout ships first, or launch day needs a person on the other end of the
-  plans page.
+* **Is Rs 199 monthly or one-time?** Settled: **one-time**. Starter is a single
+  diagnosis and the report it writes, not a month of service. `Plan.one_time`
+  in the catalog carries it, `GET /plans` returns it, the billing page reads it
+  instead of printing "/mo" over a single charge, and a captured payment records
+  `billing_cycle='one_time'` with no expiry.
+* **Checkout.** Razorpay **is** wired — `app/payments/` plus
+  `POST /payments/checkout`, `POST /payments/confirm` and the signed
+  `payment.captured` webhook at `app/api/v1/webhooks/razorpay.py`. A founder can
+  move themselves off the empty Free tier without anyone touching the database,
+  so launch day does not need a person on the other end of the plans page.
+  Nothing recurring is created: each purchase is a single auto-captured order,
+  never a Razorpay subscription mandate.
+
+## Still open
+
+* **The annual option.** Plus and Pro are sold as "pay for twelve months, get
+  two free", and there is no way to actually buy that — no annual price, no
+  annual tier, nothing that writes `billing_cycle='annual'` (the column already
+  accepts it). Today the offer exists only in the help answers and on the plans
+  page.
 
 ---
 
