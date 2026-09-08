@@ -332,3 +332,55 @@
      row would otherwise shove them off the left edge of the column. */
   .dc-join, .dc-booked-note { margin-left: 0; text-align: left; }
 }
+
+
+/* --- coming soon -----------------------------------------------------------
+   Discovery calls are built but cannot be hosted until Google Workspace domain
+   verification lands. The page shows what the feature is, behind a banner
+   saying it is not open. See COMING_SOON in DiscoveryCall.jsx. */
+
+.dc-soon {
+  margin-bottom: 22px;
+  padding: 22px 26px;
+  border-radius: 18px;
+  border: 1px solid rgba(16, 185, 129, .35);
+  background: linear-gradient(160deg, rgba(16, 185, 129, .14), rgba(16, 185, 129, .05));
+}
+.dc-soon-tag {
+  display: inline-block;
+  margin-bottom: 10px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--color-forest, #1B4332);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.dc-soon-title {
+  margin: 0 0 8px;
+  font-family: var(--font-display);
+  font-size: clamp(19px, 2.4vw, 25px);
+  letter-spacing: -.01em;
+  color: var(--color-forest, #1B4332);
+}
+.dc-soon-copy {
+  margin: 0;
+  max-width: 62ch;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--color-muted-2, #6c7a70);
+}
+
+/* The feature behind the banner: visible enough to be understood, plainly not
+   available. `inert` on the element already removes it from the tab order and
+   from pointer events; the opacity is what makes that visible. */
+.dc-preview {
+  opacity: .42;
+  filter: saturate(.75);
+  user-select: none;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .dc-preview { transition: opacity .2s ease; }
+}

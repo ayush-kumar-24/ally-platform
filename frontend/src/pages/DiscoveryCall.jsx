@@ -12,12 +12,62 @@ import { useApp } from '../context/AppContext';
    success message for a call that did not exist. Everything below is driven by
    the API. */
 
+/**
+ * ONE SWITCH FOR THE WHOLE FEATURE.
+ *
+ * Google Workspace domain verification is 30-48 hours out and we launch
+ * tomorrow, so nobody can be given a real joining link yet. Rather than ship a
+ * booking flow that confirms calls we cannot host, the page shows what the
+ * feature IS behind a banner saying it is not open yet.
+ *
+ * Flip to false when verification lands. There is a matching server-side switch
+ * (DISCOVERY_CALLS_ENABLED) -- this one alone only hides the button, and a
+ * founder with the API docs could still book. Turn both.
+ *
+ * NOT a plan lock, deliberately. A lock icon means "upgrade to unlock", and no
+ * amount of money unlocks this today. "Coming soon" is a different promise and
+ * the honest one.
+ */
+const COMING_SOON = true;
+
+function ComingSoonBanner() {
+  return (
+    <div className="dc-soon" role="status">
+      <div className="dc-soon-tag">Coming soon</div>
+      <h2 className="dc-soon-title">Discovery calls open in a few days.</h2>
+      <p className="dc-soon-copy">
+        We are finishing the last piece of the calendar setup. Booking opens
+        shortly — nothing below is live yet, and no plan unlocks it early.
+        Ally will let you know the moment it does.
+      </p>
+    </div>
+  );
+}
+
 const WHAT_YOU_GET = [
   ['What happens —', '30 focused minutes; your advisor arrives already briefed by Ally.'],
   ['Why it matters —', 'a diagnosis only compounds once it becomes a sequenced plan.'],
   ['What you get —', 'your root cause pressure-tested and 3 actions turned into moves.'],
   ['You leave with —', 'a 90-day founder roadmap and one weekly north-star metric.'],
 ];
+
+/* Times for the greyed-out preview only. Generated rather than hardcoded so
+   the dates never drift into the past and start reading as a bug. Weekday
+   business hours, same shape the real API returns. */
+const PREVIEW_SLOTS = (() => {
+  const out = [];
+  const day = new Date();
+  while (out.length < 20) {
+    day.setDate(day.getDate() + 1);
+    if (day.getDay() === 0 || day.getDay() === 6) continue;
+    for (const hour of [10, 11, 14, 15, 16]) {
+      const slot = new Date(day);
+      slot.setHours(hour, 0, 0, 0);
+      out.push(slot.toISOString());
+    }
+  }
+  return out;
+})();
 
 function InfoCard() {
   return (
@@ -280,6 +330,26 @@ export default function DiscoveryCall() {
     load();
     return created;
   };
+
+  /* Banner in front, the real page dimmed behind it, so a founder can see what
+     they are waiting for. `inert` takes the whole subtree out of the tab order
+     and off the pointer -- a dimmed card is still clickable and still
+     focusable without it, which is how a "disabled" screen ends up firing a
+     request. */
+  if (COMING_SOON) {
+    return (
+      <div className="dc-container">
+        <ComingSoonBanner />
+        <div className="dc-preview" inert>
+          <div className="dc-grid">
+            <InfoCard />
+            <Scheduler slots={PREVIEW_SLOTS} timezone={null} price={null}
+                       onBook={() => {}} onBooked={() => {}} />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // Only the slots and the call list gate the render. The quote supplies a
   // price and nothing else, so a slow or failed quote must not hold up a page

@@ -39,6 +39,7 @@ from app.services.discovery_notifications import send_booking_confirmation
 from app.notifications import notify
 from app.api.v1.plans.dependencies import enforcement_enabled
 from app.core.container import container
+from app.core.config import settings
 from app.core.logger import logger
 from app.plans.catalog import (
     PRIORITY_CALL_LEAD_DAYS,
@@ -53,6 +54,22 @@ router = APIRouter(prefix="/discovery", tags=["discovery"])
 class CallNotFoundError(AppError):
     def __init__(self):
         super().__init__("Discovery call not found", status_code=status.HTTP_404_NOT_FOUND)
+
+
+class CallsNotOpenError(AppError):
+    """Discovery calls are not open yet.
+
+    503 rather than 403: nothing is wrong with the founder or their plan, the
+    feature is simply not available yet. A 403 would read as "you are not
+    allowed", which is a different and wrong message -- no plan unlocks this.
+    """
+
+    def __init__(self):
+        super().__init__(
+            "Discovery calls are not open yet. We will let you know the moment "
+            "booking goes live.",
+            status_code=503,
+        )
 
 
 class SlotInPastError(AppError):
@@ -184,6 +201,11 @@ def get_slots(days: int = 7, founder: Founder = Depends(get_founder_record),
     Pro's window opens two days earlier than everyone else's, which is what
     "priority booking" means here: the same slots, reached first.
     """
+    if not settings.DISCOVERY_CALLS_ENABLED:
+        # Empty rather than an error: the page renders its own "coming soon"
+        # state, and a failed request there would look like a broken page.
+        return SlotsResponse(timezone=DEFAULT_TIMEZONE, slots=[])
+
     days = max(1, min(days, 30))
     now = datetime.now(timezone.utc)
     lead = (PRIORITY_CALL_LEAD_DAYS if _has_call_priority(founder, db)
@@ -220,6 +242,9 @@ def book_call(
     checkout exists, the charge belongs immediately before `create_meeting` here
     and the refund belongs in `cancel_call`.
     """
+    if not settings.DISCOVERY_CALLS_ENABLED:
+        raise CallsNotOpenError()
+
     scheduled = payload.scheduled_at
     if scheduled.tzinfo is None:
         scheduled = scheduled.replace(tzinfo=timezone.utc)

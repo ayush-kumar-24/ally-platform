@@ -377,6 +377,17 @@ class Settings(BaseSettings):
     # call when auto-Meet is off. Recommended for the personal-Gmail setup.
     GOXL_MEETING_URL: str = ""
 
+    # --- Discovery calls: open or not ---
+    # False until Google Workspace domain verification lands (30-48h as of
+    # 2026-09-08). Booking is built and works, but a confirmed call needs a
+    # joining link we cannot mint yet, so /book refuses and /slots returns
+    # nothing rather than confirming calls nobody can host.
+    #
+    # The page has its own COMING_SOON flag showing the feature behind a
+    # banner. That one hides the button; this one is the actual lock. Turn both
+    # off together.
+    DISCOVERY_CALLS_ENABLED: bool = False
+
     @property
     def google_calendar_enabled(self) -> bool:
         return bool(
