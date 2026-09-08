@@ -3,9 +3,9 @@
  *
  * The division of authority here is the whole point of the file:
  *
- *  - This module may ASK for an order. `POST /payments/checkout` creates a
- *    *pending* payment server-side and returns the order to open the widget
- *    with. It grants nothing.
+ *  - This module may ASK for an order, or for a subscription mandate. Both
+ *    create a *pending* record server-side and return what the widget needs.
+ *    Neither grants anything.
  *  - This module may NOT decide that a payment succeeded. Razorpay's success
  *    callback runs in the founder's own tab, so anything it reports is a claim
  *    made by the client — treating it as proof would let anyone with devtools
@@ -35,9 +35,14 @@ import { getMyPlan } from './plans';
 const CHECKOUT_JS_URL = 'https://checkout.razorpay.com/v1/checkout.js';
 
 /**
- * Create a Razorpay order for a paid tier.
+ * Create a Razorpay order for a ONE-TIME tier.
  *
- * @param {'basic'|'starter'|'pro'} tier  Starter / Plus / Pro respectively.
+ * Starter (Rs 199) only. The backend refuses a renewing tier here outright —
+ * selling one as a single order charges the founder once and gives them the
+ * plan forever, which is what it used to do. Plus and Pro go through
+ * `startSubscription` in services/billing.js.
+ *
+ * @param {'basic'} tier  Starter. Renewing tiers are refused with a 422.
  * @returns {Promise<{payment_id:number, order_id:string, amount_paise:number,
  *                    currency:string, key_id:string}>}
  */
@@ -168,6 +173,65 @@ export function openCheckout({ order, planName, prefill = {} }) {
          notes again would only re-break the entity for no gain, and anything
          this file puts in them is browser-supplied and cannot be trusted with
          that decision anyway. */
+      theme: { color: '#1B4332' },
+      handler: (response) => settle({ status: 'paid', response }),
+      modal: {
+        ondismiss: () => settle(
+          lastError ? { status: 'failed', error: lastError } : { status: 'dismissed' },
+        ),
+      },
+    });
+
+    rzp.on('payment.failed', (e) => { lastError = e?.error ?? null; });
+    rzp.open();
+  }));
+}
+
+/**
+ * Open Razorpay Checkout in SUBSCRIPTION mode.
+ *
+ * The only difference from `openCheckout` that matters is `subscription_id`
+ * instead of `order_id` — and what that changes is what the founder is
+ * agreeing to. An order authorises one charge; a subscription authorises a
+ * recurring MANDATE, and Razorpay's widget says so and collects the extra
+ * consent that requires. Passing an order id here would take one payment and
+ * create no mandate, which is precisely the bug the recurring tiers had.
+ *
+ * There is deliberately no `amount`. The amount lives on the Razorpay Plan and
+ * is fixed there; sending one would be a number the browser named for a charge
+ * it does not control, and a mismatch would be silently ignored by Razorpay
+ * while looking authoritative here.
+ *
+ * Resolves the same three ways `openCheckout` does — 'paid', 'failed',
+ * 'dismissed' — and 'paid' carries exactly the same weight: Razorpay's client
+ * script said so. The plan is granted by the signed `subscription.charged`
+ * webhook and by nothing else.
+ */
+export function openSubscriptionCheckout({ subscription, planName, prefill = {} }) {
+  return loadCheckoutScript().then(Razorpay => new Promise((resolve) => {
+    let settled = false;
+    let lastError = null;
+    const settle = (outcome) => {
+      if (settled) return;
+      settled = true;
+      resolve(outcome);
+    };
+
+    const rzp = new Razorpay({
+      key: subscription.key_id,
+      subscription_id: subscription.razorpay_subscription_id,
+      name: 'GoXL Ally',
+      description: `${planName} — ₹${subscription.amount_inr}/month`,
+      image: '/ally-logo.png',
+      prefill: {
+        name: prefill.name || '',
+        email: prefill.email || '',
+        contact: prefill.contact || '',
+      },
+      /* No `notes`, for the same reason openCheckout carries none: anything
+         put here is browser-supplied and must never be what decides which
+         plan is granted. The backend reads the tier off its own subscription
+         row. */
       theme: { color: '#1B4332' },
       handler: (response) => settle({ status: 'paid', response }),
       modal: {

@@ -953,6 +953,14 @@ body.sb-collapsed .sb-toggle .ic{transform:rotate(180deg)}
 .bl-status-badge.active{background:rgba(52,211,153,.15);color:#059669;border:1px solid rgba(52,211,153,.3)}
 .bl-status-badge.pending{background:rgba(245,158,11,.14);color:#b45309;border:1px solid rgba(245,158,11,.32)}
 .bl-status-badge.active::before{content:'';width:5px;height:5px;border-radius:50%;background:#34d399}
+/* The remaining tones a subscription can be in. `warn` is a renewal Razorpay is
+   still retrying and `ended` is a cancellation running out its paid period --
+   neither is a failure the founder has to act on this second, so neither is
+   red. `error` (halted) is, because the plan stops unless they do something. */
+.bl-status-badge.warn{background:rgba(245,158,11,.14);color:#b45309;border:1px solid rgba(245,158,11,.32)}
+.bl-status-badge.error{background:rgba(239,68,68,.12);color:#b91c1c;border:1px solid rgba(239,68,68,.3)}
+.bl-status-badge.ended{background:#f2ede6;color:#6c7a70;border:1px solid #e7e0d6}
+.bl-status-badge.none{background:#f2ede6;color:#6c7a70;border:1px solid #e7e0d6}
 .inv-status.paid{display:inline-block;font-size:10.5px;font-weight:750;letter-spacing:.04em;text-transform:uppercase;padding:3px 9px;border-radius:99px;background:rgba(16,185,129,.12);color:#059669;border:1px solid rgba(52,211,153,.25)}
 
 /* Subscription status view */
@@ -997,6 +1005,46 @@ body.sb-collapsed .sb-toggle .ic{transform:rotate(180deg)}
 .inv-dl-btn{display:inline-flex;align-items:center;gap:5px;padding:5px 11px;border:1px solid #e7e0d6;border-radius:8px;background:#fff;font-family:var(--display-tight);font-size:11.5px;font-weight:650;color:#556458;cursor:pointer;transition:.2s}
 .inv-dl-btn svg{width:13px;height:13px}
 .inv-dl-btn:hover{border-color:#1B4332;color:#1B4332;background:#f5f0ea}
+
+/* Real billing status, invoices and payment history (Billing.jsx StatusView) */
+.bl-status-note{font-size:12.5px;line-height:1.55;color:#6c7a70;margin:8px 0 0;max-width:56ch}
+.bl-status-note strong{color:#0E2A1C;font-weight:650}
+.bl-invoice-section + .bl-invoice-section{margin-top:20px}
+.bl-invoice-section{margin-bottom:20px}
+.bl-inv-status{display:inline-block;font-size:10.5px;font-weight:750;letter-spacing:.04em;text-transform:uppercase;padding:3px 9px;border-radius:99px;background:#f2ede6;color:#6c7a70;border:1px solid #e7e0d6}
+.bl-inv-status.paid,.bl-inv-status.success{background:rgba(16,185,129,.12);color:#059669;border-color:rgba(52,211,153,.25)}
+.bl-inv-status.failed{background:rgba(239,68,68,.1);color:#b91c1c;border-color:rgba(239,68,68,.26)}
+.bl-inv-status.pending,.bl-inv-status.issued{background:rgba(245,158,11,.12);color:#b45309;border-color:rgba(245,158,11,.28)}
+.bl-inv-status.refunded{background:rgba(99,102,241,.1);color:#4338ca;border-color:rgba(99,102,241,.26)}
+/* A failure reason sits under its status rather than in its own column: it is
+   the one row a founder needs to read in full, and a column wide enough for it
+   would be empty on every other row. */
+.bl-inv-reason{font-size:11.5px;line-height:1.45;color:#b91c1c;margin-top:5px;max-width:34ch}
+.bl-inv-nolink{color:#a8b1aa}
+
+/* Cancel dialog + billing details form */
+.bl-cancel-reason{display:block;text-align:left;margin:16px 0 4px}
+.bl-cancel-reason span{display:block;font-size:12px;font-weight:650;color:#6c7a70;margin-bottom:6px}
+.bl-cancel-reason input{width:100%;padding:9px 12px;border:1px solid #e7e0d6;border-radius:9px;font-size:13px;color:#16241c;background:#fff}
+.bl-cancel-reason input:focus{outline:none;border-color:#1B4332;box-shadow:0 0 0 3px rgba(27,67,50,.1)}
+.bl-billing-summary{display:flex;flex-direction:column;align-items:flex-start;gap:10px}
+.bl-billing-summary .bl-status-note{margin-top:0}
+.bl-billing-form{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.bl-billing-form label{display:block}
+.bl-billing-form label span{display:block;font-size:12px;font-weight:650;color:#6c7a70;margin-bottom:6px}
+.bl-billing-form input,.bl-billing-form select{width:100%;padding:9px 12px;border:1px solid #e7e0d6;border-radius:9px;font-size:13px;color:#16241c;background:#fff;font-family:inherit}
+.bl-billing-form input:focus,.bl-billing-form select:focus{outline:none;border-color:#1B4332;box-shadow:0 0 0 3px rgba(27,67,50,.1)}
+.bl-billing-form input:disabled,.bl-billing-form select:disabled{background:#f7f4ef;color:#8a938c}
+/* The address, the errors and the buttons span both columns: an address field
+   half the width of the form is the one that gets abbreviated and then prints
+   wrong on an invoice. */
+.bl-billing-form label:has(#billing-address),.bl-billing-form .bl-coupon-err,
+.bl-billing-form .bl-coupon-note,.bl-billing-form .bl-modal-actions{grid-column:1 / -1}
+@media (max-width:640px){
+  .bl-billing-form{grid-template-columns:1fr}
+  .bl-status-header{flex-direction:column}
+  .bl-status-actions{flex-direction:row;width:100%}
+}
 
 /* Cancel modal */
 .bl-modal-overlay{position:fixed;inset:0;background:rgba(6,20,13,.5);backdrop-filter:blur(4px);z-index:200;display:grid;place-items:center;padding:20px;animation:fadeIn .2s}

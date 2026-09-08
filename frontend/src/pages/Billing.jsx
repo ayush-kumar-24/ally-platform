@@ -2,7 +2,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { MOCK_PLANS } from '../data/mockData';
 import { getProfile } from '../services/profile';
 import { getCatalog, getMyPlan } from '../services/plans';
-import { confirmPayment, openCheckout, startCheckout, validateCoupon, waitForPlanActivation } from '../services/payments';
+import { confirmPayment, openCheckout, openSubscriptionCheckout, startCheckout, validateCoupon, waitForPlanActivation } from '../services/payments';
+import {
+  cancelSubscription, describeSubscription, formatDate, formatINR, getBillingProfile,
+  getInvoices, getPaymentHistory, getSubscription, INDIAN_STATES, saveBillingProfile,
+  startSubscription,
+} from '../services/billing';
 
 /* ─── Static data ─── */
 /** Keys must match the plan tiers served by GET /plans, which lists only the
@@ -280,7 +285,17 @@ function rupeesFromPaise(paise) {
  * widget would be a broken promise about a price.
  */
 function CheckoutView({ plan, onBack, onPaid }) {
+  /* THE ONE BRANCH THAT MATTERS ON THIS SCREEN. A one-time tier buys a
+     deliverable and is paid for with a Razorpay ORDER. A renewing tier buys a
+     period and needs a Razorpay SUBSCRIPTION -- a mandate the founder
+     authorises once and Razorpay charges every month. Sending a renewing tier
+     down the order path is what this product used to do: the founder was
+     charged once, no mandate existed, and the second month never came. The
+     backend refuses it outright now, so getting this wrong is a visible error
+     rather than a silent one -- but it should not be gettable wrong here. */
+  const recurring = !plan.oneTime;
   const [order, setOrder] = useState(null);
+  const [subscription, setSubscription] = useState(null);
   const [orderError, setOrderError] = useState(null);
   const [payState, setPayState] = useState('idle'); // 'idle' | 'opening' | 'paid'
   const [payError, setPayError] = useState(null);
@@ -299,6 +314,15 @@ function CheckoutView({ plan, onBack, onPaid }) {
      and the Razorpay popup outlive a "Back to Plans" click. */
   const alive = useRef(true);
   useEffect(() => () => { alive.current = false; }, []);
+
+  const createSubscription = useCallback(() => {
+    setSubscription(null);
+    setOrderError(null);
+    setPayError(null);
+    return startSubscription(plan.id)
+      .then((sub) => { if (alive.current) setSubscription(sub); })
+      .catch((err) => { if (alive.current) setOrderError(err); });
+  }, [plan.id]);
 
   const createOrder = useCallback((couponCode = null) => {
     setOrder(null);
@@ -352,7 +376,13 @@ function CheckoutView({ plan, onBack, onPaid }) {
     createOrder();
   };
 
-  useEffect(() => { createOrder(); }, [createOrder]);  // full price until a code is applied
+  /* Created when the screen opens rather than on the Pay click, so every
+     amount rendered below is read off the thing Razorpay will actually charge
+     against. */
+  useEffect(() => {
+    if (recurring) createSubscription();
+    else createOrder();                    // full price until a code is applied
+  }, [recurring, createOrder, createSubscription]);
 
   /* Prefill only. Razorpay asks for anything we cannot supply, so a failed
      profile fetch costs the founder a field, not the payment. */
@@ -368,12 +398,14 @@ function CheckoutView({ plan, onBack, onPaid }) {
   }, []);
 
   const handlePay = async () => {
-    if (!order || payState !== 'idle') return;
+    if (!(recurring ? subscription : order) || payState !== 'idle') return;
     setPayError(null);
     setPayState('opening');
     let outcome;
     try {
-      outcome = await openCheckout({ order, planName: plan.name, prefill });
+      outcome = recurring
+        ? await openSubscriptionCheckout({ subscription, planName: plan.name, prefill })
+        : await openCheckout({ order, planName: plan.name, prefill });
     } catch (err) {
       // Checkout.js itself never loaded — nothing was charged.
       if (alive.current) {
@@ -389,10 +421,18 @@ function CheckoutView({ plan, onBack, onPaid }) {
          own browser telling us what it saw; the plan is granted by the signed
          payment.captured webhook, and the next screen is what waits for it. */
       setPayState('paid');
-      /* The whole callback, not just the payment id: the activating screen
-         hands it back to the backend, which checks its signature and asks
-         Razorpay directly rather than waiting for the webhook. */
-      onPaid({ plan, order, callback: outcome.response ?? null });
+      /* The whole callback, not just the payment id: on the one-time path the
+         activating screen hands it back to the backend, which checks its
+         signature and asks Razorpay directly rather than waiting for the
+         webhook.
+
+         A SUBSCRIPTION HAS NO SUCH SHORTCUT, and deliberately so. What settles
+         a mandate is `subscription.charged` -- the event that names the money
+         -- and there is exactly one grant path for it. The activating screen
+         waits for it, which is a few seconds longer and cannot grant a plan
+         Razorpay has not charged for. */
+      onPaid({ plan, order: recurring ? null : order,
+               callback: recurring ? null : (outcome.response ?? null) });
       return;
     }
 
@@ -405,14 +445,22 @@ function CheckoutView({ plan, onBack, onPaid }) {
     }
   };
 
-  /* All three read off the ORDER, never the quote: the order is what Razorpay
-     will charge, so the summary cannot drift from the receipt. */
-  const amountLabel = order ? `₹${rupeesFromPaise(order.amount_paise)}` : null;
-  const listLabel = order?.list_amount_paise
+  /* All of these read off the ORDER (or the subscription), never the quote:
+     the order is what Razorpay will charge, so the summary cannot drift from
+     the receipt. A subscription carries no order amount at all -- the amount
+     lives on the Razorpay Plan -- so its figure is the catalog price the
+     backend echoed back, and there is nothing here that could disagree with
+     what is charged because nothing here names it. */
+  const ready = recurring ? !!subscription : !!order;
+  const amountLabel = recurring
+    ? (subscription ? `₹${Number(subscription.amount_inr).toLocaleString('en-IN')}` : null)
+    : (order ? `₹${rupeesFromPaise(order.amount_paise)}` : null);
+  const listLabel = !recurring && order?.list_amount_paise
     ? `₹${rupeesFromPaise(order.list_amount_paise)}` : null;
-  const discountLabel = order?.discount_paise
+  const discountLabel = !recurring && order?.discount_paise
     ? `₹${rupeesFromPaise(order.discount_paise)}` : null;
   const busy = payState !== 'idle';
+  const retryCreate = recurring ? createSubscription : () => createOrder();
 
   return (
     <div className="bl-checkout-wrap stagger d1">
@@ -429,18 +477,33 @@ function CheckoutView({ plan, onBack, onPaid }) {
         <div className="bl-checkout-form-col">
           <div className="bl-section-label">Secure Payment</div>
 
-          <h3 className="bl-pay-heading">Pay for {plan.name}</h3>
+          <h3 className="bl-pay-heading">
+            {recurring ? `Subscribe to ${plan.name}` : `Pay for ${plan.name}`}
+          </h3>
           <p className="bl-pay-lede">
             You&apos;ll complete payment in Razorpay&apos;s secure window — card, UPI,
             net banking and wallets are all available there. Your payment details
             are entered on Razorpay and never touch GoXL Ally.
           </p>
+          {recurring && (
+            /* Said plainly, before they pay, because it is the thing that
+               makes this different from every other Pay button on the site:
+               they are authorising a repeating charge. Burying that and
+               letting them discover it on next month's statement is how a
+               subscription becomes a chargeback. */
+            <p className="bl-pay-lede">
+              This sets up a monthly payment of <strong>{amountLabel || `₹${plan.price}`}</strong>,
+              charged automatically until you cancel. You can cancel any time from
+              this page and keep your plan until the end of the month you have
+              already paid for.
+            </p>
+          )}
 
           {orderError && (
             <div className="bl-pay-alert err" role="alert">
               <strong>We couldn&apos;t start this payment.</strong>
               <span>{orderError.detail || orderError.message || 'Please try again in a moment.'}</span>
-              <button type="button" className="bl-link-btn" onClick={createOrder}>
+              <button type="button" className="bl-link-btn" onClick={retryCreate}>
                 Try again
               </button>
               {/* The backend logs every failed checkout under this id, so a
@@ -460,7 +523,16 @@ function CheckoutView({ plan, onBack, onPaid }) {
           )}
 
           {/* Discount code. Sits above Pay because it changes what Pay costs,
-              and a founder who spots it afterwards has already committed. */}
+              and a founder who spots it afterwards has already committed.
+
+              ONE-TIME PURCHASES ONLY. A Razorpay subscription is billed on a
+              Plan whose amount is fixed at Razorpay, so a discount could only
+              be applied at the gateway -- and then `payments.amount_inr` (what
+              every revenue view reads) would record one number while the
+              founder was charged another. That is the exact trade the coupons
+              migration refused. Showing a code box that cannot work would be
+              worse than not showing one. */}
+          {!recurring && (
           <div className="bl-coupon">
             {applied ? (
               <div className="bl-coupon-applied">
@@ -502,13 +574,14 @@ function CheckoutView({ plan, onBack, onPaid }) {
               <p className="bl-coupon-note">{applied.description}</p>
             )}
           </div>
+          )}
 
           <button
             id="checkout-pay-btn"
             type="button"
             className={`bl-pay-btn${busy ? ' loading' : ''}`}
             onClick={handlePay}
-            disabled={!order || busy}
+            disabled={!ready || busy}
           >
             {busy ? (
               <>
@@ -520,7 +593,9 @@ function CheckoutView({ plan, onBack, onPaid }) {
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
                   <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
                 </svg>
-                {order ? `Pay ${amountLabel}` : 'Preparing secure checkout…'}
+                {ready
+                  ? (recurring ? `Subscribe · ${amountLabel}/month` : `Pay ${amountLabel}`)
+                  : 'Preparing secure checkout…'}
               </>
             )}
           </button>
@@ -530,8 +605,13 @@ function CheckoutView({ plan, onBack, onPaid }) {
             your card details.
           </p>
 
-          {order && (
+          {!recurring && order && (
             <p className="bl-pay-order-ref">Order reference: {order.order_id}</p>
+          )}
+          {recurring && subscription && (
+            <p className="bl-pay-order-ref">
+              Subscription reference: {subscription.razorpay_subscription_id}
+            </p>
           )}
         </div>
 
@@ -542,7 +622,9 @@ function CheckoutView({ plan, onBack, onPaid }) {
           <div className="bl-os-plan-badge">
             <div className="bl-os-plan-name">{plan.name} Plan</div>
             <div className="bl-os-plan-tag">{plan.tag}</div>
-            <div className="bl-os-plan-cycle">{plan.oneTime ? 'One-time payment' : 'Billed Monthly'}</div>
+            <div className="bl-os-plan-cycle">
+              {plan.oneTime ? 'One-time payment' : 'Billed monthly until cancelled'}
+            </div>
           </div>
 
           <ul className="bl-os-feats">
@@ -568,7 +650,7 @@ function CheckoutView({ plan, onBack, onPaid }) {
               </div>
             )}
             <div className="bl-os-total">
-              <span>Total payable</span>
+              <span>{recurring ? 'Charged monthly' : 'Total payable'}</span>
               <span>{amountLabel ?? '—'}</span>
             </div>
           </div>
@@ -576,6 +658,7 @@ function CheckoutView({ plan, onBack, onPaid }) {
           <div className="bl-os-trust">
             <span>Payments secured by Razorpay</span>
             <span>Your plan activates as soon as payment is confirmed</span>
+            {recurring && <span>Cancel any time — you keep the month you paid for</span>}
             <span>No card details are stored by GoXL Ally</span>
           </div>
         </div>
@@ -757,50 +840,114 @@ function SuccessView({ plan, order, onViewStatus }) {
 }
 
 /* ═══════════════════════════════════════════
+/* ═══════════════════════════════════════════
    VIEW 4 — Subscription Status
 ═══════════════════════════════════════════ */
+/**
+ * Everything on this screen used to be invented. "Next renewal: August 1,
+ * 2026" was a string literal shown to every founder on every plan; the cancel
+ * button closed its own dialog and did nothing else; the invoice table listed
+ * four made-up receipts with a PDF button that went nowhere. It was later
+ * honest about the invoices ("Once billing is live…") but still hard-coded the
+ * renewal date and still had a Cancel button that cancelled nothing.
+ *
+ * Every figure here now comes from GET /payments/subscription,
+ * /payments/invoices and /payments/history.
+ *
+ * ONE THING WORTH BEING CAREFUL ABOUT: `entitlement`, not `status`, is what
+ * says whether the founder still has their features. A cancelled subscription
+ * is still entitled until the end of the month they paid for, and a `pending`
+ * one (a renewal Razorpay is retrying) has not lost anything yet. Reading
+ * "cancelled" as "gone" would tell a founder they had lost something they
+ * still have — on the screen where they would go looking for a refund.
+ */
 function StatusView({ onUpgrade, currentPlan }) {
+  const [sub, setSub] = useState(null);
+  const [invoices, setInvoices] = useState([]);
+  const [payments, setPayments] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const [cancelModal, setCancelModal] = useState(false);
-  /* MOCK_PLANS lists the three PAID tiers, so `free` matches nothing -- and the
-     old fallback was `|| MOCK_PLANS[1]`, which is Plus at Rs 499. A founder who
-     had never paid a rupee opened this page and was told, with an Active badge
-     and a Cancel Plan button, that they were on Plus. Nothing here is a
-     subscription unless a paid tier matched. */
-  const plan = MOCK_PLANS.find(p => p.id === currentPlan) || null;
+  const [cancelBusy, setCancelBusy] = useState(false);
+  const [cancelError, setCancelError] = useState(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelled, setCancelled] = useState(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
-  if (!plan) {
+  const alive = useRef(true);
+  useEffect(() => () => { alive.current = false; }, []);
+
+  useEffect(() => {
+    let cancelledEffect = false;
+    setLoading(true);
+    /* allSettled, not all: a founder who has never been invoiced still needs
+       to see which plan they are on. One empty list must not blank the page. */
+    Promise.allSettled([getSubscription(), getInvoices(), getPaymentHistory()])
+      .then(([s, i, p]) => {
+        if (cancelledEffect) return;
+        if (s.status === 'fulfilled') setSub(s.value);
+        else setLoadError(s.reason);
+        setInvoices(i.status === 'fulfilled' ? (i.value ?? []) : []);
+        setPayments(p.status === 'fulfilled' ? (p.value ?? []) : []);
+        setLoading(false);
+      });
+    return () => { cancelledEffect = true; };
+  }, [reloadKey]);
+
+  const handleCancel = async () => {
+    if (cancelBusy) return;
+    setCancelBusy(true);
+    setCancelError(null);
+    try {
+      const result = await cancelSubscription({
+        atPeriodEnd: true,
+        reason: cancelReason.trim() || null,
+      });
+      if (!alive.current) return;
+      setCancelled(result);
+      setCancelModal(false);
+      setReloadKey(k => k + 1);
+    } catch (err) {
+      if (!alive.current) return;
+      setCancelError(err?.detail || err?.message
+        || 'We could not cancel this subscription. Please email info@goxl.in.');
+    } finally {
+      if (alive.current) setCancelBusy(false);
+    }
+  };
+
+  if (loading) {
     return (
       <div className="bl-status-wrap stagger d1">
-        <div className="bl-status-header">
-          <div>
-            <div className="bl-section-label">Current Subscription</div>
-            <h2 className="bl-status-plan-name">Ally Free</h2>
-            <p className="bl-status-renew">
-              No paid plan yet. You are on the free tier.
-            </p>
-          </div>
-          <div className="bl-status-actions">
-            <button id="upgrade-plan-btn" className="bl-action-btn primary" onClick={onUpgrade}>
-              See plans
-            </button>
-          </div>
-        </div>
-
-        <div className="bl-invoice-section">
-          <div className="bl-section-label" style={{ marginBottom: 14 }}>Billing History</div>
-          <p className="dash-empty">
-            No invoices yet. Once billing is live, your receipts will appear here.
-          </p>
-        </div>
+        <div className="bl-section-label">Current Subscription</div>
+        <p className="dash-empty">Loading your billing details…</p>
       </div>
     );
   }
 
+  const state = describeSubscription(sub);
+  const entitlement = sub?.entitlement;
+  const planName = entitlement?.plan_name || sub?.plan_name;
+  /* The catalog copy for whatever they are actually entitled to -- used only
+     for the feature list. The PLAN they are on comes from the backend, never
+     from matching against this. */
+  const catalogPlan = MOCK_PLANS.find(p => p.id === (entitlement?.plan || currentPlan)) || null;
+  const isPaid = !!entitlement?.is_paid;
+  /* Only a live recurring mandate can be cancelled. A one-time Starter
+     purchase has nothing to cancel -- there is no future charge to stop --
+     and offering the button would promise a refund this does not give. */
+  const canCancel = sub?.has_subscription && sub?.is_recurring
+    && !sub?.cancel_at_period_end
+    && ['created', 'authenticated', 'active', 'pending', 'halted'].includes(sub.status);
+
+  const accessUntil = formatDate(entitlement?.access_until);
+  const nextCharge = formatDate(sub?.next_charge_at);
+
   return (
     <div className="bl-status-wrap stagger d1">
-      {/* Cancel modal */}
+      {/* ── Cancel confirmation ── */}
       {cancelModal && (
-        <div className="bl-modal-overlay" onClick={() => setCancelModal(false)}>
+        <div className="bl-modal-overlay" onClick={() => !cancelBusy && setCancelModal(false)}>
           <div className="bl-modal" onClick={e => e.stopPropagation()}>
             <div className="bl-modal-icon warn">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -809,74 +956,382 @@ function StatusView({ onUpgrade, currentPlan }) {
                 <line x1="12" y1="17" x2="12.01" y2="17" />
               </svg>
             </div>
-            <h3>Cancel Subscription?</h3>
-            <p>Your access to {plan.name} features will continue until your current billing period ends (Aug 1, 2026). After that, your account reverts to the Free plan.</p>
+            <h3>Cancel {planName}?</h3>
+            {/* The REAL date, from the subscription. This sentence used to
+                name "Aug 1, 2026" to everyone regardless of when they paid --
+                a promise about their money that happened to be a literal. */}
+            <p>
+              {accessUntil
+                ? <>Your {planName} features stay on until <strong>{accessUntil}</strong> —
+                   the period you have already paid for. After that your account returns
+                   to the Free plan. You will not be charged again.</>
+                : <>Your {planName} features will end and your account returns to the
+                   Free plan. You will not be charged again.</>}
+            </p>
+            <label className="bl-cancel-reason">
+              <span>Anything we could have done better? (optional)</span>
+              <input
+                id="cancel-reason-input"
+                type="text"
+                maxLength={500}
+                value={cancelReason}
+                disabled={cancelBusy}
+                onChange={(e) => setCancelReason(e.target.value)}
+              />
+            </label>
+            {cancelError && <p className="bl-coupon-err" role="alert">{cancelError}</p>}
             <div className="bl-modal-actions">
-              <button id="cancel-confirm-btn" className="bl-modal-btn danger" onClick={() => setCancelModal(false)}>
-                Yes, Cancel Plan
+              <button id="cancel-confirm-btn" className="bl-modal-btn danger"
+                      onClick={handleCancel} disabled={cancelBusy}>
+                {cancelBusy ? 'Cancelling…' : 'Yes, cancel my plan'}
               </button>
-              <button id="cancel-dismiss-btn" className="bl-modal-btn ghost" onClick={() => setCancelModal(false)}>
-                Keep My Plan
+              <button id="cancel-dismiss-btn" className="bl-modal-btn ghost"
+                      onClick={() => setCancelModal(false)} disabled={cancelBusy}>
+                Keep my plan
               </button>
             </div>
           </div>
         </div>
       )}
 
+      {cancelled && (
+        <div className="bl-pay-alert warn" role="status">
+          <span>{cancelled.message}</span>
+        </div>
+      )}
+
+      {loadError && (
+        <div className="bl-pay-alert err" role="alert">
+          <strong>We couldn&apos;t load your subscription.</strong>
+          <span>{loadError.detail || loadError.message || 'Please try again in a moment.'}</span>
+          <button type="button" className="bl-link-btn" onClick={() => setReloadKey(k => k + 1)}>
+            Try again
+          </button>
+        </div>
+      )}
+
+      {/* ── Header ── */}
       <div className="bl-status-header">
         <div>
           <div className="bl-section-label">Current Subscription</div>
           <h2 className="bl-status-plan-name">
-            {plan.name} Plan
-            <span className="bl-status-badge active">Active</span>
+            {isPaid ? `${planName} Plan` : 'Ally Free'}
+            {sub?.has_subscription && (
+              <span className={`bl-status-badge ${state.tone}`}>{state.label}</span>
+            )}
           </h2>
-          {plan.oneTime
-            ? <p className="bl-status-renew">One-time purchase · ₹{plan.price.toLocaleString()}</p>
-            : <p className="bl-status-renew">Next renewal: <strong>August 1, 2026</strong> · ₹{plan.price.toLocaleString()}/mo</p>}
+
+          {!isPaid && !sub?.has_subscription && (
+            <p className="bl-status-renew">No paid plan yet. You are on the free tier.</p>
+          )}
+
+          {sub?.has_subscription && !sub.is_recurring && (
+            <p className="bl-status-renew">
+              One-time purchase · {formatINR(sub.amount_inr)}
+              {accessUntil ? <> · access until <strong>{accessUntil}</strong></> : null}
+            </p>
+          )}
+
+          {sub?.has_subscription && sub.is_recurring && (
+            <p className="bl-status-renew">
+              {/* Next charge only when one is actually coming. A cancelling or
+                  halted subscription has no next charge, and printing a date
+                  for one is the same class of lie as the hard-coded date this
+                  replaced. */}
+              {state.tone === 'active' && nextCharge
+                ? <>Next charge: <strong>{nextCharge}</strong> · {formatINR(sub.amount_inr)}/month</>
+                : <>{formatINR(sub.amount_inr)}/month</>}
+            </p>
+          )}
+
+          {state.detail && <p className="bl-status-note">{state.detail}</p>}
+
+          {accessUntil && isPaid && state.tone === 'active' && !sub?.cancel_at_period_end && (
+            <p className="bl-status-note">Your plan is paid up to {accessUntil}.</p>
+          )}
         </div>
+
         <div className="bl-status-actions">
           <button id="upgrade-plan-btn" className="bl-action-btn primary" onClick={onUpgrade}>
-            Upgrade Plan
+            {isPaid ? 'Change plan' : 'See plans'}
           </button>
-          <button id="cancel-plan-btn" className="bl-action-btn ghost" onClick={() => setCancelModal(true)}>
-            Cancel Plan
-          </button>
+          {canCancel && (
+            <button id="cancel-plan-btn" className="bl-action-btn ghost"
+                    onClick={() => { setCancelError(null); setCancelModal(true); }}>
+              Cancel plan
+            </button>
+          )}
         </div>
       </div>
 
-      {/* The usage meters that stood here were mock numbers (8 of 10 diagnoses,
-          unlimited chat) that no plan matches: every plan is one diagnosis per
-          account and chat is metered by tokens. Real meters need real usage
-          data from the API; until then nothing is better than fiction. */}
-
-      {/* Plan features included */}
-      <div className="bl-incl-section">
-        <div className="bl-section-label" style={{ marginBottom: 14 }}>What's included in {plan.name}</div>
-        <div className="bl-incl-grid">
-          {plan.features.map((f, i) => (
-            <div key={i} className="bl-incl-item">
-              <CheckIcon size={15} />
-              {f}
-            </div>
-          ))}
+      {/* ── What's included ── */}
+      {catalogPlan && isPaid && (
+        <div className="bl-incl-section">
+          <div className="bl-section-label" style={{ marginBottom: 14 }}>
+            What&apos;s included in {planName}
+          </div>
+          <div className="bl-incl-grid">
+            {catalogPlan.features.map((f, i) => (
+              <div key={i} className="bl-incl-item">
+                <CheckIcon size={15} />
+                {f}
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* Invoice history */}
-      {/* This table listed four invoices -- INV-2026-007 at ₹999 "Paid", and
-          three more -- for every founder who opened the page, with a PDF button
-          that did nothing. They were invented: there is no invoice endpoint in
-          the API at all. Fabricated payment records are not a placeholder, so
-          the section says what is true until billing history actually exists. */}
+      <BillingDetailsSection />
+
+      {/* ── Invoices ── */}
       <div className="bl-invoice-section">
-        <div className="bl-section-label" style={{ marginBottom: 14 }}>Billing History</div>
-        <p className="dash-empty">
-          No invoices yet. Once billing is live, your receipts will appear here.
-        </p>
+        <div className="bl-section-label" style={{ marginBottom: 14 }}>Invoices</div>
+        {invoices.length === 0 ? (
+          <p className="dash-empty">No invoices yet.</p>
+        ) : (
+          <div className="bl-invoice-table-wrap">
+          <table className="bl-invoice-table">
+            <thead>
+              <tr>
+                <th>Invoice</th><th>Date</th><th>Amount</th><th>Status</th><th />
+              </tr>
+            </thead>
+            <tbody>
+              {invoices.map(inv => (
+                <tr key={inv.invoice_id}>
+                  <td>{inv.invoice_number || inv.gateway_invoice_id}</td>
+                  <td>{formatDate(inv.paid_at || inv.issued_at) || '—'}</td>
+                  <td>{formatINR(inv.total_amount_inr)}</td>
+                  <td><span className={`bl-inv-status ${inv.status}`}>{inv.status}</span></td>
+                  <td>
+                    {/* Razorpay's own hosted document. There is no PDF button
+                        that does nothing here: if there is no URL there is no
+                        link, because we index invoices rather than render
+                        them. */}
+                    {inv.invoice_url
+                      ? <a className="bl-link-btn" href={inv.invoice_url}
+                           target="_blank" rel="noopener noreferrer">View</a>
+                      : <span className="bl-inv-nolink">—</span>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          </div>
+        )}
+      </div>
+
+      {/* ── Payment history ── */}
+      <div className="bl-invoice-section">
+        <div className="bl-section-label" style={{ marginBottom: 14 }}>Payment history</div>
+        {payments.length === 0 ? (
+          <p className="dash-empty">No payments yet.</p>
+        ) : (
+          <div className="bl-invoice-table-wrap">
+          <table className="bl-invoice-table">
+            <thead>
+              <tr><th>Date</th><th>Plan</th><th>Amount</th><th>Status</th></tr>
+            </thead>
+            <tbody>
+              {payments.map(pay => (
+                <tr key={pay.payment_id}>
+                  <td>{formatDate(pay.paid_at || pay.created_at) || '—'}</td>
+                  <td>{pay.plan_name || pay.plan_tier || '—'}</td>
+                  <td>{formatINR(pay.amount_inr)}</td>
+                  <td>
+                    <span className={`bl-inv-status ${pay.status}`}>{pay.status}</span>
+                    {/* Failures are shown WITH their reason rather than
+                        filtered out. A founder whose renewal did not go
+                        through needs to see why, on the page where they would
+                        fix it -- hiding it is how someone finds out about a
+                        lapsed card by losing access. */}
+                    {pay.status === 'failed' && pay.failure_reason && (
+                      <div className="bl-inv-reason">{pay.failure_reason}</div>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          </div>
+        )}
       </div>
     </div>
   );
 }
+
+/**
+ * Billing name, GSTIN and address.
+ *
+ * Collected here, on the page a founder already visits to manage billing,
+ * rather than mid-checkout: a Razorpay invoice cannot be reissued against
+ * different details as easily as a form can be filled in, so the prompt has to
+ * come before the money, not after it.
+ *
+ * NOTHING HERE COMPUTES TAX. It collects the inputs a correct GST invoice
+ * needs — legal name, GSTIN, and the place of supply the treatment turns on.
+ * What rate applies, and whether Razorpay's document is a compliant tax
+ * invoice for this business, is the company CA's to confirm.
+ */
+function BillingDetailsSection() {
+  const [profile, setProfile] = useState(null);
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  const [saved, setSaved] = useState(false);
+
+  const alive = useRef(true);
+  useEffect(() => () => { alive.current = false; }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    getBillingProfile()
+      .then(p => { if (!cancelled) setProfile(p); })
+      .catch(() => { if (!cancelled) setProfile(null); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const set = (field) => (e) => {
+    setSaved(false);
+    setProfile(p => ({ ...(p ?? {}), [field]: e.target.value }));
+  };
+
+  const handleSave = async (e) => {
+    e.preventDefault();
+    if (saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const next = await saveBillingProfile({
+        customer_type: profile?.customer_type || 'individual',
+        business_name: profile?.business_name || null,
+        gstin: profile?.gstin || null,
+        billing_address: profile?.billing_address || null,
+        billing_city: profile?.billing_city || null,
+        billing_state: profile?.billing_state || null,
+        billing_pincode: profile?.billing_pincode || null,
+        billing_country: profile?.billing_country || 'IN',
+      });
+      if (!alive.current) return;
+      setProfile(next);
+      setSaved(true);
+    } catch (err) {
+      if (!alive.current) return;
+      /* Shown verbatim. The backend's message names the actual problem ("that
+         GSTIN is not a valid 15-character GST number", "'00' is not a valid
+         GST state code"), and replacing it with a generic "invalid" would
+         leave the founder guessing at a 15-character string. */
+      setError(err?.detail || err?.message || 'Those details could not be saved.');
+    } finally {
+      if (alive.current) setSaving(false);
+    }
+  };
+
+  if (profile === null && !open) return null;
+  const isBusiness = profile?.customer_type === 'business';
+
+  return (
+    <div className="bl-invoice-section">
+      <div className="bl-section-label" style={{ marginBottom: 14 }}>Billing details</div>
+
+      {!open ? (
+        <div className="bl-billing-summary">
+          {profile?.is_invoice_ready ? (
+            <p className="bl-status-note">
+              {isBusiness
+                ? <>Invoices are issued to <strong>{profile.business_name}</strong>
+                    {profile.gstin ? <> · GSTIN {profile.gstin}</> : null}</>
+                : <>Invoices are issued to your account details.</>}
+              {profile.billing_state ? <> · {profile.billing_state}</> : null}
+            </p>
+          ) : (
+            <p className="bl-status-note">
+              Add your billing address — and your business name and GSTIN if you
+              need invoices in a company&apos;s name. Details added after an invoice
+              is issued do not change that invoice.
+            </p>
+          )}
+          <button type="button" className="bl-link-btn" onClick={() => setOpen(true)}>
+            {profile?.is_invoice_ready ? 'Edit billing details' : 'Add billing details'}
+          </button>
+        </div>
+      ) : (
+        <form className="bl-billing-form" onSubmit={handleSave}>
+          <label>
+            <span>Billing type</span>
+            <select id="billing-type" value={profile?.customer_type || 'individual'}
+                    onChange={set('customer_type')} disabled={saving}>
+              <option value="individual">Individual</option>
+              <option value="business">Business</option>
+            </select>
+          </label>
+
+          {isBusiness && (
+            <>
+              <label>
+                <span>Registered business name</span>
+                <input id="billing-business-name" type="text" maxLength={200}
+                       value={profile?.business_name || ''} onChange={set('business_name')}
+                       disabled={saving} />
+              </label>
+              <label>
+                <span>GSTIN (optional)</span>
+                <input id="billing-gstin" type="text" maxLength={15}
+                       placeholder="29ABCDE1234F1Z5" autoCapitalize="characters"
+                       spellCheck="false"
+                       value={profile?.gstin || ''} onChange={set('gstin')}
+                       disabled={saving} />
+              </label>
+            </>
+          )}
+
+          <label>
+            <span>Billing address</span>
+            <input id="billing-address" type="text" maxLength={1000}
+                   value={profile?.billing_address || ''} onChange={set('billing_address')}
+                   disabled={saving} />
+          </label>
+          <label>
+            <span>City</span>
+            <input id="billing-city" type="text" maxLength={100}
+                   value={profile?.billing_city || ''} onChange={set('billing_city')}
+                   disabled={saving} />
+          </label>
+          <label>
+            {/* A fixed list, not free text: this is the place of supply, and
+                GST treatment turns on it. */}
+            <span>State (place of supply)</span>
+            <select id="billing-state" value={profile?.billing_state || ''}
+                    onChange={set('billing_state')} disabled={saving}>
+              <option value="">Select a state…</option>
+              {INDIAN_STATES.map(st => <option key={st} value={st}>{st}</option>)}
+            </select>
+          </label>
+          <label>
+            <span>PIN code</span>
+            <input id="billing-pincode" type="text" inputMode="numeric" maxLength={6}
+                   value={profile?.billing_pincode || ''} onChange={set('billing_pincode')}
+                   disabled={saving} />
+          </label>
+
+          {error && <p className="bl-coupon-err" role="alert">{error}</p>}
+          {saved && !error && <p className="bl-coupon-note">Billing details saved.</p>}
+
+          <div className="bl-modal-actions">
+            <button type="submit" className="bl-action-btn primary" disabled={saving}>
+              {saving ? 'Saving…' : 'Save billing details'}
+            </button>
+            <button type="button" className="bl-action-btn ghost"
+                    onClick={() => setOpen(false)} disabled={saving}>
+              Done
+            </button>
+          </div>
+        </form>
+      )}
+    </div>
+  );
+}
+
 
 /* ═══════════════════════════════════════════
    ROOT COMPONENT
