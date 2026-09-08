@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { MOCK_PLANS } from '../data/mockData';
 import { getProfile } from '../services/profile';
 import { getCatalog, getMyPlan } from '../services/plans';
@@ -882,6 +883,13 @@ function StatusView({ onUpgrade, currentPlan }) {
    ROOT COMPONENT
 ═══════════════════════════════════════════ */
 export default function Billing() {
+  /* PlanRequiredGate redirects a founder with no features here and passes
+     `needsPlan` in the navigation state. Nothing read it until now, so somebody
+     finishing onboarding was bounced onto a pricing page with no explanation of
+     why they had left the page they asked for. This is that explanation. */
+  const { state: navState } = useLocation();
+  const needsPlan = Boolean(navState?.needsPlan);
+
   // 'plans' | 'checkout' | 'activating' | 'success' | 'status'
   const [view, setView] = useState('plans');
   const [selectedPlan, setSelectedPlan] = useState(null);
@@ -932,6 +940,16 @@ export default function Billing() {
 
   return (
     <div className="pad bill-wrap">
+      {/* Shown only on arrival from the gate, and only while they are still
+          choosing -- once they are in checkout the reason they came is no
+          longer the thing on their mind. */}
+      {needsPlan && view === 'plans' && (
+        <div className="bl-needs-plan" role="status">
+          <strong>You're through onboarding.</strong> Choose a plan to open Ally
+          — your diagnosis, your Clarity Report and everything after it.
+        </div>
+      )}
+
       {/* Top nav tabs (when not in plans view) */}
       {view !== 'plans' && view !== 'checkout' && view !== 'activating' && (
         <div className="bl-top-tabs">

@@ -15,6 +15,7 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_founder_record
+from app.api.v1.entitlement_gates import require_reports
 from app.api.v1.reports.document import build_report_document
 from app.api.v1.reports.generator import ReportNarrative, ReportNarrativeGenerator
 from app.api.v1.reports.payload import build_report_payload
@@ -103,7 +104,18 @@ def _resolve_share_or_404(db: Session, token: str, *, route: str):
 
     return share, report
 
-router = APIRouter(prefix="/reports", tags=["reports"])
+# Gated on Feature.REPORTS at the router, so an endpoint added later is
+# protected by default rather than by its author remembering -- the same
+# reasoning as require_vision. The two share-token endpoints CANNOT live here:
+# they are read by whoever the founder sent a link to, who has no founder row
+# and no plan, so they sit on public_router below.
+router = APIRouter(prefix="/reports", tags=["reports"],
+                   dependencies=[Depends(require_reports)])
+
+# PUBLIC. No auth, no entitlement -- a share token is the credential. Included
+# BEFORE the gated router in api/v1/router.py so `/reports/shared/{token}`
+# keeps the route precedence it has today.
+public_router = APIRouter(prefix="/reports", tags=["reports"])
 
 
 # --- helpers ----------------------------------------------------------------
@@ -229,8 +241,10 @@ def share_url_for(token: str, request: Request) -> str:
     return f"{str(request.base_url).rstrip('/')}{path}"
 
 
-# --- founder-scoped endpoints ----------------------------------------------
-@router.get("/shared/{token}", response_model=SharedReportView)
+# --- public share-token endpoints -------------------------------------------
+# Mislabelled "founder-scoped" until the entitlement gate went in: both of these
+# take a token and no founder, which is exactly why they must stay ungated.
+@public_router.get("/shared/{token}", response_model=SharedReportView)
 def shared_report(token: str, db: Session = Depends(get_db)) -> SharedReportView:
     """PUBLIC. Strict subset: headings + prose only."""
     _share, report = _resolve_share_or_404(db, token, route="json")
@@ -242,7 +256,7 @@ def shared_report(token: str, db: Session = Depends(get_db)) -> SharedReportView
     )
 
 
-@router.get("/shared/{token}/view", response_class=HTMLResponse)
+@public_router.get("/shared/{token}/view", response_class=HTMLResponse)
 def shared_report_page(token: str, db: Session = Depends(get_db)) -> HTMLResponse:
     """PUBLIC. The shared report as a readable page.
 

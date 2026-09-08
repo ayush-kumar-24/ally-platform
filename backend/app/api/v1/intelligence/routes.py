@@ -20,6 +20,7 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_founder_record
+from app.api.v1.entitlement_gates import require_reports
 from app.db.session import get_db
 from app.middleware.error_handler import AppError
 from app.models import Founder
@@ -37,7 +38,8 @@ from app.schemas.intelligence import (
     RootCauseRef,
 )
 
-router = APIRouter(prefix="/intelligence", tags=["intelligence"])
+router = APIRouter(prefix="/intelligence", tags=["intelligence"],
+                   dependencies=[Depends(require_reports)])
 
 
 class ReportNotFoundError(AppError):

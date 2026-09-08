@@ -3,8 +3,9 @@ authenticated founder and delegates to VisionService; validation lives in
 the service. Domain errors propagate to the global handler.
 
 Gated on Feature.VISION (Rs 999) at the router, not per endpoint -- see
-require_vision. Goals, the cheaper tiers' equivalent, stays ungated in
-app/api/v1/founder_goals/router.py.
+require_vision. Goals, the cheaper tiers' equivalent, is gated the same way on
+Feature.GOALS (Rs 499) -- see app/api/v1/entitlement_gates.py. It was ungated
+until then, which was survivable only while Free carried it.
 """
 
 from __future__ import annotations
