@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { getCurrentSession, normalise, resumeOrStart, submitAnswer } from '../services/diagnosis';
-import { explainLimit } from '../services/plans';
+import { explainLimit, getMyPlan } from '../services/plans';
 import { useVoiceInput } from '../hooks/useVoiceInput';
 import VoiceBars from '../components/VoiceBars';
 import useAutoGrow from '../hooks/useAutoGrow';
@@ -63,6 +63,29 @@ export default function DiagnosisChat() {
         // Real counters, straight off the session the server already returns.
         setAnswered(session.answered ?? 0);
         setCategory(session.question?.category ?? null);
+        // Live-reproduced: resuming showed only the single current question
+        // -- every prior answer was safely saved server-side but never sent
+        // back to render, so the transcript looked wiped on every reload.
+        // Rebuilds the full history as alternating ally/founder bubbles,
+        // oldest first, using each turn's real answered_at rather than "now".
+        const past = session.history.flatMap((h) => [
+          { role: 'ally', time: clock(h.answeredAt), text: h.questionText },
+          { role: 'me', time: clock(h.answeredAt), text: h.answerText },
+        ]);
+        // A plain page load really can end a diagnosis: _attach_question
+        // (diagnosis/service.py) completes the session when the bank is
+        // exhausted or the scorer already flipped routing_state to
+        // generate_report, so GET /current answers is_complete with no
+        // question. Only `question.text` was branched on below, so that
+        // reply fell through every branch and left the founder on a blank
+        // transcript with a live input box, on a diagnosis already over and
+        // a report already being built. Same hand-off as the answer path.
+        if (session.complete) {
+          setDone(true);
+          setMessages([...past, { role: 'ally', time: clock(),
+            text: 'That completes your diagnosis. I am building your report now.' }]);
+          return;
+        }
         if (session.question?.text) {
           // A greeting precedes the first question on a genuine fresh start
           // only -- resuming reloads the same in-progress session (page
@@ -72,19 +95,10 @@ export default function DiagnosisChat() {
             ? []
             : [{ role: 'ally', time: clock(),
                 text: "Hi, I'm Ally. Let's get started — I'll ask about 30 questions, adapting as we go, so answer honestly and we'll get to your report as fast as your answers let us." }];
-          // Live-reproduced: resuming showed only the single current question
-          // -- every prior answer was safely saved server-side but never sent
-          // back to render, so the transcript looked wiped on every reload.
-          // Rebuilds the full history as alternating ally/founder bubbles,
-          // oldest first, using each turn's real answered_at rather than "now".
-          const past = session.history.flatMap((h) => [
-            { role: 'ally', time: clock(h.answeredAt), text: h.questionText },
-            { role: 'me', time: clock(h.answeredAt), text: h.answerText },
-          ]);
           setMessages([...opening, ...past, { role: 'ally', text: session.question.text, time: clock() }]);
         }
       })
-      .catch((error) => {
+      .catch(async (error) => {
         if (cancelled) return;
         const limit = explainLimit(error);
         if (limit?.kind === 'completed') {
@@ -95,6 +109,30 @@ export default function DiagnosisChat() {
           setBlocked(limit.message);
           return;
         }
+        // Live-reported: a founder who HAD finished their diagnosis was still
+        // told to "refresh to try again", forever. DiagnosisAlreadyCompletedError
+        // is only one of the ways POST /start refuses someone who is already
+        // done -- the route also runs consent, profile and rate-limit gates
+        // ahead of the handler, and any of those answers with a different code
+        // (403/429/5xx) that lands here instead. Refreshing cannot clear any of
+        // them, so the message above was both wrong and a dead end.
+        //
+        // The founder's usage is the thing that actually settles it, so ask for
+        // it rather than inferring the answer from which error came back. Same
+        // count and limit the start gate enforces (plans/router.py
+        // _diagnosis_usage exists so the two can never disagree).
+        try {
+          const usage = (await getMyPlan())?.diagnosis_usage;
+          if (cancelled) return;
+          if (usage && usage.limit != null && usage.used >= usage.limit) {
+            setBlocked('Your diagnosis is complete — your report is ready to read.');
+            return;
+          }
+        } catch {
+          // Could not confirm either way; say the honest transient thing below
+          // rather than guessing at a completion that may not have happened.
+        }
+        if (cancelled) return;
         setMessages([{ role: 'ally', time: clock(),
           text: "I couldn't start your diagnosis just now. Please refresh to try again." }]);
       });
