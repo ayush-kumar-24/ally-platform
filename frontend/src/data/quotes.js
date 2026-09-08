@@ -7,9 +7,12 @@
  * reading this at midnight does not need to be told to seize the day.
  *
  * Attributions are limited to lines that are well documented as that person's.
- * The rest are written for this product and left unattributed on purpose --
- * a made-up attribution on a real founder's dashboard is worse than no
- * attribution, and inventing one to fill the slot is exactly how that happens.
+ * Most of the rest are written for this product and left unattributed on
+ * purpose -- a made-up attribution on a real founder's dashboard is worse than
+ * no attribution, and inventing one to fill the slot is exactly how that
+ * happens. A line may also carry no `by` because we chose not to name the
+ * person; the card simply renders the quote alone, which is why `by` is
+ * optional rather than required.
  */
 
 export const QUOTES = {
@@ -22,7 +25,7 @@ export const QUOTES = {
   ],
   afternoon: [
     { text: 'Ideas are easy. Implementation is hard.', by: 'Guy Kawasaki' },
-    { text: 'Fall in love with the problem, not the solution.', by: 'Uri Levine' },
+    { text: 'Fall in love with the problem, not the solution.' },
     { text: 'The best way to predict the future is to invent it.', by: 'Alan Kay' },
     { text: 'The middle of the day is where most plans quietly get abandoned. Not today.' },
     { text: 'Slow progress on the right thing still beats fast progress on the wrong one.' },
