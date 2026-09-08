@@ -109,8 +109,16 @@ export const DIMENSION_LABELS = {
   communication_preference: 'Communication Preference',
   focus_attention: 'Focus & Attention',
   emotional_intelligence: 'Emotional Intelligence',
+  /* Added 2026-09-02 by migration a3f81c05e6d7 and present in the backend's
+     FounderDnaDimension enum, but never added here -- so the engine asked a
+     15th dimension while the progress counter still said "of 14". A founder
+     could resolve every dimension and never see the number reach the end. */
+  risk_appetite: 'Risk Appetite',
 };
 
+/* Derived, never hardcoded: the count and the labels cannot disagree. The
+   backend enum is the source of truth -- if a dimension is added there, add it
+   above or this counter silently under-reports again. */
 export const TOTAL_DIMENSIONS = Object.keys(DIMENSION_LABELS).length;
 
 export function dimensionLabel(code) {

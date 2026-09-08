@@ -52,6 +52,15 @@ ALL_DIMENSIONS: tuple[str, ...] = (
     "core_values", "mindset_excellence", "strengths_blind_spots",
     "energy_patterns", "stress_response", "decision_style",
     "communication_preference", "focus_attention", "emotional_intelligence",
+    # Added by migration a3f81c05e6d7 (2026-09-02), which seeded six questions
+    # for it and added it to FounderDnaDimension -- but not here. This tuple is
+    # what `_progress` subtracts resolved dimensions from, so the phase called
+    # itself COMPLETE with risk_appetite still unresolved, and the counter read
+    # "14 of 14" while a fifteenth dimension existed and was being asked.
+    #
+    # Last, matching the enum: it is a GoXL addition like emotional_intelligence
+    # above it, not one of the doc's original thirteen.
+    "risk_appetite",
 )
 
 #: arc_position at/above which a question is an adaptive FOLLOW-UP rather than

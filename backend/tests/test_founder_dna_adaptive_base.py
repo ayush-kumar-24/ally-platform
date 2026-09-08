@@ -148,3 +148,47 @@ def test_all_base_resolved_and_no_follow_ups_left_ends_on_the_close():
         per_dimension={"origin": 2},
     )
     assert _select(repo).founder_dna_question_id == CLOSING.founder_dna_question_id
+
+
+# --- the dimension list must not drift from the enum -----------------------
+
+def test_all_dimensions_covers_every_enum_member():
+    """ALL_DIMENSIONS is what `_progress` subtracts resolved dimensions from,
+    so a dimension missing here is one the phase never waits for.
+
+    risk_appetite was added to the enum and seeded with six questions by
+    migration a3f81c05e6d7, but not added to ALL_DIMENSIONS -- so Founder DNA
+    reported itself complete with a fifteenth dimension unresolved, and the
+    progress counter read "14 of 14". The tuple stays a literal because its
+    ORDER is meaningful; this test is what keeps it honest.
+    """
+    from app.api.v1.founder_dna.engine import ALL_DIMENSIONS
+    from app.models.enums import FounderDnaDimension
+
+    assert set(ALL_DIMENSIONS) == {d.value for d in FounderDnaDimension}
+    assert len(ALL_DIMENSIONS) == len(set(ALL_DIMENSIONS)), "duplicate dimension"
+
+
+def test_every_dimension_has_seeded_questions_for_every_stage_group():
+    """A dimension the phase waits for but has no question for is a session
+    that cannot finish. Checked per stage group because the banks are authored
+    separately and one can be forgotten.
+    """
+    from sqlalchemy import text
+    from app.api.v1.founder_dna.engine import ALL_DIMENSIONS
+    from app.db.session import SessionLocal, set_admin_rls_context
+
+    db = SessionLocal()
+    try:
+        set_admin_rls_context(db)
+        rows = db.execute(text(
+            "select dimension_code, stage_group from founder_dna_questions "
+            "where is_active group by dimension_code, stage_group"
+        )).all()
+    finally:
+        db.close()
+
+    groups = {g for _, g in rows}
+    have = {(d, g) for d, g in rows}
+    missing = [(d, g) for d in ALL_DIMENSIONS for g in groups if (d, g) not in have]
+    assert not missing, f"dimensions with no question for a stage group: {missing}"
