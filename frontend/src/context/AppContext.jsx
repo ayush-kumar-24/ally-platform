@@ -178,8 +178,16 @@ export function AppProvider({ children }) {
   const clearNotifications = useCallback(() => {
     setNotifications([]);
     setUnreadCount(0);
-    dismissAll().catch(() => refreshNotifications());
-  }, [refreshNotifications]);
+    dismissAll().catch(() => {
+      /* Say so. The rows were cleared optimistically, so a silent refetch puts
+         every one of them back with no explanation -- which reads as "the
+         button does nothing" rather than "the server refused". That is exactly
+         how this looked in production while the dismissed_at migration was
+         still undeployed: 500, silent catch, rows reappear. */
+      showToast("Couldn't clear those just now. Please try again.");
+      refreshNotifications();
+    });
+  }, [refreshNotifications, showToast]);
 
   /** Mark one read -- the badge should drop when a founder acts on a row. */
   const readNotification = useCallback((id) => {

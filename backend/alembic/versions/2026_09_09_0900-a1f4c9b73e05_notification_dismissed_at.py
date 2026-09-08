@@ -15,7 +15,7 @@ it from the list. Nullable and additive, so the deploy is a no-op for anything
 already running.
 
 Revision ID: a1f4c9b73e05
-Revises: c7e4b19d5a20
+Revises: a4d7c6e2b915
 Create Date: 2026-09-09 09:00:00.000000
 """
 
@@ -23,7 +23,7 @@ from alembic import op
 import sqlalchemy as sa
 
 revision = "a1f4c9b73e05"
-down_revision = "c7e4b19d5a20"
+down_revision = "a4d7c6e2b915"
 branch_labels = None
 depends_on = None
 
