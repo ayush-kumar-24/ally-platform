@@ -8,6 +8,7 @@ import { supabaseConfigured, WAITLIST_URL } from './services/supabaseConfig';
 import { loadChunk } from './utils/loadChunk';
 import ErrorBoundary from './components/ErrorBoundary';
 import RequireAuth from './components/RequireAuth';
+import RequireProfile from './components/RequireProfile';
 import RouteTitle from './components/RouteTitle';
 import SplashScreen from './components/SplashScreen';
 import Toast from './components/ui/Toast';
@@ -243,14 +244,14 @@ export default function App() {
                 /diagnosis/start 409s until it completes. Distinct from
                 "founder-dna" below, which is the read-only result card:
                 this one is where the founder answers. */}
-            <Route path="founder-dna-journey" element={<FounderDnaChat />} />
+            <Route path="founder-dna-journey" element={<RequireProfile><FounderDnaChat /></RequireProfile>} />
             {/* Phase 2 of 3. Reached from the Founder DNA journey rather than
                 linked directly -- see PlatformLayout, where the one "Start
                 Diagnosis" entry point still points at founder-dna-journey and
                 each phase passes through once complete. */}
-            <Route path="current-problem" element={<CurrentProblemChat />} />
-            <Route path="diagnosis" element={<DiagnosisChat />} />
-            <Route path="thinking" element={<Thinking />} />
+            <Route path="current-problem" element={<RequireProfile><CurrentProblemChat /></RequireProfile>} />
+            <Route path="diagnosis" element={<RequireProfile><DiagnosisChat /></RequireProfile>} />
+            <Route path="thinking" element={<RequireProfile><Thinking /></RequireProfile>} />
             <Route path="founder-dna" element={<FounderDNA />} />
             <Route path="vision" element={<VisionPage />} />
             <Route path="business-dna" element={<BusinessDNA />} />

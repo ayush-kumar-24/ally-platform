@@ -14,6 +14,7 @@
  */
 
 import { get, patch, put } from './api';
+import { forgetProfileComplete } from './onboarding';
 
 export function getProfile() {
   return get('/profile');
@@ -24,18 +25,30 @@ export function getProgress() {
 }
 
 export function updateProfile(changes) {
+  /* Any write can be the one that completes onboarding, so the cached
+     "is the profile finished" answer stops being trustworthy here. */
+  forgetProfileComplete();
   return patch('/profile', changes);
 }
 
 export function updateFounderSection(changes) {
+  /* Any write can be the one that completes onboarding, so the cached
+     "is the profile finished" answer stops being trustworthy here. */
+  forgetProfileComplete();
   return patch('/profile/founder', changes);
 }
 
 export function updateBusinessSection(changes) {
+  /* Any write can be the one that completes onboarding, so the cached
+     "is the profile finished" answer stops being trustworthy here. */
+  forgetProfileComplete();
   return patch('/profile/business', changes);
 }
 
 export function updateGoals(changes) {
+  /* Any write can be the one that completes onboarding, so the cached
+     "is the profile finished" answer stops being trustworthy here. */
+  forgetProfileComplete();
   return patch('/profile/goals', changes);
 }
 

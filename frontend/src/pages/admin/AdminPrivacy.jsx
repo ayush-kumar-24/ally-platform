@@ -212,7 +212,13 @@ export default function AdminPrivacy() {
               <tbody>
                 {ordered.map((r) => {
                   const isEmail = r.request_type === 'email_change';
-                  const age = waiting(r.requested_at);
+                  const isGrievance = r.request_type === 'grievance';
+                  /* A complaint carries a 48-hour acknowledgement promise under
+                     the DPDP Act, so it is clocked in hours. Everything else is
+                     measured against the 30-day commitment, in days. */
+                  const age = isGrievance
+                    ? ackClock(r.requested_at)
+                    : waiting(r.requested_at);
                   const pending = r.status === 'pending' || r.status === 'in_progress';
                   return (
                     <tr key={r.request_id}>

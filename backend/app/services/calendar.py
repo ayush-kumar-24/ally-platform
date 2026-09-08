@@ -199,6 +199,19 @@ def create_meeting(
         "summary": "GoXL Discovery Call",
         "start": {"dateTime": scheduled_at.isoformat(), "timeZone": DEFAULT_TIMEZONE},
         "end": {"dateTime": end.isoformat(), "timeZone": DEFAULT_TIMEZONE},
+        # Stated rather than left to each person's own calendar defaults, which
+        # for most people is a 10-minute popup and no email at all. These reach
+        # the founder only once they are an attendee (INVITE_ATTENDEES below);
+        # until then they apply to the host calendar, which is harmless.
+        "reminders": {
+            "useDefault": False,
+            "overrides": [
+                {"method": "email",
+                 "minutes": settings.GOOGLE_CALENDAR_REMINDER_EMAIL_MINUTES},
+                {"method": "popup",
+                 "minutes": settings.GOOGLE_CALENDAR_REMINDER_POPUP_MINUTES},
+            ],
+        },
     }
 
     # --- Video link ---
@@ -218,7 +231,13 @@ def create_meeting(
         body["description"] = f"Join the call: {settings.GOXL_MEETING_URL}"
 
     # --- Attendees ---
-    # Only with Workspace + domain-wide delegation; otherwise the app sends the link.
+    # This is what puts the call in the FOUNDER'S own calendar and blocks that
+    # time for them. Without it the event exists on the GoXL calendar only, the
+    # founder is never invited, and nothing appears in their diary -- they have
+    # the link from our email and nothing else.
+    #
+    # Needs Workspace + domain-wide delegation; a bare service account cannot
+    # invite anyone. Until then the app's own emails are the only reminder.
     send_updates = "none"
     if founder_email and settings.GOOGLE_CALENDAR_INVITE_ATTENDEES:
         body["attendees"] = [{"email": founder_email}]

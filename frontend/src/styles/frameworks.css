@@ -257,13 +257,22 @@ a.fw-card-link:focus-visible {
   transition: opacity .16s ease;
 }
 .wt-grid:has(.wt-tile:hover)::after,
-.wt-grid:has(.wt-tile.is-open)::after { opacity: .66; }
+.wt-grid:has(.wt-tile:focus-within)::after { opacity: .66; }
 
-.wt-tile { position: relative; transition: transform .16s ease; }
-.wt-tile:hover, .wt-tile.is-open { transform: translateY(-4px); z-index: 5; }
+/* The whole tile is the link, panel included -- see the note in
+   KnowledgePage. Anchors carry the browser's underline and link colour, so
+   both are reset here rather than on every child. */
+.wt-tile {
+  position: relative;
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  transition: transform .16s ease;
+}
+.wt-tile:hover, .wt-tile:focus-within { transform: translateY(-4px); z-index: 5; }
 
 .wt-face {
-  display: flex;
+  display: flex;   /* a <span>, so this is what makes it a box at all */
   flex-direction: column;
   gap: 7px;
   width: 100%;
@@ -282,12 +291,12 @@ a.fw-card-link:focus-visible {
   transition: background-color .16s ease, border-color .16s ease, box-shadow .16s ease;
 }
 .wt-tile:hover .wt-face,
-.wt-tile.is-open .wt-face {
+.wt-tile:focus-within .wt-face {
   background-color: rgba(16, 185, 129, .08);
   border-color: rgba(16, 185, 129, .4);
   box-shadow: 0 12px 28px rgba(16, 24, 20, .10);
 }
-.wt-face:focus-visible { outline: 2px solid var(--color-emerald, #10B981); outline-offset: 2px; }
+.wt-tile:focus-visible { outline: 2px solid var(--color-emerald, #10B981); outline-offset: 3px; border-radius: 16px; }
 
 .wt-name {
   font-family: var(--font-display);
@@ -332,16 +341,16 @@ a.fw-card-link:focus-visible {
   transition: opacity .16s ease, visibility 0s linear .16s;
 }
 .wt-tile:hover .wt-pop,
-.wt-tile.is-open .wt-pop {
+.wt-tile:focus-within .wt-pop {
   opacity: 1;
   visibility: visible;
   pointer-events: auto;
   transition: opacity .16s ease;
 }
 
-.wt-why { margin: 3px 0 0; font-size: 12.5px; line-height: 1.55; color: var(--color-ink, #16241c); }
+.wt-why { display: block; margin: 3px 0 0; font-size: 12.5px; line-height: 1.55; color: var(--color-ink, #16241c); }
 
-.wt-line { margin: 4px 0 0; font-size: 12px; line-height: 1.5; color: var(--color-moss, #3a5f47); }
+.wt-line { display: block; margin: 4px 0 0; font-size: 12px; line-height: 1.5; color: var(--color-moss, #3a5f47); }
 .wt-line-label {
   display: block;
   font-size: 9.5px;
@@ -355,6 +364,7 @@ a.fw-card-link:focus-visible {
 /* The way a title is commonly misread. Warm rather than green so it separates
    from the recommendation it is qualifying. */
 .wt-care {
+  display: block;
   margin: 8px 0 0;
   padding-top: 8px;
   border-top: 1px dashed rgba(16, 185, 129, .35);
@@ -366,5 +376,213 @@ a.fw-card-link:focus-visible {
 
 @media (prefers-reduced-motion: reduce) {
   .wt-tile { transition: none; }
-  .wt-tile:hover, .wt-tile.is-open { transform: none; }
+  .wt-tile:hover, .wt-tile:focus-within { transform: none; }
+}
+
+
+/* The nudge that says the peek is not the whole thing. */
+.wt-more {
+  display: block;
+  margin-top: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  color: var(--color-emerald-dark, #0c7a54);
+}
+
+
+/* The fifteen the shortlist names as carrying the most weight. The reasons it
+   gives are about Ally's own corpus gaps, so the ranking travels to a founder
+   and the reasoning does not -- hence a badge and not a sentence. */
+.wt-pick {
+  align-self: flex-start;
+  margin-bottom: 2px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--color-emerald-dark, #0c7a54);
+  background: rgba(16, 185, 129, .13);
+  border: 1px solid rgba(16, 185, 129, .3);
+}
+
+
+/* --- the glossary: a searchable list, not a grid ---------------------------
+   A definition is the content itself rather than a title you click through, so
+   it is set as a definition list and reads top to bottom. */
+
+.gl { max-width: 900px; }
+
+/* Sticky, because with ~180 terms you are usually several screens down when
+   you think of the next thing to look up. */
+.gl-bar {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0 14px;
+  margin-bottom: 4px;
+  background: var(--color-ivory, #f7f1eb);
+}
+.gl-search {
+  flex: 1;
+  min-width: 0;
+  padding: 11px 15px;
+  font: inherit;
+  font-size: 14px;
+  color: var(--color-ink, #16241c);
+  background: #fff;
+  border: 1px solid var(--color-bd, #e7e0d6);
+  border-radius: 12px;
+  transition: border-color .16s ease, box-shadow .16s ease;
+}
+.gl-search::placeholder { color: var(--color-muted-2, #8a958b); }
+.gl-search:focus {
+  outline: none;
+  border-color: rgba(16, 185, 129, .5);
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, .12);
+}
+.gl-count {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--color-muted-2, #8a958b);
+}
+
+.gl-jump { display: flex; flex-wrap: wrap; gap: 7px; margin: 0 0 26px; }
+.gl-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 13px;
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+  color: var(--color-muted-2, #6c7a70);
+  background: transparent;
+  border: 1px solid var(--color-bd, #e7e0d6);
+  border-radius: 999px;
+  transition: color .16s ease, background-color .16s ease, border-color .16s ease;
+}
+.gl-chip:hover {
+  color: var(--color-forest, #1B4332);
+  background-color: rgba(16, 185, 129, .08);
+  border-color: rgba(16, 185, 129, .4);
+}
+.gl-chip-n { font-size: 10px; font-weight: 800; color: var(--color-muted-2, #8a958b); }
+
+/* Each section is a panel of its own. As one continuous list the sections
+   disappeared and 182 rows read as a single wall of text. */
+.gl-section {
+  margin-bottom: 26px;
+  scroll-margin-top: 78px;
+  border: 1px solid var(--color-bd, #e7e0d6);
+  border-radius: 18px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.gl-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 20px;
+  background: linear-gradient(180deg, rgba(16, 185, 129, .10), rgba(16, 185, 129, .05));
+  border-bottom: 1px solid var(--color-bd, #e7e0d6);
+}
+.gl-num {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--color-forest, #1B4332);
+  color: #fff;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 700;
+}
+.gl-head-text { flex: 1; min-width: 0; }
+.gl-h {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 17px;
+  letter-spacing: -.01em;
+  color: var(--color-forest, #1B4332);
+}
+.gl-blurb {
+  margin: 3px 0 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--color-muted-2, #6c7a70);
+}
+.gl-h-n {
+  flex-shrink: 0;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .75);
+  border: 1px solid rgba(16, 185, 129, .28);
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--color-emerald-dark, #0c7a54);
+}
+
+.gl-note {
+  margin: 16px 20px 0;
+  padding: 11px 14px;
+  border-left: 3px solid #c08a4a;
+  background: rgba(192, 138, 74, .08);
+  border-radius: 0 10px 10px 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: #6d4a20;
+}
+
+.gl-list { margin: 0; padding: 4px 20px 8px; }
+.gl-row {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 20px;
+  padding: 14px 0;
+  border-bottom: 1px solid rgba(231, 224, 214, .7);
+}
+.gl-row:last-child { border-bottom: none; }
+.gl-row:hover { background: rgba(16, 185, 129, .035); }
+@media (max-width: 720px) {
+  .gl-row { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+}
+
+.gl-term {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 700;
+  line-height: 1.4;
+  color: var(--color-forest, #1B4332);
+}
+.gl-def { margin: 0; display: flex; flex-direction: column; gap: 7px; }
+.gl-means { font-size: 13.5px; line-height: 1.6; color: var(--color-ink, #16241c); }
+
+/* The failure mode, which the source calls the point of the whole thing. Set
+   apart so it cannot be skimmed past as more definition. */
+.gl-miss {
+  position: relative;
+  padding-left: 13px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--color-moss, #3a5f47);
+}
+.gl-miss::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 4px; bottom: 4px;
+  width: 2px;
+  border-radius: 2px;
+  background: rgba(16, 185, 129, .45);
 }

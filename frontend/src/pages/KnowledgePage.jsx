@@ -16,17 +16,18 @@
  * than component state, so a founder can be sent straight to one and the back
  * button behaves.
  *
- * TWO KINDS OF CARD. A podcast episode has a link, so its whole card is one.
- * A film has no link worth giving (see the note in data/watch.js), and there
- * are sixty-five of them -- printing every description at once is a wall
- * nobody reads. Those render as title tiles that open on hover.
+ * TWO KINDS OF CARD, both links. A podcast episode links to the episode. A film
+ * or a book has no durable link we could give -- streaming availability differs
+ * by country and by month, and a bookshop link would be us picking a shop -- so
+ * it links to a search for itself, which is what a founder would type anyway,
+ * and which lands on the panel with the cover, the editions and where to get it.
  *
  * NO LOADING STATE, deliberately. This is static reference content imported at
  * build time -- there is nothing to fetch, and a spinner over data already in
  * the bundle is a lie about what is happening.
  */
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { KNOWLEDGE_SECTIONS } from '../data/knowledge';
 
@@ -82,72 +83,203 @@ function ResourceCard({ item }) {
 }
 
 /**
- * A film or series: the title at rest, everything else on hover.
+ * The search a founder would have typed anyway.
  *
- * HOVER IS NOT THE ONLY WAY IN. A hover-only disclosure is invisible on a
- * phone and unreachable from a keyboard, so the face is a real <button>:
- * clicking or tapping it pins the detail open, and `aria-expanded` says so.
- * Hover is the shortcut on top of that, not the mechanism.
+ * Title alone is not enough for half of these -- "Air", "Joy", "Chef" and
+ * "Corporate" are all ordinary words, and a bare search lands nowhere useful.
+ * The year and the kind are what make the search resolve to the right thing.
+ */
+function searchUrl(item) {
+  const tag = (item.tag || '').toLowerCase();
+  /* A book is identified by its author, a film by its year. Both need the word
+     for what they are: "Drive" and "Range" and "Flow" and "Air" and "Joy" are
+     all ordinary words, and a bare title search lands nowhere useful. */
+  const q = item.by
+    ? [item.title, item.by, 'book']
+    : [item.title, item.year, tag.includes('series') ? 'series'
+      : tag.includes('documentary') ? 'documentary' : 'film'];
+  return `https://www.google.com/search?q=${encodeURIComponent(q.filter(Boolean).join(' '))}`;
+}
+
+/**
+ * A film, a series or a book: the title at rest, the detail on hover, the
+ * search on click.
  *
- * The detail is absolutely positioned over the tile and allowed to overhang
- * downwards. Growing the tile in place would reflow every card in the row on
- * a mouse-over, which looks broken even when it isn't.
+ * THE WHOLE TILE IS THE LINK, panel included. The panel takes pointer events
+ * so the cursor can cross it without the tile losing hover and flickering,
+ * which means a click lands on the panel rather than the face -- so the anchor
+ * has to wrap both rather than sit inside one of them.
+ *
+ * The panel is absolutely positioned over the tile and allowed to overhang
+ * downwards. Growing the tile in place would reflow every card in the row on a
+ * mouse-over, which looks broken even when it isn't.
  */
 function TitleTile({ item }) {
-  const [open, setOpen] = useState(false);
+  /* Built by joining rather than hard-coded, because the same tile carries a
+     film ("2016 · Global film") and a book ("Carol Dweck · Indian"). */
+  const meta = (
+    <span className="wt-sub">
+      {[item.year, item.by, item.tag].filter(Boolean).join(' · ')}
+    </span>
+  );
 
   return (
-    <div
-      className={`wt-tile${open ? ' is-open' : ''}`}
-      onMouseLeave={() => setOpen(false)}
+    <a
+      className="wt-tile"
+      href={searchUrl(item)}
+      target="_blank"
+      rel="noopener noreferrer"
     >
-      <button
-        type="button"
-        className="wt-face"
-        aria-expanded={open}
-        onClick={() => setOpen((o) => !o)}
-        onKeyDown={(e) => { if (e.key === 'Escape') setOpen(false); }}
-      >
+      <span className="wt-face">
+        {item.pick && <span className="wt-pick">Start here</span>}
         <span className="wt-name">{item.title}</span>
-        <span className="wt-sub">
-          {item.year}
-          {item.year && item.tag ? ' · ' : ''}
-          {item.tag}
-        </span>
-      </button>
+        {meta}
+      </span>
 
-      {/* The panel takes pointer events so the cursor can cross it without the
-          tile losing hover and flickering. That means a second tap lands here
-          rather than on the face, so closing has to live here too. */}
-      <div className="wt-pop" onClick={() => setOpen(false)}>
+      <span className="wt-pop">
         <span className="wt-name">{item.title}</span>
-        <span className="wt-sub">
-          {item.year}
-          {item.year && item.tag ? ' · ' : ''}
-          {item.tag}
-        </span>
+        {meta}
 
-        {item.why && <p className="wt-why">{item.why}</p>}
+        {item.why && <span className="wt-why">{item.why}</span>}
 
         {item.forWhen && (
-          <p className="wt-line">
-            <span className="wt-line-label">Watch it when</span>
+          <span className="wt-line">
+            <span className="wt-line-label">
+              {item.by ? 'Read it when' : 'Watch it when'}
+            </span>
             {item.forWhen}
-          </p>
+          </span>
         )}
 
         {item.ask && (
-          <p className="wt-line">
+          <span className="wt-line">
             <span className="wt-line-label">Ask yourself after</span>
             {item.ask}
-          </p>
+          </span>
         )}
 
         {/* Shown, not filed away. The films most likely to be misread are the
             ones most likely to be watched, so the warning travels with the
             title rather than living in a document nobody opens. */}
-        {item.care && <p className="wt-care">{item.care}</p>}
+        {item.care && <span className="wt-care">{item.care}</span>}
+
+        <span className="wt-more">Look it up ›</span>
+      </span>
+    </a>
+  );
+}
+
+/**
+ * The glossary: a searchable list, not a grid of tiles.
+ *
+ * WHY THIS IS A DIFFERENT SHAPE FROM THE OTHER SECTIONS. A film or a book is a
+ * title you leave the page for; a definition is the content itself, and there
+ * is nowhere better to send anyone. Tiles would hide the only thing of value
+ * behind a hover, and 180-odd of them would be unreadable either way.
+ *
+ * SEARCH IS THE PRIMARY WAY IN, because that is how a glossary gets used --
+ * somebody hears "liquidation preference" in a meeting and wants it now. It
+ * matches the term, the meaning and the mistake, so "who gets paid first" finds
+ * the entry even though those words are not in its name.
+ *
+ * The failure mode gets its own line rather than being folded into the meaning.
+ * Any dictionary can define CAC; the mistake attached to it is the reason this
+ * is worth having.
+ */
+function Glossary({ sections }) {
+  const [q, setQ] = useState('');
+  const query = q.trim().toLowerCase();
+
+  const total = useMemo(
+    () => sections.reduce((n, s) => n + s.terms.length, 0),
+    [sections],
+  );
+
+  const shown = useMemo(() => {
+    if (!query) return sections;
+    const hit = (t) => `${t.term} ${t.means} ${t.mistake}`.toLowerCase().includes(query);
+    return sections
+      .map((s) => ({ ...s, terms: s.terms.filter(hit) }))
+      .filter((s) => s.terms.length > 0);
+  }, [sections, query]);
+
+  const found = shown.reduce((n, s) => n + s.terms.length, 0);
+
+  return (
+    <div className="gl">
+      <div className="gl-bar">
+        <input
+          type="search"
+          className="gl-search"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Search — try churn, ESOP, runway, GST"
+          aria-label="Search the glossary"
+        />
+        <span className="gl-count" aria-live="polite">
+          {query ? `${found} of ${total}` : `${total} terms`}
+        </span>
       </div>
+
+      {/* Jump links while browsing. They would be noise during a search, where
+          the filtered list is already short. */}
+      {!query && (
+        <nav className="gl-jump" aria-label="Glossary sections">
+          {sections.map((s) => (
+            <a key={s.slug} className="gl-chip" href={`#gl-${s.slug}`}>
+              {s.title}
+              <span className="gl-chip-n">{s.terms.length}</span>
+            </a>
+          ))}
+        </nav>
+      )}
+
+      {found === 0 && (
+        <p className="fw-empty">
+          Nothing matches “{q}”. It may simply not be in here yet — the glossary
+          covers the vocabulary founders are expected to know, not everything.
+        </p>
+      )}
+
+      {shown.map((s) => (
+        /* Each section is its own panel with a numbered header, because as one
+           continuous run of 182 rows the sections were invisible and the whole
+           thing read as an undifferentiated wall.
+
+           The number comes from the full list, not from the filtered one. A
+           search for "esop" returns sections 5 and 8; numbering them 1 and 2
+           because they happen to be the only two showing would make the number
+           mean nothing. */
+        <section className="gl-section" key={s.slug} id={`gl-${s.slug}`}>
+          <header className="gl-head">
+            <span className="gl-num">
+              {sections.findIndex((x) => x.slug === s.slug) + 1}
+            </span>
+            <div className="gl-head-text">
+              <h2 className="gl-h">{s.title}</h2>
+              {s.blurb && <p className="gl-blurb">{s.blurb}</p>}
+            </div>
+            <span className="gl-h-n">{s.terms.length}</span>
+          </header>
+
+          {/* Shown, not filed. Several of these facts have already moved once
+              inside a year, and a founder reading a stale rate here would be
+              relying on us for it. */}
+          {s.note && <p className="gl-note">{s.note}</p>}
+
+          <dl className="gl-list">
+            {s.terms.map((t) => (
+              <div className="gl-row" key={t.term}>
+                <dt className="gl-term">{t.term}</dt>
+                <dd className="gl-def">
+                  <span className="gl-means">{t.means}</span>
+                  {t.mistake && <span className="gl-miss">{t.mistake}</span>}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+      ))}
     </div>
   );
 }
@@ -201,7 +333,7 @@ export default function KnowledgePage() {
         /* role="tablist" and the arrow-key behaviour browsers give buttons in
            one: these are real buttons, not links, because they swap content on
            the same page rather than navigating. */
-        <div className="fw-tabs" role="tablist" aria-label="What to watch">
+        <div className="fw-tabs" role="tablist" aria-label={`${kicker} sections`}>
           {tabs.map((tab) => {
             const isActive = tab.slug === active.slug;
             return (
@@ -230,9 +362,11 @@ export default function KnowledgePage() {
           every card would turn it into wallpaper. */}
       {active?.standing && <p className="fw-standing">{active.standing}</p>}
 
-      {tabs
-        ? <Library items={active.items} empty={active.empty} variant={active.variant} />
-        : <Library items={items} empty={empty} />}
+      {section.variant === 'glossary'
+        ? <Glossary sections={section.glossary} />
+        : tabs
+          ? <Library items={active.items} empty={active.empty} variant={active.variant} />
+          : <Library items={items} empty={empty} />}
     </div>
   );
 }

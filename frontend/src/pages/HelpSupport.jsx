@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { useNavigate } from 'react-router-dom';
 import Modal from '../components/Modal';
-import { FAQS, searchFaqs } from '../data/faqs';
+import { searchFaqs } from '../data/faqs';
 import { FEEDBACK, submitFeedback } from '../services/feedback';
 import { ApiError } from '../services/api';
 import { prefersReducedMotion } from '../services/motion';

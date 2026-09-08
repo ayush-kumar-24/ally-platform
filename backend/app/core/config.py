@@ -315,6 +315,20 @@ class Settings(BaseSettings):
     # calendar + domain-wide delegation. When off, the booking is created without
     # attendees and the app delivers the meeting link to the founder itself.
     GOOGLE_CALENDAR_INVITE_ATTENDEES: bool = False
+    # Minutes before the call that Google Calendar emails a reminder, and pops
+    # one up. Set on the event rather than left to each person's own defaults:
+    # without this Google uses whatever the attendee happens to have configured,
+    # which for most people is a 10-minute popup and no email at all.
+    #
+    # These reach the FOUNDER only when they are an attendee -- i.e. only with
+    # GOOGLE_CALENDAR_INVITE_ATTENDEES on. Until then they apply to the host
+    # calendar alone, which is harmless.
+    #
+    # Separate from the app's own 1-hour reminder email
+    # (app/jobs/discovery_reminders.py). That one always works; these need
+    # Workspace.
+    GOOGLE_CALENDAR_REMINDER_EMAIL_MINUTES: int = 30
+    GOOGLE_CALENDAR_REMINDER_POPUP_MINUTES: int = 10
     # Auto-generating a Google Meet link also needs Workspace -- personal Gmail
     # rejects it ("Invalid conference type value"). When off, the booking is a
     # plain event and the meeting link comes from GOXL_MEETING_URL.

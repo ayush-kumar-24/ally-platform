@@ -38,7 +38,6 @@ import { IconClose, IconMessageSquare, IconSend } from '../utils/icons';
  */
 
 const PANEL_ID = 'help-assistant-panel';
-const REPLY_DELAY_MS = 380; // enough to read as a reply, not enough to wait for
 
 const GREETING =
   "Hi — I'm Ally's help assistant. Ask me about your account, plans, the diagnosis or your data, and I'll find the answer.";
