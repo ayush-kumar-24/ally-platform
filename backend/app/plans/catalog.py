@@ -95,20 +95,26 @@ SOURCE_PLANNING = "planning"
 #: help answers 143 to 149, which quote both.
 CALL_PRICE_INR = 300
 
-#: BILLING CYCLE, settled by the team 2026-09-06 and NOT yet modelled here.
+#: BILLING CYCLE, settled by the team 2026-09-06 and now half modelled here.
 #:
-#: `price_inr` on every tier below is a monthly figure, because that is all this
-#: catalog has ever expressed. Two of the three plans are genuinely monthly --
-#: Plus and Pro renew until cancelled, and pay for twelve months and you get two
-#: free. Starter is not: Rs 199 is paid ONCE and buys a single month, with no
-#: renewal.
+#: `price_inr` on every tier below is a monthly figure. Two of the three plans
+#: are genuinely monthly -- Plus and Pro renew until cancelled, and pay for
+#: twelve months and you get two free. Starter is not: Rs 199 is paid ONCE and
+#: buys a single month, with no renewal.
 #:
-#: Nothing enforces that difference. There is no billing cycle field, no annual
-#: option and no non-renewing tier, because checkout was never built -- so the
-#: distinction lives only in the help answers and on the plans page today.
-#: Whoever wires Razorpay owns making the code agree with it: Starter must not
-#: create a recurring mandate, and Plus and Pro need an annual option at ten
-#: months' price.
+#: The non-renewing tier IS modelled: `one_time` below carries it, the plans API
+#: returns it, the billing page reads it rather than printing "/mo" over a
+#: single charge, and a captured payment writes `billing_cycle='one_time'` with
+#: no expiry instead of stamping every purchase as monthly. Checkout itself is
+#: wired (app/payments/), and it creates a single auto-captured order per
+#: purchase rather than a Razorpay subscription mandate -- so nothing recurring
+#: is created for Starter, or for anything else.
+#:
+#: STILL MISSING: the annual option. Plus and Pro are meant to be buyable at ten
+#: months' price for twelve, and there is no annual tier, no annual price field
+#: and no way to select one -- so today "two months free" lives only in the help
+#: answers and on the plans page. The subscriptions table already accepts
+#: `billing_cycle='annual'`; nothing writes it.
 #:
 #: GST is included in every price shown. Prices are inclusive, not exclusive.
 
