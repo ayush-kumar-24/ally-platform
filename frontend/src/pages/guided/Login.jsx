@@ -21,7 +21,7 @@ import AuthTransition from '../../components/AuthTransition';
 import { CURRENT_VERSIONS, flushPendingConsent, recordConsent, savePendingConsent } from '../../services/consents';
 import { sendEmailOtp, signInWithPassword, startDevSession, verifyOtpAndSetPassword } from '../../services/auth';
 import { get } from '../../services/api';
-import { DEV_MOCK_CODE, devMockAuth, supabaseConfigured, WAITLIST_URL } from '../../services/supabaseConfig';
+import { DEV_MOCK_CODE, devMockAuth, supabaseConfigured } from '../../services/supabaseConfig';
 import { firstSafe } from '../../utils/looksLikeToken';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -82,9 +82,6 @@ export default function Login() {
   const [notice, setNotice] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [cooldown, setCooldown] = useState(0);
-  // True when the address came in on the invite link (#email=…): this founder
-  // has been approved, so offering them the waitlist would only confuse.
-  const [fromInvite, setFromInvite] = useState(false);
   // Ref, not state: state updates are async, so two submits in the same tick
   // would both see `submitting === false` and both fire. The ref flips
   // synchronously.
@@ -124,7 +121,6 @@ export default function Login() {
       if (!EMAIL_RE.test(candidate)) return;
       setEmail(candidate);
       setStep('email');
-      setFromInvite(true);
     };
     applyEmailFromHash();
     // Also when the link is followed while this page is already open: a
@@ -496,12 +492,6 @@ export default function Login() {
                 Email me a code
               </button>
             </p>
-            {!fromInvite && (
-              <p className="auth-alt">
-                Don&rsquo;t have access yet?{' '}
-                <a className="auth-link-btn" href={WAITLIST_URL}>Join the waitlist</a>
-              </p>
-            )}
           </form>
         ) : step === 'email' ? (
           <form className="auth-form" onSubmit={handleSendCode} noValidate>
@@ -528,12 +518,6 @@ export default function Login() {
                 Sign in instead
               </button>
             </p>
-            {!fromInvite && (
-              <p className="auth-alt">
-                Don&rsquo;t have access yet?{' '}
-                <a className="auth-link-btn" href={WAITLIST_URL}>Join the waitlist</a>
-              </p>
-            )}
           </form>
         ) : (
           <form className="auth-form" onSubmit={handleVerify} noValidate>
