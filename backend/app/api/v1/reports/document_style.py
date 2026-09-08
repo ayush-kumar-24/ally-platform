@@ -146,9 +146,15 @@ STYLE = """
 .rp .chip-row.t-critical .mini-fill{background:linear-gradient(90deg,#A8412C,var(--rust));}
 .rp .chip-row.t-critical .chip-num{color:var(--rust);}
 
-.rp .finding{border-radius:18px;padding:36px 40px 32px;
+/* The root cause is the whole point of the diagnosis, so it is the one block on
+   the page that sits above the paper rather than on it -- the shadow and the lit
+   top edge are what make it read as the report's conclusion at a glance. */
+.rp .finding{border-radius:18px;padding:36px 40px 32px;position:relative;
   background:linear-gradient(150deg,var(--forest-700) 0%,var(--forest-900) 100%);
-  color:var(--paper);display:flex;flex-direction:column;gap:22px;}
+  color:var(--paper);display:flex;flex-direction:column;gap:22px;
+  box-shadow:0 18px 44px -22px rgba(6,20,13,.55);overflow:hidden;}
+.rp .finding::before{content:"";position:absolute;top:0;left:0;right:0;height:3px;
+  background:linear-gradient(90deg,var(--signal),#A3E635);}
 .rp .finding-tag{display:flex;align-items:center;gap:9px;font-size:11.5px;font-weight:700;
   letter-spacing:.13em;text-transform:uppercase;color:var(--signal-lit);}
 .rp .finding-tag .dot{width:8px;height:8px;border-radius:50%;background:var(--signal-lit);}
@@ -165,22 +171,36 @@ STYLE = """
 
 .rp .cause-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;}
 .rp .cause{border-radius:13px;padding:20px 22px;background:var(--paper-card);
-  border:1px solid var(--paper-line);display:flex;flex-direction:column;gap:9px;}
+  border:1px solid var(--paper-line);display:flex;flex-direction:column;gap:9px;
+  min-width:0;}
+/* The first card is the cause the report actually concluded on; the others are
+   the runners-up. Weighting them equally read as three findings of equal standing. */
+.rp .cause:first-child{border-color:var(--signal);
+  box-shadow:0 1px 2px -1px rgba(6,20,13,.14),0 8px 20px -12px rgba(6,20,13,.24);}
 .rp .cause-cat{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
   color:var(--ink-faint);}
 .rp .cause-name{font-family:var(--display);font-size:19px;font-weight:600;
-  color:var(--forest-800);line-height:1.2;}
+  color:var(--forest-800);line-height:1.2;overflow-wrap:anywhere;}
 .rp .cause-conf{font-size:12.5px;color:var(--ink-soft);font-variant-numeric:tabular-nums;}
 
 .rp .trail{border-radius:15px;padding:28px 30px;background:var(--paper-card);
   border:1px solid var(--paper-line);display:flex;flex-direction:column;gap:16px;}
 .rp .trail-head{font-size:11.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
   color:var(--forest-500);}
-.rp .trail-step{display:grid;grid-template-columns:26px minmax(0,1fr);gap:14px;align-items:start;}
+/* A connector down the step numbers, so the five steps read as one line of
+   reasoning arriving somewhere rather than five unrelated bullets. The rule
+   spans the 16px gap to the next step, so it stops at the last one. */
+.rp .trail-step{display:grid;grid-template-columns:26px minmax(0,1fr);gap:14px;align-items:start;
+  position:relative;}
+.rp .trail-step:not(:last-child)::before{content:"";position:absolute;left:11px;top:28px;
+  bottom:-18px;width:2px;background:#DFF0E4;}
 .rp .step-num{width:24px;height:24px;border-radius:7px;background:#DFF0E4;color:var(--forest-700);
   font-size:12.5px;font-weight:700;display:flex;align-items:center;justify-content:center;
-  font-variant-numeric:tabular-nums;}
-.rp .trail-step p{font-size:15px;max-width:none;}
+  font-variant-numeric:tabular-nums;position:relative;z-index:1;}
+/* The conclusion is where the trail was going -- it gets the filled marker. */
+.rp .trail-step:last-child .step-num{background:var(--forest-700);color:var(--paper);}
+.rp .trail-step:last-child p{color:var(--forest-800);}
+.rp .trail-step p{font-size:15px;max-width:none;overflow-wrap:anywhere;}
 
 .rp .quote{border-left:3px solid var(--signal);padding:4px 0 4px 20px;
   display:flex;flex-direction:column;gap:8px;}
@@ -239,13 +259,21 @@ STYLE = """
    report without a code change. */
 .rp .facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));
   gap:16px;margin-top:22px;}
+/* min-width:0 on the card and overflow-wrap on its text: a grid item's default
+   min-width is auto, so one long unbroken string (a URL, a run-on the founder
+   typed without spaces) sets the column's floor and pushes the words straight
+   out through the border instead of wrapping inside it. */
 .rp .fact{border-radius:12px;padding:18px 20px;background:var(--paper-card);
-  border:1px solid var(--paper-line);display:flex;flex-direction:column;gap:7px;}
+  border:1px solid var(--paper-line);display:flex;flex-direction:column;gap:7px;
+  min-width:0;}
 .rp .fact-k{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
-  color:var(--signal);}
-.rp .fact-v{font-size:14.5px;line-height:1.55;color:var(--ink-soft);}
-.rp .fact-list{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:7px;}
-.rp .fact-list li{display:grid;grid-template-columns:14px minmax(0,1fr);gap:9px;}
+  color:var(--signal);overflow-wrap:anywhere;}
+.rp .fact-v{font-size:14.5px;line-height:1.55;color:var(--ink-soft);
+  min-width:0;overflow-wrap:anywhere;}
+.rp .fact-list{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:7px;
+  min-width:0;}
+.rp .fact-list li{display:grid;grid-template-columns:14px minmax(0,1fr);gap:9px;
+  overflow-wrap:anywhere;}
 .rp .fact-list li::before{content:"";width:6px;height:6px;border-radius:50%;
   background:var(--signal);margin-top:8px;}
 
