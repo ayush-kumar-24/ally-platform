@@ -268,28 +268,39 @@ function Glossary({ sections }) {
               relying on us for it. */}
           {s.note && <p className="gl-note">{s.note}</p>}
 
-          <dl className="gl-list">
-            {s.terms.map((t) => (
-              <div className="gl-row" key={t.term}>
-                <dt className="gl-term">
-                  {t.term}
-                  {/* Only for actual acronyms. The source marks non-acronyms
-                      with an em dash; those carry no `full` at all rather than
-                      a dash the reader has to decode. */}
-                  {t.full && <span className="gl-full">{t.full}</span>}
-                </dt>
-                <dd className="gl-def">
-                  <span className="gl-means">{t.means}</span>
-                  {t.usedFor && (
-                    <span className="gl-used">
-                      <span className="gl-used-label">Used for</span>
-                      {t.usedFor}
-                    </span>
-                  )}
-                </dd>
-              </div>
-            ))}
-          </dl>
+          {/* The document's own four columns, kept in its order and with its
+              headings. A founder who has seen the Word version should not have
+              to work out that this is the same thing.
+
+              Horizontally scrollable on narrow screens rather than reflowed:
+              four columns of prose collapsed into a phone width stops being a
+              table and stops being comparable, which is the whole point of a
+              table. */}
+          <div className="gl-tablewrap">
+            <table className="gl-table">
+              <thead>
+                <tr>
+                  <th className="gl-c-term">Term</th>
+                  <th className="gl-c-full">Full Form</th>
+                  <th className="gl-c-used">What It Is Used For</th>
+                  <th className="gl-c-means">What It Actually Means</th>
+                </tr>
+              </thead>
+              <tbody>
+                {s.terms.map((t) => (
+                  <tr key={t.term}>
+                    <td className="gl-c-term">{t.term}</td>
+                    {/* The em dash is the document's own convention for a term
+                        that is not an acronym, so it is shown rather than left
+                        blank -- a blank cell reads as missing data. */}
+                    <td className="gl-c-full">{t.full || '—'}</td>
+                    <td className="gl-c-used">{t.usedFor}</td>
+                    <td className="gl-c-means">{t.means}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </section>
       ))}
     </div>

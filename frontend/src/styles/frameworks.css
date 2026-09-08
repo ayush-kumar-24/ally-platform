@@ -545,63 +545,57 @@ a.fw-card-link:focus-visible {
   color: #6d4a20;
 }
 
-.gl-list { margin: 0; padding: 4px 20px 8px; }
-.gl-row {
-  display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
-  gap: 20px;
-  padding: 14px 0;
-  border-bottom: 1px solid rgba(231, 224, 214, .7);
-}
-.gl-row:last-child { border-bottom: none; }
-.gl-row:hover { background: rgba(16, 185, 129, .035); }
-@media (max-width: 720px) {
-  .gl-row { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+/* The document's four-column table, kept as a table.
+
+   FULL WIDTH, not the 900px the prose version used. Four columns of real
+   sentences need the room; at 900px "What It Actually Means" wraps to six
+   lines and the table stops being scannable. */
+.gl { max-width: 100%; }
+
+.gl-tablewrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
-.gl-term {
-  margin: 0;
-  font-size: 13.5px;
-  font-weight: 700;
-  line-height: 1.4;
-  color: var(--color-forest, #1B4332);
-}
-.gl-def { margin: 0; display: flex; flex-direction: column; gap: 7px; }
-.gl-means { font-size: 13.5px; line-height: 1.6; color: var(--color-ink, #16241c); }
-
-/* The acronym expansion, under the term itself. */
-.gl-full {
-  display: block;
-  margin-top: 3px;
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 1.4;
-  color: var(--color-muted-2, #8a958b);
-}
-
-/* Where the term earns its keep. Set apart from the definition so a reader
-   scanning for meaning is not slowed by the situation, and vice versa. */
-.gl-used {
-  position: relative;
-  padding-left: 13px;
+.gl-table {
+  width: 100%;
+  min-width: 860px;            /* below this the columns are unreadable; scroll instead */
+  border-collapse: collapse;
   font-size: 13px;
-  line-height: 1.6;
-  color: var(--color-moss, #3a5f47);
+  line-height: 1.55;
 }
-.gl-used-label {
-  display: block;
-  font-size: 9.5px;
-  font-weight: 800;
-  letter-spacing: .1em;
-  text-transform: uppercase;
-  color: var(--color-muted-2, #8a958b);
-  margin-bottom: 2px;
+
+/* The document's dark header row.
+
+   NOT sticky, deliberately. It was, at top:62px to clear the search bar, and it
+   lifted out of its own table and sat on top of the first data row -- the
+   offset is measured against the scroll container, which is not the same
+   element the table sits in. Two stacked sticky elements for a table of at most
+   31 rows was not worth the breakage. */
+.gl-table thead th {
+  text-align: left;
+  padding: 11px 14px;
+  background: var(--color-forest, #1B4332);
+  color: #fff;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: .03em;
+  white-space: nowrap;
 }
-.gl-used::before {
-  content: '';
-  position: absolute;
-  left: 0; top: 4px; bottom: 4px;
-  width: 2px;
-  border-radius: 2px;
-  background: rgba(16, 185, 129, .45);
+
+.gl-table td {
+  padding: 12px 14px;
+  vertical-align: top;
+  border-bottom: 1px solid rgba(231, 224, 214, .8);
+  color: var(--color-ink, #16241c);
 }
+.gl-table tbody tr:last-child td { border-bottom: none; }
+.gl-table tbody tr:hover td { background: rgba(16, 185, 129, .04); }
+
+/* Column widths. Term and Full Form are short and fixed; the two prose columns
+   take what is left, weighted towards the meaning -- the document calls that
+   the column that matters most. */
+.gl-c-term  { width: 14%; font-weight: 700; color: var(--color-forest, #1B4332); }
+.gl-c-full  { width: 18%; color: var(--color-muted-2, #6c7a70); }
+.gl-c-used  { width: 27%; color: var(--color-moss, #3a5f47); }
+.gl-c-means { width: 41%; }
