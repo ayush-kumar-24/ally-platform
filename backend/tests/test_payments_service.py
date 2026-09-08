@@ -27,7 +27,7 @@ from app.payments.errors import (
     PaymentsNotConfiguredError,
 )
 from app.payments.gateway import GatewayOrder, PaymentGatewayError
-from app.payments.models import WebhookOutcome
+from app.payments.models import WebhookOutcome, WebhookResult
 from app.payments.service import PaymentService
 from app.plans.catalog import PLANS, PlanTier
 
@@ -867,3 +867,106 @@ def test_confirm_unconfigured_gateway_refuses():
     service, _, _ = _service(gateway=None)
     with pytest.raises(PaymentsNotConfiguredError):
         service.confirm_checkout(42, order_id="order_1", gateway_payment_id="pay_1")
+
+
+# --- the recurring split ----------------------------------------------------
+
+def test_a_renewing_tier_cannot_be_bought_as_a_one_time_order():
+    """The bug this whole branch exists to prevent, asserted directly.
+
+    Plus and Pro were sold through start_checkout: the founder was charged
+    once, no Razorpay mandate was ever created, and the second month never
+    came. It looks completely healthy while doing it -- the money arrives and
+    the plan is granted -- which is why it survived, and why the refusal has to
+    be a hard one rather than a note in a docstring.
+    """
+    service, repo, _ = _service()
+    for tier in (PlanTier.STARTER, PlanTier.PRO):
+        with pytest.raises(InvalidCheckoutError):
+            service.start_checkout(42, tier)
+    assert repo.subscriptions_created == []
+
+
+def test_only_the_one_time_tier_is_sold_through_checkout():
+    """A guard against the catalog and this path drifting: if a tier ever stops
+    being one-time, or a new one-time tier is added, this says so rather than
+    leaving it to be discovered by a founder being charged wrongly."""
+    sellable = [t for t in (PlanTier.BASIC, PlanTier.STARTER, PlanTier.PRO)
+                if PLANS[t].one_time]
+    assert sellable == [PlanTier.BASIC]
+
+
+class _RecordingSubscriptions:
+    """Stands in for SubscriptionService inside PaymentService."""
+
+    def __init__(self):
+        self.events = []
+
+    def handle_event(self, event, payload):
+        self.events.append(event)
+        return WebhookResult(outcome=WebhookOutcome.STATE_SYNCED)
+
+
+def _subscription_body(event: str) -> bytes:
+    return json.dumps({
+        "event": event,
+        "payload": {"subscription": {"entity": {"id": "sub_1", "status": "active"}}},
+    }).encode()
+
+
+def test_subscription_events_are_dispatched_after_one_signature_check():
+    """There is exactly ONE Razorpay signature verification in this codebase and
+    it is here. Subscription events go through it and then onward, rather than
+    getting a second entry point that could be reached without it."""
+    service, _, _ = _service()
+    subs = _RecordingSubscriptions()
+    service.subscriptions = subs
+
+    body = _subscription_body("subscription.charged")
+    result = service.handle_webhook(body=body, signature=_sign(body))
+
+    assert subs.events == ["subscription.charged"]
+    assert result.outcome == WebhookOutcome.STATE_SYNCED
+
+
+def test_a_subscription_event_with_a_bad_signature_never_reaches_the_service():
+    service, _, _ = _service()
+    subs = _RecordingSubscriptions()
+    service.subscriptions = subs
+
+    with pytest.raises(InvalidWebhookSignatureError):
+        service.handle_webhook(body=_subscription_body("subscription.charged"),
+                               signature="not-the-signature")
+    assert subs.events == []
+
+
+def test_a_captured_payment_belonging_to_a_subscription_defers_to_the_charge_event():
+    """Razorpay sends BOTH `payment.captured` and `subscription.charged` for a
+    recurring charge. Only the second carries the period dates, so without this
+    guard the same money is handled twice -- once granting a flat 30 days from
+    today, once granting the real period -- and whichever arrived first won.
+    The founder's access date was a coin toss."""
+    service, repo, credits = _service()
+    body = json.dumps({
+        "event": "payment.captured",
+        "payload": {"payment": {"entity": {
+            "id": "pay_1", "order_id": "order_1", "subscription_id": "sub_1"}}},
+    }).encode()
+
+    result = service.handle_webhook(body=body, signature=_sign(body))
+
+    assert result.outcome == WebhookOutcome.IGNORED_EVENT
+    assert repo.plans_granted == []
+    assert credits.grants == []
+
+
+def test_a_one_time_capture_is_still_granted_by_the_payment_event():
+    """The other half of the guard above: a payment with no subscription id is
+    an ordinary one-time purchase and must still be handled here."""
+    service, repo, _ = _service()
+    service.start_checkout(42, PlanTier.BASIC)
+    body = _captured_event(order_id="order_1", payment_id="pay_1", tier="basic")
+
+    assert service.handle_webhook(body=body, signature=_sign(body)).outcome == (
+        WebhookOutcome.CAPTURED)
+    assert repo.plans_granted == [(42, "basic")]

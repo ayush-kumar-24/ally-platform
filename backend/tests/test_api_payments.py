@@ -81,7 +81,7 @@ def test_checkout_requires_authentication():
     """No get_founder_record override installed -- the real dependency chain
     runs and rejects, same guard test_api_admin_panel.py's own
     'without_override' test proves for the admin panel."""
-    bare = TestClient(app)
+    bare = TestClient(app, raise_server_exceptions=False)
     r = bare.post(f"{BASE}/checkout", json={"tier": "starter"})
     assert r.status_code != 200
 
@@ -258,7 +258,7 @@ def test_checkout_returns_the_discount_breakdown_when_there_is_one(client):
 # outcome honestly.
 
 def test_confirm_requires_authentication():
-    bare = TestClient(app)
+    bare = TestClient(app, raise_server_exceptions=False)
     r = bare.post(f"{BASE}/confirm",
                   json={"order_id": "order_1", "razorpay_payment_id": "pay_1"})
     assert r.status_code != 200

@@ -93,16 +93,62 @@ Anyone still on `free` after this will be sent to the plans page.
 * **Feature gating itself.** It is already enforced server-side and has been for
   some time. Launch only changes what the Free tier contains.
 
+## Billing — settled
+
+* **Is Rs 199 monthly or one-time?** Answered: **one-time**. `PlanTier.BASIC`
+  carries `one_time=True`, and `PaymentService.start_checkout` is the only path
+  that sells it. Every surface that prints the price reads that flag rather
+  than assuming "/mo".
+* **Checkout.** Wired, both halves. Starter is a Razorpay **Order**; Plus and
+  Pro are Razorpay **Subscriptions** — a mandate Razorpay charges monthly until
+  cancelled. `start_checkout` refuses a renewing tier outright, because selling
+  one as a single order charges the founder once and gives them the plan
+  forever, which is what it did before.
+* **Cancellation, invoices, expiry.** Cancel at period end (the founder keeps
+  the month they paid for); invoices index Razorpay's own documents; and
+  `subscriptions.access_until` is enforced by the expire-subscriptions sweep.
+
+### Before Live Mode — the steps that are NOT code
+
+These are operational and nobody can do them from here:
+
+1. **Create the Live Mode Razorpay Plans.** `POST /admin/billing/razorpay-plans`
+   with `{"tier": "starter"}` and `{"tier": "pro"}` creates each plan at
+   Razorpay for the catalog price and registers its id, or pass an existing
+   `razorpay_plan_id` to adopt one. Until a plan id is registered for a tier,
+   subscribing to it returns 503 rather than guessing an id — the amount a
+   founder is charged every month is decided by the Razorpay Plan, and a
+   guessed one charges a number nobody chose.
+2. **Configure the Live webhook endpoint and its secret.** The events to
+   subscribe to are `payment.captured`, `payment.failed`,
+   `subscription.authenticated`, `subscription.activated`,
+   `subscription.charged`, `subscription.pending`, `subscription.halted`,
+   `subscription.cancelled`, `subscription.completed` and `invoice.paid`.
+   `RAZORPAY_WEBHOOK_SECRET` is separate from the key secret; with it unset,
+   signature verification fails closed and nothing is ever granted.
+3. **Schedule the expiry sweep.** `POST /internal/jobs/expire-subscriptions`,
+   daily. `.github/workflows/internal-job-sweeps.yml` already calls it at 18:30
+   UTC. Without it, paid access never ends: cancellation, the grace window and
+   the billing period are all dates that nothing reads.
+4. **Have the CA validate the GST treatment and the invoice format.** The
+   backend collects and validates the inputs (legal name, GSTIN, place of
+   supply) and stores whatever tax figure Razorpay reports. It computes no tax
+   and asserts nothing about whether a Razorpay invoice is a compliant tax
+   invoice for this business. That is not a gap to be closed in code.
+5. **Run one controlled production transaction and reconcile it** against
+   `payments`, `invoices` and the Razorpay dashboard before enabling the public
+   payment buttons.
+
 ## Still open when this was written
 
-* **Is Rs 199 monthly or one-time?** The catalog labels it per month; the pricing
-  proposal recommended one-time, on the grounds that a second month of "one
-  diagnosis and its report" delivers nothing new. Both readings are still in the
-  repo. The billing page cannot avoid answering it.
-* **Checkout.** Razorpay is not wired. Until it is, nobody can move themselves
-  off the empty Free tier without someone setting their plan by hand — so either
-  checkout ships first, or launch day needs a person on the other end of the
-  plans page.
+* **Annual billing.** "Pay for twelve months, get two free" is described in the
+  help answers and is not implemented. It needs a second Razorpay Plan per tier
+  at ten months' price and a billing-cycle field on the subscription.
+* **Plan changes.** Moving between Plus and Pro is refused with a 409 telling
+  the founder to cancel first. Doing it properly means cancelling one mandate
+  and starting another with a defensible answer for the overlap they already
+  paid for, which is a pricing decision rather than a coding one. Support can
+  cancel and resubscribe on request in the meantime.
 
 ---
 

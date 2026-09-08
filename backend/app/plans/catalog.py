@@ -95,20 +95,28 @@ SOURCE_PLANNING = "planning"
 #: help answers 143 to 149, which quote both.
 CALL_PRICE_INR = 300
 
-#: BILLING CYCLE, settled by the team 2026-09-06 and NOT yet modelled here.
+#: BILLING CYCLE, settled by the team 2026-09-06 and now enforced.
 #:
-#: `price_inr` on every tier below is a monthly figure, because that is all this
-#: catalog has ever expressed. Two of the three plans are genuinely monthly --
-#: Plus and Pro renew until cancelled, and pay for twelve months and you get two
-#: free. Starter is not: Rs 199 is paid ONCE and buys a single month, with no
-#: renewal.
+#: `one_time` on each Plan below is the field that expresses it, and the code
+#: agrees with it in both directions:
 #:
-#: Nothing enforces that difference. There is no billing cycle field, no annual
-#: option and no non-renewing tier, because checkout was never built -- so the
-#: distinction lives only in the help answers and on the plans page today.
-#: Whoever wires Razorpay owns making the code agree with it: Starter must not
-#: create a recurring mandate, and Plus and Pro need an annual option at ten
-#: months' price.
+#:   Starter (Rs 199)  one_time=True   a Razorpay ORDER. Paid once, buys one
+#:                                     diagnosis and its report. PaymentService
+#:                                     .start_checkout is its only path.
+#:   Plus / Pro        one_time=False  a Razorpay SUBSCRIPTION. A mandate
+#:                                     Razorpay charges monthly until cancelled.
+#:                                     SubscriptionService.start_subscription is
+#:                                     its only path; start_checkout refuses them.
+#:
+#: This comment used to say the difference was enforced by nothing, and it was
+#: right. Plus and Pro went through the one-time order path, so the founder was
+#: charged once and kept the plan forever. Both halves are now refusals rather
+#: than conventions, because that failure looks completely healthy while it is
+#: happening.
+#:
+#: STILL NOT MODELLED: the annual option ("pay for twelve months and get two
+#: free"). It needs a second Razorpay Plan per tier at ten months' price and a
+#: cycle field on the subscription; nothing here claims to offer one today.
 #:
 #: GST is included in every price shown. Prices are inclusive, not exclusive.
 
@@ -134,7 +142,26 @@ class PlanTier(str, Enum):
     """Internal tier ids. Deliberately NOT the founder-facing names -- those live
     in `Plan.name` and change with marketing. Renaming a member here means
     migrating every `founders.plan_type` row and the CHECK constraint on it, for
-    no founder-visible benefit."""
+    no founder-visible benefit.
+
+    READ THIS TABLE BEFORE WRITING A TIER LITERAL. The ids and the names are
+    offset by one, and the two that differ are the two cheapest:
+
+        PlanTier.BASIC    "Starter"   Rs 199   paid once
+        PlanTier.STARTER  "Plus"      Rs 499   monthly
+        PlanTier.PRO      "Pro"       Rs 999   monthly
+
+    So `PlanTier.STARTER` is NOT the plan called Starter -- it is Plus, at two
+    and a half times the price. Anyone implementing "create the Starter order"
+    who reaches for `PlanTier.STARTER` bills Rs 499 for a Rs 199 product, and
+    anything that builds a label out of a tier id shows a founder the wrong
+    plan name (which is exactly what PlatformLayout did: two different plans
+    both rendered as "Ally Starter", with no way for support to tell them apart
+    from a screenshot).
+
+    Use `Plan.name` for anything a person reads, and this table for anything a
+    person writes.
+    """
 
     FREE = "free"
     BASIC = "basic"          # Rs 199 / month -- shown as "Starter"
