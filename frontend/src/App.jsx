@@ -77,6 +77,15 @@ const AdminCalls = lazy(() => loadChunk(() => import('./pages/admin/AdminCalls')
 const AdminPrivacy = lazy(() => loadChunk(() => import('./pages/admin/AdminPrivacy')));
 const AdminFeedback = lazy(() => loadChunk(() => import('./pages/admin/AdminFeedback')));
 
+/* Sign-in is not a first impression. Someone landing here has clicked "Log in"
+   and wants the form; the welcome film puts up to seven seconds, and a Skip
+   button they have to find, in front of it. It still plays everywhere else,
+   which is where it was meant to play. */
+function isSignInRoute(pathname) {
+  const p = String(pathname || '').replace(/\/+$/, '');
+  return p === '/guided/login';
+}
+
 /* Show splash only once per session (won't replay on route changes).
    Wrapped because storage access throws outright -- not returns null -- in
    Safari's Lock Mode and in any embedded/third-party context where cookies are
@@ -133,7 +142,9 @@ function HomeGate() {
 
 export default function App() {
   const { toast } = useApp();
-  const [showSplash, setShowSplash] = useState(!splashAlreadyShown());
+  const [showSplash, setShowSplash] = useState(
+    () => !splashAlreadyShown() && !isSignInRoute(window.location.pathname),
+  );
   const navigate = useNavigate();
 
   // A session that can't be recovered (no refresh token, or the server rejects
