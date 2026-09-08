@@ -17,7 +17,6 @@ import pathlib
 
 import pytest
 
-from app.credits.models import CreditOperation
 from app.payments.errors import (
     InvalidCheckoutCallbackError,
     InvalidCheckoutError,

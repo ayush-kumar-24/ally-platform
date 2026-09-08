@@ -23,8 +23,6 @@ from app.payments.expiry import SubscriptionExpirySweep
 from app.plans.catalog import DEFAULT_TIER
 
 from tests.test_payments_subscriptions import (   # the same doubles, one definition
-    FakeCredits,
-    FakeGateway,
     FakePaymentRepository,
     FakeSubscriptionRepository,
 )
