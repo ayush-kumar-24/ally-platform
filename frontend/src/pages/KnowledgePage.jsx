@@ -16,17 +16,17 @@
  * than component state, so a founder can be sent straight to one and the back
  * button behaves.
  *
- * TWO KINDS OF CARD. A podcast episode has a link, so its whole card is one.
- * A film has no link worth giving (see the note in data/watch.js), and there
- * are sixty-five of them -- printing every description at once is a wall
- * nobody reads. Those render as title tiles that open on hover.
+ * TWO KINDS OF CARD, both links. A podcast episode links to the episode. A film
+ * has no durable link we could give -- availability differs by country and by
+ * month -- so it links to a search for itself, which is what a founder would
+ * type anyway, and which lands on the panel with the trailer, the cast and
+ * wherever it is currently streaming.
  *
  * NO LOADING STATE, deliberately. This is static reference content imported at
  * build time -- there is nothing to fetch, and a spinner over data already in
  * the bundle is a lie about what is happening.
  */
 
-import { useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { KNOWLEDGE_SECTIONS } from '../data/knowledge';
 
@@ -82,73 +82,83 @@ function ResourceCard({ item }) {
 }
 
 /**
- * A film or series: the title at rest, everything else on hover.
+ * The search a founder would have typed anyway.
  *
- * HOVER IS NOT THE ONLY WAY IN. A hover-only disclosure is invisible on a
- * phone and unreachable from a keyboard, so the face is a real <button>:
- * clicking or tapping it pins the detail open, and `aria-expanded` says so.
- * Hover is the shortcut on top of that, not the mechanism.
+ * Title alone is not enough for half of these -- "Air", "Joy", "Chef" and
+ * "Corporate" are all ordinary words, and a bare search lands nowhere useful.
+ * The year and the kind are what make the search resolve to the right thing.
+ */
+function searchUrl(item) {
+  const tag = (item.tag || '').toLowerCase();
+  const kind = tag.includes('series') ? 'series'
+    : tag.includes('documentary') ? 'documentary'
+      : 'film';
+  const q = [item.title, item.year, kind].filter(Boolean).join(' ');
+  return `https://www.google.com/search?q=${encodeURIComponent(q)}`;
+}
+
+/**
+ * A film or series: the title at rest, the detail on hover, the search on
+ * click.
  *
- * The detail is absolutely positioned over the tile and allowed to overhang
- * downwards. Growing the tile in place would reflow every card in the row on
- * a mouse-over, which looks broken even when it isn't.
+ * THE WHOLE TILE IS THE LINK, panel included. The panel takes pointer events
+ * so the cursor can cross it without the tile losing hover and flickering,
+ * which means a click lands on the panel rather than the face -- so the anchor
+ * has to wrap both rather than sit inside one of them.
+ *
+ * The panel is absolutely positioned over the tile and allowed to overhang
+ * downwards. Growing the tile in place would reflow every card in the row on a
+ * mouse-over, which looks broken even when it isn't.
  */
 function TitleTile({ item }) {
-  const [open, setOpen] = useState(false);
+  const meta = (
+    <span className="wt-sub">
+      {item.year}
+      {item.year && item.tag ? ' · ' : ''}
+      {item.tag}
+    </span>
+  );
 
   return (
-    <div
-      className={`wt-tile${open ? ' is-open' : ''}`}
-      onMouseLeave={() => setOpen(false)}
+    <a
+      className="wt-tile"
+      href={searchUrl(item)}
+      target="_blank"
+      rel="noopener noreferrer"
     >
-      <button
-        type="button"
-        className="wt-face"
-        aria-expanded={open}
-        onClick={() => setOpen((o) => !o)}
-        onKeyDown={(e) => { if (e.key === 'Escape') setOpen(false); }}
-      >
+      <span className="wt-face">
         <span className="wt-name">{item.title}</span>
-        <span className="wt-sub">
-          {item.year}
-          {item.year && item.tag ? ' · ' : ''}
-          {item.tag}
-        </span>
-      </button>
+        {meta}
+      </span>
 
-      {/* The panel takes pointer events so the cursor can cross it without the
-          tile losing hover and flickering. That means a second tap lands here
-          rather than on the face, so closing has to live here too. */}
-      <div className="wt-pop" onClick={() => setOpen(false)}>
+      <span className="wt-pop">
         <span className="wt-name">{item.title}</span>
-        <span className="wt-sub">
-          {item.year}
-          {item.year && item.tag ? ' · ' : ''}
-          {item.tag}
-        </span>
+        {meta}
 
-        {item.why && <p className="wt-why">{item.why}</p>}
+        {item.why && <span className="wt-why">{item.why}</span>}
 
         {item.forWhen && (
-          <p className="wt-line">
+          <span className="wt-line">
             <span className="wt-line-label">Watch it when</span>
             {item.forWhen}
-          </p>
+          </span>
         )}
 
         {item.ask && (
-          <p className="wt-line">
+          <span className="wt-line">
             <span className="wt-line-label">Ask yourself after</span>
             {item.ask}
-          </p>
+          </span>
         )}
 
         {/* Shown, not filed away. The films most likely to be misread are the
             ones most likely to be watched, so the warning travels with the
             title rather than living in a document nobody opens. */}
-        {item.care && <p className="wt-care">{item.care}</p>}
-      </div>
-    </div>
+        {item.care && <span className="wt-care">{item.care}</span>}
+
+        <span className="wt-more">Look it up ›</span>
+      </span>
+    </a>
   );
 }
 

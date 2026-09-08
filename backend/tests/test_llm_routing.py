@@ -70,6 +70,9 @@ def test_every_task_is_registered_in_the_enum():
         "diagnosis_reasoning", "answer_consistency", "archetype_assignment",
         "report_narrative", "first_impression",
         "founder_dna_dimension_resolution",
+        # The help bot's two calls. Their routing rows are seeded by migration
+        # c8e3a41f7b52; if you add a task here, add the row there too.
+        "support_routing", "support_answer",
     }
 
 

@@ -257,13 +257,22 @@ a.fw-card-link:focus-visible {
   transition: opacity .16s ease;
 }
 .wt-grid:has(.wt-tile:hover)::after,
-.wt-grid:has(.wt-tile.is-open)::after { opacity: .66; }
+.wt-grid:has(.wt-tile:focus-within)::after { opacity: .66; }
 
-.wt-tile { position: relative; transition: transform .16s ease; }
-.wt-tile:hover, .wt-tile.is-open { transform: translateY(-4px); z-index: 5; }
+/* The whole tile is the link, panel included -- see the note in
+   KnowledgePage. Anchors carry the browser's underline and link colour, so
+   both are reset here rather than on every child. */
+.wt-tile {
+  position: relative;
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  transition: transform .16s ease;
+}
+.wt-tile:hover, .wt-tile:focus-within { transform: translateY(-4px); z-index: 5; }
 
 .wt-face {
-  display: flex;
+  display: flex;   /* a <span>, so this is what makes it a box at all */
   flex-direction: column;
   gap: 7px;
   width: 100%;
@@ -282,12 +291,12 @@ a.fw-card-link:focus-visible {
   transition: background-color .16s ease, border-color .16s ease, box-shadow .16s ease;
 }
 .wt-tile:hover .wt-face,
-.wt-tile.is-open .wt-face {
+.wt-tile:focus-within .wt-face {
   background-color: rgba(16, 185, 129, .08);
   border-color: rgba(16, 185, 129, .4);
   box-shadow: 0 12px 28px rgba(16, 24, 20, .10);
 }
-.wt-face:focus-visible { outline: 2px solid var(--color-emerald, #10B981); outline-offset: 2px; }
+.wt-tile:focus-visible { outline: 2px solid var(--color-emerald, #10B981); outline-offset: 3px; border-radius: 16px; }
 
 .wt-name {
   font-family: var(--font-display);
@@ -332,16 +341,16 @@ a.fw-card-link:focus-visible {
   transition: opacity .16s ease, visibility 0s linear .16s;
 }
 .wt-tile:hover .wt-pop,
-.wt-tile.is-open .wt-pop {
+.wt-tile:focus-within .wt-pop {
   opacity: 1;
   visibility: visible;
   pointer-events: auto;
   transition: opacity .16s ease;
 }
 
-.wt-why { margin: 3px 0 0; font-size: 12.5px; line-height: 1.55; color: var(--color-ink, #16241c); }
+.wt-why { display: block; margin: 3px 0 0; font-size: 12.5px; line-height: 1.55; color: var(--color-ink, #16241c); }
 
-.wt-line { margin: 4px 0 0; font-size: 12px; line-height: 1.5; color: var(--color-moss, #3a5f47); }
+.wt-line { display: block; margin: 4px 0 0; font-size: 12px; line-height: 1.5; color: var(--color-moss, #3a5f47); }
 .wt-line-label {
   display: block;
   font-size: 9.5px;
@@ -355,6 +364,7 @@ a.fw-card-link:focus-visible {
 /* The way a title is commonly misread. Warm rather than green so it separates
    from the recommendation it is qualifying. */
 .wt-care {
+  display: block;
   margin: 8px 0 0;
   padding-top: 8px;
   border-top: 1px dashed rgba(16, 185, 129, .35);
@@ -366,5 +376,16 @@ a.fw-card-link:focus-visible {
 
 @media (prefers-reduced-motion: reduce) {
   .wt-tile { transition: none; }
-  .wt-tile:hover, .wt-tile.is-open { transform: none; }
+  .wt-tile:hover, .wt-tile:focus-within { transform: none; }
+}
+
+
+/* The nudge that says the peek is not the whole thing. */
+.wt-more {
+  display: block;
+  margin-top: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  color: var(--color-emerald-dark, #0c7a54);
 }
