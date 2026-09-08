@@ -72,6 +72,11 @@ export default function Login() {
   const [confirmPassword, setConfirmPassword] = useState('');
 
   const [showAuthTransition, setShowAuthTransition] = useState(false);
+  /* Where the transition lets them out. Set at the moment we know which kind
+     of founder just signed in, because that is the only point where the
+     answer is knowable -- see finishSignIn. A ref, not state: it is read once,
+     inside a callback, and must not schedule a render of its own. */
+  const destination = useRef(returnTo);
   const [agreeTerms, setAgreeTerms] = useState(false);
   const [agreeDiagnosis, setAgreeDiagnosis] = useState(false);
   // The Terms already say "you confirm you are at least 18" -- this is what
@@ -163,11 +168,19 @@ export default function Login() {
        existed, so by the time the guard could re-check, it never fires again.
        This is the one place the answer is knowable at the moment it matters:
        right after the session is established, with the freshly-fetched profile
-       in hand. Skip the "signing you in" transition and the 14-step shell --
-       there is nothing to resume into. (Carried over from origin/main's OAuth
-       mount effect, which this email/OTP flow replaced.) */
+       in hand. Skip the 14-step shell -- there is nothing to resume into --
+       and go straight to the app. (Carried over from origin/main's OAuth
+       mount effect, which this email/OTP flow replaced.)
+
+       The "signing you in" transition still plays. It used to be skipped here
+       along with the shell, which meant the founders who sign in most often
+       were the only ones who never saw it. It is the moment between typing a
+       password and the app appearing, and that moment exists on this path
+       too. */
     if (profile?.profile_completed) {
-      navigate('/app', { replace: true });
+      destination.current = '/app';
+      setSubmitting(false);
+      setShowAuthTransition(true);
       return;
     }
 
@@ -441,7 +454,7 @@ export default function Login() {
           // session ran out. Without honouring it, anyone whose token expired
           // mid-flow was dropped back at the start of onboarding with no
           // explanation and no way back to where they were.
-          onNavigate={() => navigate(returnTo, { replace: true })}
+          onNavigate={() => navigate(destination.current, { replace: true })}
           onComplete={() => setShowAuthTransition(false)}
         />
       )}
