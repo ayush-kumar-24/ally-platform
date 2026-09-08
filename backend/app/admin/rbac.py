@@ -55,6 +55,14 @@ class Capability(str, Enum):
     # about the team's own diary, not account administration, and the people who
     # answer founders are the people who know whether the slot works.
     MANAGE_DISCOVERY_CALLS = "manage_discovery_calls"
+    # Approving or rejecting a waitlist registration. Admin tier, not
+    # super-admin: the whole point of the queue is that the people who read it
+    # every day can clear it. Approving is still the act that creates a login,
+    # so it stays above Support, who can see the queue (VIEW_USERS) without
+    # being able to answer it. The 300-place cap is the one thing only a super
+    # admin may cross -- enforced in services/waitlist.py by role, not by a
+    # separate capability, because it is the same action at a different limit.
+    MANAGE_WAITLIST = "manage_waitlist"
     # --- super-admin-only mutations -------------------------------------
     TRANSFER_CREDITS = "transfer_credits"
     MODIFY_SUBSCRIPTION = "modify_subscription"
@@ -83,6 +91,7 @@ _ADMIN: frozenset[Capability] = frozenset({
     Capability.CANCEL_DELETION,
     Capability.MANAGE_PRIVACY_REQUESTS,
     Capability.MANAGE_DISCOVERY_CALLS,
+    Capability.MANAGE_WAITLIST,
 })
 
 # Super Admin holds every capability -- stated as "all of them" so a capability
