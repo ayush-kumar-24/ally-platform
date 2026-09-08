@@ -244,3 +244,23 @@
   transition-duration: 0.01ms !important;
   scroll-behavior: auto !important;
 }
+
+/* ── Post-sign-in splash (AuthTransition) ─────────────────────────────────
+   The mark rises in, breathes behind a soft glow, and three dots keep time
+   while the app loads behind the overlay. Replaces the film that used to
+   play here: same moment, a tenth of the bytes, and nothing to decode. */
+
+@keyframes gxRise {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes gxGlow {
+  0%, 100% { opacity: .5; }
+  50%      { opacity: 1; }
+}
+
+@keyframes gxDot {
+  0%, 60%, 100% { opacity: .25; transform: none; }
+  30%           { opacity: 1; transform: translateY(-3px); }
+}
