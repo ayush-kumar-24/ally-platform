@@ -54,6 +54,35 @@ def _is_question(text: str) -> bool:
     return " ".join((text or "").split()).endswith("?")
 
 
+#: One Founder-DNA card's worth of text. Long enough for two plain sentences,
+#: short enough that a dozen of them on one page still read as a summary.
+_DIMENSION_SUMMARY_CHARS = 220
+
+
+def _answer_text(value: Any) -> str:
+    """A dimension's raw material as one string, minus any stored question.
+
+    A dimension is either a single answer or a list of them (see
+    generator._slots_and_facts); both arrive verbatim as the founder typed
+    them, which is exactly why they need shortening before they are shown.
+    """
+    values = value if isinstance(value, (list, tuple)) else [value]
+    parts = [
+        " ".join(str(v).split())
+        for v in values
+        if isinstance(v, str) and str(v).strip() and not _is_question(v)
+    ]
+    return " ".join(parts)
+
+
+def _json_object(raw: str) -> str:
+    """The outermost {...} in a model reply, so a fenced or chatty response
+    still parses. Returns the input unchanged when there is no object to find,
+    letting the caller's own json error handling deal with it."""
+    start, end = raw.find("{"), raw.rfind("}")
+    return raw[start : end + 1] if 0 <= start < end else raw
+
+
 @dataclass(frozen=True)
 class ToneGuidance:
     persona: str | None                 # Validator / Compass / Auditor
@@ -81,6 +110,20 @@ class TemplateNarrator:
 
     def narrate_with_source(self, section_key, slots, tone) -> tuple[str, str]:
         return self.narrate(section_key, slots, tone), "template"
+
+    def summarise_dimensions(self, dimensions: dict[str, Any]) -> dict[str, str]:
+        """Shorten each Founder-DNA dimension to its first whole thought.
+
+        Deterministic, so it cannot make the founder's own words plainer -- only
+        a model can do that -- but it stops one card from carrying three
+        paragraphs, which is the larger of the two problems.
+        """
+        out: dict[str, str] = {}
+        for key, value in dimensions.items():
+            text = _shorten(_answer_text(value), _DIMENSION_SUMMARY_CHARS)
+            if text:
+                out[key] = text
+        return out
 
     # --- sections --------------------------------------------------------
     def _founder_summary(self, s, tone):
@@ -384,6 +427,52 @@ class LLMSectionNarrator:
     def narrate(self, section_key: str, slots: dict[str, Any], tone: ToneGuidance) -> str:
         return self.narrate_with_source(section_key, slots, tone)[0]
 
+    def summarise_dimensions(self, dimensions: dict[str, Any]) -> dict[str, str]:
+        """Every Founder-DNA dimension compressed to a plain line or two.
+
+        ONE call for all of them rather than one per dimension: a founder can
+        answer a dozen dimensions, and a dozen round trips would cost more than
+        the entire rest of report generation (0.4s of a 203s pipeline).
+
+        Compression only. The model is given the founder's own answer and told
+        to use nothing else, so a card can still only say what the founder said
+        -- the same never-invent contract the section narration works under. Any
+        dimension the model drops, mangles or returns as a non-string falls back
+        to the deterministic trim, so a bad reply shortens the report rather
+        than emptying it.
+        """
+        import json
+
+        material = {k: t for k, v in dimensions.items() if (t := _answer_text(v))}
+        if not material:
+            return {}
+
+        prompt = (
+            "You are compressing a founder's own answers for their clarity report. "
+            "Return ONLY a JSON object with exactly the same keys as the input.\n"
+            "For each key, write 1-2 short sentences in plain, everyday English, "
+            "addressed to the founder as \"you\".\n"
+            "Use ONLY what that key's own text says. Never add a fact, name, number "
+            "or judgement that is not already there, and never mix material between "
+            "keys. If a value says too little to summarise, shorten it and leave the "
+            "meaning alone.\n"
+            "No quotes, no markdown, no preamble.\n"
+            f"INPUT: {json.dumps(material, default=str)}"
+        )
+        try:
+            parsed = json.loads(_json_object((self.llm(prompt) or "").strip()))
+        except Exception:
+            parsed = {}
+        if not isinstance(parsed, dict):
+            parsed = {}
+
+        out: dict[str, str] = {}
+        for key, original in material.items():
+            summary = parsed.get(key)
+            summary = " ".join(summary.split()) if isinstance(summary, str) else ""
+            out[key] = _shorten(summary or original, _DIMENSION_SUMMARY_CHARS)
+        return out
+
     @staticmethod
     def _has_narratable_content(slots: dict[str, Any]) -> bool:
         """Is there anything here for a model to write FROM?
@@ -440,6 +529,21 @@ class LLMSectionNarrator:
                 "IMPORTANT: this section must be BRIEF -- exactly ONE short sentence "
                 "naming only the overall band, plus one line saying more detail can "
                 "wait. Do NOT list individual pillars, bands, or descriptions."
+            )
+        if section_key == "founder_dna":
+            # This section's slots are the founder's raw answers, and quoting
+            # them was producing a page-long opening paragraph that repeated,
+            # verbatim, the same vision text rendered in the card right below
+            # it. The founder learns nothing from re-reading what they typed;
+            # what they came for is what it ADDS UP TO.
+            directives.append(
+                "Write at most 3 short sentences of plain, everyday English "
+                "naming the pattern these answers share -- how this founder "
+                "operates. Do NOT quote or paraphrase any answer at length, and "
+                "do not walk through the dimensions one by one; each is already "
+                "shown beside this paragraph, so repeating one wastes the only "
+                "place that can say what they mean together. A quoted fragment, "
+                "if it genuinely earns its place, must be under 12 words."
             )
         if section_key == "problem_path" and slots.get("stated_symptom"):
             # The one section with a prescribed shape. Every Page 3 in the

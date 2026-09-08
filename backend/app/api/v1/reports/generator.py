@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from app.api.v1.reports.narrator import SectionNarrator, TemplateNarrator, ToneGuidance
+from app.core.logger import logger
 from app.api.v1.reports.payload import ReportPayload
 from app.api.v1.reports.variants import ReportVariant, select_variant
 
@@ -181,6 +182,10 @@ class ReportNarrativeGenerator:
         sources: list[str] = []
         for key in order:
             slots, facts = self._slots_and_facts(key, payload, sep_identity)
+            if key == "founder_dna":
+                # Slots stay raw -- the narrator needs the real material to see
+                # the pattern across dimensions. Only what is RENDERED shrinks.
+                facts = self._summarise_dna_facts(facts)
             if key == "business_dna" and variant is ReportVariant.DISTRESS:
                 slots = {**slots, "brief": True}  # de-prioritise business under distress
             prose, source = self._narrate(key, slots, tone)
@@ -212,6 +217,39 @@ class ReportNarrativeGenerator:
             tone_persona=payload.tone_persona, sections=tuple(sections),
             narrator_provenance=provenance,
         )
+
+    #: Structured rather than prose, so it is already short and must not be sent
+    #: through summarisation -- the document renders it as its own labelled card.
+    _DNA_STRUCTURED_FACTS = ("archetype",)
+
+    def _summarise_dna_facts(self, facts: dict) -> dict:
+        """Founder-DNA cards as short summaries rather than raw answers.
+
+        Every dimension here was assigned straight off the payload, so each card
+        printed whole paragraphs of the founder's own typing -- a dozen of them,
+        one per dimension, saying back exactly what they had already said. A
+        narrator that can summarise does so; one that cannot (the template
+        narrator, and any older narrator predating this) leaves the facts alone
+        rather than silently dropping them.
+        """
+        summarise = getattr(self.narrator, "summarise_dimensions", None)
+        if not callable(summarise):
+            return facts
+        prose_facts = {k: v for k, v in facts.items()
+                       if k not in self._DNA_STRUCTURED_FACTS}
+        if not prose_facts:
+            return facts
+        try:
+            summaries = summarise(prose_facts)
+        except Exception:                       # noqa: BLE001
+            logger.warning("Founder-DNA summarisation failed; keeping raw answers")
+            return facts
+        # A dimension the summariser dropped keeps its original text: a shorter
+        # card is the goal, a missing one is a regression.
+        out = dict(facts)
+        for key in prose_facts:
+            out[key] = summaries.get(key) or facts[key]
+        return out
 
     def _narrate(self, key: str, slots: dict, tone: ToneGuidance) -> tuple[str, str]:
         """Return (prose, source). Prefers a provenance-aware narrator; falls back
