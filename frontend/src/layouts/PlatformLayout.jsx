@@ -140,11 +140,14 @@ const NAV_GROUPS = [
          including one who had never opened the planner. Null until it can be
          driven by a real due-task count. */
       { path: '/app/plan', tip: 'Plan Your Day', icon: IconCalendar, label: 'Plan Your Day', badge: null },
-      /* Hidden outright rather than locked, unlike needsReport above. A locked
-         item still advertises the feature; for the beta the instruction is to
-         take discovery calls out of the free-tier UI, and a founder who cannot
-         book one has nothing to unlock by clicking. */
-      { path: '/app/discovery-call', tip: 'Book a discovery call', icon: IconCalendar, label: 'Discovery call', badge: null },
+      /* comingSoon, not a plan lock. Booking is built but cannot be hosted
+         until Workspace domain verification lands, and no plan unlocks it
+         early -- so the tooltip says when, not what to buy.
+
+         Still navigable on purpose: comingSoon shows the padlock without
+         setting aria-disabled or intercepting the click, so the row opens the
+         page's own coming-soon banner rather than dead-ending. */
+      { path: '/app/discovery-call', tip: 'Book a discovery call', icon: IconCalendar, label: 'Discovery call', badge: null, comingSoon: true, lockTip: 'Opening in a few days' },
     ],
   },
   {
