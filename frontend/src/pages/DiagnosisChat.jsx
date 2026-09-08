@@ -5,6 +5,7 @@ import { getCurrentSession, normalise, resumeOrStart, submitAnswer } from '../se
 import { explainLimit } from '../services/plans';
 import { useVoiceInput } from '../hooks/useVoiceInput';
 import VoiceBars from '../components/VoiceBars';
+import useAutoGrow from '../hooks/useAutoGrow';
 import Markdown from '../components/Markdown';
 import FeedbackPrompt from '../components/FeedbackPrompt';
 import { FEEDBACK } from '../services/feedback';
@@ -26,6 +27,7 @@ export default function DiagnosisChat() {
   const [category, setCategory] = useState(null);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
+  const taRef = useAutoGrow(input);
   const [question, setQuestion] = useState(null);
   const [sessionId, setSessionId] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -361,6 +363,7 @@ export default function DiagnosisChat() {
             <label className="sr-only" htmlFor="dg-answer">Your answer to Ally</label>
             <textarea
               id="dg-answer"
+              ref={taRef}
               rows={1}
               placeholder={done ? 'Your diagnosis is complete.' : "Answer Ally's question or ask anything..."}
               value={input}

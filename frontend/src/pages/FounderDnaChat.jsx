@@ -10,6 +10,7 @@ import {
   submitFounderDnaAnswer,
 } from '../services/founderDna';
 import { useVoiceInput } from '../hooks/useVoiceInput';
+import useAutoGrow from '../hooks/useAutoGrow';
 import VoiceBars from '../components/VoiceBars';
 import Markdown from '../components/Markdown';
 
@@ -37,6 +38,7 @@ export default function FounderDnaChat() {
   const { user, showToast } = useApp();
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
+  const taRef = useAutoGrow(input);
   const [question, setQuestion] = useState(null);
   const [resolved, setResolved] = useState([]);
   const [busy, setBusy] = useState(false);
@@ -447,6 +449,7 @@ export default function FounderDnaChat() {
             <label className="sr-only" htmlFor="fdna-answer">Your answer to Ally</label>
             <textarea
               id="fdna-answer"
+              ref={taRef}
               rows={1}
               placeholder={
                 failed ? 'Refresh to try again.'

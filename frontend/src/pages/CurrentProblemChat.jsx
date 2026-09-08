@@ -8,6 +8,7 @@ import {
   submitCurrentProblemAnswer,
 } from '../services/currentProblem';
 import { useVoiceInput } from '../hooks/useVoiceInput';
+import useAutoGrow from '../hooks/useAutoGrow';
 
 /* The bridge between Founder DNA and the business diagnosis: the founder
    says, in their own words, what they think is wrong — then answers three
@@ -36,6 +37,7 @@ export default function CurrentProblemChat() {
   const { user, showToast } = useApp();
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
+  const taRef = useAutoGrow(input);
   const [question, setQuestion] = useState(null);
   const [progress, setProgress] = useState({ answered: 0, total: 0 });
   const [busy, setBusy] = useState(false);
@@ -245,6 +247,7 @@ export default function CurrentProblemChat() {
             <label className="sr-only" htmlFor="cp-answer">Your answer to Ally</label>
             <textarea
               id="cp-answer"
+              ref={taRef}
               rows={1}
               placeholder={
                 failed ? 'Refresh to try again.'
