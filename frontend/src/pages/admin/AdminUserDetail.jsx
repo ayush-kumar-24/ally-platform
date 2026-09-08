@@ -19,6 +19,7 @@ import {
   getCredits,
   getTimeline,
   getUser,
+  regenerateReport,
   resetConversations,
   resetDiagnosis,
   setPlan,
@@ -370,6 +371,36 @@ export default function AdminUserDetail() {
               danger: true, confirmLabel: 'Reset diagnosis',
               run: () => run(() => resetDiagnosis(id), r => `Diagnosis reset (${r.rows_affected} row(s)).`),
             })}>Reset diagnosis</button>
+          )}
+          {/* Same capability the endpoint enforces (panel_service.regenerate_report
+              requires RESET_DIAGNOSIS). The endpoint has existed all along with
+              nothing calling it, which left a founder's report frozen for good:
+              the narrative is cached on narrative_snapshot and never rebuilt on
+              read, so a prompt or generator change could not reach a report that
+              already existed. */}
+          {canResetDiag && (
+            <button className="adm-btn" type="button" disabled={busy} onClick={() => setDialog({
+              title: 'Regenerate this report?',
+              body: 'Re-runs the diagnosis reasoning on the founder\'s latest completed '
+                + 'session and replaces their report. Use it after a change to how '
+                + 'reports are written. This takes a few minutes — keep this tab open.',
+              confirmLabel: 'Regenerate report',
+              run: () => run(
+                async () => {
+                  const res = await regenerateReport(id, 'Regenerated from admin panel');
+                  // 200 does not mean it worked -- the pipeline reports failure in
+                  // the body, so without this an admin is told a failed run is done.
+                  const r = res?.result ?? {};
+                  if (r.status !== 'regenerated' && r.status !== 'no_change') {
+                    throw new Error(r.error || r.reason || 'Report regeneration failed.');
+                  }
+                  return res;
+                },
+                (res) => (res.result.status === 'regenerated'
+                  ? `Report regenerated (report #${res.result.report_id}).`
+                  : 'Already up to date — nothing regenerated.'),
+              ),
+            })}>Regenerate report</button>
           )}
           {canResetChat && (
             <button className="adm-btn" type="button" disabled={busy} onClick={() => setDialog({

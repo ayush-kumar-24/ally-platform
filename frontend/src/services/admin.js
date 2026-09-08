@@ -103,8 +103,23 @@ export function viewConversation(conversationId) {
   return get(`/admin/conversations/${conversationId}`);
 }
 
+/**
+ * Re-run report generation for a founder.
+ *
+ * Five minutes, not api.js's 20s default: this runs the reasoning pipeline
+ * synchronously (trigger.py's regenerate_report_for_founder -> analyze_session),
+ * which is a 203s job live-measured. On the default timeout the browser gave up
+ * roughly three minutes before the server finished, so a regeneration that
+ * actually succeeded was reported to the admin as a failure -- and clicking
+ * again just started a second one.
+ *
+ * The endpoint answers 200 even when the pipeline fails; the real outcome is
+ * `result.status` in the body, so callers must read it rather than trust the
+ * status code.
+ */
 export function regenerateReport(id, reason) {
-  return post(`/admin/users/${id}/regenerate-report`, { confirm: true, reason });
+  return post(`/admin/users/${id}/regenerate-report`, { confirm: true, reason },
+              { timeout: 300_000 });
 }
 
 /**
