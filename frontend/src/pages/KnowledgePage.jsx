@@ -17,10 +17,10 @@
  * button behaves.
  *
  * TWO KINDS OF CARD, both links. A podcast episode links to the episode. A film
- * has no durable link we could give -- availability differs by country and by
- * month -- so it links to a search for itself, which is what a founder would
- * type anyway, and which lands on the panel with the trailer, the cast and
- * wherever it is currently streaming.
+ * or a book has no durable link we could give -- streaming availability differs
+ * by country and by month, and a bookshop link would be us picking a shop -- so
+ * it links to a search for itself, which is what a founder would type anyway,
+ * and which lands on the panel with the cover, the editions and where to get it.
  *
  * NO LOADING STATE, deliberately. This is static reference content imported at
  * build time -- there is nothing to fetch, and a spinner over data already in
@@ -90,16 +90,19 @@ function ResourceCard({ item }) {
  */
 function searchUrl(item) {
   const tag = (item.tag || '').toLowerCase();
-  const kind = tag.includes('series') ? 'series'
-    : tag.includes('documentary') ? 'documentary'
-      : 'film';
-  const q = [item.title, item.year, kind].filter(Boolean).join(' ');
-  return `https://www.google.com/search?q=${encodeURIComponent(q)}`;
+  /* A book is identified by its author, a film by its year. Both need the word
+     for what they are: "Drive" and "Range" and "Flow" and "Air" and "Joy" are
+     all ordinary words, and a bare title search lands nowhere useful. */
+  const q = item.by
+    ? [item.title, item.by, 'book']
+    : [item.title, item.year, tag.includes('series') ? 'series'
+      : tag.includes('documentary') ? 'documentary' : 'film'];
+  return `https://www.google.com/search?q=${encodeURIComponent(q.filter(Boolean).join(' '))}`;
 }
 
 /**
- * A film or series: the title at rest, the detail on hover, the search on
- * click.
+ * A film, a series or a book: the title at rest, the detail on hover, the
+ * search on click.
  *
  * THE WHOLE TILE IS THE LINK, panel included. The panel takes pointer events
  * so the cursor can cross it without the tile losing hover and flickering,
@@ -111,11 +114,11 @@ function searchUrl(item) {
  * mouse-over, which looks broken even when it isn't.
  */
 function TitleTile({ item }) {
+  /* Built by joining rather than hard-coded, because the same tile carries a
+     film ("2016 · Global film") and a book ("Carol Dweck · Indian"). */
   const meta = (
     <span className="wt-sub">
-      {item.year}
-      {item.year && item.tag ? ' · ' : ''}
-      {item.tag}
+      {[item.year, item.by, item.tag].filter(Boolean).join(' · ')}
     </span>
   );
 
@@ -127,6 +130,7 @@ function TitleTile({ item }) {
       rel="noopener noreferrer"
     >
       <span className="wt-face">
+        {item.pick && <span className="wt-pick">Start here</span>}
         <span className="wt-name">{item.title}</span>
         {meta}
       </span>
@@ -139,7 +143,9 @@ function TitleTile({ item }) {
 
         {item.forWhen && (
           <span className="wt-line">
-            <span className="wt-line-label">Watch it when</span>
+            <span className="wt-line-label">
+              {item.by ? 'Read it when' : 'Watch it when'}
+            </span>
             {item.forWhen}
           </span>
         )}
@@ -211,7 +217,7 @@ export default function KnowledgePage() {
         /* role="tablist" and the arrow-key behaviour browsers give buttons in
            one: these are real buttons, not links, because they swap content on
            the same page rather than navigating. */
-        <div className="fw-tabs" role="tablist" aria-label="What to watch">
+        <div className="fw-tabs" role="tablist" aria-label={`${kicker} sections`}>
           {tabs.map((tab) => {
             const isActive = tab.slug === active.slug;
             return (

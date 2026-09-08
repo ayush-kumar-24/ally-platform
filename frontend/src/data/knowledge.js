@@ -1,4 +1,5 @@
 import { WATCH_TABS } from './watch';
+import { READ_TABS } from './read';
 
 /**
  * data/knowledge.js — the three reference libraries under KNOWLEDGE.
@@ -26,8 +27,9 @@ import { WATCH_TABS } from './watch';
  *   }
  */
 
-/** Long-form: books, essays, papers, posts. */
-export const THINGS_TO_READ = [];
+/* "Things to read" is tabbed by theme -- see data/read.js. A founder looking
+   for help with pricing should not have to scroll past a hundred books about
+   something else. */
 
 /* "Things to watch" is the one section with sub-tabs, because podcasts, series
    and films are three different sizes of commitment and mixing them makes the
@@ -46,9 +48,9 @@ export const KNOWLEDGE_SECTIONS = {
     slug: 'read',
     kicker: 'Things to read',
     title: 'Worth the hours.',
-    sub: 'Books, essays and posts the team has actually read and would hand to a founder.',
+    sub: 'Books worth the hours, grouped by what you need them for. Tap one to look it up.',
     empty: 'Nothing here yet. We are only listing things we have read ourselves, so this fills up slowly and on purpose.',
-    items: THINGS_TO_READ,
+    tabs: READ_TABS,
   },
   watch: {
     slug: 'watch',
