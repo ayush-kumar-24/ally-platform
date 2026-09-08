@@ -21,6 +21,20 @@ One deploy setting, no release. Flipping it:
   state a founder is in before they have chosen one. Every feature gate reads
   the same feature set, so this closes all of them at once rather than leaving
   one route open because somebody forgot it.
+
+  That sentence was aspirational when it was written, and wrong. It is true of
+  features that HAVE a gate, and until the entitlement-gates change three did
+  not: DIAGNOSIS, REPORTS and GOALS had no `require_feature` call anywhere in
+  the backend, so flipping this switch redirected a plan-less founder to
+  billing in the UI while those endpoints still answered a direct API call.
+  They are gated now (`app/api/v1/entitlement_gates.py`), and
+  `tests/test_entitlement_gates.py` asserts the routers still carry the
+  dependency so it cannot silently come off again.
+
+  Two things remain deliberately open, and should stay that way:
+  `/reports/shared/{token}` (a share link is read by someone with no account at
+  all) and CALL_BOOKING (booking is sold beside the plans, paid per call).
+  KNOW_MY_ENERGY has no backend endpoint to gate -- it is a client-only page.
 * **sends a founder with no plan to the plans page** as soon as they sign in,
   instead of letting them meet a series of locked pages and 402s one feature at
   a time.

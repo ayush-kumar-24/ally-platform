@@ -59,6 +59,7 @@ export const TITLES = {
   '/admin': 'Admin · Dashboard',
   '/admin/users': 'Admin · Users',
   '/admin/usage': 'Admin · Usage',
+  '/admin/waitlist': 'Admin · Waitlist',
   '/admin/audit': 'Admin · Audit log',
   '/admin/system': 'Admin · System',
 };

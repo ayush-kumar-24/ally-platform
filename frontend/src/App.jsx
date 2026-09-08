@@ -75,6 +75,7 @@ const AdminSystem = lazy(() => loadChunk(() => import('./pages/admin/AdminSystem
 const AdminCoupons = lazy(() => loadChunk(() => import('./pages/admin/AdminCoupons')));
 const AdminUsage = lazy(() => loadChunk(() => import('./pages/admin/AdminUsage')));
 const AdminCalls = lazy(() => loadChunk(() => import('./pages/admin/AdminCalls')));
+const AdminWaitlist = lazy(() => loadChunk(() => import('./pages/admin/AdminWaitlist')));
 const AdminPrivacy = lazy(() => loadChunk(() => import('./pages/admin/AdminPrivacy')));
 const AdminFeedback = lazy(() => loadChunk(() => import('./pages/admin/AdminFeedback')));
 
@@ -287,6 +288,7 @@ export default function App() {
             <Route path="users/:id" element={<AdminUserDetail />} />
             <Route path="usage" element={<AdminUsage />} />
             <Route path="calls" element={<AdminCalls />} />
+            <Route path="waitlist" element={<AdminWaitlist />} />
             <Route path="privacy" element={<AdminPrivacy />} />
             <Route path="feedback" element={<AdminFeedback />} />
             <Route path="audit" element={<AdminAuditLog />} />

@@ -16,8 +16,10 @@ from app.api.v1.privacy.router import router as privacy_router
 from app.api.v1.plans.router import router as plans_router
 from app.api.v1.payments.router import router as payments_router
 from app.api.v1.support.public import router as public_support_router
+from app.api.v1.waitlist.public import router as public_waitlist_router
 from app.api.v1.support.router import router as support_router
 from app.api.v1.admin.discovery_calls_router import router as admin_discovery_calls_router
+from app.api.v1.admin.waitlist_router import router as admin_waitlist_router
 from app.api.v1.admin.panel_router import router as admin_panel_router
 from app.api.v1.admin.panel_router_v2 import router as admin_panel_router_v2
 from app.api.v1.dashboard.routes import router as dashboard_router
@@ -33,6 +35,7 @@ from app.api.v1.frontend_errors.router import router as frontend_errors_router
 from app.api.v1.impression.router import router as impression_router
 from app.api.v1.profile.routes import router as profile_router
 from app.api.v1.reference.routes import router as reference_router
+from app.api.v1.reports.routes import public_router as reports_public_router
 from app.api.v1.reports.routes import router as reports_router
 from app.api.v1.settings.routes import router as settings_router
 from app.api.v1.settings.router import router as settings_preferences_router
@@ -62,6 +65,9 @@ api_router.include_router(knowledge_router)
 api_router.include_router(intelligence_router)
 api_router.include_router(reference_router)
 api_router.include_router(dashboard_router)
+# Public share-token routes FIRST, so /reports/shared/{token} keeps the route
+# precedence it had when both lived on one router.
+api_router.include_router(reports_public_router)
 api_router.include_router(reports_router)
 api_router.include_router(chat_api_router)
 api_router.include_router(planning_router)
@@ -81,6 +87,9 @@ api_router.include_router(plans_router)
 api_router.include_router(payments_router)
 api_router.include_router(support_router)
 api_router.include_router(public_support_router)
+# Unauthenticated by design -- the waitlist form is how someone who has no
+# account asks for one. See the module docstring for its three abuse layers.
+api_router.include_router(public_waitlist_router)
 # The Phase 12 admin router (/admin/founders, /admin/dashboard, /admin/audit,
 # /admin/announcements -- all backed by in-memory, non-persistent repositories)
 # used to register here too. Removed: the frontend never called any of its
@@ -89,6 +98,7 @@ api_router.include_router(public_support_router)
 # see app/admin/__init__.py.
 api_router.include_router(admin_panel_router)
 api_router.include_router(admin_discovery_calls_router)
+api_router.include_router(admin_waitlist_router)
 api_router.include_router(admin_panel_router_v2)
 api_router.include_router(webhooks_supabase_router)
 api_router.include_router(internal_jobs_router)

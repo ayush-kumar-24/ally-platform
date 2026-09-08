@@ -858,6 +858,16 @@ body.sb-collapsed .sb-toggle .ic{transform:rotate(180deg)}
 .bl-manage-link{text-align:center;font-size:13px;color:#6c7a70;margin:24px 0 8px}
 .bl-link-btn{background:none;border:none;cursor:pointer;font-family:var(--display-tight);font-size:13px;font-weight:650;color:#10B981;padding:0;text-decoration:underline;text-underline-offset:3px}
 .bl-link-btn:hover{color:#0E2A1C}
+/* Shown when PlanRequiredGate sent a founder here rather than them choosing to
+   come. Emerald rather than a warning colour on purpose: finishing onboarding
+   and being asked to pick a plan is the happy path, not an error. */
+.bl-needs-plan{
+  margin:0 0 22px;padding:14px 18px;border-radius:12px;
+  border:1px solid rgba(16,185,129,.28);border-left:3px solid var(--emerald);
+  background:rgba(16,185,129,.07);color:var(--forest);
+  font-size:14.5px;line-height:1.55}
+.bl-needs-plan strong{font-weight:750}
+
 .bl-top-tabs{display:flex;gap:4px;margin-bottom:28px;background:#f5f0ea;border-radius:12px;padding:5px;border:1px solid #e7e0d6}
 .bl-top-tab{flex:1;padding:9px 16px;border:none;border-radius:9px;background:transparent;font-family:var(--display-tight);font-size:13px;font-weight:650;color:#6c7a70;cursor:pointer;transition:.22s}
 .bl-top-tab.active{background:#fff;color:#1B4332;box-shadow:0 1px 4px -1px rgba(6,20,13,.14)}

@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 # Phase 3's get_founder_record resolves the AuthUser token to the Founders row.
 from app.api.deps import get_founder_record as get_current_founder, require_profile_complete
+from app.api.v1.entitlement_gates import require_diagnosis
 from app.api.v1.diagnosis.schemas import (
     AnsweredQA,
     CurrentQuestionResponse,
@@ -34,7 +35,8 @@ from app.db.session import get_db
 from app.middleware.rate_limit import founder_rate_limit
 from app.models import Founder, SessionStatus
 
-router = APIRouter(prefix="/diagnosis", tags=["diagnosis"])
+router = APIRouter(prefix="/diagnosis", tags=["diagnosis"],
+                   dependencies=[Depends(require_diagnosis)])
 
 # Named module-level dependency objects (not inline Depends(founder_rate_limit(...))
 # calls) so tests can override them the same way other per-founder gates in

@@ -19,6 +19,11 @@ const LINKS = [
   // Support sees this too -- answering a call request is a scheduling decision
   // about the team's own diary, not account administration.
   { to: '/admin/calls', label: 'Calls', capability: 'manage_discovery_calls' },
+  // view_users, not manage_waitlist: Support is the team who gets asked "did my
+  // registration go through?", and they can answer that from the queue without
+  // being able to let anyone in. The Approve button is what checks the stronger
+  // capability -- see AdminWaitlist.
+  { to: '/admin/waitlist', label: 'Waitlist', capability: 'view_users' },
   // view_users, not manage_privacy_requests: seeing the queue is the same
   // tier as seeing users, and hiding it from people who can read it but
   // not action it is how a request sits unnoticed for a month.

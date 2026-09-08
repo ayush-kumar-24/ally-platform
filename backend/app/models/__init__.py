@@ -16,8 +16,9 @@ Class names follow sqlacodegen's convention (pluralised: `Founders`,
 `Conversations`). `Founder` is aliased to `Founders` for existing call sites.
 """
 
-from app.models import auth, llm, memory, partitioned, schema, suggestions
+from app.models import auth, llm, memory, partitioned, schema, suggestions, waitlist
 from app.models.auth import RevokedTokenRow
+from app.models.waitlist import WaitlistRegistration
 from app.models.llm import LLMCallLog, ModelTaskRouting
 from app.models.memory import FounderMemory, FounderMemoryEvent
 from app.models.partitioned import AnalyticsEvent, AuditLog, Message
@@ -68,6 +69,7 @@ __all__ = [
     "AuditLog",
     "FounderMemory",
     "FounderMemoryEvent",
+    "WaitlistRegistration",
     # reasoning compat
     "Answer",
     "DiagnosisSession",

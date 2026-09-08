@@ -54,6 +54,31 @@ class Settings(BaseSettings):
     # every request rather than silently trusting an unsigned one.
     SUPABASE_WEBHOOK_SECRET: str = ""
 
+    # The Supabase SERVICE ROLE key. Used for exactly one thing: creating the
+    # auth.users row when an admin approves a waitlist registration (see
+    # app/services/supabase_admin.py). Sign-ups are switched off at the project
+    # level, so approval is the ONLY way an identity comes into existence, and
+    # that call needs an admin credential -- the anon key cannot do it.
+    #
+    # This key bypasses RLS entirely and can read or write every table in the
+    # project. Treat it like the database password it effectively is: Secrets
+    # Manager, never a plain environment variable, never anywhere near the
+    # frontend. It is deliberately NOT wired into the auth provider, the ORM
+    # session, or any request path a founder can reach; the one module that
+    # reads it is the only module that should ever read it.
+    #
+    # Empty means the approve endpoint refuses rather than half-approving: a
+    # registration marked approved with no identity behind it is a founder
+    # who has been told they are in and cannot log in.
+    SUPABASE_SERVICE_ROLE_KEY: str = ""
+
+    # How many founders the platform is being opened to in this phase. Counted
+    # against approvals, not registrations -- the queue is allowed to grow past
+    # it, and that backlog is the demand signal. A super admin can approve past
+    # the cap deliberately (see app/services/waitlist.py); everyone else is
+    # refused with the count in the message.
+    WAITLIST_APPROVAL_CAP: int = 300
+
     # Shared secret for internal-only endpoints with no founder in the request
     # at all (the deletion-sweep trigger an external scheduler calls). Same
     # fail-closed rule: empty means refuse, never "open by default".

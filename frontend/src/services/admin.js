@@ -269,3 +269,31 @@ export function founderFeedbackStats({ type = null } = {}) {
 export function listSupportMisses({ limit = 100 } = {}) {
   return get('/admin/support-misses', { params: { limit } });
 }
+
+// --- waitlist -------------------------------------------------------------
+// Access to Ally is granted by approval, never by signing up: sign-ups are off
+// at the Supabase project level, so an address with no identity cannot even
+// receive a login code. Approving here is what creates that identity and emails
+// the founder -- it is the only door in.
+
+/**
+ * The queue. `status` is one of pending | approved | rejected | all; pending is
+ * the only view with work in it, so it is the default on the server too.
+ *
+ * Returns { registrations, counts, cap } -- `cap` carries the 300-place budget
+ * and whether access can be granted at all right now (it cannot without the
+ * service role key, and the screen says so rather than failing at the click).
+ */
+export function listWaitlist({ status = 'pending', limit = 100, offset = 0 } = {}) {
+  return get('/admin/waitlist', { params: { status, limit, offset } });
+}
+
+/** Approve: creates the founder's login and emails them. Not undoable. */
+export function approveRegistration(registrationId) {
+  return post(`/admin/waitlist/${registrationId}/approve`, {});
+}
+
+/** Reject, with a reason. Recorded, never emailed to the person. */
+export function rejectRegistration(registrationId, reason) {
+  return post(`/admin/waitlist/${registrationId}/reject`, { reason });
+}
