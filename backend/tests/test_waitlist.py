@@ -366,6 +366,105 @@ def test_an_unknown_field_is_rejected_rather_than_silently_dropped(public_client
     assert r.status_code == 422
 
 
+# --- the forwarding exemption ----------------------------------------------
+#
+# Exercised against the real dependency function, not through public_client
+# (whose fixture overrides waitlist_rate_limit outright) -- what is under test
+# here is the choice this function makes between the per-IP limiter and
+# skipping it, so the fixture that removes that choice cannot be used.
+
+
+class _FakeRequestForLimiter:
+    """Just enough of a Request for _client_ip: a `client.host` and headers."""
+
+    def __init__(self, ip: str):
+        self.client = type("C", (), {"host": ip})()
+        self.headers: dict[str, str] = {}
+
+
+def test_forward_secret_unset_never_exempts_even_with_a_header(monkeypatch):
+    """Fail closed, like INTERNAL_JOBS_SECRET: forgetting to configure the
+    secret must never silently turn into 'anyone with any header skips the
+    limit' -- it must mean the limit always applies."""
+    from app.api.v1.waitlist import public as public_mod
+    from app.core.config import settings
+    from app.middleware import rate_limit as rl
+
+    monkeypatch.setattr(settings, "WAITLIST_FORWARD_SECRET", "")
+    monkeypatch.setattr(rl, "_limiter", rl._SlidingWindowLimiter())
+    ip = "203.0.113.5"
+
+    for _ in range(5):
+        public_mod.waitlist_rate_limit(
+            _FakeRequestForLimiter(ip), x_waitlist_forward_secret="whatever"
+        )
+    with pytest.raises(Exception) as exc_info:
+        public_mod.waitlist_rate_limit(
+            _FakeRequestForLimiter(ip), x_waitlist_forward_secret="whatever"
+        )
+    assert exc_info.value.status_code == 429
+
+
+def test_the_matching_secret_skips_the_per_ip_limit(monkeypatch):
+    """The one case this exists for: the landing site's own IP pool must be
+    able to forward more than five registrations in five minutes."""
+    from app.api.v1.waitlist import public as public_mod
+    from app.core.config import settings
+    from app.middleware import rate_limit as rl
+
+    monkeypatch.setattr(settings, "WAITLIST_FORWARD_SECRET", "correct-horse-battery")
+    monkeypatch.setattr(rl, "_limiter", rl._SlidingWindowLimiter())
+    ip = "203.0.113.9"
+
+    # Six is past the plain per-IP limit of five -- proves the bucket was
+    # never touched, not just that it has not filled up yet.
+    for _ in range(6):
+        public_mod.waitlist_rate_limit(
+            _FakeRequestForLimiter(ip), x_waitlist_forward_secret="correct-horse-battery"
+        )
+
+
+def test_a_wrong_secret_does_not_exempt_and_still_counts_against_the_limit(monkeypatch):
+    """A guessed or stale header must fall through to the ordinary limit, not
+    open a side door -- and the attempt itself is not free."""
+    from app.api.v1.waitlist import public as public_mod
+    from app.core.config import settings
+    from app.middleware import rate_limit as rl
+
+    monkeypatch.setattr(settings, "WAITLIST_FORWARD_SECRET", "correct-horse-battery")
+    monkeypatch.setattr(rl, "_limiter", rl._SlidingWindowLimiter())
+    ip = "203.0.113.7"
+
+    for _ in range(5):
+        public_mod.waitlist_rate_limit(
+            _FakeRequestForLimiter(ip), x_waitlist_forward_secret="guessed-wrong"
+        )
+    with pytest.raises(Exception) as exc_info:
+        public_mod.waitlist_rate_limit(
+            _FakeRequestForLimiter(ip), x_waitlist_forward_secret="guessed-wrong"
+        )
+    assert exc_info.value.status_code == 429
+
+
+def test_no_header_at_all_falls_through_to_the_ordinary_limit(monkeypatch):
+    """The overwhelming majority of callers -- real visitors hitting this
+    endpoint directly -- send no such header. Confirms the plain path is
+    unchanged, not merely that the exempted path works."""
+    from app.api.v1.waitlist import public as public_mod
+    from app.core.config import settings
+    from app.middleware import rate_limit as rl
+
+    monkeypatch.setattr(settings, "WAITLIST_FORWARD_SECRET", "correct-horse-battery")
+    monkeypatch.setattr(rl, "_limiter", rl._SlidingWindowLimiter())
+    ip = "203.0.113.11"
+
+    for _ in range(5):
+        public_mod.waitlist_rate_limit(_FakeRequestForLimiter(ip), x_waitlist_forward_secret=None)
+    with pytest.raises(Exception) as exc_info:
+        public_mod.waitlist_rate_limit(_FakeRequestForLimiter(ip), x_waitlist_forward_secret=None)
+    assert exc_info.value.status_code == 429
+
+
 # --- the approval email ---------------------------------------------------
 
 

@@ -24,14 +24,35 @@ ABUSE PROTECTION, for an unauthenticated write:
 There is no CAPTCHA. It would be the fourth layer on a form whose worst case is
 junk rows in a queue a human reads anyway, and it costs every genuine founder a
 puzzle at the first moment they meet us.
+
+ONE EXEMPTION FROM THE PER-IP LIMIT
+The join.goxlally.ai landing site forwards its own registrations here
+server-to-server (not from the visitor's browser), so every registration it
+sends arrives from that site's own small pool of serverless egress IPs -- to
+this endpoint's rate limiter, indistinguishable from one caller hammering it.
+Five genuine founders registering within the same five minutes would cost the
+sixth their registration, silently, on a launch day that is exactly when it is
+most likely to happen.
+
+A caller presenting X-Waitlist-Forward-Secret matching WAITLIST_FORWARD_SECRET
+skips the per-IP bucket. This is not authentication -- the endpoint stays
+unauthenticated by design, see above -- it only tells this one known,
+server-to-server caller apart from "traffic from an IP" so its volume is not
+double-limited under a limit meant to catch a single scripting visitor. The
+landing site enforces its own real per-visitor limit before it ever reaches
+here (its RATE_LIMIT/RATE_WINDOW_MS); honeypot and length caps still apply to
+every request regardless of the header.
 """
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Request, status
+import hmac
+
+from fastapi import APIRouter, Depends, Header, Request, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.db.session import get_db
 from app.middleware.rate_limit import ip_rate_limit
 from app.services.waitlist import register
@@ -41,7 +62,35 @@ router = APIRouter(prefix="/waitlist", tags=["waitlist"])
 # Named at module level, not inline, so tests can override it -- same reason as
 # the auth router's limiters (FastAPI keys dependency_overrides on the exact
 # callable object, and a factory call makes a new closure every time).
-waitlist_rate_limit = ip_rate_limit(key="waitlist-register", limit=5, window_seconds=300)
+_waitlist_ip_rate_limit = ip_rate_limit(key="waitlist-register", limit=5, window_seconds=300)
+
+
+def waitlist_rate_limit(
+    request: Request,
+    x_waitlist_forward_secret: str | None = Header(default=None),
+) -> None:
+    """The per-IP limit, unless the one known forwarding caller identifies
+    itself -- see the module docstring's "ONE EXEMPTION" section.
+
+    `compare_digest`, not `==`: this compares a value an outside caller
+    supplies against a stored secret, so it gets the same timing-safe
+    comparison as the payment webhook signatures (app/payments/gateway.py)
+    rather than the plain `!=` the internal-jobs secret uses -- that one is
+    never compared against attacker-controlled input on a public route the
+    way this is.
+
+    Fails closed the same way INTERNAL_JOBS_SECRET does: an unset
+    WAITLIST_FORWARD_SECRET makes `compare_digest` compare against an empty
+    string, which a request cannot supply (the header check above already
+    requires a non-None value), so the limiter is never skipped just because
+    someone forgot to configure this.
+    """
+    secret = settings.WAITLIST_FORWARD_SECRET
+    if secret and x_waitlist_forward_secret and hmac.compare_digest(
+        x_waitlist_forward_secret, secret
+    ):
+        return
+    _waitlist_ip_rate_limit(request)
 
 
 class WaitlistSubmission(BaseModel):
