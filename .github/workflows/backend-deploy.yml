@@ -192,12 +192,22 @@ jobs:
           # the Founder DNA dimension-resolution advisor, and the LLM answer
           # classifier. With it off, every one of those falls back to a
           # deterministic path and no founder context reaches question choice.
+          #
+          # PUBLIC_LAUNCH empties the Free tier. A founder with no plan is sent
+          # to the plans page on sign-in, and every feature gate closes at once
+          # rather than one route staying open because somebody forgot it. It
+          # belongs in this list for the same reason as the others: set by hand
+          # it would survive only until the next deploy re-registers the
+          # revision. docs/PUBLIC-LAUNCH-CHECKLIST.md has what must be true
+          # either side of it -- testers moved off plan_type='free' before,
+          # four checks after.
           jq \
             --arg IMAGE "${{ steps.image.outputs.uri }}" \
             --arg CONTAINER "$CONTAINER_NAME" \
             --argjson FLAGS '[
               {"name": "ARCHETYPE_LLM", "value": "true"},
-              {"name": "ADAPTIVE_QUESTIONS", "value": "true"}
+              {"name": "ADAPTIVE_QUESTIONS", "value": "true"},
+              {"name": "PUBLIC_LAUNCH", "value": "true"}
             ]' \
             '
             .containerDefinitions |= map(
