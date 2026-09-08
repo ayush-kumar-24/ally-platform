@@ -2435,24 +2435,69 @@ body.lp-done #landing-page { display:none; }
 /* ---- quote card (Compass + Plan Your Day) ------------------------------
    One component at two sizes rather than two components: the pages want the
    same thing at different weights, and a second copy is how the two quietly
-   drift apart. The rule at the left edge does the work a quotation mark would,
-   without competing with the serif for attention. */
-.qc{margin:0;border:1px solid var(--bd);border-left:3px solid var(--emerald);border-radius:12px;
-  background:var(--ivory-2);display:flex;flex-direction:column;gap:6px}
-.qc-text{margin:0;font-family:var(--serif);font-style:italic;color:var(--forest);line-height:1.5}
-.qc-by{font-family:var(--display);font-weight:700;letter-spacing:.02em;color:var(--muted-2)}
+   drift apart.
+
+   A filled forest panel, not a tinted card. This sat on --ivory-2 against an
+   --ivory page -- a two-percent difference that read as an unstyled paragraph
+   rather than a placed quote, and it is why the same component looked like a
+   card on the Compass and like a stray italic line on Plan Your Day. The
+   quiet version depended on its own size to be seen at all, which is the one
+   thing a shared component cannot rely on. Inverting it removes the problem
+   rather than tuning it: a filled panel cannot be mistaken for the page at
+   any size, so both surfaces read the same way by construction.
+
+   The gradient is the dark-tile idiom from the landing page
+   (#landing-page .tile.dark-tile), so the platform and the marketing site
+   speak the same language wherever they both go dark. */
+.qc{
+  position:relative;overflow:hidden;margin:0;
+  border:1px solid rgba(255,255,255,.09);
+  border-left:3px solid var(--emerald);
+  border-radius:14px;
+  background:radial-gradient(130% 110% at 18% 0%,#164630,var(--forest-deep) 58%,var(--forest-night));
+  /* Forest-tinted rather than --shadow-dark: that token is built for dark
+     surfaces sitting on dark, and its neutral black reads as a grey smudge
+     under a panel this size on an ivory page. */
+  box-shadow:0 1px 2px rgba(6,20,13,.16),0 14px 30px -12px rgba(6,20,13,.32);
+  display:flex;flex-direction:column;gap:8px}
+
+/* The opening quotation mark as a watermark, cropped by the panel's own edge.
+   In CSS rather than the markup because it is decoration: a real character in
+   the DOM is read out as punctuation before the quote it decorates, and the
+   component's markup stays the two elements it actually means. */
+.qc::before{
+  content:"\201C";position:absolute;pointer-events:none;
+  font-family:var(--serif);font-weight:700;font-style:normal;
+  color:var(--emerald);opacity:.13;line-height:1}
+
+/* A bloom off the left rule, so the accent reads as light coming from the
+   edge rather than a flat stripe painted onto a dark box. */
+.qc::after{
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(70% 120% at 0% 50%,rgba(16,185,129,.16),transparent 70%)}
+
+/* Both children sit above the two decorative layers. */
+.qc-text,.qc-by{position:relative;z-index:1}
+.qc-text{margin:0;font-family:var(--serif);font-style:italic;font-weight:500;
+  color:var(--on-dark);line-height:1.5;text-wrap:pretty}
+.qc-by{font-family:var(--display);font-weight:700;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--emerald-bright)}
 .qc-by::before{content:"— "}
 
-/* Plan Your Day: a small box beside the day's work, deliberately quiet. */
-.qc-sm{padding:12px 14px}
-.qc-sm .qc-text{font-size:13.5px}
-.qc-sm .qc-by{font-size:10.5px}
+/* Plan Your Day: a small panel beside the day's work. Quiet in footprint, but
+   no longer quiet in contrast -- being unmissable at 14px is the whole point
+   of the fill. */
+.qc-sm{padding:15px 18px}
+.qc-sm .qc-text{font-size:14px}
+.qc-sm .qc-by{font-size:10px}
+.qc-sm::before{font-size:88px;top:-14px;right:12px}
 
-/* Compass: a step up, because the page around it is wider and a small box
+/* Compass: a step up, because the page around it is wider and a small panel
    here reads as something left over rather than something placed. */
-.qc-lg{padding:18px 22px;gap:8px}
-.qc-lg .qc-text{font-size:16.5px;line-height:1.55}
-.qc-lg .qc-by{font-size:11.5px}
+.qc-lg{padding:24px 28px;gap:10px}
+.qc-lg .qc-text{font-size:18px;line-height:1.55}
+.qc-lg .qc-by{font-size:11px}
+.qc-lg::before{font-size:132px;top:-22px;right:20px}
 
 /* Spacing belongs to the page, not the component -- the card is used in two
    layouts with different rhythms and should not carry one of them around. */
@@ -2460,8 +2505,10 @@ body.lp-done #landing-page { display:none; }
 .plan-wrap > .qc-sm{margin:20px 0 0}
 
 @media(max-width:640px){
-  .qc-lg{padding:14px 16px}
-  .qc-lg .qc-text{font-size:15px}
+  .qc-lg{padding:18px 20px}
+  .qc-lg .qc-text{font-size:15.5px}
+  .qc-lg::before{font-size:104px;top:-16px;right:14px}
+  .qc-sm::before{font-size:74px}
 }
 
 /* --- checkout discount code ---------------------------------------------- */
