@@ -79,6 +79,27 @@ class Settings(BaseSettings):
     # refused with the count in the message.
     WAITLIST_APPROVAL_CAP: int = 300
 
+    # Exempts ONE known caller -- the landing site's server-to-server forward
+    # (app/lib/ally-waitlist.ts over there) -- from the public waitlist
+    # endpoint's per-IP rate limit.
+    #
+    # That endpoint is unauthenticated by design (see app/api/v1/waitlist/
+    # public.py), so this is not an auth token; it changes nothing about who
+    # may call it. What it fixes: the landing site forwards EVERY registration
+    # from one small pool of serverless egress IPs, which is indistinguishable
+    # from a single caller hammering the endpoint to a per-IP limiter -- so the
+    # 6th founder to register within five minutes was rate-limited into a
+    # dropped registration, silently, on both sides. A real per-visitor abuse
+    # limit has to key on the visitor, which only the landing site can see;
+    # this lets that site enforce its OWN limit (already does, see its
+    # RATE_LIMIT/RATE_WINDOW_MS) instead of being throttled a second time by
+    # an IP the limit was never meant to describe.
+    #
+    # Empty means the exemption is never available -- same fail-closed rule as
+    # INTERNAL_JOBS_SECRET below: a header nobody can produce, not "open by
+    # default" if this is forgotten.
+    WAITLIST_FORWARD_SECRET: str = ""
+
     # Shared secret for internal-only endpoints with no founder in the request
     # at all (the deletion-sweep trigger an external scheduler calls). Same
     # fail-closed rule: empty means refuse, never "open by default".
