@@ -23,6 +23,17 @@ export function markAllRead() {
 }
 
 /**
+ * Clear the panel. Hides every notification; it does not delete them.
+ *
+ * The server keeps the rows because the feed is regenerated from standing
+ * conditions on every bell open, and only the existing row's dedup key stops a
+ * cleared notification coming straight back.
+ */
+export function dismissAll() {
+  return post('/notifications/dismiss-all', {});
+}
+
+/**
  * How long ago, in words. "2h ago" beats a raw ISO timestamp, which is what
  * this rendered before.
  */

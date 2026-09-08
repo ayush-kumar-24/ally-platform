@@ -78,3 +78,19 @@ def mark_all_read(
 ):
     changed = notification_repository.mark_all_read(db, founder.founder_id)
     return {"marked_read": changed}
+
+
+@router.post("/dismiss-all")
+def dismiss_all(
+    founder: Founder = Depends(get_founder_record),
+    db: Session = Depends(get_db),
+):
+    """Clear the panel: hide every notification the founder currently has.
+
+    NOT a delete. The feed is rebuilt on every bell open from standing
+    conditions, and that is only safe because each rule is idempotent on the
+    existing row's dedup_key. Delete the rows and the next page load recreates
+    them -- so "Clear all" would appear to do nothing.
+    """
+    hidden = notification_repository.dismiss_all(db, founder.founder_id)
+    return {"dismissed": hidden}

@@ -6,7 +6,7 @@ import { getAccessToken } from '../services/api';
 import { getProfile } from '../services/profile';
 import { applyReducedMotion } from '../services/motion';
 import { getNotificationPreferences } from '../services/settings';
-import { listNotifications, markAllRead, markRead, toDisplay } from '../services/notifications';
+import { dismissAll, listNotifications, markAllRead, markRead, toDisplay } from '../services/notifications';
 import { isDueOrOverdue, listTasks } from '../services/planning';
 import { firstSafe } from '../utils/looksLikeToken';
 
@@ -160,13 +160,25 @@ export function AppProvider({ children }) {
 
   // "Clear all" must reach the server, otherwise the notifications return on the
   // next load and the button looks broken.
-  const clearNotifications = useCallback(() => {
-    // Marks them read; it does not delete them. The list stays so a founder can
-    // still read what it said -- "clear" here means "stop badging me", and
-    // wiping the panel meant a notification glimpsed and dismissed was gone.
+  /** Mark everything read, leaving the rows on screen. The panel's own button. */
+  const markAllNotificationsRead = useCallback(() => {
     setNotifications(prev => prev.map(n => ({ ...n, unread: false })));
     setUnreadCount(0);
     markAllRead().catch(() => refreshNotifications());
+  }, [refreshNotifications]);
+
+  /**
+   * Clear all -- empty the panel.
+   *
+   * This used to be the same call as "Mark all as read": two buttons, one
+   * behaviour, and the one labelled "Clear all" left every notification exactly
+   * where it was. It now hides them server-side so they stay gone on the next
+   * load and on other devices.
+   */
+  const clearNotifications = useCallback(() => {
+    setNotifications([]);
+    setUnreadCount(0);
+    dismissAll().catch(() => refreshNotifications());
   }, [refreshNotifications]);
 
   /** Mark one read -- the badge should drop when a founder acts on a row. */
@@ -265,7 +277,8 @@ export function AppProvider({ children }) {
       user, setUser,
       sidebarCollapsed, toggleSidebar,
       sidebarOpen, openSidebar, closeSidebar,
-      notifications, setNotifications, clearNotifications, refreshNotifications,
+      notifications, setNotifications, clearNotifications, markAllNotificationsRead,
+      refreshNotifications,
       unreadCount, readNotification,
       activeView, setActiveView: navigate,
       isGuided, setIsGuided,

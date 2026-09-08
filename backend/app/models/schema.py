@@ -975,6 +975,10 @@ class Notifications(Base):
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     body: Mapped[str] = mapped_column(Text, nullable=False)
     is_read: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text('false'))
+    #: Set when the founder presses Clear all. The row STAYS -- the feed is
+    #: regenerated on every bell open and only the existing row's dedup_key
+    #: stops it coming straight back, so a delete would un-clear it.
+    dismissed_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
     action_url: Mapped[Optional[str]] = mapped_column(String(500))
     #: Makes a write idempotent. Unique per founder where set (d3f8b71c02a9), so
     #: a sweep re-evaluating the same condition every few hours cannot stack up

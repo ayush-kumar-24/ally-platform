@@ -196,7 +196,8 @@ const NAV_GROUPS = [
 
 export default function PlatformLayout() {
   const { user, sidebarCollapsed, toggleSidebar, sidebarOpen, openSidebar, closeSidebar,
-          notifications, clearNotifications, unreadCount, readNotification,
+          notifications, clearNotifications, markAllNotificationsRead,
+          unreadCount, readNotification,
           hasVision, setHasVision, startTour } = useApp();
 
   /* Both of these read "Ally Free" as literal text, so a paying founder was
@@ -506,7 +507,8 @@ export default function PlatformLayout() {
                     <div className="np-t">Ally Reminders</div>
                     <div className="np-sub">{unreadCount ? `${unreadCount} unread` : 'All caught up'}</div>
                   </div>
-                  <button className="np-clear" onClick={clearNotifications} type="button">Clear all</button>
+                  <button className="np-clear" onClick={clearNotifications} type="button"
+                          disabled={!notifications.length}>Clear all</button>
                 </div>
                 <div className="np-list">
                   {notifications.length === 0 ? (
@@ -562,7 +564,11 @@ export default function PlatformLayout() {
                       Day whatever the notification was about -- a billing alert
                       included. Each row now goes to its own place, so the foot
                       just offers the one thing that applies to all of them. */}
-                  <button className="np-open" onClick={clearNotifications} type="button"
+                  {/* Mark all as read, NOT clear. These two buttons both called
+                      clearNotifications, so "Clear all" at the top and "Mark all
+                      as read" here did exactly the same thing -- and neither
+                      cleared anything. */}
+                  <button className="np-open" onClick={markAllNotificationsRead} type="button"
                           disabled={!unreadCount}>
                     <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12" /></svg>
                     Mark all as read

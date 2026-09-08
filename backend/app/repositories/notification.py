@@ -20,7 +20,13 @@ class NotificationRepository(BaseRepository[Notifications]):
     ) -> list[Notifications]:
         stmt = (
             select(Notifications)
-            .where(Notifications.founder_id == founder_id, Notifications.channel == _CHANNEL)
+            .where(
+                Notifications.founder_id == founder_id,
+                Notifications.channel == _CHANNEL,
+                # Dismissed rows stay in the table so their dedup_key keeps
+                # suppressing regeneration; they just stop being shown.
+                Notifications.dismissed_at.is_(None),
+            )
         )
         if unread_only:
             stmt = stmt.where(Notifications.is_read.is_(False))
@@ -35,6 +41,7 @@ class NotificationRepository(BaseRepository[Notifications]):
                 Notifications.founder_id == founder_id,
                 Notifications.channel == _CHANNEL,
                 Notifications.is_read.is_(False),
+                Notifications.dismissed_at.is_(None),
             )
         )
         return db.execute(stmt).scalar_one()
@@ -57,6 +64,27 @@ class NotificationRepository(BaseRepository[Notifications]):
                 Notifications.is_read.is_(False),
             )
             .values(is_read=True, read_at=datetime.now(timezone.utc))
+        )
+        result = db.execute(stmt)
+        db.commit()
+        return result.rowcount
+
+    def dismiss_all(self, db: Session, founder_id: int) -> int:
+        """Clear the panel. Returns how many rows were hidden.
+
+        Marks read as well as dismissed. A row that is hidden but still counted
+        as unread would leave the bell badged with a number nothing on screen
+        explains -- which is the current bug, in reverse.
+        """
+        now = datetime.now(timezone.utc)
+        stmt = (
+            update(Notifications)
+            .where(
+                Notifications.founder_id == founder_id,
+                Notifications.channel == _CHANNEL,
+                Notifications.dismissed_at.is_(None),
+            )
+            .values(dismissed_at=now, is_read=True, read_at=Notifications.read_at)
         )
         result = db.execute(stmt)
         db.commit()
