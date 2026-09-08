@@ -204,13 +204,18 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  transition: transform 0.25s var(--ease), box-shadow 0.25s var(--ease), border-color 0.25s var(--ease);
+  transition: transform 0.25s var(--ease), box-shadow 0.25s var(--ease),
+              border-color 0.25s var(--ease), background-color 0.25s var(--ease);
 }
 
+/* Same emerald tint the rest of the app uses for a hovered surface
+   (.sugg:hover, .ac-pcard:hover in platform.css). The lift is deeper than the
+   resting shadow implies so the card reads as coming toward the reader. */
 .fd-card:hover {
-  transform: translateY(-2px);
-  border-color: var(--bd-2, #d8cfc2);
-  box-shadow: 0 4px 20px -8px rgba(6, 20, 13, 0.18), 0 10px 30px -10px rgba(6, 20, 13, 0.12);
+  transform: translateY(-4px);
+  background: rgba(16, 185, 129, 0.08);
+  border-color: rgba(16, 185, 129, 0.4);
+  box-shadow: 0 6px 24px -8px rgba(6, 20, 13, 0.2), 0 16px 40px -12px rgba(6, 20, 13, 0.16);
 }
 
 .fd-card-top {
