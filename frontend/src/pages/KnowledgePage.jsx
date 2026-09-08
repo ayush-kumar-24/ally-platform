@@ -242,11 +242,25 @@ function Glossary({ sections }) {
       )}
 
       {shown.map((s) => (
+        /* Each section is its own panel with a numbered header, because as one
+           continuous run of 182 rows the sections were invisible and the whole
+           thing read as an undifferentiated wall.
+
+           The number comes from the full list, not from the filtered one. A
+           search for "esop" returns sections 5 and 8; numbering them 1 and 2
+           because they happen to be the only two showing would make the number
+           mean nothing. */
         <section className="gl-section" key={s.slug} id={`gl-${s.slug}`}>
-          <h2 className="gl-h">
-            {s.title}
+          <header className="gl-head">
+            <span className="gl-num">
+              {sections.findIndex((x) => x.slug === s.slug) + 1}
+            </span>
+            <div className="gl-head-text">
+              <h2 className="gl-h">{s.title}</h2>
+              {s.blurb && <p className="gl-blurb">{s.blurb}</p>}
+            </div>
             <span className="gl-h-n">{s.terms.length}</span>
-          </h2>
+          </header>
 
           {/* Shown, not filed. Several of these facts have already moved once
               inside a year, and a founder reading a stale rate here would be

@@ -477,29 +477,65 @@ a.fw-card-link:focus-visible {
 }
 .gl-chip-n { font-size: 10px; font-weight: 800; color: var(--color-muted-2, #8a958b); }
 
-.gl-section { margin-bottom: 40px; scroll-margin-top: 74px; }
-.gl-h {
+/* Each section is a panel of its own. As one continuous list the sections
+   disappeared and 182 rows read as a single wall of text. */
+.gl-section {
+  margin-bottom: 26px;
+  scroll-margin-top: 78px;
+  border: 1px solid var(--color-bd, #e7e0d6);
+  border-radius: 18px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.gl-head {
   display: flex;
-  align-items: baseline;
-  gap: 10px;
-  margin: 0 0 14px;
-  padding-bottom: 10px;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 20px;
+  background: linear-gradient(180deg, rgba(16, 185, 129, .10), rgba(16, 185, 129, .05));
   border-bottom: 1px solid var(--color-bd, #e7e0d6);
+}
+.gl-num {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--color-forest, #1B4332);
+  color: #fff;
   font-family: var(--font-display);
-  font-size: 19px;
+  font-size: 13px;
+  font-weight: 700;
+}
+.gl-head-text { flex: 1; min-width: 0; }
+.gl-h {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 17px;
   letter-spacing: -.01em;
   color: var(--color-forest, #1B4332);
 }
+.gl-blurb {
+  margin: 3px 0 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--color-muted-2, #6c7a70);
+}
 .gl-h-n {
-  font-family: var(--font-body);
+  flex-shrink: 0;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .75);
+  border: 1px solid rgba(16, 185, 129, .28);
   font-size: 11px;
-  font-weight: 700;
-  color: var(--color-muted-2, #8a958b);
+  font-weight: 800;
+  color: var(--color-emerald-dark, #0c7a54);
 }
 
-/* Warm rather than green, so a dated-facts warning does not read as a heading. */
 .gl-note {
-  margin: 0 0 16px;
+  margin: 16px 20px 0;
   padding: 11px 14px;
   border-left: 3px solid #c08a4a;
   background: rgba(192, 138, 74, .08);
@@ -509,7 +545,7 @@ a.fw-card-link:focus-visible {
   color: #6d4a20;
 }
 
-.gl-list { margin: 0; }
+.gl-list { margin: 0; padding: 4px 20px 8px; }
 .gl-row {
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr);
@@ -518,6 +554,7 @@ a.fw-card-link:focus-visible {
   border-bottom: 1px solid rgba(231, 224, 214, .7);
 }
 .gl-row:last-child { border-bottom: none; }
+.gl-row:hover { background: rgba(16, 185, 129, .035); }
 @media (max-width: 720px) {
   .gl-row { grid-template-columns: minmax(0, 1fr); gap: 6px; }
 }
