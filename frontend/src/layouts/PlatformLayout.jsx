@@ -3,6 +3,7 @@ import DeletionPendingGate from '../components/DeletionPendingGate';
 import PlanRequiredGate from '../components/PlanRequiredGate';
 import HelpWidget from '../components/HelpWidget';
 import { useApp } from '../context/AppContext';
+import { checkProfileComplete } from '../services/onboarding';
 import { planLabel as planLabelFor } from '../services/plans';
 import { usePlanName } from '../hooks/usePlanName';
 import { useState, useRef, useEffect } from 'react';
@@ -106,7 +107,10 @@ const NAV_GROUPS = [
          locked rows above the one row a new founder could actually click --
          the map was there, but the door was below it. (2026-09-05 product
          decision.) */
-      { path: '/app/founder-dna-journey', tip: 'Adaptive diagnosis', icon: IconPulse, label: 'Adaptive diagnosis', badge: null },
+      /* needsProfile: the API refuses /founder-dna/start, /current-problem/start
+         and /diagnosis/start until onboarding is finished. Showing this row as
+         open would be advertising a door that answers 409. */
+      { path: '/app/founder-dna-journey', tip: 'Adaptive diagnosis', icon: IconPulse, label: 'Adaptive diagnosis', badge: null, needsProfile: true },
       { path: '/app/founder-dna', tip: 'Founder DNA', icon: IconUser, label: 'Founder DNA', badge: null, needsReport: true },
       { path: '/app/business-dna', tip: 'Business DNA', icon: IconTrendingUp, label: 'Business DNA', badge: null, needsReport: true },
       /* Unlike the DNA pages above, this isn't derived from a diagnosis report
@@ -210,6 +214,9 @@ export default function PlatformLayout() {
   const [npOpen, setNpOpen] = useState(false);
   const npRef = useRef(null);
 
+  /* Whether onboarding is finished. Starts true for the same reason
+     hasReport does -- a slow call must not lock anyone out. */
+  const [profileComplete, setProfileComplete] = useState(true);
   /* Whether a diagnosis has actually produced a report yet -- what decides
      which nav items are still locked. Starts unlocked so a slow call never
      shuts a founder out of pages they have already earned. */
@@ -231,6 +238,13 @@ export default function PlatformLayout() {
         setHasReport(Boolean(o.latest_diagnosis?.available));
         if (o.founder_name) setFounderName(o.founder_name);
       })
+      .catch(() => { /* leave unlocked rather than guess */ });
+
+    /* Same fail-open rule as hasReport above: if the check cannot be reached we
+       leave the row open and let the server say no, rather than locking a
+       founder out of a diagnosis they are entitled to. */
+    checkProfileComplete()
+      .then((r) => { if (!cancelled) setProfileComplete(r?.valid !== false); })
       .catch(() => { /* leave unlocked rather than guess */ });
     /* One request per session for one word in the sidebar. It rides in the
        effect that already runs here rather than in AppContext, because this
@@ -333,22 +347,26 @@ export default function PlatformLayout() {
               {group.hideLabel
                 ? <div className="sb-gap" aria-hidden="true" />
                 : <div className="sb-group">{group.label}</div>}
-              {group.items.map(({ path, action, tip, icon: Icon, label, badge, needsReport, comingSoon, lockTip }) => {
+              {group.items.map(({ path, action, tip, icon: Icon, label, badge, needsReport, needsProfile, comingSoon, lockTip }) => {
                 const reportLocked = needsReport && !hasReport;
-                const locked = reportLocked || comingSoon;
+                const profileLocked = needsProfile && !profileComplete;
+                const locked = reportLocked || profileLocked || comingSoon;
                 return (
                   <button
                     key={path ?? action}
                     className={`nav-item${path && isActive(path) ? ' active' : ''}${locked ? ' locked' : ''}`}
-                    data-tip={comingSoon ? (lockTip || 'Coming soon') : reportLocked ? 'Finish your diagnosis to unlock' : path === '/app/vision' ? visionLabel(hasVision) : tip}
+                    data-tip={comingSoon ? (lockTip || 'Coming soon') : profileLocked ? 'Finish your profile to unlock' : reportLocked ? 'Finish your diagnosis to unlock' : path === '/app/vision' ? visionLabel(hasVision) : tip}
                     data-nav={path ?? action}
-                    aria-disabled={reportLocked}
+                    aria-disabled={reportLocked || profileLocked}
                     onClick={() => {
                       // A report-gated item sends them to the thing that
                       // unlocks it rather than an empty page they'd have to
                       // work out for themselves. A not-yet-built feature has
                       // nothing to unlock -- it opens its own honest
                       // "coming soon" page instead of redirecting anywhere.
+                      /* Straight to the thing that unlocks it, same as the
+                         report lock above -- not to a dead row. */
+                      if (profileLocked) { handleNav('/guided/profile'); return; }
                       if (reportLocked) { handleNav('/app/founder-dna-journey'); return; }
                       // An action item stays put: the tour opens over whatever
                       // page they are on, and the drawer is left to the tour,
