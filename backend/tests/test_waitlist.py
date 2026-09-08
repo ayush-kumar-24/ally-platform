@@ -46,11 +46,19 @@ class Row:
 
 class StubSession:
     """Enough Session for the service: a scalar for the cap count, a row for
-    the SELECT ... FOR UPDATE, and a record of commits/rollbacks."""
+    the SELECT ... FOR UPDATE, and a record of commits/rollbacks.
 
-    def __init__(self, row=None, approved_count=0):
+    `scalar_one` answers the approved count and `scalar` the opened-slots sum,
+    which is the only reason the service reads those two through different
+    methods -- a stub that returned one number for both could not tell the cap
+    apart from the ledger.
+    """
+
+    def __init__(self, row=None, approved_count=0, slots_opened=0):
         self._row = row
         self._approved = approved_count
+        self._slots_opened = slots_opened
+        self.added = []
         self.commits = 0
         self.rollbacks = 0
 
@@ -60,8 +68,14 @@ class StubSession:
     def scalar_one(self):
         return self._approved
 
+    def scalar(self):
+        return self._slots_opened
+
     def scalar_one_or_none(self):
         return self._row
+
+    def add(self, obj):
+        self.added.append(obj)
 
     def commit(self):
         self.commits += 1
@@ -95,7 +109,8 @@ def test_normalise_email_is_the_one_definition_of_same_person():
 def test_cap_status_reports_remaining(monkeypatch):
     monkeypatch.setattr(settings, "WAITLIST_APPROVAL_CAP", 300)
     assert waitlist.cap_status(StubSession(approved_count=298)) == {
-        "approved": 298, "cap": 300, "remaining": 2, "is_full": False,
+        "approved": 298, "cap": 300, "base_cap": 300, "slots_opened": 0,
+        "remaining": 2, "is_full": False,
     }
 
 
@@ -394,3 +409,141 @@ def test_the_email_greets_by_first_name_and_survives_a_blank_one(monkeypatch):
 
     wn.send_approval_email("f@x.com", "   ")
     assert "Hi there," in captured["text"]
+
+
+# --- opening slots --------------------------------------------------------
+
+
+def test_opening_slots_is_super_admin_only():
+    """Approving one person is queue work; deciding how many people the phase
+    holds is not. Admin can clear the queue and still cannot grow it."""
+    assert has_capability(PanelRole.SUPER_ADMIN, Capability.OPEN_WAITLIST_SLOTS)
+    assert not has_capability(PanelRole.ADMIN, Capability.OPEN_WAITLIST_SLOTS)
+    assert not has_capability(PanelRole.SUPPORT, Capability.OPEN_WAITLIST_SLOTS)
+    # ...while the ordinary approval stays where it was.
+    assert has_capability(PanelRole.ADMIN, Capability.MANAGE_WAITLIST)
+
+
+def test_the_cap_is_the_env_value_plus_every_slot_opened(monkeypatch):
+    """The environment keeps meaning "the size we launched with". Slots opened
+    from the panel add to it, so a deploy cannot silently undo them."""
+    monkeypatch.setattr(settings, "WAITLIST_APPROVAL_CAP", 300)
+    status = waitlist.cap_status(StubSession(approved_count=300, slots_opened=25))
+    assert status["cap"] == 325
+    assert status["base_cap"] == 300 and status["slots_opened"] == 25
+    # Full a moment ago, not full now -- which is the whole point of the feature.
+    assert status["is_full"] is False and status["remaining"] == 25
+
+
+def _queue(*names):
+    rows = []
+    for i, name in enumerate(names, start=1):
+        row = Row(name=name, email=f"{name.lower()}@x.com")
+        row.registration_id = i
+        rows.append(row)
+    return rows
+
+
+def _open(db, monkeypatch, queue, approve_impl, slots=3):
+    monkeypatch.setattr(waitlist, "next_in_queue", lambda _db, n: queue[:n])
+    monkeypatch.setattr(waitlist, "approve", approve_impl)
+    return waitlist.open_slots(
+        db, slots=slots, admin_id=7, admin_email="s@x.com",
+        admin_role=PanelRole.SUPER_ADMIN,
+    )
+
+
+def test_slots_approve_the_front_of_the_queue_in_order(monkeypatch):
+    """The order people asked in is the order they get in. An admin who opens
+    three slots gets exactly the three rows at the top of their screen."""
+    monkeypatch.setattr(settings, "WAITLIST_APPROVAL_CAP", 300)
+    queue = _queue("Asha", "Bala", "Chetan", "Divya")
+    seen = []
+
+    def fake_approve(_db, registration_id, **_k):
+        row = next(r for r in queue if r.registration_id == registration_id)
+        seen.append(row.full_name)
+        row.status = APPROVED
+        return row
+
+    out = _open(StubSession(), monkeypatch, queue, fake_approve, slots=3)
+
+    assert seen == ["Asha", "Bala", "Chetan"]
+    assert [r.full_name for r in out["approved"]] == ["Asha", "Bala", "Chetan"]
+    # The fourth stays where they were: at the front of the next opening.
+    assert queue[3].status == PENDING
+
+
+def test_the_opening_is_recorded_before_anyone_is_approved(monkeypatch):
+    """The ledger row must be committed first, or `approve` would check a cap
+    that has not moved yet and refuse every approval in its own batch."""
+    monkeypatch.setattr(settings, "WAITLIST_APPROVAL_CAP", 300)
+    db = StubSession()
+    queue = _queue("Asha")
+    commits_when_approving = []
+
+    def fake_approve(_db, registration_id, **_k):
+        commits_when_approving.append(db.commits)
+        row = queue[0]
+        row.status = APPROVED
+        return row
+
+    _open(db, monkeypatch, queue, fake_approve, slots=1)
+
+    opening = db.added[0]
+    assert opening.slots_opened == 1
+    assert opening.opened_by_email == "s@x.com" and opening.opened_by_admin_id == 7
+    # At least one commit had already happened when the first approval ran.
+    assert commits_when_approving and commits_when_approving[0] >= 1
+
+
+def test_one_failure_does_not_deny_the_rest_their_place(monkeypatch):
+    """Each approval is its own transaction, so a single identity call failing
+    is reported against that person and nobody else's place is lost."""
+    monkeypatch.setattr(settings, "WAITLIST_APPROVAL_CAP", 300)
+    queue = _queue("Asha", "Bala", "Chetan")
+
+    def fake_approve(_db, registration_id, **_k):
+        row = next(r for r in queue if r.registration_id == registration_id)
+        if row.full_name == "Bala":
+            raise supabase_admin.IdentityProviderError("upstream said no")
+        row.status = APPROVED
+        return row
+
+    out = _open(StubSession(), monkeypatch, queue, fake_approve, slots=3)
+
+    assert [r.full_name for r in out["approved"]] == ["Asha", "Chetan"]
+    assert len(out["failures"]) == 1
+    assert out["failures"][0]["full_name"] == "Bala"
+    assert out["failures"][0]["email"] == "bala@x.com"
+    # Still pending, so opening slots again retries them from the front.
+    assert queue[1].status == PENDING
+
+
+def test_an_opening_bigger_than_the_queue_keeps_the_unused_places(monkeypatch):
+    """Ten slots against a queue of two is not an error: eight places stay open
+    for whoever registers next, and the ledger says only two were used."""
+    monkeypatch.setattr(settings, "WAITLIST_APPROVAL_CAP", 300)
+    db = StubSession()
+    queue = _queue("Asha", "Bala")
+
+    def fake_approve(_db, registration_id, **_k):
+        row = next(r for r in queue if r.registration_id == registration_id)
+        row.status = APPROVED
+        return row
+
+    out = _open(db, monkeypatch, queue, fake_approve, slots=10)
+
+    assert len(out["approved"]) == 2 and out["slots"] == 10
+    opening = db.added[0]
+    assert opening.slots_opened == 10 and opening.approved_count == 2
+
+
+def test_opening_zero_or_fewer_slots_is_refused(monkeypatch):
+    monkeypatch.setattr(settings, "WAITLIST_APPROVAL_CAP", 300)
+    for bad in (0, -5):
+        with pytest.raises(ValueError):
+            waitlist.open_slots(
+                StubSession(), slots=bad, admin_id=1, admin_email="s@x.com",
+                admin_role=PanelRole.SUPER_ADMIN,
+            )

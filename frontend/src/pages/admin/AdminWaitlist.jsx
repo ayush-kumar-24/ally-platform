@@ -23,11 +23,16 @@ import {
   approveRegistration,
   can,
   listWaitlist,
+  openWaitlistSlots,
+  previewWaitlistSlots,
   rejectRegistration,
 } from '../../services/admin';
 import { ConfirmDialog, EmptyState, ErrorState, Flash, Loading, useFlash } from './AdminUI';
 
 const CAPABILITY = 'manage_waitlist';
+// Opening slots is a decision about how big the phase is, not about one
+// person, so it sits a tier above clearing the queue. See rbac.py.
+const OPEN_SLOTS_CAPABILITY = 'open_waitlist_slots';
 
 const FILTERS = [
   { key: 'pending', label: 'Waiting on us' },
@@ -61,6 +66,7 @@ export default function AdminWaitlist() {
   // Everyone who can see the panel's user list can read this queue, so Support
   // can answer "did my registration arrive?". Only manage_waitlist can answer it.
   const canDecide = can(me, CAPABILITY);
+  const canOpenSlots = can(me, OPEN_SLOTS_CAPABILITY);
 
   const [rows, setRows] = useState([]);
   const [counts, setCounts] = useState({});
@@ -73,6 +79,14 @@ export default function AdminWaitlist() {
   // { row, mode: 'approve' | 'reject' }
   const [dialog, setDialog] = useState(null);
   const [reason, setReason] = useState('');
+  // How many places to open. A string, not a number: a controlled number input
+  // that coerces as you type fights the person clearing it to type "25".
+  const [slots, setSlots] = useState('');
+  // The server's answer to "who would this let in" -- named people, held until
+  // somebody confirms. Null means nothing is pending.
+  const [preview, setPreview] = useState(null);
+  const [previewing, setPreviewing] = useState(false);
+  const [opening, setOpening] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -121,6 +135,51 @@ export default function AdminWaitlist() {
     }
   };
 
+  const slotCount = Number.parseInt(slots, 10);
+  const slotsValid = Number.isInteger(slotCount) && slotCount >= 1 && slotCount <= 500;
+
+  const askWhoGetsIn = async () => {
+    if (!slotsValid) return;
+    setPreviewing(true);
+    try {
+      setPreview(await previewWaitlistSlots(slotCount));
+    } catch (err) {
+      setFlash({ error: true, message: err?.detail || err?.message || 'Could not read the queue.' });
+    } finally {
+      setPreviewing(false);
+    }
+  };
+
+  const confirmOpen = async () => {
+    if (!preview) return;
+    setOpening(true);
+    try {
+      const result = await openWaitlistSlots(preview.slots);
+      const inCount = result?.approved?.length || 0;
+      const failed = result?.failures?.length || 0;
+      // A partial result is flagged as an error not because the grant failed
+      // for the others -- it did not -- but because the people who missed out
+      // are the ones still needing a human.
+      setFlash(
+        failed
+          ? {
+              error: true,
+              message: `${inCount} let in. ${failed} could not be: ${result.failures
+                .map((f) => `${f.full_name} (${f.reason})`)
+                .join('; ')}. They are still at the front of the queue.`,
+            }
+          : { message: `${inCount} ${inCount === 1 ? 'founder is' : 'founders are'} in, and have been emailed.` },
+      );
+      setPreview(null);
+      setSlots('');
+      load();
+    } catch (err) {
+      setFlash({ error: true, message: err?.detail || err?.message || 'Nothing was opened. Try again.' });
+    } finally {
+      setOpening(false);
+    }
+  };
+
   const full = cap?.is_full;
 
   return (
@@ -134,7 +193,7 @@ export default function AdminWaitlist() {
 
       <Flash flash={flash} />
 
-      {/* The 300-place budget, above the queue rather than inside it: it is a
+      {/* The place budget, above the queue rather than inside it: it is a
           fact about the phase, not about any one row. */}
       {cap && (
         <div className="adm-panel">
@@ -142,14 +201,53 @@ export default function AdminWaitlist() {
           {!full && <> · {cap.remaining} left</>}
           {full && (
             <span className="adm-warn">
-              {' '}· The list is full. Only a super admin can approve past this.
+              {' '}· The list is full. Open more places below, or a super admin
+              can approve past it one at a time.
             </span>
+          )}
+          {/* Where the number came from. "325" on its own reads as a constant;
+              "300 to start, 25 opened here" reads as a decision someone made. */}
+          {cap.slots_opened > 0 && (
+            <div className="adm-dim" style={{ marginTop: 4 }}>
+              {cap.base_cap} to start · {cap.slots_opened} opened from this screen
+            </div>
           )}
           {cap.can_grant_access === false && (
             <div className="adm-warn" style={{ marginTop: 6 }}>
               Access cannot be granted right now: the identity provider is not
               configured (SUPABASE_SERVICE_ROLE_KEY is unset), so approving
               would fail. Nothing here will let anyone in until that is set.
+            </div>
+          )}
+
+          {canOpenSlots && (
+            <div style={{ marginTop: 12, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <label htmlFor="waitlist-slots">Open</label>
+              <input
+                id="waitlist-slots"
+                className="adm-input"
+                type="number"
+                min="1"
+                max="500"
+                style={{ width: 90 }}
+                value={slots}
+                onChange={(e) => setSlots(e.target.value)}
+                placeholder="25"
+              />
+              <span>more places</span>
+              <button
+                className="adm-btn adm-btn--primary"
+                type="button"
+                disabled={!slotsValid || previewing || cap.can_grant_access === false}
+                onClick={askWhoGetsIn}
+              >
+                {previewing ? 'Checking…' : 'See who gets in'}
+              </button>
+              <span className="adm-dim">
+                The people who have waited longest are let in first, in the same
+                order as the queue below. You see exactly who before anything
+                happens.
+              </span>
             </div>
           )}
         </div>
@@ -277,6 +375,51 @@ export default function AdminWaitlist() {
         busy={busyId !== null}
         onConfirm={act}
         onCancel={() => setDialog(null)}
+      />
+
+      {/* Named people, not a number. The confirmation for "open 25 slots" has
+          to answer "which 25?", because the act creates 25 logins and sends 25
+          emails and none of it can be taken back from here. */}
+      <ConfirmDialog
+        open={Boolean(preview)}
+        title={preview ? `Let in ${preview.would_approve.length} ${preview.would_approve.length === 1 ? 'person' : 'people'}?` : ''}
+        body={preview ? (
+          <>
+            <p>
+              These are the {preview.would_approve.length} who have waited
+              longest. Each one gets a login and an email saying they are on the
+              founder&apos;s list. This cannot be undone from here.
+            </p>
+            {preview.would_approve.length === 0 ? (
+              <p className="adm-warn">
+                Nobody is waiting, so this would let nobody in — it would only
+                open {preview.slots} places for whoever registers next.
+              </p>
+            ) : (
+              <ol style={{ maxHeight: 220, overflowY: 'auto', margin: '8px 0', paddingLeft: 20 }}>
+                {preview.would_approve.map((r) => (
+                  <li key={r.registration_id} style={{ marginBottom: 4 }}>
+                    {r.full_name}
+                    <span className="adm-mono adm-dim"> · {r.email}</span>
+                  </li>
+                ))}
+              </ol>
+            )}
+            {preview.unused_slots > 0 && preview.would_approve.length > 0 && (
+              <p className="adm-dim">
+                {preview.unused_slots} of the {preview.slots} places will go
+                unused — the queue is shorter than that. They stay open for
+                whoever registers next.
+              </p>
+            )}
+          </>
+        ) : ''}
+        confirmLabel={preview && preview.would_approve.length > 0
+          ? `Let ${preview.would_approve.length} in and email them`
+          : 'Open the places'}
+        busy={opening}
+        onConfirm={confirmOpen}
+        onCancel={() => setPreview(null)}
       />
 
       <ConfirmDialog

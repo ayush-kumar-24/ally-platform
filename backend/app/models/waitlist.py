@@ -75,3 +75,35 @@ class WaitlistRegistration(Base):
         """Approved AND holding an identity. The two are separate facts: see
         auth_user_id. This is the only honest answer to "are they in?"."""
         return self.status == APPROVED and self.auth_user_id is not None
+
+
+class WaitlistSlotOpening(Base):
+    """One act of opening slots -- see migration a4d7c6e2b915.
+
+    The effective cap is `WAITLIST_APPROVAL_CAP` plus the sum of `slots_opened`
+    here, so the environment value stays the starting size of the list and the
+    panel adds to it. Append-only: two admins opening slots at the same moment
+    insert two rows rather than racing on one counter.
+    """
+
+    __tablename__ = "waitlist_slot_openings"
+    __table_args__ = (
+        CheckConstraint("slots_opened > 0", name="waitlist_slot_openings_positive"),
+        CheckConstraint("approved_count >= 0", name="waitlist_slot_openings_approved_nonneg"),
+    )
+
+    opening_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    slots_opened: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    #: How many of those slots actually became approvals. Lower than
+    #: slots_opened when the queue was shorter than the number opened, or when
+    #: an identity call failed; the unused capacity stays available.
+    approved_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
+    )
+
+    opened_by_admin_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    opened_by_email: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(True), nullable=False, server_default=text("now()")
+    )

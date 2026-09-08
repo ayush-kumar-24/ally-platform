@@ -64,6 +64,14 @@ class Capability(str, Enum):
     # separate capability, because it is the same action at a different limit.
     MANAGE_WAITLIST = "manage_waitlist"
     # --- super-admin-only mutations -------------------------------------
+    # Opening slots: deciding how many people the product lets in, and letting
+    # the front of the queue in automatically. Kept above MANAGE_WAITLIST
+    # deliberately -- approving one person is the daily work of reading the
+    # queue, while raising the ceiling is a decision about the size of the
+    # phase, and it was already super-admin territory (crossing the cap is).
+    # It is also the one action here that creates many logins and sends many
+    # emails from a single click.
+    OPEN_WAITLIST_SLOTS = "open_waitlist_slots"
     TRANSFER_CREDITS = "transfer_credits"
     MODIFY_SUBSCRIPTION = "modify_subscription"
     SUSPEND_USER = "suspend_user"
