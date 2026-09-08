@@ -76,9 +76,13 @@ def upgrade() -> None:
     # singular by design ("ends on ONE deliberately bigger question"), and the
     # engine reserves exactly one slot for it. A second would silently never
     # be asked.
-    op.create_index(
-        'uq_founder_dna_one_closing_per_stage', _TABLE, ['stage_group'],
-        unique=True, postgresql_where=sa.text('is_closing'),
+    # IF NOT EXISTS, because b4e9a17c6d32 creates this same index when it
+    # builds the table from scratch, and on a FRESH database that migration
+    # runs first -- production only escaped the collision because its own
+    # anchor guard made b4e9a17c6d32 a no-op there.
+    op.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_founder_dna_one_closing_per_stage "
+        f"ON {_TABLE} (stage_group) WHERE is_closing"
     )
 
 

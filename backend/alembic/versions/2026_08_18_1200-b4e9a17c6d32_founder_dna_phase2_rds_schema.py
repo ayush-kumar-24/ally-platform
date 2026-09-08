@@ -188,7 +188,13 @@ def upgrade() -> None:
 
     # 57 seed rows, ids 98-154 -- see founder_dna_questions_seed.sql.
     for statement in _SEED_STATEMENTS:
-        op.execute(statement)
+        # exec_driver_sql, NOT op.execute: these statements embed JSON, and
+        # op.execute wraps a string in sa.text(), which reads `:98` inside
+        # `"founder_dna_question_id":98` as a bind parameter and refuses to
+        # run without a value for it. Applied long ago in production, so this
+        # was invisible there -- but it makes a FRESH database unmigratable,
+        # which is every new environment and every restore-from-scratch.
+        bind.exec_driver_sql(statement)
 
     # The seed above inserts explicit ids via json_populate_record, which
     # does NOT advance the SERIAL sequence (it bypasses nextval()). Left

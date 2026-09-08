@@ -255,8 +255,15 @@ def _run_reference_data() -> None:
             "Reference data block is empty in migration 905bddfc6aff."
         )
 
+    bind = op.get_bind()
     for statement in statements:
-        op.execute(statement)
+        # exec_driver_sql, NOT op.execute: these statements embed JSON, and
+        # op.execute wraps a string in sa.text(), which reads `:98` inside
+        # `"founder_dna_question_id":98` as a bind parameter and refuses to
+        # run without a value for it. Applied long ago in production, so this
+        # was invisible there -- but it makes a FRESH database unmigratable,
+        # which is every new environment and every restore-from-scratch.
+        bind.exec_driver_sql(statement)
 
 
 def upgrade() -> None:
