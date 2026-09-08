@@ -157,13 +157,21 @@ class Feature(str, Enum):
     GOALS = "goals"
     VISION = "vision"
     RECOMMENDATIONS = "recommendations"
+    #: Ally REASONING over the knowledge base inside chat -- working a framework
+    #: with you, in conversation. Not the same thing as KNOWLEDGE_LIBRARY below,
+    #: and the two are easy to confuse: this one is Ally's time, which is why it
+    #: is a Rs 999 feature.
     KNOWLEDGE_CHAT = "knowledge_chat"
+    #: The reference shelves themselves -- Things to read, Things to watch and
+    #: Things to learn. Held by EVERY tier including Free; see _BASE.
+    KNOWLEDGE_LIBRARY = "knowledge_library"
     EMAIL_NOTIFICATIONS = "email_notifications"
     PRIORITY_CALL = "priority_call"
 
 
 #: What every tier gets. This is the Rs 199 plan's ENTIRE surface: run the
-#: adaptive diagnosis and read the Clarity Report it produces. Nothing else.
+#: adaptive diagnosis, read the Clarity Report it produces, and open the
+#: reference shelves. Nothing else.
 #:
 #: Founder DNA and Business DNA are deliberately absent. They are not features a
 #: plan can include or withhold -- they are sections of the report the diagnosis
@@ -172,11 +180,22 @@ class Feature(str, Enum):
 #:
 #: Call booking is here because booking is open to everyone and every call is
 #: paid at CALL_PRICE_INR. It is sold beside the plans, not inside one.
+#:
+#: KNOWLEDGE_LIBRARY is here for a different reason, settled by the team
+#: 2026-09-08: the shelves are open to every founder, on every tier, paid or
+#: not. They cost us nothing per founder -- they are static reference content
+#: shipped in the frontend bundle (data/read.js, data/watch.js,
+#: data/glossary.js), with no model call and no per-read cost behind them -- so
+#: withholding them would buy no margin and would meet a founder who has not
+#: paid yet with a wall instead of something useful. Declared explicitly rather
+#: than left ungated by omission: "no gate exists yet" and "every tier includes
+#: this" look identical from the outside right up until somebody adds the gate.
 _BASE = frozenset({
     Feature.DIAGNOSIS,
     Feature.VOICE_DIAGNOSIS,     # voice within the diagnosis itself
     Feature.REPORTS,
     Feature.CALL_BOOKING,
+    Feature.KNOWLEDGE_LIBRARY,   # Things to read / watch / learn -- universal
 })
 
 #: Added at Rs 499: the founder gets somewhere to work, and Ally answers.
@@ -287,18 +306,25 @@ _FREE_TESTING = (_BASE | _WORKSPACE | frozenset({
     Feature.KNOWLEDGE_CHAT,
 })) - frozenset({Feature.VOICE_CHAT})
 
-#: What Free carries AT PUBLIC LAUNCH: nothing.
+#: What Free carries AT PUBLIC LAUNCH: the reference shelves, and nothing else.
 #:
 #: There is no free plan once we launch. Free stops being a tier anyone uses and
 #: becomes the state a founder is in before they have chosen one -- they can sign
-#: in, and the app sends them to the plans page. Empty rather than `_BASE`,
+#: in, and the app sends them to the plans page. Deliberately not `_BASE`,
 #: because _BASE is the diagnosis and the report, and that is precisely what the
 #: Rs 199 plan sells.
 #:
-#: Every gate reads this through `Plan.includes`, so emptying it here closes
-#: every feature at once rather than leaving one route ungated because somebody
-#: forgot it.
-_FREE_AT_LAUNCH: frozenset[Feature] = frozenset()
+#: KNOWLEDGE_LIBRARY is the single exception, and it is the same call _BASE
+#: documents: Things to read, Things to watch and Things to learn belong to
+#: every founder whether or not they ever pay. This is the set that decides
+#: what a founder who has chosen nothing can still open, so a founder who lands
+#: on the plans page has something honest to read while they decide, instead of
+#: an app that is entirely wall.
+#:
+#: Every gate reads this through `Plan.includes`, so keeping this set to exactly
+#: the one universal feature closes every other one at once rather than leaving
+#: a route open because somebody forgot it.
+_FREE_AT_LAUNCH: frozenset[Feature] = frozenset({Feature.KNOWLEDGE_LIBRARY})
 
 #: Settings, not a constant, so launch day is a deploy toggle rather than a
 #: release. Read once at import: a plan catalog that changed shape mid-process

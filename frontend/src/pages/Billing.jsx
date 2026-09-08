@@ -29,6 +29,11 @@ const COMPARE_ROWS = [
   { label: 'Build your Vision Board', basic: false, starter: false, pro: true },
   { label: 'Work a framework with Ally', basic: false, starter: false, pro: true },
   { label: 'Email reminders from Ally', basic: false, starter: false, pro: true },
+  // True on every tier and on Free too -- the shelves are not sold, they are
+  // simply open. See _BASE in backend/app/plans/catalog.py.
+  { label: 'Things to read', basic: true, starter: true, pro: true },
+  { label: 'Things to watch', basic: true, starter: true, pro: true },
+  { label: 'Things to learn', basic: true, starter: true, pro: true },
   { label: 'Book a discovery call', basic: true, starter: true, pro: true },
   { label: 'Call price', basic: '₹300 / 30 min', starter: '₹300 / 30 min', pro: '₹300 / 30 min' },
   { label: 'Priority call booking', basic: false, starter: false, pro: true },
@@ -116,6 +121,17 @@ function useCatalog() {
               ...(p.features.includes('vision') ? ['Vision'] : []),
               ...(p.features.includes('knowledge_chat') ? ['Work a framework with Ally'] : []),
               ...(p.features.includes('email_notifications') ? ['Email reminders from Ally'] : []),
+              // The reference shelves, on every card. Not conditional on
+              // `knowledge_library`: these pages are static content in this
+              // bundle (data/read.js, data/watch.js, data/glossary.js) that no
+              // route gates, so the frontend already knows every founder can
+              // open them. Reading the flag would have hidden them from all
+              // three cards during the window where this file deploys ahead of
+              // the backend that grew it -- and the frontend and backend deploy
+              // separately, as the `one_time` fallback above exists to survive.
+              'Things to read',
+              'Things to watch',
+              'Things to learn',
               `Book a call · ₹${callPrice} / ${callMins} min`,
               ...(p.features.includes('priority_call') ? ['Priority call booking'] : []),
             ],
