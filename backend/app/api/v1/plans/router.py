@@ -16,6 +16,7 @@ import math
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_founder_record
@@ -104,6 +105,43 @@ def _trial_status(expires_at) -> dict | None:
     }
 
 
+def _subscription(db: Session, founder: Founder) -> dict | None:
+    """The founder's live subscription, or None when they have never paid.
+
+    The billing page printed "Next renewal: August 1, 2026" as a LITERAL, to
+    every founder, forever -- so the date was wrong for everyone the moment it
+    was written and became a date in the past. The real one has been in
+    `subscriptions.expires_at` since the payment was captured
+    (payments/service.py stamps it one billing cycle out); nothing ever read it
+    back. This is that read.
+
+    Newest row wins: a founder who upgrades gets a second active row, and the
+    one they are on is the one they just bought.
+    """
+    row = db.execute(
+        text(
+            "SELECT plan_type, status, billing_cycle, started_at, expires_at, "
+            "       cancelled_at "
+            "FROM subscriptions "
+            "WHERE founder_id = :fid AND status = 'active' "
+            "ORDER BY started_at DESC, subscription_id DESC LIMIT 1"
+        ),
+        {"fid": founder.founder_id},
+    ).mappings().first()
+    if row is None:
+        return None
+    return {
+        "plan_type": row["plan_type"],
+        "status": row["status"],
+        "billing_cycle": row["billing_cycle"],
+        "started_at": row["started_at"],
+        # None for a one-time tier, which has no cycle to renew -- the client
+        # must show "one-time purchase" there rather than inventing a date.
+        "renews_at": row["expires_at"],
+        "cancelled_at": row["cancelled_at"],
+    }
+
+
 def _diagnosis_usage(db: Session, founder: Founder) -> dict:
     """The founder's LIFETIME diagnosis usage -- completed reports only, not
     scoped to a month -- the same count and limit `_check_diagnosis_allowance`
@@ -148,6 +186,7 @@ def my_entitlements(founder: Founder = Depends(get_founder_record),
         "call_price_inr": e.call_price_inr,
         "trial": _trial_status(trial_expires_at),
         "diagnosis_usage": _diagnosis_usage(db, founder),
+        "subscription": _subscription(db, founder),
     }
 
 

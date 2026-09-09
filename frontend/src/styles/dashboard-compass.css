@@ -33,11 +33,15 @@
 
 /* Readouts */
 .compass-readouts{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--bd);border-bottom:1px solid var(--bd)}
-.compass-readout{padding:20px 24px 18px;border-left:1px solid var(--bd);transition:background .2s var(--ease)}
-.compass-readout:first-child{border-left:0;padding-left:0}
-/* Same emerald tint the rest of the app uses for a hovered surface
-   (.sugg:hover, .ac-pcard:hover in platform.css) rather than a new green. */
-.compass-readout:hover{background:rgba(16,185,129,.08)}
+/* Tinted at rest, not only on hover: these four are one readout strip, and
+   emerald is what marks it as Ally's own reading of the founder rather than
+   plain page. Hover deepens the same tint so the row still answers the cursor. */
+.compass-readout{padding:20px 24px 18px;border-left:1px solid var(--bd);
+  background:rgba(16,185,129,.08);transition:background .2s var(--ease)}
+/* Keeps its left padding, unlike before: with a background behind it, flush
+   text reads as a clipped block rather than as the start of the strip. */
+.compass-readout:first-child{border-left:0}
+.compass-readout:hover{background:rgba(16,185,129,.15)}
 .compass-readout .crl{display:block;font-family:var(--body);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
 .compass-readout .crv{display:block;font-size:32px;font-weight:600;letter-spacing:-.03em;line-height:1;margin:10px 0 8px;font-variant-numeric:tabular-nums;color:var(--forest-deep)}
 .compass-readout .crs{display:block;font-size:12px;color:var(--muted)}
@@ -110,5 +114,7 @@
   .compass-readouts{grid-template-columns:repeat(2,1fr)}
   .compass-readout{border-top:1px solid var(--bd)}
   .compass-readout:nth-child(-n+2){border-top:0}
-  .compass-readout:nth-child(odd){border-left:0;padding-left:0}
+  /* padding-left kept for the same reason as :first-child above -- the tint
+     needs room on its left edge to read as a block. */
+  .compass-readout:nth-child(odd){border-left:0}
 }

@@ -6,6 +6,45 @@ import { getCatalog, getMyPlan } from '../services/plans';
 import { refreshPlanName } from '../hooks/usePlanName';
 import { confirmPayment, openCheckout, startCheckout, validateCoupon, waitForPlanActivation } from '../services/payments';
 
+/** The Knowledge libraries, in the order the sidebar lists them.
+ *
+ *  Shared by the live catalog mapping and the MOCK_PLANS fallback so the two
+ *  cannot drift -- which is the whole reason the rest of this list is derived
+ *  from the server rather than written twice.
+ */
+const KNOWLEDGE_FEATURES = [
+  'Frameworks',
+  'Things to read',
+  'Things to watch',
+  'Things to learn',
+];
+
+/** A renewal date as a founder reads it. Empty for anything unparseable, so a
+ *  bad value shows nothing rather than "Invalid Date". */
+function fmtRenewalDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+/** One calendar month from today, clamped to the month's length.
+ *
+ *  Used ONLY before payment, where no subscription row exists yet: it mirrors
+ *  what payments/service.py stamps on capture, so the figure quoted at checkout
+ *  is the one the founder will see on their subscription afterwards. Everywhere
+ *  after payment reads the stored date instead of recomputing it.
+ */
+function oneMonthFromToday() {
+  const now = new Date();
+  const target = new Date(now);
+  target.setDate(1);
+  target.setMonth(target.getMonth() + 1);
+  const lastDay = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
+  target.setDate(Math.min(now.getDate(), lastDay));
+  return target;
+}
+
 /* ─── Static data ─── */
 /** Keys must match the plan tiers served by GET /plans, which lists only the
  * tiers actually on sale (basic / starter / pro — shown as Starter, Plus and
@@ -118,6 +157,13 @@ function useCatalog() {
               ...(p.features.includes('vision') ? ['Vision'] : []),
               ...(p.features.includes('knowledge_chat') ? ['Work a framework with Ally'] : []),
               ...(p.features.includes('email_notifications') ? ['Email reminders from Ally'] : []),
+              // The four Knowledge libraries, on every tier and unconditional
+              // because they are genuinely ungated: the KNOWLEDGE group in
+              // PlatformLayout carries no feature check and no plan lock, so a
+              // founder on Rs 199 has the same access as one on Rs 999. Listed
+              // rather than assumed -- a founder cannot value what the pricing
+              // page never told them they were getting.
+              ...KNOWLEDGE_FEATURES,
               `Book a call · ₹${callPrice} / ${callMins} min`,
               ...(p.features.includes('priority_call') ? ['Priority call booking'] : []),
             ],
@@ -749,7 +795,15 @@ function SuccessView({ plan, order, onViewStatus }) {
           <strong>₹{rupeesFromPaise(order?.amount_paise)}{plan.oneTime ? '' : '/mo'}</strong>
         </div>
         <div className="bl-sd-row"><span>Billing cycle</span><strong>{plan.oneTime ? 'One-time' : 'Monthly'}</strong></div>
-        {!plan.oneTime && <div className="bl-sd-row"><span>Next renewal</span><strong>Aug 2026</strong></div>}
+        {/* Was the literal "Aug 2026". Computed the same way the backend will
+            stamp it on capture, so the date quoted here is the one that shows
+            on the subscription afterwards. */}
+        {!plan.oneTime && (
+          <div className="bl-sd-row">
+            <span>Next renewal</span>
+            <strong>{fmtRenewalDate(oneMonthFromToday().toISOString())}</strong>
+          </div>
+        )}
         {order && (
           <div className="bl-sd-row"><span>Order reference</span><strong>{order.order_id}</strong></div>
         )}
@@ -765,7 +819,7 @@ function SuccessView({ plan, order, onViewStatus }) {
 /* ═══════════════════════════════════════════
    VIEW 4 — Subscription Status
 ═══════════════════════════════════════════ */
-function StatusView({ onUpgrade, currentPlan }) {
+function StatusView({ onUpgrade, currentPlan, subscription }) {
   const [cancelModal, setCancelModal] = useState(false);
   /* MOCK_PLANS lists the three PAID tiers, so `free` matches nothing -- and the
      old fallback was `|| MOCK_PLANS[1]`, which is Plus at Rs 499. A founder who
@@ -836,9 +890,22 @@ function StatusView({ onUpgrade, currentPlan }) {
             {plan.name} Plan
             <span className="bl-status-badge active">Active</span>
           </h2>
+          {/* Was the literal "August 1, 2026", shown to every founder on every
+              plan -- so it was wrong for everyone the day it was written, and
+              by September it was advertising a renewal date in the past. The
+              real one is stamped on the subscription when the payment is
+              captured; when there is no row behind the plan (an admin grant),
+              the date is omitted rather than guessed. */}
           {plan.oneTime
             ? <p className="bl-status-renew">One-time purchase · ₹{plan.price.toLocaleString()}</p>
-            : <p className="bl-status-renew">Next renewal: <strong>August 1, 2026</strong> · ₹{plan.price.toLocaleString()}/mo</p>}
+            : (
+              <p className="bl-status-renew">
+                {subscription?.renews_at
+                  ? <>Next renewal: <strong>{fmtRenewalDate(subscription.renews_at)}</strong> · </>
+                  : null}
+                ₹{plan.price.toLocaleString()}/mo
+              </p>
+            )}
         </div>
         <div className="bl-status-actions">
           <button id="upgrade-plan-btn" className="bl-action-btn primary" onClick={onUpgrade}>
@@ -910,11 +977,20 @@ export default function Billing() {
   // Was hardcoded to 'starter' -- every founder, on any plan, saw Starter marked
   // "Current Plan" here regardless of what they actually pay for.
   const [currentPlan, setCurrentPlan] = useState(null);
+  // The founder's real subscription row, for the renewal date below. Kept
+  // separately from `currentPlan` because a founder can be on a paid tier with
+  // no subscription row (an admin grant), and the date must then be absent
+  // rather than invented.
+  const [subscription, setSubscription] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
     getMyPlan()
-      .then((p) => { if (!cancelled) setCurrentPlan(p?.tier || 'free'); })
+      .then((p) => {
+        if (cancelled) return;
+        setCurrentPlan(p?.tier || 'free');
+        setSubscription(p?.subscription || null);
+      })
       .catch(() => { if (!cancelled) setCurrentPlan('free'); });
     return () => { cancelled = true; };
   }, []);
@@ -1016,6 +1092,7 @@ export default function Billing() {
       {view === 'status' && (
         <StatusView
           currentPlan={currentPlan}
+          subscription={subscription}
           onUpgrade={() => setView('plans')}
         />
       )}
