@@ -484,6 +484,13 @@ body.gate .j-bar{display:none!important}
 .j-input{width:100%;background:rgba(255,255,255,.05);border:1px solid var(--line-2);border-radius:14px;padding:14px 16px;color:var(--on-dark);font-family:var(--body);font-size:14.5px;outline:none;transition:border-color .25s}
 .j-input:focus{border-color:rgba(16,185,129,.5)}
 .j-input::placeholder{color:var(--on-dark-dim)}
+/* Send button anchored inside the problem field. Bottom-right rather than
+   vertically centred: the field is a 3-row textarea, so a centred button drifts
+   away from the caret as the answer grows. */
+.gp-field{position:relative}
+.gp-field .gp-send{position:absolute;right:10px;bottom:10px}
+.gp-field .gp-send svg{width:17px;height:17px}
+.gp-field .gp-send:disabled{opacity:.45;cursor:not-allowed}
 /* summary / validation trait chips */
 .traits{display:flex;flex-wrap:wrap;gap:9px;justify-content:center;margin-top:22px}
 .trait{padding:8px 15px;border-radius:999px;font-size:12.5px;font-weight:600;background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.3);color:var(--emerald-bright)}

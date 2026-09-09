@@ -63,15 +63,38 @@ export default function Problem() {
         </p>
 
         <label className="sr-only" htmlFor="gp-problem">Describe the problem you are facing</label>
-        <textarea
-          id="gp-problem"
-          className="j-input"
-          value={problem}
-          onChange={(e) => setProblem(e.target.value)}
-          placeholder="e.g. we're spending more on marketing but growth has completely flatlined..."
-          rows={3}
-          style={{ marginTop: '24px', resize: 'none' }}
-        />
+        {/* Submit sits ON the field, not only in the fixed bottom bar. That bar
+            was the sole way to continue, and on a short viewport it is the
+            first thing off-screen -- a founder who has typed their answer is
+            then looking at a box with no visible way forward. Enter submits
+            too, matching every other answer box in the app. */}
+        <div className="gp-field">
+          <textarea
+            id="gp-problem"
+            className="j-input"
+            value={problem}
+            onChange={(e) => setProblem(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleContinue(); }
+            }}
+            placeholder="e.g. we're spending more on marketing but growth has completely flatlined..."
+            rows={3}
+            style={{ marginTop: '24px', resize: 'none', paddingRight: '58px' }}
+          />
+          <button
+            className="ci-btn send gp-send"
+            type="button"
+            onClick={handleContinue}
+            disabled={!problem.trim() || starting}
+            title="Start diagnosis"
+            aria-label="Start diagnosis"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="22" y1="2" x2="11" y2="13" />
+              <polygon points="22 2 15 22 11 13 2 9 22 2" />
+            </svg>
+          </button>
+        </div>
 
         <div className="chip-row" style={{ justifyContent: 'center', marginTop: '14px' }}>
           {examples.map((item) => (
