@@ -5,8 +5,12 @@
 # session, no report, and their one lifetime diagnosis already spent -- and
 # scheduled account erasures under DPDP never actually execute.
 #
-# All three endpoints are idempotent and take a shared secret, so running them
+# Every endpoint here is idempotent and takes a shared secret, so running them
 # more often than needed is safe and a missed run costs only latency.
+#
+# The two mail sweeps are the delivery half of features that had none: task
+# reminders and bell notifications were both written to the database and never
+# sent to anybody. Ten minutes is inside the fifteen they are designed for.
 #
 # GitHub's scheduled runs are best-effort and can be delayed under load, and
 # GitHub disables schedules after 60 days without repo activity. That is
@@ -44,6 +48,26 @@ jobs:
         run: |
           curl -sS -f -X POST \
             "$API/api/v1/internal/jobs/backfill-report-pdfs" \
+            -H "X-Internal-Secret: $SECRET"
+        env:
+          API: ${{ vars.ALLY_API_BASE || 'https://api.goxlally.ai' }}
+          SECRET: ${{ secrets.INTERNAL_JOBS_SECRET }}
+
+      - name: Send due task reminders
+        if: github.event.schedule == '*/10 * * * *' || github.event_name == 'workflow_dispatch'
+        run: |
+          curl -sS -f -X POST \
+            "$API/api/v1/internal/jobs/send-task-reminders" \
+            -H "X-Internal-Secret: $SECRET"
+        env:
+          API: ${{ vars.ALLY_API_BASE || 'https://api.goxlally.ai' }}
+          SECRET: ${{ secrets.INTERNAL_JOBS_SECRET }}
+
+      - name: Send notification emails
+        if: github.event.schedule == '*/10 * * * *' || github.event_name == 'workflow_dispatch'
+        run: |
+          curl -sS -f -X POST \
+            "$API/api/v1/internal/jobs/send-notification-emails" \
             -H "X-Internal-Secret: $SECRET"
         env:
           API: ${{ vars.ALLY_API_BASE || 'https://api.goxlally.ai' }}
