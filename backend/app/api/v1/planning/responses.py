@@ -155,12 +155,17 @@ class ReminderResponse(BaseModel):
     status: str
     note: str
     sent_at: datetime | None = None
+    #: "auto" (Ally scheduled it from the task's due date) or "manual" (set
+    #: through the reminders endpoint). Exposed so a client can tell the
+    #: founder's own reminders apart from the derived one, and so cancelling
+    #: an auto reminder is a visibly different act from cancelling their own.
+    source: str = "manual"
 
     @classmethod
     def from_domain(cls, r) -> "ReminderResponse":
         return cls(reminder_id=r.reminder_id, task_id=r.task_id, plan_id=r.plan_id,
                    remind_at=r.remind_at, channel=r.channel.value, status=r.status.value,
-                   note=r.note, sent_at=r.sent_at)
+                   note=r.note, sent_at=r.sent_at, source=r.source.value)
 
 
 class ReminderListResponse(BaseModel):

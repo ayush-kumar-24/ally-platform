@@ -596,6 +596,31 @@ class Settings(BaseSettings):
     # would make a founder's calendar unreadable.
     CALENDAR_EVENT_DURATION_MINUTES: int = 30
 
+    # --- Task reminders by email ---
+    # Minutes before a task is due that the reminder email is sent. Mirrors
+    # CALENDAR_REMINDER_MINUTES_BEFORE deliberately: a founder with a calendar
+    # connected and one without should be nudged at the same moment, or the
+    # same task nags twice at two different times.
+    TASK_REMINDER_MINUTES_BEFORE: int = 30
+    # A reminder whose time passed while the worker was not running is stale.
+    # Sending "due in 30 minutes" for something that was due yesterday is worse
+    # than sending nothing, so anything older than this is dropped (marked sent,
+    # not retried forever). Sized to survive a weekend of downtime being
+    # noticed on Monday without a burst of archaeology landing in an inbox.
+    TASK_REMINDER_MAX_AGE_MINUTES: int = 180
+
+    # --- Notification emails ---
+    # Per founder, per run. A safety valve, not a policy: the dedup keys already
+    # decide how often each notification may recur, so a founder hitting this
+    # means something upstream is generating far more than expected -- and the
+    # cap turns "a founder wakes to sixty emails" into "the logs show a capped
+    # run". Anything over the cap is not lost; it goes out on the next run.
+    NOTIFICATION_EMAIL_MAX_PER_RUN: int = 10
+    # A notification that sat unsent this long is not worth an email. Same
+    # reasoning as TASK_REMINDER_MAX_AGE_MINUTES: after an outage, "here is
+    # everything you missed" is how a founder learns to filter us.
+    NOTIFICATION_EMAIL_MAX_AGE_HOURS: int = 24
+
     # --- Observability ---
     SENTRY_DSN: str = ""
     LOG_LEVEL: str = "INFO"

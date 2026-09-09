@@ -240,3 +240,71 @@ def send_call_reminders(
 
     result = send_due_reminders(db)
     return {**result, "email_configured": settings.email_enabled}
+
+
+@router.post(
+    "/send-task-reminders",
+    summary="Send any due Plan Your Day task reminders by email",
+)
+def send_task_reminders(
+    db: Session = Depends(get_db),
+    _: None = Depends(authorise_internal_job),
+) -> dict:
+    """The consumer side of `planning_reminders`, which had no caller at all.
+
+    The reminders table, the endpoint that writes to it, `due_reminders()` and
+    `mark_reminder_sent()` all shipped with Plan Your Day and nothing ever ran
+    them -- so a scheduled reminder sat at status "scheduled" forever and no
+    founder was ever emailed about a task. Same shape and same auth as the
+    sweeps above, so whatever cron / EventBridge / pg_cron already runs them can
+    run this too.
+
+    **Call this every 15 minutes.** Reminders are scheduled to the minute and
+    only sent once past it, so the founder's nudge is late by however long the
+    gap between runs is. Idempotent: every row examined moves off "scheduled",
+    whether it was sent, skipped or dropped, so re-running immediately does
+    nothing.
+
+    Note this does nothing useful until EMAIL_HOST is configured -- send_email
+    runs in stub mode until then, logging instead of sending. The response
+    reports `email_configured` so a scheduler's logs make that obvious rather
+    than showing a cheerful zero.
+    """
+
+    from app.services.task_reminders import send_due_reminders
+
+    result = send_due_reminders(db)
+    return {**result, "email_configured": settings.email_enabled}
+
+
+@router.post(
+    "/send-notification-emails",
+    summary="Email any bell notifications not yet emailed (Pro founders only)",
+)
+def send_notification_emails(
+    db: Session = Depends(get_db),
+    _: None = Depends(authorise_internal_job),
+) -> dict:
+    """The email leg of the notification system, which never had one.
+
+    All eighteen notification types were written to `notifications` and shown in
+    the bell, and that was the end of it -- a founder who did not open the app
+    learned nothing. This sweeps the rows `notify()` wrote and mails them to
+    founders whose plan includes Feature.EMAIL_NOTIFICATIONS. Same shape and
+    same auth as the sweeps above.
+
+    **Call this every 15 minutes.** Idempotent: every row examined gets
+    `sent_at` stamped, whether it was sent, skipped or dropped, so re-running
+    immediately does nothing. Rows over the per-founder cap are left unstamped
+    on purpose and go out on the next run.
+
+    Note this does nothing useful until EMAIL_HOST is configured -- send_email
+    runs in stub mode until then, logging instead of sending. The response
+    reports `email_configured` so a scheduler's logs make that obvious rather
+    than showing a cheerful zero.
+    """
+
+    from app.services.notification_emails import send_pending_notification_emails
+
+    result = send_pending_notification_emails(db)
+    return {**result, "email_configured": settings.email_enabled}
