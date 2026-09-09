@@ -24,7 +24,8 @@ never granted, or credits added, twice.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta, timezone
+from calendar import monthrange
+from datetime import datetime, timezone
 from typing import Any
 
 from app.core.logger import logger
@@ -45,7 +46,23 @@ from app.payments.repository import PaymentRepository
 from app.plans.catalog import PLANS, PlanTier
 
 _CURRENCY = "INR"
-_BILLING_CYCLE_DAYS = 30
+
+
+def _one_month_after(start: datetime) -> datetime:
+    """The same day of the next month, clamped to that month's length.
+
+    A calendar month, not the flat 30 days this used to add. Every plan is sold
+    as monthly, and a founder who pays on the 9th expects the 9th -- 30 days
+    drifts a little further backwards every cycle (31 Jan + 30d lands on 2 Mar),
+    so within a year the renewal date no longer resembles the purchase date.
+
+    Clamping is what makes the 29th, 30th and 31st safe: 31 January renews on
+    28 February (29th in a leap year), not on a date that does not exist.
+    """
+    year = start.year + (start.month // 12)
+    month = start.month % 12 + 1
+    last_day = monthrange(year, month)[1]
+    return start.replace(year=year, month=month, day=min(start.day, last_day))
 
 # Credit grants triggered by a real payment are not an admin action -- same
 # system-initiated sentinel app/plans/service.py and app/plans/reconciliation.py
@@ -326,7 +343,7 @@ class PaymentService:
         # for Basic was simply untrue -- and an expiry nothing enforces today is
         # the sort of field something enforces later.
         one_time = plan.one_time
-        expires_at = None if one_time else now + timedelta(days=_BILLING_CYCLE_DAYS)
+        expires_at = None if one_time else _one_month_after(now)
 
         subscription_id = self.repository.create_subscription(
             founder_id=payment.founder_id, plan_type=tier.value, amount_inr=payment.amount_inr,
