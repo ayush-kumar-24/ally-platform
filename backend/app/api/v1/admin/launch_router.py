@@ -4,11 +4,16 @@
     POST /admin/launch/arm        close the doors ahead of the event
     POST /admin/launch/countdown  start the shared clock
     POST /admin/launch/abort      stop the clock, doors still shut
-    POST /admin/launch/launch     open to everyone -- irreversible
+    POST /admin/launch/launch     open to everyone -- spends one launch
+    POST /admin/launch/reset      close it again, so the ceremony can be rehearsed
 
 Every mutation needs SYSTEM_SETTINGS, which is Super Admin only. That is not
-caution for its own sake: launching is the single most public, least
-reversible action in the panel, and the whole product is downstream of it.
+caution for its own sake: launching is the single most public action in the
+panel, and the whole product is downstream of it.
+
+Reset is bounded, not free. The platform may be launched a small, fixed
+number of times and the last one is final -- see app/launch/__init__.py for
+why the budget, and not an unlimited toggle, is what makes the rest safe.
 Watching the state is VIEW_USERS, so the rest of the team can follow along
 on the day without being able to press anything.
 
@@ -36,7 +41,11 @@ from app.api.v1.admin.panel_dependencies import (
 from app.core.container import container
 from app.db.session import get_db
 from app.launch import LaunchStatus
-from app.launch.service import DEFAULT_COUNTDOWN_SECONDS, MAX_COUNTDOWN_SECONDS, MIN_COUNTDOWN_SECONDS
+from app.launch.service import (
+    DEFAULT_COUNTDOWN_SECONDS,
+    MAX_COUNTDOWN_SECONDS,
+    MIN_COUNTDOWN_SECONDS,
+)
 
 router = APIRouter(prefix="/admin/launch", tags=["admin-launch"])
 
@@ -66,10 +75,17 @@ class LaunchStateResponse(BaseModel):
     countdown_ends_at: datetime | None = None
     launched_at: datetime | None = None
     launched_by: int | None = None
+    launch_count: int = 0
+    max_launches: int = 0
+    launches_remaining: int = 0
     # Whether the launch button is pressable right now. Computed here rather
     # than in the browser so the UI cannot arm its own button: the same rule
     # the service enforces is the one the panel renders.
     can_launch: bool = False
+    # Same principle: whether the platform can still be closed again. Goes
+    # false for good once the allowance is spent, and the panel reads it
+    # rather than doing its own arithmetic on the counters.
+    can_reset: bool = False
 
 
 def _response(status: LaunchStatus) -> LaunchStateResponse:
@@ -81,7 +97,11 @@ def _response(status: LaunchStatus) -> LaunchStateResponse:
         countdown_ends_at=status.countdown_ends_at,
         launched_at=status.launched_at,
         launched_by=status.launched_by,
+        launch_count=status.launch_count,
+        max_launches=status.max_launches,
+        launches_remaining=status.launches_remaining,
         can_launch=status.countdown_elapsed,
+        can_reset=status.can_reset,
     )
 
 
@@ -163,4 +183,30 @@ def launch_now(ip: str | None = Depends(client_ip),
                          new_value={"state": after.state.value,
                                     "launched_at": str(after.launched_at),
                                     "launched_by": after.launched_by})
+    return _response(after)
+
+
+@router.post("/reset", response_model=LaunchStateResponse,
+             summary="Close a launched platform again for another rehearsal (Super Admin)")
+def reset(ip: str | None = Depends(client_ip),
+          admin: PanelAdmin = Depends(get_panel_admin),
+          service=Depends(get_panel_service),
+          db: Session = Depends(get_db)) -> LaunchStateResponse:
+    """Takes a live platform back behind the gate. Refused once the launch
+    allowance is spent, which is what keeps the final launch final.
+
+    Audited with the counters on both sides, because "how many launches are
+    left" is the question somebody will ask afterwards and the state itself
+    only ever shows the answer now.
+    """
+    require(admin.role, Capability.SYSTEM_SETTINGS)
+    launch = container.launch_service(db)
+    before = launch.status()
+    after = launch.reset(admin_id=admin.admin_id)
+    service.audit.record(admin=admin, action="launch.reset", resource="launch",
+                         ip_address=ip,
+                         old_value={"state": before.state.value,
+                                    "launches_remaining": before.launches_remaining},
+                         new_value={"state": after.state.value,
+                                    "launches_remaining": after.launches_remaining})
     return _response(after)

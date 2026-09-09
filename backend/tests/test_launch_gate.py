@@ -14,6 +14,7 @@ from app.launch import (
     AlreadyLaunchedError,
     CountdownRunningError,
     InMemoryLaunchRepository,
+    LaunchAllowanceSpentError,
     LaunchNotArmedError,
     LaunchState,
     LaunchStatus,
@@ -247,13 +248,130 @@ def test_launching_twice_does_not_rewrite_who_launched_or_when():
 
 
 @pytest.mark.parametrize("action", ["arm", "start_countdown", "abort"])
-def test_nothing_reopens_the_gate_after_launch(action):
-    """`launched` is terminal. Putting a live platform back behind a countdown
-    would sign founders out of something they are mid-way through, and the
-    holding screen would be a lie -- there is nothing left to wait for."""
+def test_only_reset_reopens_the_gate(action):
+    """Reopening a live platform must be one deliberate act. Arm, countdown
+    and abort all refuse from `launched` so it can never happen as a side
+    effect of pressing something adjacent."""
     s = _launched(Clock())
     with pytest.raises(AlreadyLaunchedError):
         getattr(s, action)(admin_id=1)
+    assert s.is_open() is True
+
+
+# ── the launch allowance ────────────────────────────────────────────────────
+
+
+def test_launch_spends_one_of_the_allowance():
+    s = _launched(Clock())
+    status = s.status()
+    assert status.launch_count == 1
+    assert status.launches_remaining == status.max_launches - 1
+
+
+def test_reset_closes_the_platform_again():
+    """The rehearsal loop: launch, reset, and the doors are shut for another
+    run-through."""
+    s = _launched(Clock())
+    after = s.reset(admin_id=1)
+    assert after.state is LaunchState.ARMED
+    assert s.is_open() is False
+
+
+def test_reset_lands_on_armed_not_open():
+    """OPEN would leave the doors wide while the team believed they had just
+    closed them -- the one misunderstanding this feature cannot afford."""
+    assert _launched(Clock()).reset(admin_id=1).state is LaunchState.ARMED
+
+
+def test_reset_keeps_the_record_of_the_last_launch():
+    """A rehearsal that happened is still a thing that happened."""
+    clock = Clock()
+    s = _launched(clock)
+    after = s.reset(admin_id=1)
+    assert after.launched_at == T0 + timedelta(seconds=10)
+    assert after.launched_by == 42
+
+
+def test_reset_does_not_refund_the_allowance():
+    s = _launched(Clock())
+    assert s.reset(admin_id=1).launch_count == 1
+
+
+def test_relaunching_after_a_reset_spends_another():
+    clock = Clock()
+    s = _launched(clock)
+    s.reset(admin_id=1)
+    s.start_countdown(admin_id=1)
+    clock.advance(10)
+    assert s.launch(admin_id=7).launch_count == 2
+
+
+def test_double_pressing_launch_does_not_spend_two():
+    """Idempotent within the state: a double-click must not burn a rehearsal."""
+    s = _launched(Clock())
+    s.launch(admin_id=42)
+    assert s.status().launch_count == 1
+
+
+def _spend_allowance(clock: Clock, max_launches: int = 3):
+    """Run the full rehearsal loop until the allowance is gone."""
+    s = service(clock, LaunchStatus(state=LaunchState.OPEN, max_launches=max_launches))
+    for i in range(max_launches):
+        if i:
+            s.reset(admin_id=1)
+        s.start_countdown(admin_id=1, countdown_seconds=10)
+        clock.advance(10)
+        s.launch(admin_id=42)
+    return s
+
+
+def test_the_last_launch_is_final():
+    """The whole point of bounding the rehearsals: once the allowance is
+    spent, `launched` is terminal after all and the platform stays open."""
+    s = _spend_allowance(Clock())
+    assert s.status().launches_remaining == 0
+    assert s.status().can_reset is False
+    with pytest.raises(LaunchAllowanceSpentError):
+        s.reset(admin_id=1)
+    assert s.is_open() is True
+
+
+@pytest.mark.parametrize("action", ["arm", "start_countdown", "abort"])
+def test_nothing_reopens_the_gate_once_the_allowance_is_spent(action):
+    s = _spend_allowance(Clock())
+    with pytest.raises(AlreadyLaunchedError):
+        getattr(s, action)(admin_id=1)
+    assert s.is_open() is True
+
+
+def test_an_allowance_of_one_behaves_like_the_old_one_way_door():
+    s = _spend_allowance(Clock(), max_launches=1)
+    assert s.status().can_reset is False
+    with pytest.raises(LaunchAllowanceSpentError):
+        s.reset(admin_id=1)
+
+
+@pytest.mark.parametrize("state", [LaunchState.OPEN, LaunchState.ARMED,
+                                   LaunchState.COUNTING])
+def test_reset_is_refused_when_nothing_has_launched(state):
+    """Calling reset instead of abort mid-countdown should fail loudly rather
+    than quietly do something adjacent."""
+    s = service(Clock(), LaunchStatus(state=state, countdown_ends_at=T0))
+    with pytest.raises(LaunchNotArmedError):
+        s.reset(admin_id=1)
+
+
+def test_transitions_never_hand_back_a_fresh_allowance():
+    """The counters are the safety limit, so every transition must carry them
+    forward. A rebuild-from-scratch would silently turn the budget into the
+    unlimited toggle it exists to prevent."""
+    clock = Clock()
+    s = _launched(clock)
+    s.reset(admin_id=1)
+    for step in (lambda: s.arm(admin_id=1),
+                 lambda: s.start_countdown(admin_id=1),
+                 lambda: s.abort(admin_id=1)):
+        assert step().launch_count == 1
 
 
 def test_launch_survives_a_naive_stored_deadline():

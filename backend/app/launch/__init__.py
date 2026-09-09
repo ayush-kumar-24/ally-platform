@@ -1,16 +1,22 @@
-"""Go-live gate -- the one-time moment the platform opens to everyone.
+"""Go-live gate -- the moment the platform opens to everyone, rehearsable.
 
-Three states, one row, one direction of travel:
+Four states, one row:
 
     armed  --start_countdown-->  counting  --launch-->  launched
-      ^                              |
-      +---------abort----------------+
+      ^                              |                      |
+      +---------abort----------------+                      |
+      +--------- reset (spends one launch) -----------------+
 
-`launched` is terminal. There is deliberately no un-launch: this models a
-public go-live, and "we opened, then we closed again" is not a state the
-product has. Closing the door after founders are inside is a different
-decision (maintenance mode / a feature flag), taken deliberately, not by
-reversing a launch. See LaunchService.launch for how that is enforced.
+`launched` is NOT terminal until the allowance runs out. The platform may be
+launched a small, fixed number of times -- two rehearsals and the real thing
+by default -- and `reset` is the only way back out. Once the last launch is
+spent, `reset` is refused and the state is final after all.
+
+That budget is the safety property. An un-launch with no limit is a toggle,
+and a toggle eventually gets pressed on a platform full of founders
+mid-diagnosis. A bounded allowance buys the practice runs and still
+guarantees the launch everybody remembers cannot be taken back, because by
+then there is nothing left to spend. See LaunchService.reset.
 
 Why a countdown at all, rather than one button: the countdown is the part
 everybody watching sees. It gives the room a shared clock, and it gives
@@ -29,6 +35,7 @@ from app.launch.service import (
     AlreadyLaunchedError,
     CountdownRunningError,
     InMemoryLaunchRepository,
+    LaunchAllowanceSpentError,
     LaunchNotArmedError,
     LaunchRepository,
     LaunchService,
@@ -43,6 +50,7 @@ __all__ = [
     "AlreadyLaunchedError",
     "CountdownRunningError",
     "InMemoryLaunchRepository",
+    "LaunchAllowanceSpentError",
     "LaunchNotArmedError",
     "LaunchRepository",
     "LaunchService",
