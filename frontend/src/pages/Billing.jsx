@@ -6,6 +6,19 @@ import { getCatalog, getMyPlan } from '../services/plans';
 import { refreshPlanName } from '../hooks/usePlanName';
 import { confirmPayment, openCheckout, startCheckout, validateCoupon, waitForPlanActivation } from '../services/payments';
 
+/** The Knowledge libraries, in the order the sidebar lists them.
+ *
+ *  Shared by the live catalog mapping and the MOCK_PLANS fallback so the two
+ *  cannot drift -- which is the whole reason the rest of this list is derived
+ *  from the server rather than written twice.
+ */
+const KNOWLEDGE_FEATURES = [
+  'Frameworks',
+  'Things to read',
+  'Things to watch',
+  'Things to learn',
+];
+
 /** A renewal date as a founder reads it. Empty for anything unparseable, so a
  *  bad value shows nothing rather than "Invalid Date". */
 function fmtRenewalDate(iso) {
@@ -144,6 +157,13 @@ function useCatalog() {
               ...(p.features.includes('vision') ? ['Vision'] : []),
               ...(p.features.includes('knowledge_chat') ? ['Work a framework with Ally'] : []),
               ...(p.features.includes('email_notifications') ? ['Email reminders from Ally'] : []),
+              // The four Knowledge libraries, on every tier and unconditional
+              // because they are genuinely ungated: the KNOWLEDGE group in
+              // PlatformLayout carries no feature check and no plan lock, so a
+              // founder on Rs 199 has the same access as one on Rs 999. Listed
+              // rather than assumed -- a founder cannot value what the pricing
+              // page never told them they were getting.
+              ...KNOWLEDGE_FEATURES,
               `Book a call · ₹${callPrice} / ${callMins} min`,
               ...(p.features.includes('priority_call') ? ['Priority call booking'] : []),
             ],
