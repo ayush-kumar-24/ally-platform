@@ -241,32 +241,66 @@ def ensure_founder_or_waitlist(
     if not settings.ENABLE_FOUNDER_PROVISIONING or identity.provider == "dev":
         return None, False, False
 
-    if not _came_through_the_waitlist(db, user_uuid):
-        if not _take_a_direct_signup_slot(db):
-            db.rollback()  # release the FOR UPDATE lock; nothing to keep
+    # This whole block -- the capacity gate and the provisioning attempt it
+    # guards -- is new and, until direct capacity was ever raised above zero,
+    # had never actually executed against a real signup in production; every
+    # brand-new identity took the capacity-zero branch below instead, which
+    # never touches _take_a_direct_signup_slot or create_founder_on_signup at
+    # all. The FOR UPDATE select, the slot decrement, and create_founder_on_signup
+    # are each one query failing in a way ensure_founder_with_status's narrower
+    # `except DatabaseError` does not catch (e.g. a driver-level or
+    # RLS-context problem, not a constraint violation) would otherwise
+    # propagate all the way out of /auth/session as a raw 500 -- a founder who
+    # verified their code correctly and got nothing but "something went
+    # wrong". Caught here and treated exactly like capacity-zero: queued and
+    # emailed, not turned away. This does NOT explain away the failure -- it
+    # is logged at error level with the traceback for whoever next has
+    # application-log access, so the actual bug still gets found and fixed.
+    # It only stops today's version of it from being a dead end at sign-in.
+    try:
+        if not _came_through_the_waitlist(db, user_uuid):
+            if not _take_a_direct_signup_slot(db):
+                db.rollback()  # release the FOR UPDATE lock; nothing to keep
+                return _queue_for_waitlist(db, identity, ip_address)
 
-            name = _display_name(identity)
-            email = identity.email or ""
-            if email:
-                # Same function the "Register" button calls -- ON CONFLICT DO
-                # NOTHING, so someone who already registered and is now also
-                # trying the direct route does not get a second row or a
-                # second place in line.
-                register(
-                    db,
-                    email=email,
-                    full_name=name,
-                    source="direct_signup_overflow",
-                    ip_address=ip_address,
-                )
-                try:
-                    send_direct_signup_overflow_email(email, name)
-                except Exception:  # noqa: BLE001 -- best effort, never blocks sign-in
-                    logger.warning(
-                        "direct-signup overflow email failed", extra={"path": email}
-                    )
+        founder, created = ensure_founder_with_status(identity, db, ip_address=ip_address)
+        return founder, created, False
+    except Exception as exc:  # noqa: BLE001 -- see comment above
+        db.rollback()
+        logger.error(
+            "Direct-signup provisioning crashed; falling back to waitlist",
+            extra={"founder_id": str(user_uuid)}, exc_info=exc,
+        )
+        return _queue_for_waitlist(db, identity, ip_address)
 
-            return None, False, True
 
-    founder, created = ensure_founder_with_status(identity, db, ip_address=ip_address)
-    return founder, created, False
+def _queue_for_waitlist(
+    db: Session, identity: AuthUser, ip_address: str
+) -> tuple[Founder | None, bool, bool]:
+    """Place `identity` in the same pending queue an ordinary registration
+    lands in, and best-effort email them. Shared by the two ways a direct
+    sign-up ends up here: capacity genuinely at zero, and the fallback above
+    for an unexpected failure partway through trying to provision them.
+    """
+    name = _display_name(identity)
+    email = identity.email or ""
+    if email:
+        # Same function the "Register" button calls -- ON CONFLICT DO
+        # NOTHING, so someone who already registered and is now also
+        # trying the direct route does not get a second row or a
+        # second place in line.
+        register(
+            db,
+            email=email,
+            full_name=name,
+            source="direct_signup_overflow",
+            ip_address=ip_address,
+        )
+        try:
+            send_direct_signup_overflow_email(email, name)
+        except Exception:  # noqa: BLE001 -- best effort, never blocks sign-in
+            logger.warning(
+                "direct-signup overflow email failed", extra={"path": email}
+            )
+
+    return None, False, True
