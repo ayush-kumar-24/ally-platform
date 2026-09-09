@@ -141,7 +141,17 @@ async function exchangeForBackendSession(supabaseToken) {
   } catch {
     // Nothing left to do -- our tokens are already stored.
   }
-  return result.founder; // { id, email, provider }
+  // waitlisted rides alongside { id, email, provider } rather than being a
+  // second return value: every existing caller destructures this as
+  // "founder", and a second value would mean updating each one just to
+  // thread a flag through untouched. Registration is open at the client
+  // (see sendEmailOtp above), so this identity may already exist in Supabase
+  // with no founders row behind it yet -- see provisioning.py's
+  // ensure_founder_or_waitlist. True means: tokens exist, but there is no
+  // profile to sign into; the caller must show the waitlist state instead of
+  // calling finishSignIn, which would otherwise fetch a /profile that is not
+  // there.
+  return { ...result.founder, waitlisted: Boolean(result.waitlisted) };
 }
 
 /**

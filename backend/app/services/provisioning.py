@@ -21,8 +21,11 @@ from app.core.config import settings
 from app.core.logger import logger
 from app.db.session import set_founder_rls_context
 from app.models import Founder
+from app.models.waitlist import APPROVED
 from app.plans.catalog import PLANS, PlanTier
 from app.repositories import founder_repository
+from app.services.waitlist import register
+from app.services.waitlist_notifications import send_direct_signup_overflow_email
 
 
 def _display_name(identity: AuthUser) -> str:
@@ -136,3 +139,134 @@ def ensure_founder_with_status(
         return None, False
 
     return founder_repository.get(db, founder_id), True
+
+
+def _came_through_the_waitlist(db: Session, user_uuid: UUID) -> bool:
+    """Was this identity's Supabase account created by an admin's approval?
+
+    True for every founder who ever went through the waitlist -- approve()
+    stamps waitlist_registrations.auth_user_id at the moment it creates their
+    identity. False for a direct sign-up: nothing wrote that row, because
+    nothing here ever decided to let them in.
+
+    The distinction matters because both paths land in this same function,
+    at the same "no founders row yet" moment, and only one of them is
+    supposed to be capacity-gated. An approved founder must NEVER be
+    refused their own first login because direct capacity happens to read
+    zero -- the team already said yes to them, on a completely different
+    ledger.
+    """
+    return bool(
+        db.execute(
+            text(
+                "SELECT 1 FROM waitlist_registrations "
+                "WHERE auth_user_id = :u AND status = :approved LIMIT 1"
+            ),
+            {"u": str(user_uuid), "approved": APPROVED},
+        ).scalar()
+    )
+
+
+def _take_a_direct_signup_slot(db: Session) -> bool:
+    """Claim one slot of direct-signin capacity, or refuse.
+
+    FOR UPDATE, inside the SAME transaction the caller will use to create (or
+    not create) the founders row: two identities hitting /auth/session for the
+    very last slot at the same moment must not both read remaining=1 and both
+    proceed. The second one blocks on the lock until the first commits or
+    rolls back, then reads the true, post-decrement number.
+
+    Returns False, having changed nothing, when there is no capacity. True
+    means one slot has been claimed -- the caller is now responsible for
+    either using it (creating the founder) or rolling back the whole
+    transaction, which un-claims it along with everything else.
+    """
+    remaining = db.execute(
+        text("SELECT remaining FROM direct_signup_capacity WHERE id = true FOR UPDATE")
+    ).scalar_one()
+    if remaining <= 0:
+        return False
+    db.execute(
+        text(
+            "UPDATE direct_signup_capacity "
+            "SET remaining = remaining - 1, updated_at = now() WHERE id = true"
+        )
+    )
+    return True
+
+
+def ensure_founder_or_waitlist(
+    identity: AuthUser, db: Session, ip_address: str = "0.0.0.0"
+) -> tuple[Founder | None, bool, bool]:
+    """As `ensure_founder_with_status`, plus the direct-signup capacity gate.
+
+    Registration is open at the client level now (see auth.js/Login.jsx): any
+    address can ask Supabase for a sign-in code, and Supabase will make one.
+    That is correct for exactly as many strangers as the team has opened
+    direct capacity for, and wrong for everyone past that -- the login page's
+    own URL is reachable with no button in front of it, so the button on the
+    landing page is a convenience, never the boundary. This is the boundary.
+
+    Returns (founder, created, waitlisted):
+      - An EXISTING founder: unchanged, capacity never enters into it.
+        (founder, False, False)
+      - A brand-new identity that came through the waitlist (approve() made
+        it), or that arrives while direct capacity is open: provisioned
+        exactly as ensure_founder_with_status already does.
+        (founder, True, False)
+      - A brand-new identity with no waitlist history, arriving at capacity
+        zero: NOT provisioned. Instead placed in the same pending queue an
+        ordinary registration lands in (register(), so it is the identical
+        row shape the admin panel already reads and open_slots() already
+        walks), and mailed to say so.
+        (None, False, True)
+
+    The capacity check and the founders-row creation share one transaction
+    (see _take_a_direct_signup_slot): if create_founder_on_signup fails after
+    a slot was claimed, the rollback already inside ensure_founder_with_status
+    undoes the claim along with it, so a failed creation can never quietly
+    burn a slot nobody got.
+    """
+    try:
+        user_uuid = UUID(str(identity.id))
+    except (ValueError, TypeError):
+        return None, False, False  # dev token; nothing to gate
+
+    set_founder_rls_context(db, str(user_uuid))
+
+    existing = founder_repository.get_by_user_id(db, user_uuid)
+    if existing is not None:
+        return existing, False, False
+
+    if not settings.ENABLE_FOUNDER_PROVISIONING or identity.provider == "dev":
+        return None, False, False
+
+    if not _came_through_the_waitlist(db, user_uuid):
+        if not _take_a_direct_signup_slot(db):
+            db.rollback()  # release the FOR UPDATE lock; nothing to keep
+
+            name = _display_name(identity)
+            email = identity.email or ""
+            if email:
+                # Same function the "Register" button calls -- ON CONFLICT DO
+                # NOTHING, so someone who already registered and is now also
+                # trying the direct route does not get a second row or a
+                # second place in line.
+                register(
+                    db,
+                    email=email,
+                    full_name=name,
+                    source="direct_signup_overflow",
+                    ip_address=ip_address,
+                )
+                try:
+                    send_direct_signup_overflow_email(email, name)
+                except Exception:  # noqa: BLE001 -- best effort, never blocks sign-in
+                    logger.warning(
+                        "direct-signup overflow email failed", extra={"path": email}
+                    )
+
+            return None, False, True
+
+    founder, created = ensure_founder_with_status(identity, db, ip_address=ip_address)
+    return founder, created, False

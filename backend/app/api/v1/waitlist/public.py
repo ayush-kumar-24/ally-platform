@@ -3,7 +3,9 @@ anybody on the internet may POST to without a token.
 
 The waitlist site (join.goxlally.ai, a separate codebase) posts its form here.
 Nothing is created but a `pending` row; access is granted only by an admin
-approving it in the panel.
+approving it in the panel -- OR, while direct capacity is open (see
+GET /capacity below), by signing in directly, no queue. Both paths converge
+on the same founders row through services/provisioning.py.
 
 WHY IT ALWAYS RETURNS THE SAME THING
 202 with a fixed body, whether the row was inserted, was a duplicate, or
@@ -50,6 +52,7 @@ import hmac
 
 from fastapi import APIRouter, Depends, Header, Request, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -136,6 +139,19 @@ class WaitlistAccepted(BaseModel):
     detail: str
 
 
+class DirectSignupCapacityOut(BaseModel):
+    #: Whether a stranger can sign in right now and get an account with no
+    #: queue. The landing page's own CTA reads this to decide between
+    #: "Register" and "Log in" -- but it is a courtesy, not the gate: the
+    #: real one is in services/provisioning.py, at the point a founders row
+    #: would actually be created, which this number cannot itself bypass.
+    open: bool
+    #: How many direct places are left. Not sensitive -- it is the same fact
+    #: "open" already implies a non-zero version of, shown so a caller can
+    #: read "3 left" rather than only yes/no.
+    remaining: int
+
+
 _ACCEPTED = WaitlistAccepted(
     detail="Thanks -- your registration is in. We review the founder's list by hand, "
            "and you'll get an email as soon as your place is confirmed."
@@ -174,3 +190,19 @@ def submit_registration(
         user_agent=(request.headers.get("user-agent") or "")[:500] or None,
     )
     return _ACCEPTED
+
+
+@router.get("/capacity", response_model=DirectSignupCapacityOut)
+def read_direct_signup_capacity(db: Session = Depends(get_db)):
+    """Is a stranger allowed to sign in right now with no queue?
+
+    Public and unauthenticated, like the rest of this router -- the landing
+    page's own login/register CTA reads this before a visitor has any
+    identity to authenticate with. Cheap and cacheable (a single-row SELECT,
+    no write, no per-IP limit needed the way the POST above has one): the
+    worst case of hammering this is a few extra reads of one integer.
+    """
+    remaining = db.execute(
+        text("SELECT remaining FROM direct_signup_capacity WHERE id = true")
+    ).scalar_one()
+    return DirectSignupCapacityOut(open=remaining > 0, remaining=remaining)
