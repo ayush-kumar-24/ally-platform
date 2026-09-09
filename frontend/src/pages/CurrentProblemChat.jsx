@@ -7,6 +7,7 @@ import {
   resumeOrStartCurrentProblem,
   submitCurrentProblemAnswer,
 } from '../services/currentProblem';
+import LiveKnowledgeGraph from '../components/LiveKnowledgeGraph';
 import { useVoiceInput } from '../hooks/useVoiceInput';
 import useAutoGrow from '../hooks/useAutoGrow';
 
@@ -283,6 +284,8 @@ export default function CurrentProblemChat() {
           </div>
         </div>
       </div>
+
+      <LiveKnowledgeGraph phase="current-problem" messages={messages} resolved={done} />
     </div>
   );
 }

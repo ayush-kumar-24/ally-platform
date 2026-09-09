@@ -8,6 +8,7 @@ import VoiceBars from '../components/VoiceBars';
 import useAutoGrow from '../hooks/useAutoGrow';
 import Markdown from '../components/Markdown';
 import FeedbackPrompt from '../components/FeedbackPrompt';
+import LiveKnowledgeGraph from '../components/LiveKnowledgeGraph';
 import { FEEDBACK } from '../services/feedback';
 
 /* There was a filter bar here: All / Revenue / Strategy / Team / Operations /
@@ -37,18 +38,10 @@ export default function DiagnosisChat() {
   // entirely -- there is no partial state to resume into, so nothing below it
   // renders at all. See the resumeOrStart().catch below.
   const [blocked, setBlocked] = useState(null);
-  const [kgVisible] = useState(true);
-  const kgRef = useRef(null);
   const scrollRef = useRef(null);
 
-  /* The draw timer had no cleanup and this effect runs on every message, so a
-     new orphaned timeout was created for each one and any pending timers kept
-     touching the DOM after unmount. */
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    if (!kgRef.current) return undefined;
-    const t = setTimeout(() => kgRef.current?.classList.add('draw'), 800);
-    return () => clearTimeout(t);
   }, [messages, busy]);
 
   // Resume if a session is in progress, otherwise start one. The server owns the
@@ -256,16 +249,6 @@ export default function DiagnosisChat() {
 
   const initials = (user?.initials || user?.name || '?').charAt(0).toUpperCase();
 
-  /* The graph's "symptoms" are the founder's own answers, newest last -- the
-     panel claims to connect what you say to the underlying cause, so it has to
-     be built from what you actually said. It used to be three fixed labels
-     ("Flat growth", "Rising spend", "Week-2 silence") rendered identically for
-     everyone, before a single question had been answered. */
-  const symptoms = messages
-    .filter(m => m.role === 'me' && m.text.trim())
-    .slice(-3)
-    .map(m => (m.text.length > 22 ? `${m.text.slice(0, 21).trimEnd()}…` : m.text));
-
   if (blocked) {
     return (
       <div
@@ -436,52 +419,7 @@ export default function DiagnosisChat() {
         </div>
       </div>
 
-      {/* Knowledge Graph Panel */}
-      {kgVisible && (
-        <div className="kg-panel">
-          <h2>Live knowledge graph</h2>
-          <p className="kp-sub">How Ally is connecting what you say to the underlying cause.</p>
-          <div className="kg" ref={kgRef}>
-            <svg viewBox="0 0 260 210" preserveAspectRatio="xMidYMid meet">
-              <path className="edge" d="M40,40 C110,40 90,95 130,95" />
-              <path className="edge" d="M40,120 C110,120 100,100 130,95" />
-              <path className="edge" d="M40,180 C110,180 110,110 130,100" />
-              <path className="edge hot" d="M130,95 C190,95 190,150 220,150" />
-              <circle className="kn" cx="40" cy="40" r="7" fill="rgba(255,255,255,.25)" />
-              <circle className="kn" cx="40" cy="120" r="7" fill="rgba(255,255,255,.25)" />
-              <circle className="kn" cx="40" cy="180" r="7" fill="rgba(255,255,255,.25)" />
-              <circle className="kg-ring" cx="220" cy="150" r="11" />
-              <circle className="kn pulse-m" cx="130" cy="97" r="8" fill="#34d399" />
-              <circle className="kn pulse-r" cx="220" cy="150" r="10" fill="#A8D94A" />
-              <circle className="kg-sig s1" r="3" />
-              <circle className="kg-sig s2" r="3" />
-              <circle className="kg-sig s3" r="3" />
-              <circle className="kg-sig hot" r="3.4" />
-              {/* The founder's own answers, newest last. */}
-              {[43, 123, 183].map((y, i) => (
-                <text key={y} className="kg-lbl" x="52" y={y}>
-                  {symptoms[i] || '—'}
-                </text>
-              ))}
-              {/* The mechanism and root cause are produced by the reasoning
-                  layer once the diagnosis finishes -- there is nothing truthful
-                  to name here while questions are still being answered. */}
-              <text className="kg-lbl hot" x="96" y="118">{done ? 'Mechanism' : 'Listening…'}</text>
-              <text className="kg-lbl hot" x="176" y="172">{done ? 'Root cause' : 'In your report'}</text>
-            </svg>
-          </div>
-          <div className="kg-legend">
-            <div className="kg-leg"><span className="d" style={{ background: 'rgba(255,255,255,.3)' }} /> Symptoms you described</div>
-            <div className="kg-leg"><span className="d" style={{ background: '#34d399' }} /> Mechanism Ally inferred</div>
-            <div className="kg-leg"><span className="d" style={{ background: '#A8D94A' }} /> Root cause</div>
-          </div>
-          {symptoms.length === 0 && (
-            <p className="kp-sub" style={{ marginTop: 10 }}>
-              Nothing plotted yet — this fills in from your answers as you go.
-            </p>
-          )}
-        </div>
-      )}
+      <LiveKnowledgeGraph phase="diagnosis" messages={messages} resolved={done} />
 
       {/* Asked once, the moment the diagnosis ends. Holds the hand-off to the
           report interstitial so the dialog is not navigated out from under
