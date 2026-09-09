@@ -22,27 +22,49 @@ import { getMyPlan } from '../services/plans';
 let cached;             // undefined = never fetched; null = fetched and failed
 let inflight = null;
 
-/** Drop the cached plan so the next mount refetches -- call after an upgrade. */
+/* Every mounted usePlanName, so an invalidation can reach them.
+ *
+ * The cache lives at module scope and the badge that reads it renders in the
+ * app shell, which stays mounted for the whole session. Clearing `cached`
+ * alone therefore changed nothing on screen: the effect below only runs on
+ * mount, and the shell does not remount on navigation or on an upgrade. */
+const subscribers = new Set();
+
+function fetchPlan() {
+  inflight = inflight ?? getMyPlan().then((p) => p ?? null).catch(() => null);
+  return inflight.then((p) => {
+    cached = p;
+    inflight = null;
+    subscribers.forEach((set) => set(p));
+    return p;
+  });
+}
+
+/**
+ * Drop the cached plan and refetch, telling every mounted caller the answer.
+ *
+ * Call this whenever the founder behind the cache may have changed: on sign-out
+ * (the cache is module state, so without it the next founder to sign in IN THE
+ * SAME TAB inherits the previous one's plan badge -- an SPA never reloads the
+ * page between the two), and on a completed upgrade (otherwise a founder who
+ * has just paid keeps seeing the plan they left behind).
+ */
 export function refreshPlanName() {
   cached = undefined;
   inflight = null;
+  if (subscribers.size > 0) fetchPlan();
 }
 
 export function usePlanName() {
   const [plan, setPlan] = useState(() => (cached === undefined ? null : cached));
 
   useEffect(() => {
-    if (cached !== undefined) return undefined;
-
-    let cancelled = false;
-    inflight = inflight ?? getMyPlan().then((p) => p ?? null).catch(() => null);
-    inflight.then((p) => {
-      cached = p;
-      inflight = null;
-      if (!cancelled) setPlan(p);
-    });
-
-    return () => { cancelled = true; };
+    subscribers.add(setPlan);
+    // A mount arriving after someone else's fetch resolved has the answer
+    // already; one arriving during it is covered by the subscriber above.
+    if (cached !== undefined) setPlan(cached);
+    else fetchPlan();
+    return () => { subscribers.delete(setPlan); };
   }, []);
 
   return plan?.plan_name || null;
