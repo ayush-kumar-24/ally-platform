@@ -164,7 +164,16 @@ body.guided .view-wrap{background:transparent}
    chain up to the window, so pages could only be moved by dragging the window
    scrollbar. Hand scrolling back to the document. */
 body.guided .view-wrap{overflow:visible}
-body.guided .j-stage{padding-top:140px}
+/* .view.active carries overflow-y:auto+flex:1 1 auto for the dashboard shell,
+   where .platform is the fixed-height ancestor and .view.active is meant to be
+   the scroller. Guided pages have no such fixed ancestor (GuidedLayout is
+   min-height:100vh, so the window is the real scroller), so the login/welcome
+   section -- which is both .view.active and .j-stage -- became its own
+   zero-range scroll container: sized exactly to its flex box, it captured the
+   trackpad/wheel gesture and had nothing to scroll, so two-finger scroll did
+   nothing instead of chaining up to the window. Same fix as .view-wrap above. */
+body.guided .view.active{overflow:visible;flex:none}
+body.guided .j-stage{overflow:visible;padding-top:140px}
 body.guided .think,body.guided .call-view{padding-top:64px}
 body.guided .j-stage::before{display:none}          /* single ambient source = #guidedBg */
 body.guided .chat{background:transparent}
