@@ -19,6 +19,7 @@ from app.api.v1.support.public import router as public_support_router
 from app.api.v1.waitlist.public import router as public_waitlist_router
 from app.api.v1.support.router import router as support_router
 from app.api.v1.admin.discovery_calls_router import router as admin_discovery_calls_router
+from app.api.v1.admin.launch_router import router as admin_launch_router
 from app.api.v1.admin.waitlist_router import router as admin_waitlist_router
 from app.api.v1.admin.panel_router import router as admin_panel_router
 from app.api.v1.admin.panel_router_v2 import router as admin_panel_router_v2
@@ -29,6 +30,7 @@ from app.api.v1.founder_dna.router import router as founder_dna_router
 from app.api.v1.discovery.routes import router as discovery_router
 from app.api.v1.intelligence.routes import router as intelligence_router
 from app.api.v1.knowledge.routes import router as knowledge_router
+from app.api.v1.launch.routes import router as launch_public_router
 from app.api.v1.notifications.routes import router as notifications_router
 from app.api.v1.feedback.router import router as feedback_router
 from app.api.v1.frontend_errors.router import router as frontend_errors_router
@@ -90,6 +92,9 @@ api_router.include_router(public_support_router)
 # Unauthenticated by design -- the waitlist form is how someone who has no
 # account asks for one. See the module docstring for its three abuse layers.
 api_router.include_router(public_waitlist_router)
+# Unauthenticated for the same reason: the visitors who most need to know
+# whether the platform is open are the ones who cannot sign in yet.
+api_router.include_router(launch_public_router)
 # The Phase 12 admin router (/admin/founders, /admin/dashboard, /admin/audit,
 # /admin/announcements -- all backed by in-memory, non-persistent repositories)
 # used to register here too. Removed: the frontend never called any of its
@@ -99,6 +104,7 @@ api_router.include_router(public_waitlist_router)
 api_router.include_router(admin_panel_router)
 api_router.include_router(admin_discovery_calls_router)
 api_router.include_router(admin_waitlist_router)
+api_router.include_router(admin_launch_router)
 api_router.include_router(admin_panel_router_v2)
 api_router.include_router(webhooks_supabase_router)
 api_router.include_router(internal_jobs_router)

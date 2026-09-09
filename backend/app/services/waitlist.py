@@ -115,6 +115,21 @@ def effective_cap(db: Session) -> int:
     return int(settings.WAITLIST_APPROVAL_CAP) + slots_opened_total(db)
 
 
+def direct_signup_capacity_remaining(db: Session) -> int:
+    """How many strangers may sign in right now with no queue at all.
+
+    Read-only; the decrement lives in provisioning.py, inside the same
+    transaction as the founders row it gates. Called from here (the queue
+    page, on every load) and from the public GET /capacity endpoint the
+    landing page's button reads -- one number, two very different readers.
+    """
+    return int(
+        db.execute(
+            text("SELECT remaining FROM direct_signup_capacity WHERE id = true")
+        ).scalar_one()
+    )
+
+
 def cap_status(db: Session) -> dict:
     """What the panel shows above the queue, and what approve/1 checks."""
     approved = approved_count(db)
@@ -131,6 +146,10 @@ def cap_status(db: Session) -> dict:
         "slots_opened": opened,
         "remaining": max(cap - approved, 0),
         "is_full": approved >= cap,
+        # On every load, not only after opening slots -- an admin reading the
+        # queue page with the slots panel untouched still needs to know
+        # whether a stranger can walk straight in right now.
+        "direct_signup_capacity": direct_signup_capacity_remaining(db),
     }
 
 
@@ -389,15 +408,14 @@ def open_slots(
     # read-locked is the DECREMENT, in provisioning.py, where two sign-ins
     # racing for the last slot is the case that actually matters.
     direct_capacity_added = slots - len(approved)
-    new_direct_capacity = db.execute(
+    db.execute(
         text(
             "UPDATE direct_signup_capacity "
             "SET remaining = remaining + :delta, updated_at = now() "
-            "WHERE id = true "
-            "RETURNING remaining"
+            "WHERE id = true"
         ),
         {"delta": direct_capacity_added},
-    ).scalar_one()
+    )
 
     db.commit()
 
@@ -413,11 +431,12 @@ def open_slots(
         "slots": slots,
         "approved": approved,
         "failures": failures,
+        # Read fresh, after the commit above: cap_status()'s own
+        # direct_signup_capacity_remaining() is the ONE place this number
+        # comes from, so the panel and the landing page's button can never
+        # disagree about what "capacity" currently means.
         "cap": cap_status(db),
-        # How many of THIS batch went to direct sign-in rather than the queue,
-        # and the running total still open. The panel shows both: the first
-        # answers "did this batch reach the queue or just open the door", the
-        # second is what the landing page's own button is reading right now.
+        # This batch's own contribution -- not derivable from cap alone, which
+        # only knows the running total, not what THIS click did.
         "direct_signup_opened": direct_capacity_added,
-        "direct_signup_capacity": new_direct_capacity,
     }

@@ -524,6 +524,14 @@ class Container:
         from app.admin.broadcasts import BroadcastService, SqlAlchemyBroadcastRepository
         return BroadcastService(SqlAlchemyBroadcastRepository(db))
 
+    def launch_service(self, db: Session):
+        """The go-live gate. Per-request like every other db-bound service --
+        the state lives in one row, so there is nothing worth caching on the
+        container and a cached copy would be the one thing still saying
+        "closed" after the launch."""
+        from app.launch import LaunchService, SqlAlchemyLaunchRepository
+        return LaunchService(SqlAlchemyLaunchRepository(db))
+
 
 # Application-wide container instance. Import and use `container.chat_execution(db)`.
 container = Container()

@@ -157,6 +157,13 @@ export default function AdminWaitlist() {
       const result = await openWaitlistSlots(preview.slots);
       const inCount = result?.approved?.length || 0;
       const failed = result?.failures?.length || 0;
+      const direct = result?.direct_signup_opened || 0;
+      // Said once, here, because this is the moment it happened -- the
+      // running total afterwards lives in the cap box above, not repeated
+      // in every flash.
+      const directNote = direct > 0
+        ? ` ${direct} more direct sign-in ${direct === 1 ? 'place is' : 'places are'} open too.`
+        : '';
       // A partial result is flagged as an error not because the grant failed
       // for the others -- it did not -- but because the people who missed out
       // are the ones still needing a human.
@@ -166,9 +173,13 @@ export default function AdminWaitlist() {
               error: true,
               message: `${inCount} let in. ${failed} could not be: ${result.failures
                 .map((f) => `${f.full_name} (${f.reason})`)
-                .join('; ')}. They are still at the front of the queue.`,
+                .join('; ')}. They are still at the front of the queue.${directNote}`,
             }
-          : { message: `${inCount} ${inCount === 1 ? 'founder is' : 'founders are'} in, and have been emailed.` },
+          : inCount === 0
+            ? { message: `Nobody was waiting to let in.${directNote}` }
+            : {
+                message: `${inCount} ${inCount === 1 ? 'founder is' : 'founders are'} in, and have been emailed.${directNote}`,
+              },
       );
       setPreview(null);
       setSlots('');
@@ -212,6 +223,29 @@ export default function AdminWaitlist() {
               {cap.base_cap} to start · {cap.slots_opened} opened from this screen
             </div>
           )}
+
+          {/* Direct sign-in is the other door: whatever a batch does not spend
+              on the queue becomes places a stranger can fill by logging in,
+              no approval needed. This is the one fact the landing page's own
+              "Register" vs "Log in" button reads, so the number here is
+              exactly what a founder sees decide their button right now. */}
+          {cap.direct_signup_capacity > 0 ? (
+            <div className="adm-panel" style={{ marginTop: 10, padding: 10 }}>
+              <strong>{cap.direct_signup_capacity}</strong> direct sign-in{' '}
+              {cap.direct_signup_capacity === 1 ? 'place is' : 'places are'} open
+              right now — anyone can log in and get an account on the spot, no
+              approval needed. The landing page shows "Log in" instead of
+              "Register" while this is above zero, and it drops back to
+              "Register" the moment it hits zero.
+            </div>
+          ) : (
+            <div className="adm-dim" style={{ marginTop: 10 }}>
+              Direct sign-in is closed — new visitors register and land in the
+              queue below. Opening places above will fill the queue first,
+              oldest first, then hand anything left over to direct sign-in.
+            </div>
+          )}
+
           {cap.can_grant_access === false && (
             <div className="adm-warn" style={{ marginTop: 6 }}>
               Access cannot be granted right now: the identity provider is not
@@ -392,8 +426,10 @@ export default function AdminWaitlist() {
             </p>
             {preview.would_approve.length === 0 ? (
               <p className="adm-warn">
-                Nobody is waiting, so this would let nobody in — it would only
-                open {preview.slots} places for whoever registers next.
+                Nobody is waiting, so this would let nobody in from the queue
+                — instead it opens {preview.slots} direct sign-in{' '}
+                {preview.slots === 1 ? 'place' : 'places'}: anyone can log in
+                and get an account on the spot until they run out.
               </p>
             ) : (
               <ol style={{ maxHeight: 220, overflowY: 'auto', margin: '8px 0', paddingLeft: 20 }}>
@@ -407,9 +443,10 @@ export default function AdminWaitlist() {
             )}
             {preview.unused_slots > 0 && preview.would_approve.length > 0 && (
               <p className="adm-dim">
-                {preview.unused_slots} of the {preview.slots} places will go
-                unused — the queue is shorter than that. They stay open for
-                whoever registers next.
+                The queue is shorter than that — the other{' '}
+                {preview.unused_slots} of {preview.slots} places become
+                direct sign-in capacity instead: anyone can log in and get an
+                account on the spot until they run out.
               </p>
             )}
           </>

@@ -34,6 +34,11 @@ const LINKS = [
   { to: '/admin/coupons', label: 'Coupons', capability: 'view_users' },
   { to: '/admin/audit', label: 'Audit Log', capability: 'view_audit' },
   { to: '/admin/system', label: 'System', capability: 'view_users' },
+  // view_users, not system_settings: on the day, the whole team wants the
+  // countdown on a screen. Only the launch buttons check the stronger
+  // capability -- see AdminLaunch -- and the backend refuses everyone else
+  // regardless of what this renders.
+  { to: '/admin/launch', label: 'Launch', capability: 'view_users' },
 ];
 
 export default function AdminLayout() {
