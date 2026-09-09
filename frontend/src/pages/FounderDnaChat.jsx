@@ -9,6 +9,7 @@ import {
   resumeOrStartFounderDna,
   submitFounderDnaAnswer,
 } from '../services/founderDna';
+import LiveKnowledgeGraph from '../components/LiveKnowledgeGraph';
 import { useVoiceInput } from '../hooks/useVoiceInput';
 import useAutoGrow from '../hooks/useAutoGrow';
 import VoiceBars from '../components/VoiceBars';
@@ -485,6 +486,8 @@ export default function FounderDnaChat() {
         </div>
         )}
       </div>
+
+      <LiveKnowledgeGraph phase="founder-dna" messages={messages} resolved={done} />
     </div>
   );
 }

@@ -134,11 +134,16 @@ STYLE = """
 .rp .panel-gap .dot{background:var(--rust);}
 .rp .panel-note{font-size:13.5px;color:var(--ink-soft);}
 .rp .chip-list{display:flex;flex-direction:column;gap:11px;}
-.rp .chip-row{display:grid;grid-template-columns:minmax(0,1fr) 76px 38px;align-items:center;
-  gap:12px;font-size:14px;}
+/* Third column is max-content, not the 38px it carried for years. 38px was
+   right when that cell held a two-digit score; it now holds the BAND WORD, and
+   "Critical gap" needs about 90px -- so the label ran straight out through the
+   right edge of the panel. Sizing to the content means a longer band added
+   later cannot reintroduce it. */
+.rp .chip-row{display:grid;grid-template-columns:minmax(0,1fr) 76px max-content;
+  align-items:center;gap:12px;font-size:14px;}
 .rp .mini-track{height:6px;border-radius:999px;background:#E7E1D6;overflow:hidden;}
 .rp .mini-fill{height:100%;border-radius:999px;}
-.rp .chip-num{text-align:right;font-weight:700;font-size:13.5px;font-variant-numeric:tabular-nums;}
+.rp .chip-num{text-align:right;font-weight:700;font-size:13.5px;white-space:nowrap;}
 .rp .chip-row.t-ok .mini-fill{background:linear-gradient(90deg,var(--forest-500),var(--signal));}
 .rp .chip-row.t-ok .chip-num{color:var(--forest-500);}
 .rp .chip-row.t-watch .mini-fill{background:linear-gradient(90deg,#B87A22,var(--amber));}
