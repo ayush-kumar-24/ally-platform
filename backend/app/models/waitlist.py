@@ -6,7 +6,7 @@ from __future__ import annotations
 import datetime
 import uuid
 
-from sqlalchemy import CheckConstraint, DateTime, Index, Integer, String, Text, text
+from sqlalchemy import Boolean, CheckConstraint, DateTime, Index, Integer, String, Text, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -105,5 +105,29 @@ class WaitlistSlotOpening(Base):
     opened_by_admin_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     opened_by_email: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(True), nullable=False, server_default=text("now()")
+    )
+
+
+class DirectSignupCapacity(Base):
+    """The singleton counter gating direct sign-in -- see migration
+    c8f3a92e1d47 for the full reasoning.
+
+    Exactly one row (`id` is a boolean CHECKed to always be true). `remaining`
+    is how many strangers may still sign in and get a founders row with no
+    queue and no admin approval; it is decremented inside the same
+    transaction as the founders row it gates (see services/provisioning.py)
+    so two concurrent sign-ins for the last slot cannot both succeed.
+    """
+
+    __tablename__ = "direct_signup_capacity"
+    __table_args__ = (
+        CheckConstraint("id", name="direct_signup_capacity_singleton"),
+        CheckConstraint("remaining >= 0", name="direct_signup_capacity_nonneg"),
+    )
+
+    id: Mapped[bool] = mapped_column(Boolean, primary_key=True, default=True)
+    remaining: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    updated_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(True), nullable=False, server_default=text("now()")
     )

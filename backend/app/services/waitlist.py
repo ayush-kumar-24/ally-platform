@@ -25,7 +25,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -378,11 +378,35 @@ def open_slots(
             failures.append({**who, "reason": str(exc) or exc.__class__.__name__})
 
     opening.approved_count = len(approved)
+
+    # What the queue did not use becomes direct-signup capacity -- places a
+    # stranger fills by signing in, not by waiting in the pending list. This is
+    # the whole point of a batch that outruns the queue: it does not evaporate,
+    # it opens the front door for whoever has not registered at all yet.
+    #
+    # A single UPDATE ... SET remaining = remaining + :delta is atomic on its
+    # own; no FOR UPDATE needed to ADD safely. The row that has to be
+    # read-locked is the DECREMENT, in provisioning.py, where two sign-ins
+    # racing for the last slot is the case that actually matters.
+    direct_capacity_added = slots - len(approved)
+    new_direct_capacity = db.execute(
+        text(
+            "UPDATE direct_signup_capacity "
+            "SET remaining = remaining + :delta, updated_at = now() "
+            "WHERE id = true "
+            "RETURNING remaining"
+        ),
+        {"delta": direct_capacity_added},
+    ).scalar_one()
+
     db.commit()
 
     logger.info(
         "Waitlist slots opened",
-        extra={"path": f"{slots} slots, {len(approved)} approved, by {admin_email}"},
+        extra={
+            "path": f"{slots} slots, {len(approved)} approved from the queue, "
+            f"{direct_capacity_added} opened for direct sign-in, by {admin_email}"
+        },
     )
 
     return {
@@ -390,4 +414,10 @@ def open_slots(
         "approved": approved,
         "failures": failures,
         "cap": cap_status(db),
+        # How many of THIS batch went to direct sign-in rather than the queue,
+        # and the running total still open. The panel shows both: the first
+        # answers "did this batch reach the queue or just open the door", the
+        # second is what the landing page's own button is reading right now.
+        "direct_signup_opened": direct_capacity_added,
+        "direct_signup_capacity": new_direct_capacity,
     }

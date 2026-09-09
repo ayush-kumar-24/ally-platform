@@ -219,6 +219,17 @@ export default function Login() {
 
     try {
       const founder = await signInWithPassword(email, password);
+      // Their password already works -- Supabase has no notion of Ally's own
+      // capacity -- but there is still no founders row behind it. Same check
+      // handleVerify makes below, for the same reason: a returning visit
+      // while still pending must land on the waitlist screen, not a /profile
+      // fetch against a profile that does not exist.
+      if (founder.waitlisted) {
+        setStep('waitlisted');
+        inFlight.current = false;
+        setSubmitting(false);
+        return;
+      }
       await finishSignIn(founder);
       inFlight.current = false;
     } catch (err) {
@@ -322,6 +333,19 @@ export default function Login() {
 
     try {
       const founder = await verifyOtpAndSetPassword(email, code, newPassword, fullName);
+      // Registration is open at the client, so the code just verified and the
+      // password just chosen both worked -- Supabase created the identity the
+      // moment the code was sent. Whether it comes with a founders row is a
+      // separate, capacity-gated decision made at /auth/session; see
+      // ensure_founder_or_waitlist. Past capacity, there is nothing to sign
+      // into yet, so this stops here instead of calling finishSignIn, which
+      // would fetch a /profile for a founder who does not exist.
+      if (founder.waitlisted) {
+        setStep('waitlisted');
+        inFlight.current = false;
+        setSubmitting(false);
+        return;
+      }
       await finishSignIn(founder);
       inFlight.current = false;
     } catch (err) {
@@ -493,6 +517,25 @@ export default function Login() {
               </button>
             </p>
           </form>
+        ) : step === 'waitlisted' ? (
+          /* Reached only from a moment-of-truth capacity check at
+             /auth/session -- the code (or password) worked, but there was no
+             room. The address is already queued (ensure_founder_or_waitlist
+             put it there via the ordinary register() path), so there is
+             nothing left for them to do here except come back once mailed. */
+          <div className="auth-form">
+            <p className="auth-notice" role="status">
+              You&rsquo;re in the queue. Sign-ups just filled up for the moment,
+              so instead of an account you&rsquo;ve been added to the
+              founder&rsquo;s list -- the same one everyone registers into.
+              We&rsquo;ll email {email.trim() || 'you'} the moment your place
+              opens, with a link to sign in.
+            </p>
+            <button type="button" className="auth-link-btn"
+                    onClick={() => { setStep('password'); setValidationError(''); setNotice(''); }}>
+              Back to sign in
+            </button>
+          </div>
         ) : step === 'email' ? (
           <form className="auth-form" onSubmit={handleSendCode} noValidate>
             <label className="auth-field">
