@@ -25,6 +25,12 @@ from app.models.partitioned import AnalyticsEvent, AuditLog, Message
 from app.models.schema import Founders
 from app.models.suggestions import SuggestionFeedbackRow, SuggestionRow
 
+# Not a founder-scoped table and not generated from the live schema: the
+# launch gate's single row. Imported here for the same reason as everything
+# above -- Alembic reads Base.metadata, and a table nothing imports is a
+# table Alembic proposes to DROP.
+from app.launch.service import LaunchStateRow  # noqa: F401
+
 # Existing code (api/deps.py, profile routes) refers to `Founder`.
 Founder = Founders
 

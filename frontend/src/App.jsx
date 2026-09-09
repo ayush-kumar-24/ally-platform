@@ -7,6 +7,7 @@ import { setPresenceHint } from './services/presenceHint';
 import { supabaseConfigured, WAITLIST_URL } from './services/supabaseConfig';
 import { loadChunk } from './utils/loadChunk';
 import ErrorBoundary from './components/ErrorBoundary';
+import LaunchGate from './components/LaunchGate';
 import RequireAuth from './components/RequireAuth';
 import RequireProfile from './components/RequireProfile';
 import RouteTitle from './components/RouteTitle';
@@ -78,6 +79,7 @@ const AdminCalls = lazy(() => loadChunk(() => import('./pages/admin/AdminCalls')
 const AdminWaitlist = lazy(() => loadChunk(() => import('./pages/admin/AdminWaitlist')));
 const AdminPrivacy = lazy(() => loadChunk(() => import('./pages/admin/AdminPrivacy')));
 const AdminFeedback = lazy(() => loadChunk(() => import('./pages/admin/AdminFeedback')));
+const AdminLaunch = lazy(() => loadChunk(() => import('./pages/admin/AdminLaunch')));
 
 /* Show splash only once per session (won't replay on route changes).
    Wrapped because storage access throws outright -- not returns null -- in
@@ -214,6 +216,14 @@ export default function App() {
       <a href="#main-content" className="skip-link">Skip to main content</a>
       <RouteTitle />
       {showSplash && <SplashScreen onDone={handleSplashDone} />}
+      {/* Everything a founder can reach sits behind the go-live gate. It
+          exempts /admin (the launch button lives there, and gating it would
+          make the ceremony unstartable) and the legal pages, and it fails
+          open, so a status request that does not answer leaves the platform
+          serving rather than putting a holding screen in front of it. Until
+          somebody arms the gate from the panel, this renders nothing at all
+          -- see components/LaunchGate.jsx. */}
+      <LaunchGate>
       <Suspense fallback={<RouteFallback />}>
         <Routes>
           {/* ── Root: dashboard or sign-in, never a page of its own ── */}
@@ -318,6 +328,7 @@ export default function App() {
             <Route path="feedback" element={<AdminFeedback />} />
             <Route path="audit" element={<AdminAuditLog />} />
             <Route path="coupons" element={<AdminCoupons />} />
+            <Route path="launch" element={<AdminLaunch />} />
             <Route path="system" element={<AdminSystem />} />
           </Route>
 
@@ -327,6 +338,7 @@ export default function App() {
           <Route path="*" element={<NotFound />} />
         </Routes>
       </Suspense>
+      </LaunchGate>
       <Toast message={toast} />
       <CookieBanner />
     </>

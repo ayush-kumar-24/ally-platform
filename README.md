@@ -48,4 +48,28 @@ npm install
 npm run dev
 ```
 
+## Launch day
+
+Going live is a state the team sets from the Admin Panel, not a deploy. Ally
+ships **open** — the gate does nothing until somebody arms it — and the whole
+sequence lives at `/admin/launch` (Super Admin only):
+
+1. **Arm the gate.** Every visitor now sees the holding screen. Sign-in and the
+   whole app are behind it; `/admin` is not, so the panel stays reachable.
+2. **Start the countdown.** One clock, computed on the server, so every browser
+   in the room counts down together instead of drifting apart on its own wall
+   clock. Ten seconds by default, 3–300 configurable.
+3. **Abort** if something is wrong. That window is the reason the countdown
+   exists — the launch button is refused until it reaches zero.
+4. **Launch.** The platform opens to everyone, immediately.
+
+Launching happens **once**. There is no un-launch: nothing arms, counts or
+aborts afterwards, and pressing the button again returns the original launch
+rather than staging a second one. Every press is written to the admin audit
+trail with who pressed it and from where.
+
+If the launch state cannot be read at all — the migration has not run, the
+database is unreachable — the gate **fails open** and the platform serves
+normally. See `backend/app/launch/` for why that direction, and not the other.
+
 See [backend/README.md](backend/README.md) and [frontend/README.md](frontend/README.md) for details on auth, database migrations, and project layout.
