@@ -1,11 +1,12 @@
 /**
  * Launch control — the go-live ceremony, from the panel.
  *
- * Four buttons, in the order the day runs:
+ * Five buttons, in the order the day runs:
  *   Arm       close the platform ahead of the event
  *   Start     run the shared countdown everybody is watching
  *   Abort     stop it, doors still shut — the reason the countdown exists
- *   Launch    open to everyone. Irreversible.
+ *   Launch    open to everyone. Spends one of a small allowance.
+ *   Reset     close it again for another rehearsal, while any remain
  *
  * WHAT THIS SCREEN DOES NOT DECIDE
  * `can_launch` comes from the server on every poll; this page renders it and
@@ -14,10 +15,15 @@
  * be showing the room a button that does not work. Same reason the countdown
  * itself is server state: see backend app/launch/service.py.
  *
- * Launch is the only action in the panel with no undo, so it goes through the
- * confirmation dialog and says so in as many words. Everything here is Super
- * Admin only, enforced server-side; the rest of the team can watch the state
- * without being able to press anything.
+ * Both irreversible-ish actions go through the confirmation dialog: launch,
+ * because it opens the product to the public, and reset, because it CLOSES a
+ * platform that is live right now — the more dangerous of the two if pressed
+ * by accident, and the one whose danger is easiest to underestimate.
+ *
+ * `launches_remaining` and `can_reset` are read from the server, never
+ * computed here. The panel must not be able to offer a rehearsal the backend
+ * would refuse, or hide one it would allow. Everything is Super Admin only,
+ * enforced server-side; the rest of the team can watch without pressing.
  */
 
 import { useCallback, useEffect, useState } from 'react';
@@ -29,6 +35,7 @@ import {
   getLaunchState,
   launchNow,
   LAUNCH_STATES,
+  resetLaunch,
   startCountdown,
 } from '../../services/launch';
 import { ConfirmDialog, ErrorState, Flash, Loading, useFlash } from './AdminUI';
@@ -60,8 +67,7 @@ const COPY = {
   },
   [LAUNCH_STATES.LAUNCHED]: {
     label: 'Launched',
-    line: 'The platform is open to everyone. A launch happens once — this '
-      + 'cannot be replayed or undone.',
+    line: 'The platform is open to everyone right now.',
   },
 };
 
@@ -78,7 +84,8 @@ export default function AdminLaunch() {
   const [state, setState] = useState(null);
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
-  const [confirming, setConfirming] = useState(false);
+  /* null | 'launch' | 'reset' — one dialog, two questions. */
+  const [confirming, setConfirming] = useState(null);
   const [seconds, setSeconds] = useState(10);
   const [flash, setFlash] = useFlash();
 
@@ -144,17 +151,47 @@ export default function AdminLaunch() {
           </div>
         )}
 
-        {launched && state.launched_at && (
+        {state.launched_at && (
           <div className="adm-dim" style={{ marginTop: 10 }}>
-            Launched {whenLabel(state.launched_at)}
+            {launched ? 'Launched' : 'Last launched'} {whenLabel(state.launched_at)}
             {state.launched_by ? ` · by admin #${state.launched_by}` : ''}
           </div>
         )}
+
+        {/* The budget, stated plainly wherever the team is standing. "2 of 3
+            used" is the number somebody needs before deciding whether this
+            run-through is a rehearsal or the real thing. */}
+        <div className="adm-dim" style={{ marginTop: 6 }}>
+          {state.launch_count} of {state.max_launches} launches used
+          {state.launches_remaining > 0
+            ? ` · ${state.launches_remaining} left`
+            : ' · none left, the platform is open for good'}
+        </div>
 
         {!allowed && (
           <div className="adm-dim" style={{ marginTop: 12 }}>
             You can watch the launch from here. Pressing anything needs Super
             Admin.
+          </div>
+        )}
+
+        {allowed && launched && state.can_reset && (
+          <div className="lc-actions">
+            <button
+              className="adm-btn"
+              type="button"
+              disabled={busy}
+              onClick={() => setConfirming('reset')}
+            >
+              Close again for another rehearsal
+            </button>
+          </div>
+        )}
+
+        {allowed && launched && !state.can_reset && (
+          <div className="adm-dim" style={{ marginTop: 12 }}>
+            The launch allowance is spent, so this one is final — the platform
+            cannot be closed from here.
           </div>
         )}
 
@@ -213,7 +250,7 @@ export default function AdminLaunch() {
               /* Disabled straight off the server's own answer, so this button
                  and the endpoint behind it can never disagree. */
               disabled={busy || !state.can_launch}
-              onClick={() => setConfirming(true)}
+              onClick={() => setConfirming('launch')}
             >
               {state.can_launch ? 'Launch Ally' : 'Launch (waiting for zero)'}
             </button>
@@ -222,20 +259,56 @@ export default function AdminLaunch() {
       </div>
 
       <ConfirmDialog
-        open={confirming}
+        open={confirming === 'launch'}
         title="Open Ally to everyone?"
         body={
           <>
-            This opens the platform to every visitor, immediately. It happens
-            once and <strong>cannot be undone</strong> — there is no un-launch.
+            This opens the platform to every visitor, immediately.
+            {state.launches_remaining > 1 ? (
+              <>
+                {' '}It spends one of your {state.launches_remaining} remaining
+                launches, leaving {state.launches_remaining - 1}.
+              </>
+            ) : (
+              <>
+                {' '}This is your <strong>last launch</strong> — afterwards the
+                platform cannot be closed again from here.
+              </>
+            )}
           </>
         }
         confirmLabel="Launch now"
         busy={busy}
-        onCancel={() => setConfirming(false)}
+        onCancel={() => setConfirming(null)}
         onConfirm={async () => {
           await run(launchNow, 'Ally is live.');
-          setConfirming(false);
+          setConfirming(null);
+        }}
+      />
+
+      {/* Marked danger, unlike launch. Launching opens a platform nobody is
+          using yet; this SHUTS one that is live, and anybody already inside
+          meets the holding screen on their next page. That is the presser's
+          decision to make, but not one to make by accident. */}
+      <ConfirmDialog
+        open={confirming === 'reset'}
+        title="Close Ally again?"
+        danger
+        body={
+          <>
+            Every visitor goes back to the holding screen immediately, including
+            anyone using the platform right now. The launch you already spent is
+            not refunded — you will have{' '}
+            <strong>{Math.max(0, state.launches_remaining)} launch
+            {state.launches_remaining === 1 ? '' : 'es'}</strong> left afterwards.
+          </>
+        }
+        confirmLabel="Close the platform"
+        busy={busy}
+        onCancel={() => setConfirming(null)}
+        onConfirm={async () => {
+          await run(resetLaunch, 'Platform closed. The gate is armed again.');
+          setConfirming(null);
         }}
       />
     </section>

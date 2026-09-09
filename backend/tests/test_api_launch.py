@@ -120,7 +120,7 @@ def test_public_status_tracks_the_gate(client):
 # --- authorization ----------------------------------------------------------
 
 
-@pytest.mark.parametrize("path", ["/arm", "/countdown", "/abort", "/launch"])
+@pytest.mark.parametrize("path", ["/arm", "/countdown", "/abort", "/launch", "/reset"])
 @pytest.mark.parametrize("role", [PanelRole.ADMIN, PanelRole.SUPPORT])
 def test_only_super_admin_may_press_anything(client, path, role):
     """Launching is the most public, least reversible action in the panel.
@@ -183,7 +183,7 @@ def test_launch_is_recorded_against_the_person_who_pressed_it(client):
     assert {"launch.arm", "launch.countdown", "launch.launch"} <= events
 
 
-def test_relaunching_is_refused_or_a_no_op_but_never_a_second_launch(client):
+def test_relaunching_is_a_no_op_and_never_spends_a_second(client):
     run_countdown(client)
     first = client.http.post(f"{ADMIN}/launch").json()
     client.clock.advance(3600)
@@ -191,11 +191,83 @@ def test_relaunching_is_refused_or_a_no_op_but_never_a_second_launch(client):
     again = client.http.post(f"{ADMIN}/launch")
     assert again.status_code == 200
     assert again.json()["launched_at"] == first["launched_at"]
+    assert again.json()["launch_count"] == 1
 
-    # And nothing puts a live platform back behind the countdown.
+    # Reset is the only door out -- nothing else touches a live platform.
     for path in ("/arm", "/countdown", "/abort"):
         assert client.http.post(f"{ADMIN}{path}", json={}).status_code == 409
     assert client.http.get(PUBLIC).json()["is_open"] is True
+
+
+# --- the rehearsal loop -----------------------------------------------------
+
+
+def test_reset_closes_the_platform_for_another_rehearsal(client):
+    run_countdown(client)
+    launched = client.http.post(f"{ADMIN}/launch").json()
+    assert launched["can_reset"] is True
+    assert client.http.get(PUBLIC).json()["is_open"] is True
+
+    after = client.http.post(f"{ADMIN}/reset").json()
+    assert after["state"] == "armed"
+    assert client.http.get(PUBLIC).json()["is_open"] is False
+
+    # And the whole ceremony runs again from the top.
+    client.http.post(f"{ADMIN}/countdown", json={})
+    client.clock.advance(10)
+    second = client.http.post(f"{ADMIN}/launch").json()
+    assert second["launch_count"] == 2
+    assert client.http.get(PUBLIC).json()["is_open"] is True
+
+
+def test_the_panel_is_told_what_is_left(client):
+    """`launches_remaining` and `can_reset` come off the server so the panel
+    and the endpoint behind it can never disagree about what is allowed."""
+    state = client.http.get(ADMIN).json()
+    assert state["launches_remaining"] == state["max_launches"]
+    assert state["can_reset"] is False           # nothing launched yet
+
+    run_countdown(client)
+    launched = client.http.post(f"{ADMIN}/launch").json()
+    assert launched["launches_remaining"] == launched["max_launches"] - 1
+    assert launched["can_reset"] is True
+
+
+def spend_allowance(client):
+    """Run rehearsals until the allowance is gone."""
+    for i in range(client.http.get(ADMIN).json()["max_launches"]):
+        if i:
+            client.http.post(f"{ADMIN}/reset")
+        client.http.post(f"{ADMIN}/countdown", json={"countdown_seconds": 10})
+        client.clock.advance(10)
+        client.http.post(f"{ADMIN}/launch")
+
+
+def test_the_last_launch_cannot_be_reset(client):
+    """Once the rehearsals are used up the door locks behind them, which is
+    the reason for bounding them in the first place."""
+    spend_allowance(client)
+    final = client.http.get(ADMIN).json()
+    assert final["launches_remaining"] == 0
+    assert final["can_reset"] is False
+
+    assert client.http.post(f"{ADMIN}/reset").status_code == 409
+    assert client.http.get(PUBLIC).json()["is_open"] is True
+
+
+def test_reset_is_audited_with_what_it_spent(client):
+    run_countdown(client)
+    client.http.post(f"{ADMIN}/launch")
+    client.http.post(f"{ADMIN}/reset")
+
+    rows, _ = client.audit.list(limit=20)
+    assert "launch.reset" in {e.action for e in rows}
+
+
+def test_reset_is_refused_when_nothing_has_launched(client):
+    assert client.http.post(f"{ADMIN}/reset").status_code == 409
+    client.http.post(f"{ADMIN}/arm", json={"countdown_seconds": 10})
+    assert client.http.post(f"{ADMIN}/reset").status_code == 409
 
 
 @pytest.mark.parametrize("seconds", [0, 2, 301])

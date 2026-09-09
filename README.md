@@ -63,10 +63,24 @@ sequence lives at `/admin/launch` (Super Admin only):
    exists — the launch button is refused until it reaches zero.
 4. **Launch.** The platform opens to everyone, immediately.
 
-Launching happens **once**. There is no un-launch: nothing arms, counts or
-aborts afterwards, and pressing the button again returns the original launch
-rather than staging a second one. Every press is written to the admin audit
-trail with who pressed it and from where.
+5. **Close it again** — while any of the allowance remains, `Reset` takes the
+   platform back behind an armed gate so the whole thing can be rehearsed.
+
+The platform may be launched **three times in its lifetime** — two rehearsals
+and the real one. `Reset` is the only way out of `launched`; arm, countdown and
+abort all refuse from there, so reopening a live platform is never a side
+effect of pressing something adjacent. Once the allowance is spent, `Reset` is
+refused and the last launch is final.
+
+That budget is the safety property, not a limitation to work around. An
+un-launch with no limit is a toggle, and a toggle eventually gets pressed on a
+platform full of founders mid-diagnosis. Raising the ceiling means changing
+`launch_state.max_launches` in the database on purpose — deliberately not an
+admin button.
+
+Pressing launch twice while already launched returns the launch in effect and
+does **not** spend a second. Every press is written to the admin audit trail
+with who pressed it and from where.
 
 If the launch state cannot be read at all — the migration has not run, the
 database is unreachable — the gate **fails open** and the platform serves

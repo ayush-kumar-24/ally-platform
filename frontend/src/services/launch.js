@@ -43,10 +43,16 @@ export function abortCountdown() {
   return post('/admin/launch/abort');
 }
 
-/** Admin: open the platform to everyone. Irreversible — see the module
- *  docstring in backend app/launch/__init__.py for why there is no undo. */
+/** Admin: open the platform to everyone. Spends one of a small allowance. */
 export function launchNow() {
   return post('/admin/launch/launch');
+}
+
+/** Admin: close a launched platform again, so the ceremony can be rehearsed.
+ *  Bounded, not free — refused once the allowance is spent, which is what
+ *  keeps the final launch final. See backend app/launch/__init__.py. */
+export function resetLaunch() {
+  return post('/admin/launch/reset');
 }
 
 export const LAUNCH_STATES = {

@@ -20,17 +20,31 @@ THE FOUR STATES
 them identically. They are kept apart because only one of them is a fact
 about a thing that happened, and `launched_at` is the record of it.
 
-WHY `launched` IS TERMINAL
-"It opened, then it closed again" is not a state a public go-live has. Once
-founders are inside, taking the platform back behind a countdown would sign
-them out of something they are mid-way through, and the countdown screen
-would be a lie -- there is nothing left to wait for. Shutting the platform
-after launch is a different decision with a different tool (maintenance
-mode, or a feature flag on the specific thing being withdrawn), taken
-deliberately rather than by rewinding history. So there is no transition out
-of `launched`, and `launch()` is idempotent rather than repeatable: pressing
-the button twice tells you about the first launch, it does not stage a
-second one.
+LAUNCHING IS A SMALL, SPENDABLE ALLOWANCE -- NOT A ONE-WAY DOOR
+`launched` began as a terminal state, on the grounds that a public go-live
+happens once. That is true of the real one and false of every rehearsal
+before it, and a ceremony nobody may practise is a ceremony performed for
+the first time in front of an audience.
+
+So `reset()` exists, and it spends from a fixed allowance: `max_launches`
+launches in the lifetime of the platform, and the last one is final. Two
+rehearsals and the real thing, by default.
+
+The allowance IS the safety property. An un-launch with no limit is a
+toggle, and a toggle eventually gets pressed on a platform full of founders
+mid-diagnosis -- which is exactly what the terminal state was protecting
+against. A budget buys the practice runs and still guarantees the launch
+everybody remembers cannot be undone, because by then there is nothing left
+to spend.
+
+`reset()` is the ONLY way out of `launched`. arm, start_countdown and abort
+all still refuse from there, so reopening the gate over a live platform is
+always one deliberate, separately-confirmed, audited act -- never a side
+effect of pressing something adjacent.
+
+`launch()` stays idempotent WITHIN a state: pressing it twice while already
+launched returns the first launch and does not spend a second allowance.
+Only a reset-then-launch cycle spends another.
 
 WHY THE COUNTDOWN IS SERVER STATE
 Two reasons, both of which a frontend animation fails:
@@ -74,6 +88,14 @@ MAX_COUNTDOWN_SECONDS = 300
 # wrong thing.
 STATE_ID = 1
 
+# How many times the platform may be launched, ever. Two rehearsals and the
+# real thing. The value actually used lives on the row (max_launches), so
+# raising the ceiling is a deliberate database change somebody makes on
+# purpose -- deliberately NOT an admin endpoint and not a config flag. An
+# allowance the panel can raise is not an allowance, and the finality of the
+# last launch is the only thing standing between a live platform and a toggle.
+DEFAULT_MAX_LAUNCHES = 3
+
 
 class LaunchState(str, Enum):
     OPEN = "open"
@@ -85,13 +107,35 @@ class LaunchState(str, Enum):
 # --- errors -----------------------------------------------------------------
 
 class AlreadyLaunchedError(AppError):
-    """Any attempt to move out of the terminal state. 409, not 400: the
-    request was well-formed, the world had simply already moved on."""
+    """Arming, counting or aborting while the platform is open to everyone.
+    409, not 400: the request was well-formed, the world had simply moved on.
 
-    def __init__(self) -> None:
+    Not a dead end while allowance remains -- it points at `reset`, which is
+    the one deliberate door out of `launched`. Refusing here is what stops a
+    live platform being closed as a side effect of pressing something
+    adjacent."""
+
+    def __init__(self, launches_remaining: int = 0) -> None:
+        if launches_remaining > 0:
+            super().__init__(
+                "The platform is open to everyone. Reset it back to a closed "
+                "gate first -- that spends one of the "
+                f"{launches_remaining} launches you have left.", status_code=409)
+        else:
+            super().__init__(
+                "The platform has launched and the launch allowance is spent. "
+                "This cannot be replayed or undone.", status_code=409)
+
+
+class LaunchAllowanceSpentError(AppError):
+    """The last launch has been used, so `reset` is refused and `launched` is
+    terminal after all -- which is the point. The rehearsals are bounded
+    precisely so the final launch is the one nobody can take back."""
+
+    def __init__(self, launch_count: int) -> None:
         super().__init__(
-            "The platform has already launched. A launch happens once and "
-            "cannot be replayed or undone.", status_code=409)
+            f"All {launch_count} launches have been used. The platform is open "
+            "for good and cannot be closed from here.", status_code=409)
 
 
 class LaunchNotArmedError(AppError):
@@ -127,6 +171,13 @@ class LaunchStateRow(Base):
     launched_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True)
     launched_by: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # How many launches have been spent, and the ceiling. Counted rather than
+    # inferred from the audit trail: the audit log is evidence for humans, and
+    # a safety limit must not depend on parsing it.
+    launch_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0")
+    max_launches: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=str(DEFAULT_MAX_LAUNCHES))
     updated_by: Mapped[int | None] = mapped_column(Integer, nullable=True)
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True)
@@ -139,8 +190,12 @@ class LaunchStatus:
     state: LaunchState
     countdown_seconds: int = DEFAULT_COUNTDOWN_SECONDS
     countdown_ends_at: datetime | None = None
+    # The MOST RECENT launch, not the first: a reset keeps these so the panel
+    # can still say when the platform was last opened and by whom.
     launched_at: datetime | None = None
     launched_by: int | None = None
+    launch_count: int = 0
+    max_launches: int = DEFAULT_MAX_LAUNCHES
     # Server-computed, never derived by the client from countdown_ends_at
     # against its own clock -- see the module docstring. None unless counting.
     seconds_remaining: float | None = None
@@ -152,6 +207,16 @@ class LaunchStatus:
     @property
     def countdown_elapsed(self) -> bool:
         return self.state is LaunchState.COUNTING and (self.seconds_remaining or 0) <= 0
+
+    @property
+    def launches_remaining(self) -> int:
+        return max(0, self.max_launches - self.launch_count)
+
+    @property
+    def can_reset(self) -> bool:
+        """Whether the platform can be closed again. False once the allowance
+        is spent -- at which point the last launch really is final."""
+        return self.state is LaunchState.LAUNCHED and self.launches_remaining > 0
 
 
 class LaunchRepository(abc.ABC):
@@ -237,6 +302,8 @@ class SqlAlchemyLaunchRepository(LaunchRepository):
             at if status.state is LaunchState.COUNTING else row.countdown_started_at)
         row.launched_at = status.launched_at
         row.launched_by = status.launched_by
+        row.launch_count = status.launch_count
+        row.max_launches = status.max_launches
         row.updated_by, row.updated_at = admin_id, at
         self.db.commit()
         self.db.refresh(row)
@@ -257,6 +324,8 @@ def _status(row: LaunchStateRow) -> LaunchStatus:
         countdown_ends_at=row.countdown_ends_at,
         launched_at=row.launched_at,
         launched_by=row.launched_by,
+        launch_count=row.launch_count or 0,
+        max_launches=row.max_launches or DEFAULT_MAX_LAUNCHES,
     )
 
 
@@ -296,11 +365,10 @@ class LaunchService:
         countdown length rather than complaining, because the only reason to
         press it twice is to change that number."""
         current = self.status()
-        if current.state is LaunchState.LAUNCHED:
-            raise AlreadyLaunchedError()
+        self._refuse_if_open(current)
         seconds = _validate_seconds(countdown_seconds)
-        return self._write(LaunchStatus(state=LaunchState.ARMED,
-                                        countdown_seconds=seconds), admin_id)
+        return self._write(_carry(current, state=LaunchState.ARMED,
+                                  countdown_seconds=seconds), admin_id)
 
     def start_countdown(self, *, admin_id: int | None = None,
                         countdown_seconds: int | None = None) -> LaunchStatus:
@@ -315,36 +383,33 @@ class LaunchService:
         abort-then-start is for, and that is two deliberate presses.
         """
         current = self.status()
-        if current.state is LaunchState.LAUNCHED:
-            raise AlreadyLaunchedError()
+        self._refuse_if_open(current)
         if current.state is LaunchState.COUNTING:
             return current
         seconds = _validate_seconds(
             current.countdown_seconds if countdown_seconds is None else countdown_seconds)
         now = self._now()
         return self._write(
-            LaunchStatus(state=LaunchState.COUNTING, countdown_seconds=seconds,
-                         countdown_ends_at=now + timedelta(seconds=seconds)), admin_id)
+            _carry(current, state=LaunchState.COUNTING, countdown_seconds=seconds,
+                   countdown_ends_at=now + timedelta(seconds=seconds)), admin_id)
 
     def abort(self, *, admin_id: int | None = None) -> LaunchStatus:
         """Stop the clock, doors still shut. The abort window is the reason
         the countdown exists; this is what it is for."""
         current = self.status()
-        if current.state is LaunchState.LAUNCHED:
-            raise AlreadyLaunchedError()
+        self._refuse_if_open(current)
         if current.state is not LaunchState.COUNTING:
             raise LaunchNotArmedError(current.state, "start a countdown")
-        return self._write(LaunchStatus(state=LaunchState.ARMED,
-                                        countdown_seconds=current.countdown_seconds),
-                           admin_id)
+        return self._write(_carry(current, state=LaunchState.ARMED,
+                                  countdown_ends_at=None), admin_id)
 
     def launch(self, *, admin_id: int | None = None) -> LaunchStatus:
-        """Open the platform to everyone. The irreversible one.
+        """Open the platform to everyone, and spend one of the allowance.
 
-        Idempotent rather than repeatable: a second call returns the first
-        launch unchanged, so a double-click cannot rewrite who launched or
-        when. The audit trail's `launched_by` names the person who actually
-        did it.
+        Idempotent WITHIN the launched state: a second call returns the launch
+        already in effect, so a double-click cannot rewrite who launched or
+        when -- and, just as importantly, cannot burn a second allowance. Only
+        a deliberate reset-then-launch cycle spends another.
         """
         current = self.status()
         if current.state is LaunchState.LAUNCHED:
@@ -355,9 +420,44 @@ class LaunchService:
             raise CountdownRunningError(current.seconds_remaining or 0.0)
         now = self._now()
         return self._write(
-            LaunchStatus(state=LaunchState.LAUNCHED,
-                         countdown_seconds=current.countdown_seconds,
-                         launched_at=now, launched_by=admin_id), admin_id)
+            _carry(current, state=LaunchState.LAUNCHED, countdown_ends_at=None,
+                   launched_at=now, launched_by=admin_id,
+                   launch_count=current.launch_count + 1), admin_id)
+
+    def reset(self, *, admin_id: int | None = None) -> LaunchStatus:
+        """Close a launched platform again, back to an armed gate, so the
+        ceremony can be rehearsed.
+
+        THE ONE DOOR OUT OF `launched`, and it is not free. It is refused once
+        the allowance is spent, which is what keeps the final launch final --
+        see the module docstring. It is also refused from every state that is
+        not `launched`: there is nothing to undo from `open`, and calling this
+        instead of `abort` mid-countdown should fail loudly rather than
+        quietly do something adjacent.
+
+        Lands on ARMED rather than OPEN deliberately. A reset is performed
+        because another rehearsal is coming, and OPEN would leave the doors
+        wide while the team believed they had just closed them -- the exact
+        misunderstanding this feature cannot afford.
+
+        `launched_at` / `launched_by` are kept: they record the most recent
+        launch, and a rehearsal that happened is still a thing that happened.
+        """
+        current = self.status()
+        if current.state is not LaunchState.LAUNCHED:
+            raise LaunchNotArmedError(current.state, "launch the platform")
+        if not current.can_reset:
+            raise LaunchAllowanceSpentError(current.launch_count)
+        return self._write(_carry(current, state=LaunchState.ARMED,
+                                  countdown_ends_at=None), admin_id)
+
+    def _refuse_if_open(self, current: LaunchStatus) -> None:
+        """Arming, counting and aborting all refuse while the platform is
+        open. Reopening the gate over a live platform must be `reset` and
+        nothing else -- one deliberate act, never a side effect of pressing
+        something next to it."""
+        if current.state is LaunchState.LAUNCHED:
+            raise AlreadyLaunchedError(current.launches_remaining)
 
     def _write(self, status: LaunchStatus, admin_id: int | None) -> LaunchStatus:
         written = self.repository.write(status, admin_id=admin_id, at=self._now())
@@ -371,6 +471,24 @@ class LaunchService:
 def _replace(status: LaunchStatus, **changes) -> LaunchStatus:
     from dataclasses import replace
     return replace(status, **changes)
+
+
+def _carry(current: LaunchStatus, **changes) -> LaunchStatus:
+    """Next state, carrying the row's durable facts forward.
+
+    Every transition used to build a fresh LaunchStatus from scratch, which
+    was fine when the only durable field was the countdown length. It is not
+    fine now: `launch_count` and `max_launches` ARE the safety limit, and a
+    transition that quietly rebuilt them as 0 and the default would hand back
+    a full allowance on every arm -- silently turning the budget into the
+    unlimited toggle it exists to prevent. Carrying forward by default means
+    a new durable field is preserved by every transition without each one
+    having to remember it.
+
+    seconds_remaining is dropped on purpose: it is derived per read by
+    status(), never stored.
+    """
+    return _replace(current, seconds_remaining=None, **changes)
 
 
 def _aware(value: datetime) -> datetime:
