@@ -129,7 +129,7 @@ def test_cap_status_reports_remaining(monkeypatch):
     monkeypatch.setattr(settings, "WAITLIST_APPROVAL_CAP", 300)
     assert waitlist.cap_status(StubSession(approved_count=298)) == {
         "approved": 298, "cap": 300, "base_cap": 300, "slots_opened": 0,
-        "remaining": 2, "is_full": False,
+        "remaining": 2, "is_full": False, "direct_signup_capacity": 0,
     }
 
 
@@ -589,6 +589,15 @@ def test_the_cap_is_the_env_value_plus_every_slot_opened(monkeypatch):
     assert status["base_cap"] == 300 and status["slots_opened"] == 25
     # Full a moment ago, not full now -- which is the whole point of the feature.
     assert status["is_full"] is False and status["remaining"] == 25
+
+
+def test_cap_status_carries_the_live_direct_signup_capacity(monkeypatch):
+    """The one place this number comes from -- the queue page (on every load,
+    not only after opening slots), the preview, the open response, and the
+    landing page's own button all read the same value through this field."""
+    monkeypatch.setattr(settings, "WAITLIST_APPROVAL_CAP", 300)
+    status = waitlist.cap_status(StubSession(direct_capacity_after=17))
+    assert status["direct_signup_capacity"] == 17
 
 
 def _queue(*names):

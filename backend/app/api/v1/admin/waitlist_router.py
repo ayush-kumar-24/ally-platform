@@ -23,7 +23,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.admin.rbac import Capability, require
@@ -205,13 +205,9 @@ class SlotPreviewOut(BaseModel):
     pending_total: int
     #: Slots that would go unused because the queue is shorter than the number
     #: asked for. No longer wasted -- they become direct-signup capacity (see
-    #: `direct_signup_capacity_now`), which is what "stay available for
+    #: `cap.direct_signup_capacity`), which is what "stay available for
     #: whoever registers next" means since registration opened at the client.
     unused_slots: int
-    #: The direct-signup door's CURRENT state, before this batch -- read-only,
-    #: shown so the admin is not deciding blind about how many places are
-    #: already open on top of whatever this batch would add.
-    direct_signup_capacity_now: int
     cap: CapOut
 
 
@@ -221,10 +217,10 @@ class SlotsOpenedOut(BaseModel):
     failures: list[SlotFailureOut]
     #: How many of THIS batch went to direct sign-in rather than the queue --
     #: `slots` minus how many the queue actually absorbed (a failed approval
-    #: frees its slot the same way a queue shorter than `slots` does).
+    #: frees its slot the same way a queue shorter than `slots` does). The
+    #: running total afterwards is cap.direct_signup_capacity -- not repeated
+    #: here, so there is exactly one place that number comes from.
     direct_signup_opened: int
-    #: The running total open for direct sign-in after this batch.
-    direct_signup_capacity: int
     cap: CapOut
 
 
@@ -251,21 +247,16 @@ def preview_slots(
             .where(WaitlistRegistration.status == PENDING)
         ).scalar_one()
     )
+    # The preview reports the cap (and direct_signup_capacity within it) as
+    # they stand now, not as they would be. What the admin is deciding is
+    # "these people, in", and a projected ceiling on the same screen reads as
+    # though it had already moved.
     cap = cap_status(db)
-    direct_now = int(
-        db.execute(
-            text("SELECT remaining FROM direct_signup_capacity WHERE id = true")
-        ).scalar_one()
-    )
-    # The preview reports the cap as it stands now, not as it would be. What
-    # the admin is deciding is "these people, in", and a projected ceiling on
-    # the same screen reads as though it had already moved.
     return SlotPreviewOut(
         slots=slots,
         would_approve=[RegistrationOut.model_validate(r) for r in queue],
         pending_total=pending_total,
         unused_slots=max(slots - len(queue), 0),
-        direct_signup_capacity_now=direct_now,
         cap=CapOut(**cap, can_grant_access=supabase_admin.is_configured()),
     )
 
@@ -297,6 +288,5 @@ def open_waitlist_slots(
         approved=[RegistrationOut.model_validate(r) for r in result["approved"]],
         failures=[SlotFailureOut(**f) for f in result["failures"]],
         direct_signup_opened=result["direct_signup_opened"],
-        direct_signup_capacity=result["direct_signup_capacity"],
         cap=CapOut(**result["cap"], can_grant_access=supabase_admin.is_configured()),
     )
