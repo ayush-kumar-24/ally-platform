@@ -17,7 +17,7 @@ Additive and nullable-free via the server default, so the deploy is a no-op for
 anything already running.
 
 Revision ID: b7e3a05c9f12
-Revises: a1f4c9b73e05
+Revises: c8f3a92e1d47
 Create Date: 2026-09-09 12:00:00.000000
 """
 
@@ -25,7 +25,7 @@ from alembic import op
 import sqlalchemy as sa
 
 revision = "b7e3a05c9f12"
-down_revision = "a1f4c9b73e05"
+down_revision = "c8f3a92e1d47"
 branch_labels = None
 depends_on = None
 
