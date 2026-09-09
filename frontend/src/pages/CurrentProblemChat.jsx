@@ -67,8 +67,13 @@ export default function CurrentProblemChat() {
         setQuestion(state.question);
         const opening = state.answered > 0
           ? []
+          // "Now the business itself" belonged to the phase AFTER this one.
+          // This phase captures the problem in the founder's own words; the
+          // business is examined in the diagnosis, as this page's own footer
+          // hint says. The opening was announcing the wrong thing, one step
+          // ahead of the question directly beneath it.
           : [{ role: 'ally', time: clock(),
-              text: "Good — I've got a clear read on you. Now the business itself." }];
+              text: "Good — I've got a clear read on you. Now the problem itself." }];
         // Rebuild what was already said, so a reload doesn't render one lone
         // question in an empty transcript. Real answered_at timestamps, not
         // "now", so the history stays honest.
