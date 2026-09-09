@@ -103,3 +103,49 @@ def send_approval_email(to: str, name: str) -> bool:
     )
 
     return send_email(to, subject, text, html)
+
+
+def send_direct_signup_overflow_email(to: str, name: str) -> bool:
+    """Tell a founder who tried to sign in past capacity that they are queued.
+
+    Only path that reaches this: someone with no waitlist history opened the
+    sign-in page directly (not the "Register" button, which would not have
+    been showing) at the exact moment direct capacity was zero. Their address
+    is already in the queue (see services/provisioning.py, which inserts the
+    row before this is sent) -- this only has to say so, since the page they
+    were just on gave them no confirmation of anything.
+
+    Same never-raises contract as send_approval_email: the queue entry is
+    already committed, so a mail failure here must not become a 500 on
+    someone's sign-in attempt.
+    """
+    first = (name or "").strip().split(" ")[0] or "there"
+    subject = "You're on the founder's list — we'll email you when it's your turn"
+
+    text = (
+        f"Hi {first},\n\n"
+        "You tried to sign in just as our current group filled up, so instead "
+        "of an account you've been added to the founder's list -- the same "
+        "queue everyone else joins from the registration page.\n\n"
+        "You do not need to do anything else. We review it in the order "
+        "people arrive, and you'll get another email the moment your place "
+        "opens, with a link to sign in.\n\n"
+        "— The GoXL Ally team\n"
+    )
+
+    safe_first = escape(first)
+    html = (
+        '<div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;'
+        'font-size:15px;line-height:1.6;color:#16241c;max-width:560px">'
+        f"<p>Hi {safe_first},</p>"
+        "<p>You tried to sign in just as our current group filled up, so "
+        "instead of an account you've been added to the founder's list -- the "
+        "same queue everyone else joins from the registration page.</p>"
+        "<p>You do not need to do anything else. We review it in the order "
+        "people arrive, and you'll get another email the moment your place "
+        "opens, with a link to sign in.</p>"
+        '<p style="color:#556458;margin-top:24px">— The GoXL Ally team</p>'
+        "</div>"
+    )
+
+    return send_email(to, subject, text, html)

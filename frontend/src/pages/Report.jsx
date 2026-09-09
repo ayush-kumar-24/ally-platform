@@ -24,6 +24,7 @@ import { getOverview } from '../services/dashboard';
  * The frame is grown to its content height instead of scrolling internally, so
  * the shell's own scroller keeps working — and with it the read-gate below.
  */
+
 function ReportDocument({ html, onDownload, onShare, frameRef }) {
   const [height, setHeight] = useState(900);
 
@@ -286,6 +287,21 @@ export default function Report() {
           : "That download didn't start. Try again in a moment.",
         7000));
   }, [reportId, showToast]);
+
+  /* NO SHARED-LINKS LIST ON THIS PAGE.
+     Removed 2026-09-09 at Aarya's request: every press of Share minted a NEW
+     link, so a page shared a dozen times showed a dozen identical "Opened no
+     times yet" rows and buried the report under them.
+
+     That root cause is now fixed at the source -- POST /reports/{id}/share
+     returns the live link instead of minting another (reports/routes.py) -- so
+     the rows cannot pile up again.
+
+     WHAT THIS STILL COSTS, so nobody rediscovers it the hard way: the list was
+     the only way a founder could turn a link off. Revoking is implemented end
+     to end and the API is untouched, but nothing in the UI calls it, so a link
+     runs its full 30 days on a document that opens without signing in and
+     contains a personal read of the founder. Support has to revoke it by hand. */
 
   const handleShare = useCallback(() => {
     if (!reportId) return;

@@ -21,7 +21,7 @@ import AuthTransition from '../../components/AuthTransition';
 import { CURRENT_VERSIONS, flushPendingConsent, recordConsent, savePendingConsent } from '../../services/consents';
 import { sendEmailOtp, signInWithPassword, startDevSession, verifyOtpAndSetPassword } from '../../services/auth';
 import { get } from '../../services/api';
-import { DEV_MOCK_CODE, devMockAuth, supabaseConfigured, WAITLIST_URL } from '../../services/supabaseConfig';
+import { DEV_MOCK_CODE, devMockAuth, supabaseConfigured } from '../../services/supabaseConfig';
 import { firstSafe } from '../../utils/looksLikeToken';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -82,9 +82,6 @@ export default function Login() {
   const [notice, setNotice] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [cooldown, setCooldown] = useState(0);
-  // True when the address came in on the invite link (#email=…): this founder
-  // has been approved, so offering them the waitlist would only confuse.
-  const [fromInvite, setFromInvite] = useState(false);
   // Ref, not state: state updates are async, so two submits in the same tick
   // would both see `submitting === false` and both fire. The ref flips
   // synchronously.
@@ -124,7 +121,6 @@ export default function Login() {
       if (!EMAIL_RE.test(candidate)) return;
       setEmail(candidate);
       setStep('email');
-      setFromInvite(true);
     };
     applyEmailFromHash();
     // Also when the link is followed while this page is already open: a
@@ -223,6 +219,17 @@ export default function Login() {
 
     try {
       const founder = await signInWithPassword(email, password);
+      // Their password already works -- Supabase has no notion of Ally's own
+      // capacity -- but there is still no founders row behind it. Same check
+      // handleVerify makes below, for the same reason: a returning visit
+      // while still pending must land on the waitlist screen, not a /profile
+      // fetch against a profile that does not exist.
+      if (founder.waitlisted) {
+        setStep('waitlisted');
+        inFlight.current = false;
+        setSubmitting(false);
+        return;
+      }
       await finishSignIn(founder);
       inFlight.current = false;
     } catch (err) {
@@ -326,6 +333,19 @@ export default function Login() {
 
     try {
       const founder = await verifyOtpAndSetPassword(email, code, newPassword, fullName);
+      // Registration is open at the client, so the code just verified and the
+      // password just chosen both worked -- Supabase created the identity the
+      // moment the code was sent. Whether it comes with a founders row is a
+      // separate, capacity-gated decision made at /auth/session; see
+      // ensure_founder_or_waitlist. Past capacity, there is nothing to sign
+      // into yet, so this stops here instead of calling finishSignIn, which
+      // would fetch a /profile for a founder who does not exist.
+      if (founder.waitlisted) {
+        setStep('waitlisted');
+        inFlight.current = false;
+        setSubmitting(false);
+        return;
+      }
       await finishSignIn(founder);
       inFlight.current = false;
     } catch (err) {
@@ -496,13 +516,26 @@ export default function Login() {
                 Email me a code
               </button>
             </p>
-            {!fromInvite && (
-              <p className="auth-alt">
-                Don&rsquo;t have access yet?{' '}
-                <a className="auth-link-btn" href={WAITLIST_URL}>Join the waitlist</a>
-              </p>
-            )}
           </form>
+        ) : step === 'waitlisted' ? (
+          /* Reached only from a moment-of-truth capacity check at
+             /auth/session -- the code (or password) worked, but there was no
+             room. The address is already queued (ensure_founder_or_waitlist
+             put it there via the ordinary register() path), so there is
+             nothing left for them to do here except come back once mailed. */
+          <div className="auth-form">
+            <p className="auth-notice" role="status">
+              You&rsquo;re in the queue. Sign-ups just filled up for the moment,
+              so instead of an account you&rsquo;ve been added to the
+              founder&rsquo;s list -- the same one everyone registers into.
+              We&rsquo;ll email {email.trim() || 'you'} the moment your place
+              opens, with a link to sign in.
+            </p>
+            <button type="button" className="auth-link-btn"
+                    onClick={() => { setStep('password'); setValidationError(''); setNotice(''); }}>
+              Back to sign in
+            </button>
+          </div>
         ) : step === 'email' ? (
           <form className="auth-form" onSubmit={handleSendCode} noValidate>
             <label className="auth-field">
@@ -528,12 +561,6 @@ export default function Login() {
                 Sign in instead
               </button>
             </p>
-            {!fromInvite && (
-              <p className="auth-alt">
-                Don&rsquo;t have access yet?{' '}
-                <a className="auth-link-btn" href={WAITLIST_URL}>Join the waitlist</a>
-              </p>
-            )}
           </form>
         ) : (
           <form className="auth-form" onSubmit={handleVerify} noValidate>

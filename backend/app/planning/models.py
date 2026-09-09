@@ -155,6 +155,20 @@ class ReminderStatus(str, Enum):
     CANCELLED = "cancelled"
 
 
+class ReminderSource(str, Enum):
+    """Who put this reminder here.
+
+    AUTO rows are derived from the task's own due date and are owned by
+    `PlanningService.sync_task_reminder`, which rewrites and cancels them freely
+    as the task is edited. MANUAL rows came from a founder calling the reminders
+    endpoint and are never touched by that sync -- otherwise editing a task's
+    due date would silently delete a reminder somebody set by hand.
+    """
+
+    AUTO = "auto"
+    MANUAL = "manual"
+
+
 @dataclass(frozen=True)
 class Reminder:
     """A scheduled nudge for a task. Storage + API only -- the actual delivery is a
@@ -171,3 +185,4 @@ class Reminder:
     created_at: datetime
     updated_at: datetime
     sent_at: datetime | None = None
+    source: ReminderSource = ReminderSource.MANUAL

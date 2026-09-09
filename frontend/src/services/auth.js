@@ -29,7 +29,7 @@
 import { clearTokens, post, setTokens } from './api';
 import { setPresenceHint } from './presenceHint';
 import { refreshPlanName } from '../hooks/usePlanName';
-import { DEV_MOCK_CODE, devMockAuth, supabaseConfigured, WAITLIST_URL } from './supabaseConfig';
+import { DEV_MOCK_CODE, devMockAuth, supabaseConfigured } from './supabaseConfig';
 import { isChunkLoadError, loadChunk } from '../utils/loadChunk';
 
 /**
@@ -45,10 +45,6 @@ function mockSession(email) {
   setPresenceHint('in');
   return { id: 'dev-mock-founder', email: email.trim().toLowerCase(), provider: 'mock' };
 }
-
-const WAITLIST_HOST = (() => {
-  try { return new URL(WAITLIST_URL).host; } catch { return WAITLIST_URL; }
-})();
 
 /**
  * The Supabase SDK is ~40 kB gzipped and is needed only while signing in, so it
@@ -111,13 +107,13 @@ function translate(error, fallback) {
   if (raw.includes('rate limit') || raw.includes('too many') || error?.status === 429) {
     return new AuthStepError('Too many attempts. Please wait a minute and try again.');
   }
-  // Sign-ups are closed at the Supabase project level and this client never
-  // asks to create a user (see sendEmailOtp), so this is exactly one case: an
-  // address the waitlist has not approved. Saying so does reveal that the
-  // address is not approved -- accepted, because a founder who typed their
-  // email and got a vague error would have no idea what to do next.
+  // Registration is open, so this no longer means "your address was not
+  // approved" -- it means the project's "Allow new users to sign up" switch is
+  // off and nobody can open an account. That is ours to fix, not something the
+  // founder can act on, so the message says what is true without sending them
+  // somewhere that cannot help them either.
   if (raw.includes('not authorized') || raw.includes('signups not allowed')) {
-    return new AuthStepError(`This email hasn't been approved for Ally yet. Join the waitlist at ${WAITLIST_HOST}.`);
+    return new AuthStepError('New sign-ups are not open at the moment. Please try again shortly.');
   }
   return new AuthStepError(fallback);
 }
@@ -146,24 +142,36 @@ async function exchangeForBackendSession(supabaseToken) {
   } catch {
     // Nothing left to do -- our tokens are already stored.
   }
-  return result.founder; // { id, email, provider }
+  // waitlisted rides alongside { id, email, provider } rather than being a
+  // second return value: every existing caller destructures this as
+  // "founder", and a second value would mean updating each one just to
+  // thread a flag through untouched. Registration is open at the client
+  // (see sendEmailOtp above), so this identity may already exist in Supabase
+  // with no founders row behind it yet -- see provisioning.py's
+  // ensure_founder_or_waitlist. True means: tokens exist, but there is no
+  // profile to sign into; the caller must show the waitlist state instead of
+  // calling finishSignIn, which would otherwise fetch a /profile that is not
+  // there.
+  return { ...result.founder, waitlisted: Boolean(result.waitlisted) };
 }
 
 /**
  * Mail a sign-in code to `email`.
  *
- * `shouldCreateUser: false`: this call never creates an account. Access to
- * Ally is granted by the waitlist -- approving a registration on
- * join.goxlally.ai creates the founder's auth user (server-side, with the
- * service role), and only then will Supabase mail this address a code. An
- * unapproved address gets "Signups not allowed", which translate() turns into
- * a pointer at the waitlist. The flag is client-side courtesy; the actual
- * gate is the project's "Allow new users to sign up" switch being OFF, which
- * no client code can override.
+ * `shouldCreateUser: true`: anybody who can receive mail at an address can now
+ * open an account. Access used to be granted by the waitlist -- an approval on
+ * join.goxlally.ai created the auth user server-side, and only then would
+ * Supabase mail that address a code. Registration is open instead, so the code
+ * is the only thing standing between a stranger and an account, and the plan
+ * gate (PlanRequiredGate) is what decides where they land afterwards.
  *
- * Both journeys still share this one call: a first-time (approved) founder
- * sets their password after verifying, and an existing founder who has
- * forgotten theirs simply gets a code.
+ * This flag alone does not open anything: the project's "Allow new users to
+ * sign up" switch has to be ON as well, and no client code can override it.
+ * With that switch OFF this call still fails with "Signups not allowed".
+ *
+ * Both journeys still share this one call: a first-time founder sets their
+ * password after verifying, and an existing founder who has forgotten theirs
+ * simply gets a code.
  *
  * `emailRedirectTo` is not set: we want a code, not a magic link. The Supabase
  * email template must use {{ .Token }} for this to arrive as digits.
@@ -174,7 +182,7 @@ export async function sendEmailOtp(email) {
   const supabase = await getSupabase();
   const { error } = await supabase.auth.signInWithOtp({
     email: email.trim().toLowerCase(),
-    options: { shouldCreateUser: false },
+    options: { shouldCreateUser: true },
   });
   if (error) throw translate(error, "We couldn't send that code. Please try again.");
 }

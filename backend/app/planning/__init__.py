@@ -30,6 +30,7 @@ from app.planning.models import (
     ProgressStatus,
     Reminder,
     ReminderChannel,
+    ReminderSource,
     ReminderStatus,
     Task,
 )
@@ -41,7 +42,7 @@ __all__ = [
     "Plan", "Goal", "Task", "PlanDetail", "GoalWithTasks",
     "PlanStatus", "ProgressStatus", "Priority", "ItemSource",
     "PlanProgress", "GoalProgress", "ProgressCounts",
-    "Reminder", "ReminderChannel", "ReminderStatus",
+    "Reminder", "ReminderChannel", "ReminderStatus", "ReminderSource",
     # repository / service
     "PlanningRepository", "InMemoryPlanningRepository",
     "PlanningService", "build_planning_service",

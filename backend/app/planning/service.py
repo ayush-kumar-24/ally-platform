@@ -36,6 +36,7 @@ from app.planning.models import (
     ProgressStatus,
     Reminder,
     ReminderChannel,
+    ReminderSource,
     ReminderStatus,
     Task,
 )
@@ -232,7 +233,8 @@ class PlanningService:
 
     def schedule_reminder(self, founder_id: int, task_id: str, *, remind_at: datetime,
                           channel: ReminderChannel = ReminderChannel.IN_APP,
-                          note: str = "") -> Reminder:
+                          note: str = "",
+                          source: ReminderSource = ReminderSource.MANUAL) -> Reminder:
         """Schedule a nudge for a task. Ownership of the task is enforced; the time
         must be in the future. Delivery is a worker's job (see due_reminders)."""
         task = self.get_task(founder_id, task_id)          # ownership + existence
@@ -243,9 +245,66 @@ class PlanningService:
             reminder_id=self._new_id(), task_id=task_id, plan_id=task.plan_id,
             founder_id=founder_id, remind_at=remind_at, channel=channel,
             status=ReminderStatus.SCHEDULED, note=note.strip(),
-            created_at=now, updated_at=now,
+            created_at=now, updated_at=now, source=source,
         )
         return self.repository.add_reminder(reminder)
+
+    # --- auto reminders, derived from a task's due date ------------------
+
+    def _auto_reminders_for(self, founder_id: int, task_id: str) -> tuple[Reminder, ...]:
+        """Still-scheduled AUTO rows for a task. A SENT one is history and a
+        CANCELLED one is a decision -- neither is ours to rewrite."""
+        return tuple(r for r in self.repository.list_reminders(founder_id, task_id=task_id)
+                     if r.source == ReminderSource.AUTO
+                     and r.status == ReminderStatus.SCHEDULED)
+
+    def sync_task_reminder(self, founder_id: int, task: Task, *,
+                           remind_at: datetime | None,
+                           channel: ReminderChannel = ReminderChannel.EMAIL) -> Reminder | None:
+        """Make the task's AUTO reminder match `remind_at`, and return it.
+
+        Idempotent, and safe to call after every save: the common cases are a
+        task with no due date (nothing scheduled, nothing to cancel -- returns
+        None without a write) and a re-save that did not move the date (the row
+        already says the right thing, so it is left alone rather than churning
+        updated_at on every edit).
+
+        MANUAL reminders are never touched. `remind_at` of None -- no due date,
+        or a due date already in the past -- cancels the AUTO row rather than
+        deleting it, so a founder can still see that Ally had scheduled one.
+
+        A task moved to DONE loses its reminder too: being nagged about
+        something you have already finished is the fastest way to learn to
+        ignore the nagging.
+        """
+        if task.status == ProgressStatus.DONE:
+            remind_at = None
+        existing = self._auto_reminders_for(founder_id, task.task_id)
+        now = self._now()
+
+        if remind_at is None or remind_at <= now:
+            for reminder in existing:
+                self.repository.replace_reminder(
+                    replace(reminder, status=ReminderStatus.CANCELLED, updated_at=now))
+            return None
+
+        keep, stale = None, []
+        for reminder in existing:
+            if keep is None and reminder.remind_at == remind_at and reminder.channel == channel:
+                keep = reminder
+            else:
+                stale.append(reminder)
+        # Belt and braces: there should never be more than one, but a duplicate
+        # would otherwise send the same founder the same email twice.
+        for reminder in stale:
+            self.repository.replace_reminder(
+                replace(reminder, status=ReminderStatus.CANCELLED, updated_at=now))
+        if keep is not None:
+            return keep
+
+        return self.schedule_reminder(
+            founder_id, task.task_id, remind_at=remind_at, channel=channel,
+            source=ReminderSource.AUTO)
 
     def list_reminders(self, founder_id: int, *, task_id: str | None = None) -> tuple[Reminder, ...]:
         if task_id is not None:

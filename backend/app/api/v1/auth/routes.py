@@ -64,7 +64,7 @@ from app.schemas.auth import (
     TokenPair,
 )
 from app.services.login_notifications import note_sign_in
-from app.services.provisioning import ensure_founder_with_status
+from app.services.provisioning import ensure_founder_or_waitlist
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -160,7 +160,7 @@ def start_session(
     dev founder) -- dev identities are not provisioned.
     """
     ip = request.client.host if request.client else "0.0.0.0"
-    founder, created = ensure_founder_with_status(identity, db, ip_address=ip)
+    founder, created, waitlisted = ensure_founder_or_waitlist(identity, db, ip_address=ip)
 
     # Record the device and, if we have not seen it before, tell the founder.
     # `login_notifications` was a setting with no consumer -- default on, and no
@@ -187,6 +187,7 @@ def start_session(
         # `founder is not None` reported true for every returning login, and for
         # dev identities that provisioning explicitly never touches.
         provisioned=created,
+        waitlisted=waitlisted,
     )
 
 

@@ -80,6 +80,31 @@ length and address shape client-side so it stays unreachable.
 mashing the button. Ask them to try again in a few minutes; do not retry
 automatically.
 
+## If the form posts server-to-server rather than from the browser
+
+The landing site's actual implementation (`app/lib/ally-waitlist.ts` there)
+does not call this from the visitor's browser -- it forwards from its own
+Next.js API route after recording the registration in its own database. That
+sidesteps CORS entirely (see below), but creates a different problem: every
+forward now arrives from that site's own small pool of serverless egress IPs,
+not the visitor's address, so to the per-IP limiter above it looks like ONE
+caller submitting on behalf of every visitor. Five real people registering
+within the same five minutes -- ordinary launch-day traffic -- costs the
+sixth their registration, and it fails silently on both sides: no CORS error
+in a console nobody is looking at, just a 429 this server-to-server caller has
+to notice itself.
+
+`WAITLIST_FORWARD_SECRET` exists for exactly this. Send it as
+`X-Waitlist-Forward-Secret` and the per-IP bucket is skipped for that request.
+It is not authentication -- this endpoint stays unauthenticated by design, see
+above -- it only tells one known, high-volume, server-to-server caller apart
+from "traffic from an IP" so its volume is not double-limited under a rule
+meant to catch a single scripting visitor. It changes nothing about who may
+call this endpoint or what they may send. Unset on either side (blank here, or
+the caller sends no header) means no exemption -- a slower failure mode under
+a traffic spike, never a broken one, and the caller's OWN per-visitor rate
+limit is what actually has to carry the abuse-prevention job in that case.
+
 ## Before it will work at all: CORS
 
 The browser calls this cross-origin, so `CORS_ORIGINS` on the ECS task

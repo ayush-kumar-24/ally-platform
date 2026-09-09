@@ -8,6 +8,7 @@ marked, and a failed email must not undo a grant.
 """
 
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 import pytest
@@ -44,6 +45,18 @@ class Row:
         self.approval_email_sent_at = None
 
 
+class _ScalarResult:
+    """Just enough of a Result for `.scalar_one()` on the direct-signup-
+    capacity UPDATE ... RETURNING -- a single fixed value, unlike StubSession
+    itself which answers differently per query."""
+
+    def __init__(self, value):
+        self._value = value
+
+    def scalar_one(self):
+        return self._value
+
+
 class StubSession:
     """Enough Session for the service: a scalar for the cap count, a row for
     the SELECT ... FOR UPDATE, and a record of commits/rollbacks.
@@ -54,15 +67,21 @@ class StubSession:
     apart from the ledger.
     """
 
-    def __init__(self, row=None, approved_count=0, slots_opened=0):
+    def __init__(self, row=None, approved_count=0, slots_opened=0, direct_capacity_after=0):
         self._row = row
         self._approved = approved_count
         self._slots_opened = slots_opened
+        # Answered separately from `_approved`/`_slots_opened`: open_slots()'s
+        # direct-signup-capacity UPDATE ... RETURNING is its own query, sniffed
+        # by text so it does not collide with cap_status()'s scalar_one().
+        self._direct_capacity_after = direct_capacity_after
         self.added = []
         self.commits = 0
         self.rollbacks = 0
 
-    def execute(self, *_a, **_k):
+    def execute(self, stmt=None, *_a, **_k):
+        if stmt is not None and "direct_signup_capacity" in str(stmt):
+            return _ScalarResult(self._direct_capacity_after)
         return self
 
     def scalar_one(self):
@@ -366,6 +385,143 @@ def test_an_unknown_field_is_rejected_rather_than_silently_dropped(public_client
     assert r.status_code == 422
 
 
+# --- GET /capacity: what the landing page's button reads -------------------
+
+
+@pytest.fixture
+def capacity_client(monkeypatch):
+    """Same shape as public_client, but with a db that actually answers
+    SELECT remaining -- the fixture above stubs db to None, which this
+    route would crash against since (unlike POST) it genuinely reads."""
+    from fastapi.testclient import TestClient
+
+    from app.api.v1.waitlist import public as public_mod
+    from app.db.session import get_db
+
+    state = {"remaining": 0}
+
+    class _DB:
+        def execute(self, *_a, **_k):
+            return SimpleNamespace(scalar_one=lambda: state["remaining"])
+
+    app.dependency_overrides[get_db] = lambda: _DB()
+    yield TestClient(app), state
+    app.dependency_overrides.clear()
+
+
+def test_capacity_reports_closed_at_zero(capacity_client):
+    client, state = capacity_client
+    state["remaining"] = 0
+    body = client.get("/api/v1/waitlist/capacity").json()
+    assert body == {"open": False, "remaining": 0}
+
+
+def test_capacity_reports_open_with_places_left(capacity_client):
+    client, state = capacity_client
+    state["remaining"] = 47
+    body = client.get("/api/v1/waitlist/capacity").json()
+    assert body == {"open": True, "remaining": 47}
+
+
+# --- the forwarding exemption ----------------------------------------------
+#
+# Exercised against the real dependency function, not through public_client
+# (whose fixture overrides waitlist_rate_limit outright) -- what is under test
+# here is the choice this function makes between the per-IP limiter and
+# skipping it, so the fixture that removes that choice cannot be used.
+
+
+class _FakeRequestForLimiter:
+    """Just enough of a Request for _client_ip: a `client.host` and headers."""
+
+    def __init__(self, ip: str):
+        self.client = type("C", (), {"host": ip})()
+        self.headers: dict[str, str] = {}
+
+
+def test_forward_secret_unset_never_exempts_even_with_a_header(monkeypatch):
+    """Fail closed, like INTERNAL_JOBS_SECRET: forgetting to configure the
+    secret must never silently turn into 'anyone with any header skips the
+    limit' -- it must mean the limit always applies."""
+    from app.api.v1.waitlist import public as public_mod
+    from app.core.config import settings
+    from app.middleware import rate_limit as rl
+
+    monkeypatch.setattr(settings, "WAITLIST_FORWARD_SECRET", "")
+    monkeypatch.setattr(rl, "_limiter", rl._SlidingWindowLimiter())
+    ip = "203.0.113.5"
+
+    for _ in range(5):
+        public_mod.waitlist_rate_limit(
+            _FakeRequestForLimiter(ip), x_waitlist_forward_secret="whatever"
+        )
+    with pytest.raises(Exception) as exc_info:
+        public_mod.waitlist_rate_limit(
+            _FakeRequestForLimiter(ip), x_waitlist_forward_secret="whatever"
+        )
+    assert exc_info.value.status_code == 429
+
+
+def test_the_matching_secret_skips_the_per_ip_limit(monkeypatch):
+    """The one case this exists for: the landing site's own IP pool must be
+    able to forward more than five registrations in five minutes."""
+    from app.api.v1.waitlist import public as public_mod
+    from app.core.config import settings
+    from app.middleware import rate_limit as rl
+
+    monkeypatch.setattr(settings, "WAITLIST_FORWARD_SECRET", "correct-horse-battery")
+    monkeypatch.setattr(rl, "_limiter", rl._SlidingWindowLimiter())
+    ip = "203.0.113.9"
+
+    # Six is past the plain per-IP limit of five -- proves the bucket was
+    # never touched, not just that it has not filled up yet.
+    for _ in range(6):
+        public_mod.waitlist_rate_limit(
+            _FakeRequestForLimiter(ip), x_waitlist_forward_secret="correct-horse-battery"
+        )
+
+
+def test_a_wrong_secret_does_not_exempt_and_still_counts_against_the_limit(monkeypatch):
+    """A guessed or stale header must fall through to the ordinary limit, not
+    open a side door -- and the attempt itself is not free."""
+    from app.api.v1.waitlist import public as public_mod
+    from app.core.config import settings
+    from app.middleware import rate_limit as rl
+
+    monkeypatch.setattr(settings, "WAITLIST_FORWARD_SECRET", "correct-horse-battery")
+    monkeypatch.setattr(rl, "_limiter", rl._SlidingWindowLimiter())
+    ip = "203.0.113.7"
+
+    for _ in range(5):
+        public_mod.waitlist_rate_limit(
+            _FakeRequestForLimiter(ip), x_waitlist_forward_secret="guessed-wrong"
+        )
+    with pytest.raises(Exception) as exc_info:
+        public_mod.waitlist_rate_limit(
+            _FakeRequestForLimiter(ip), x_waitlist_forward_secret="guessed-wrong"
+        )
+    assert exc_info.value.status_code == 429
+
+
+def test_no_header_at_all_falls_through_to_the_ordinary_limit(monkeypatch):
+    """The overwhelming majority of callers -- real visitors hitting this
+    endpoint directly -- send no such header. Confirms the plain path is
+    unchanged, not merely that the exempted path works."""
+    from app.api.v1.waitlist import public as public_mod
+    from app.core.config import settings
+    from app.middleware import rate_limit as rl
+
+    monkeypatch.setattr(settings, "WAITLIST_FORWARD_SECRET", "correct-horse-battery")
+    monkeypatch.setattr(rl, "_limiter", rl._SlidingWindowLimiter())
+    ip = "203.0.113.11"
+
+    for _ in range(5):
+        public_mod.waitlist_rate_limit(_FakeRequestForLimiter(ip), x_waitlist_forward_secret=None)
+    with pytest.raises(Exception) as exc_info:
+        public_mod.waitlist_rate_limit(_FakeRequestForLimiter(ip), x_waitlist_forward_secret=None)
+    assert exc_info.value.status_code == 429
+
+
 # --- the approval email ---------------------------------------------------
 
 
@@ -537,6 +693,29 @@ def test_an_opening_bigger_than_the_queue_keeps_the_unused_places(monkeypatch):
     assert len(out["approved"]) == 2 and out["slots"] == 10
     opening = db.added[0]
     assert opening.slots_opened == 10 and opening.approved_count == 2
+    # The eight unused places are not lost -- they become direct-signup
+    # capacity, which is exactly what "stay open for whoever registers next"
+    # means once registration itself is open at the client.
+    assert out["direct_signup_opened"] == 8
+
+
+def test_a_queue_that_fully_absorbs_the_batch_opens_no_direct_capacity(monkeypatch):
+    """The ordinary case, and worth pinning separately: when the queue is at
+    least as long as the batch, every slot goes to the people who already
+    waited, and none is left over for someone who has not registered at all."""
+    monkeypatch.setattr(settings, "WAITLIST_APPROVAL_CAP", 300)
+    db = StubSession()
+    queue = _queue("Asha", "Bala", "Chetan")
+
+    def fake_approve(_db, registration_id, **_k):
+        row = next(r for r in queue if r.registration_id == registration_id)
+        row.status = APPROVED
+        return row
+
+    out = _open(db, monkeypatch, queue, fake_approve, slots=3)
+
+    assert len(out["approved"]) == 3
+    assert out["direct_signup_opened"] == 0
 
 
 def test_opening_zero_or_fewer_slots_is_refused(monkeypatch):

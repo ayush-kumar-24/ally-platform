@@ -79,6 +79,27 @@ class Settings(BaseSettings):
     # refused with the count in the message.
     WAITLIST_APPROVAL_CAP: int = 300
 
+    # Exempts ONE known caller -- the landing site's server-to-server forward
+    # (app/lib/ally-waitlist.ts over there) -- from the public waitlist
+    # endpoint's per-IP rate limit.
+    #
+    # That endpoint is unauthenticated by design (see app/api/v1/waitlist/
+    # public.py), so this is not an auth token; it changes nothing about who
+    # may call it. What it fixes: the landing site forwards EVERY registration
+    # from one small pool of serverless egress IPs, which is indistinguishable
+    # from a single caller hammering the endpoint to a per-IP limiter -- so the
+    # 6th founder to register within five minutes was rate-limited into a
+    # dropped registration, silently, on both sides. A real per-visitor abuse
+    # limit has to key on the visitor, which only the landing site can see;
+    # this lets that site enforce its OWN limit (already does, see its
+    # RATE_LIMIT/RATE_WINDOW_MS) instead of being throttled a second time by
+    # an IP the limit was never meant to describe.
+    #
+    # Empty means the exemption is never available -- same fail-closed rule as
+    # INTERNAL_JOBS_SECRET below: a header nobody can produce, not "open by
+    # default" if this is forgotten.
+    WAITLIST_FORWARD_SECRET: str = ""
+
     # Shared secret for internal-only endpoints with no founder in the request
     # at all (the deletion-sweep trigger an external scheduler calls). Same
     # fail-closed rule: empty means refuse, never "open by default".
@@ -574,6 +595,31 @@ class Settings(BaseSettings):
     # a task is a prompt, not a meeting, and hour-long blocks for every to-do
     # would make a founder's calendar unreadable.
     CALENDAR_EVENT_DURATION_MINUTES: int = 30
+
+    # --- Task reminders by email ---
+    # Minutes before a task is due that the reminder email is sent. Mirrors
+    # CALENDAR_REMINDER_MINUTES_BEFORE deliberately: a founder with a calendar
+    # connected and one without should be nudged at the same moment, or the
+    # same task nags twice at two different times.
+    TASK_REMINDER_MINUTES_BEFORE: int = 30
+    # A reminder whose time passed while the worker was not running is stale.
+    # Sending "due in 30 minutes" for something that was due yesterday is worse
+    # than sending nothing, so anything older than this is dropped (marked sent,
+    # not retried forever). Sized to survive a weekend of downtime being
+    # noticed on Monday without a burst of archaeology landing in an inbox.
+    TASK_REMINDER_MAX_AGE_MINUTES: int = 180
+
+    # --- Notification emails ---
+    # Per founder, per run. A safety valve, not a policy: the dedup keys already
+    # decide how often each notification may recur, so a founder hitting this
+    # means something upstream is generating far more than expected -- and the
+    # cap turns "a founder wakes to sixty emails" into "the logs show a capped
+    # run". Anything over the cap is not lost; it goes out on the next run.
+    NOTIFICATION_EMAIL_MAX_PER_RUN: int = 10
+    # A notification that sat unsent this long is not worth an email. Same
+    # reasoning as TASK_REMINDER_MAX_AGE_MINUTES: after an outage, "here is
+    # everything you missed" is how a founder learns to filter us.
+    NOTIFICATION_EMAIL_MAX_AGE_HOURS: int = 24
 
     # --- Observability ---
     SENTRY_DSN: str = ""

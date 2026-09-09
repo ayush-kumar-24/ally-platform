@@ -38,6 +38,18 @@ class SessionResponse(TokenPair):
             "founders that had existed for days."
         ),
     )
+    waitlisted: bool = Field(
+        default=False,
+        description=(
+            "True when this identity has no founders row AND is the specific "
+            "reason: it signed in directly (not through an admin's waitlist "
+            "approval) at a moment direct capacity was zero. The address is "
+            "already in the waitlist queue -- see services/provisioning.py's "
+            "ensure_founder_or_waitlist. Tokens are still issued (same as any "
+            "unprovisioned identity), but the frontend must not treat this as "
+            "a normal first login: there is no profile to onboard into yet."
+        ),
+    )
 
 
 class RefreshRequest(BaseModel):

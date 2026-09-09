@@ -16,6 +16,7 @@ from app.planning.models import (
     ProgressStatus,
     Reminder,
     ReminderChannel,
+    ReminderSource,
     ReminderStatus,
     Task,
 )
@@ -27,7 +28,7 @@ def _reminder(row: ReminderRow) -> Reminder:
                     founder_id=row.founder_id, remind_at=row.remind_at,
                     channel=ReminderChannel(row.channel), status=ReminderStatus(row.status),
                     note=row.note, created_at=row.created_at, updated_at=row.updated_at,
-                    sent_at=row.sent_at)
+                    sent_at=row.sent_at, source=ReminderSource(row.source))
 
 
 def _plan(row: PlanRow) -> Plan:
@@ -160,6 +161,7 @@ class SqlAlchemyPlanningRepository(PlanningRepository):
             reminder_id=reminder.reminder_id, task_id=reminder.task_id, plan_id=reminder.plan_id,
             founder_id=reminder.founder_id, remind_at=reminder.remind_at,
             channel=reminder.channel.value, status=reminder.status.value, note=reminder.note,
+            source=reminder.source.value,
             created_at=reminder.created_at, updated_at=reminder.updated_at, sent_at=reminder.sent_at))
         self.db.commit()
         return reminder
@@ -174,6 +176,7 @@ class SqlAlchemyPlanningRepository(PlanningRepository):
             return self.add_reminder(reminder)
         row.status, row.note, row.remind_at = reminder.status.value, reminder.note, reminder.remind_at
         row.channel, row.updated_at, row.sent_at = reminder.channel.value, reminder.updated_at, reminder.sent_at
+        row.source = reminder.source.value
         self.db.commit()
         return reminder
 
