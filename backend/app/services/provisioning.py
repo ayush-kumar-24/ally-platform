@@ -271,7 +271,43 @@ def ensure_founder_or_waitlist(
             "Direct-signup provisioning crashed; falling back to waitlist",
             extra={"founder_id": str(user_uuid)}, exc_info=exc,
         )
+        # NOT a bare retry. The failure this handler was written for turned out
+        # to be the queue insert itself -- RLS was enabled on
+        # waitlist_registrations with no policy behind it, so register() could
+        # never write a row. Falling back by calling the same insert a second
+        # time reproduced the same error inside the handler and escaped as the
+        # very 500 the fallback existed to prevent ("During handling of the
+        # above exception, another exception occurred"). The queue is a
+        # courtesy; the sign-in outcome must not depend on it succeeding.
+        return _try_queue_for_waitlist(db, identity, ip_address)
+
+
+def _try_queue_for_waitlist(
+    db: Session, identity: AuthUser, ip_address: str
+) -> tuple[Founder | None, bool, bool]:
+    """_queue_for_waitlist, but a failure to queue is not a failure to sign in.
+
+    Used only from the crash handler above, where one insert has already gone
+    wrong: if the reason it went wrong also stops the queue insert -- as it did
+    in the outage this was written for -- then letting that second failure
+    propagate turns a recoverable problem into a dead end at the login screen.
+
+    The caller still gets `waitlisted=True`. That is honest about what happened
+    to them (they are not provisioned, and they are not getting in right now)
+    without claiming the queue row exists. Whether it does is recorded here,
+    loudly, rather than inferred by the founder from a blank error box.
+    """
+    try:
         return _queue_for_waitlist(db, identity, ip_address)
+    except Exception as exc:  # noqa: BLE001 -- last line before a 500
+        db.rollback()
+        logger.error(
+            "Waitlist queue insert failed too; founder is neither provisioned "
+            "nor queued",
+            extra={"path": identity.email or "", "founder_id": str(identity.id)},
+            exc_info=exc,
+        )
+        return None, False, True
 
 
 def _queue_for_waitlist(
