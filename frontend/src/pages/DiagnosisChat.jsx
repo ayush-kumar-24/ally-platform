@@ -87,7 +87,10 @@ export default function DiagnosisChat() {
           const opening = session.resumed
             ? []
             : [{ role: 'ally', time: clock(),
-                text: "Hi, I'm Ally. Let's get started — I'll ask about 30 questions, adapting as we go, so answer honestly and we'll get to your report as fast as your answers let us." }];
+                // No question count. The engine picks adaptively and stops when
+                // it has enough, so any number here is a promise the diagnosis
+                // does not make -- and one a founder would hold it to.
+                text: "Hi, I'm Ally. Let's get started — answer honestly and we'll get to your report as fast as your answers let us." }];
           setMessages([...opening, ...past, { role: 'ally', text: session.question.text, time: clock() }]);
         }
       })
