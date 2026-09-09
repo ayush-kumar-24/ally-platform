@@ -55,7 +55,7 @@ export function refreshPlanName() {
   if (subscribers.size > 0) fetchPlan();
 }
 
-export function usePlanName() {
+function useServerPlan() {
   const [plan, setPlan] = useState(() => (cached === undefined ? null : cached));
 
   useEffect(() => {
@@ -67,5 +67,23 @@ export function usePlanName() {
     return () => { subscribers.delete(setPlan); };
   }, []);
 
-  return plan?.plan_name || null;
+  return plan;
+}
+
+export function usePlanName() {
+  return useServerPlan()?.plan_name || null;
+}
+
+/**
+ * The tier the SERVER says the founder is on, or null until it answers.
+ *
+ * `user.plan` on the AppContext profile answers the same question, but it is
+ * hydrated at sign-in and not refreshed when a plan changes -- so the sidebar
+ * button kept offering "Upgrade plan" to a founder who had just paid, on the
+ * very page that took their money. This comes from the same GET /plans/me the
+ * badge beside it already trusts, and the same refreshPlanName() updates both,
+ * so the two can no longer disagree about which plan someone is on.
+ */
+export function usePlanTier() {
+  return useServerPlan()?.tier || null;
 }

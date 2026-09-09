@@ -5,7 +5,7 @@ import HelpWidget from '../components/HelpWidget';
 import { useApp } from '../context/AppContext';
 import { checkProfileComplete } from '../services/onboarding';
 import { planLabel as planLabelFor } from '../services/plans';
-import { usePlanName } from '../hooks/usePlanName';
+import { usePlanName, usePlanTier } from '../hooks/usePlanName';
 import { useState, useRef, useEffect } from 'react';
 import ProductTour from '../components/ProductTour';
 import { TITLES as ROUTE_TITLES } from '../components/RouteTitle';
@@ -209,8 +209,14 @@ export default function PlatformLayout() {
      it mapped `starter` to "Ally Starter" as well, so the Rs 499 plan and the
      Rs 199 plan rendered identically. planLabel() reads the catalog's own
      name, from the server where it has arrived. */
-  const planTier = (user?.plan || 'free').toLowerCase();
   const serverPlanName = usePlanName();
+  const serverTier = usePlanTier();
+  /* The server's tier wins over the profile's. `user.plan` is hydrated at
+     sign-in and never refreshed when a plan changes, so a founder who had just
+     upgraded was still offered "Upgrade plan" -- on the very page that had
+     taken their money. The profile stays as the fallback for the moment before
+     GET /plans/me answers, which is what keeps the button from flickering. */
+  const planTier = (serverTier || user?.plan || 'free').toLowerCase();
   const planLabel = planLabelFor(planTier, serverPlanName);
   const onTopTier = planTier === 'pro';
   const nav = useNavigate();

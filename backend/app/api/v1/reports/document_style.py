@@ -177,6 +177,10 @@ STYLE = """
    the runners-up. Weighting them equally read as three findings of equal standing. */
 .rp .cause:first-child{border-color:var(--signal);
   box-shadow:0 1px 2px -1px rgba(6,20,13,.14),0 8px 20px -12px rgba(6,20,13,.24);}
+@media screen{
+  .rp .cause{transition:background-color .2s ease,border-color .2s ease;}
+  .rp .cause:hover{background:rgba(16,185,129,.08);border-color:rgba(16,185,129,.4);}
+}
 .rp .cause-cat{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
   color:var(--ink-faint);}
 .rp .cause-name{font-family:var(--display);font-size:19px;font-weight:600;
@@ -265,7 +269,13 @@ STYLE = """
    out through the border instead of wrapping inside it. */
 .rp .fact{border-radius:12px;padding:18px 20px;background:var(--paper-card);
   border:1px solid var(--paper-line);display:flex;flex-direction:column;gap:7px;
-  min-width:0;}
+  min-width:0;transition:background-color .2s ease,border-color .2s ease;}
+/* Screen only -- print takes neither, and the PDF is unchanged. Same emerald
+   tint the app shell uses for a hovered surface, so a card reads the same way
+   inside the report as the cards around it do outside. */
+@media screen{
+  .rp .fact:hover{background:rgba(16,185,129,.08);border-color:rgba(16,185,129,.4);}
+}
 .rp .fact-k{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
   color:var(--signal);overflow-wrap:anywhere;}
 .rp .fact-v{font-size:14.5px;line-height:1.55;color:var(--ink-soft);
