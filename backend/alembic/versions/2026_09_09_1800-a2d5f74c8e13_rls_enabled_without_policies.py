@@ -131,7 +131,22 @@ def upgrade() -> None:
         # The real boundary. Restated rather than assumed: these tables hold
         # registration emails and the switch that opens the platform, and none
         # of it is a legitimate direct PostgREST read.
-        op.execute(f'REVOKE ALL ON public."{table}" FROM anon, authenticated')
+        #
+        # Guarded on the roles existing, and this is the whole lesson of the
+        # bug being fixed here. `anon` and `authenticated` are PostgREST's
+        # roles: they exist in a Supabase-managed database and do not exist in
+        # a plain RDS one. A bare REVOKE naming a role Postgres has never heard
+        # of is a hard error that aborts the migration -- which is exactly the
+        # shape of mistake that caused the outage in the first place (a
+        # migration assuming `ally_app` exists), just failing loudly here
+        # instead of silently. Anything environment-dependent gets checked.
+        for role in ("anon", "authenticated"):
+            op.execute(
+                "DO $$ BEGIN "
+                f"IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '{role}') THEN "
+                f'REVOKE ALL ON public."{table}" FROM {role}; '
+                "END IF; END $$;"
+            )
 
 
 def downgrade() -> None:
