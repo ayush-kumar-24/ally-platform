@@ -289,19 +289,19 @@ export default function Report() {
   }, [reportId, showToast]);
 
   /* NO SHARED-LINKS LIST ON THIS PAGE.
-     Removed 2026-09-09 at Aarya's request: every press of Share mints a NEW
-     link, so a page that had been shared a dozen times showed a dozen identical
-     "Opened no times yet" rows and buried the report under them.
+     Removed 2026-09-09 at Aarya's request: every press of Share minted a NEW
+     link, so a page shared a dozen times showed a dozen identical "Opened no
+     times yet" rows and buried the report under them.
 
-     WHAT THIS COSTS, so nobody rediscovers it the hard way. The list was the
-     only way a founder could turn a link off. Revoking is still implemented end
-     to end -- revokeShareLink in services/report.js and the API behind it are
-     untouched -- but nothing in the UI calls it, so a link now runs its full 30
-     days on a document that opens without signing in and contains a personal
-     read of the founder. Support has to revoke it by hand.
+     That root cause is now fixed at the source -- POST /reports/{id}/share
+     returns the live link instead of minting another (reports/routes.py) -- so
+     the rows cannot pile up again.
 
-     If it comes back, it should not come back as this list. The real problem is
-     that Share always creates a new link instead of reusing the live one. */
+     WHAT THIS STILL COSTS, so nobody rediscovers it the hard way: the list was
+     the only way a founder could turn a link off. Revoking is implemented end
+     to end and the API is untouched, but nothing in the UI calls it, so a link
+     runs its full 30 days on a document that opens without signing in and
+     contains a personal read of the founder. Support has to revoke it by hand. */
 
   const handleShare = useCallback(() => {
     if (!reportId) return;

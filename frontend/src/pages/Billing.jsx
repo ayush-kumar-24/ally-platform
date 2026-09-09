@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { MOCK_PLANS } from '../data/mockData';
 import { getProfile } from '../services/profile';
 import { getCatalog, getMyPlan } from '../services/plans';
+import { refreshPlanName } from '../hooks/usePlanName';
 import { confirmPayment, openCheckout, startCheckout, validateCoupon, waitForPlanActivation } from '../services/payments';
 
 /* ─── Static data ─── */
@@ -939,6 +940,11 @@ export default function Billing() {
   /* The backend itself now reports the new tier. */
   const handleActivated = (entitlements) => {
     if (entitlements?.tier) setCurrentPlan(entitlements.tier);
+    // The shell's plan badge reads a module-level cache filled once per
+    // session. It is not remounted by activating a plan, so without this a
+    // founder who has just paid keeps seeing the plan they left behind --
+    // on every screen -- until they reload the page.
+    refreshPlanName();
     setView('success');
   };
 

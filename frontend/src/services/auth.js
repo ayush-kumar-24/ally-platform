@@ -28,6 +28,7 @@
 
 import { clearTokens, post, setTokens } from './api';
 import { setPresenceHint } from './presenceHint';
+import { refreshPlanName } from '../hooks/usePlanName';
 import { DEV_MOCK_CODE, devMockAuth, supabaseConfigured } from './supabaseConfig';
 import { isChunkLoadError, loadChunk } from '../utils/loadChunk';
 
@@ -297,6 +298,10 @@ export async function logout() {
     clearTokens();
     setPresenceHint('out');
     localStorage.removeItem('ally_founder');
+    // Module state, not storage, so clearTokens above does not touch it: without
+    // this the next founder to sign in in the same tab wears the previous one's
+    // plan badge until a full page reload.
+    refreshPlanName();
     if (supabaseConfigured && !devMockAuth) {
       try { await (await getSupabase()).auth.signOut(); } catch { /* nothing left to do */ }
     }

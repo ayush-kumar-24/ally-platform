@@ -584,6 +584,14 @@ def _roadmap(steps: Sequence[str], stats: Sequence[tuple[str, str]]) -> str:
 
 # --- generic narrative rendering ---------------------------------------------
 
+#: Keys INSIDE a fact dict that name an engine row rather than tell the founder
+#: anything. `code` is the archetype's catalog id, and it was printed to the
+#: founder as "Code: ARCH-005 · Name: Systems Architect" -- the same mistake
+#: _root_cause already refuses to make with INT-9: a founder has no use for it,
+#: and showing one is the report admitting it was written for the engine.
+_INTERNAL_NESTED_FACT_KEYS = frozenset({"code"})
+
+
 def _fact_value(value: Any) -> str:
     """One fact's value as readable HTML.
 
@@ -595,7 +603,8 @@ def _fact_value(value: Any) -> str:
     if isinstance(value, Mapping):
         parts = [f"{e(str(k).replace('_', ' ').title())}: {e(v)}"
                  for k, v in value.items()
-                 if not isinstance(v, (list, dict)) and v not in (None, "", True, False)]
+                 if str(k).lower() not in _INTERNAL_NESTED_FACT_KEYS
+                 and not isinstance(v, (list, dict)) and v not in (None, "", True, False)]
         return " &middot; ".join(parts)
     if isinstance(value, (list, tuple)):
         items = [e(v) for v in value if isinstance(v, (str, int, float)) and str(v).strip()]
