@@ -131,12 +131,25 @@ export default function AdminLaunch() {
   const copy = COPY[state.state] ?? { label: state.state, line: '' };
   const remaining = state.seconds_remaining;
 
+  /* Whether the API actually told us about the allowance.
+     Deploys are not atomic: this page ships from S3 in seconds while the API
+     rolls out over ~15 minutes, so a build that knows about launch counters
+     WILL run against an API that does not. Reading those absent fields as
+     numbers made `launches_remaining > 0` false and `can_reset` false, and
+     the page then said "none left, the platform is open for good" and "this
+     one is final" -- both untrue, on the one screen whose entire job is to
+     tell the truth about whether the platform is open.
+     Absent is not zero. When the fields are missing we say nothing about the
+     allowance rather than inventing the most alarming reading of it. */
+  const allowanceKnown = Number.isFinite(state.max_launches) && state.max_launches > 0;
+
   return (
     <section>
       <h1 className="adm-h1">Launch</h1>
       <p className="adm-sub">
-        The one-time moment Ally opens to everyone. Arm the gate, run the
-        countdown in front of the room, then launch.
+        The moment Ally opens to everyone. Arm the gate, run the countdown in
+        front of the room, then launch — rehearsals included, up to the
+        allowance.
       </p>
 
       <Flash flash={flash} />
@@ -161,12 +174,22 @@ export default function AdminLaunch() {
         {/* The budget, stated plainly wherever the team is standing. "2 of 3
             used" is the number somebody needs before deciding whether this
             run-through is a rehearsal or the real thing. */}
-        <div className="adm-dim" style={{ marginTop: 6 }}>
-          {state.launch_count} of {state.max_launches} launches used
-          {state.launches_remaining > 0
-            ? ` · ${state.launches_remaining} left`
-            : ' · none left, the platform is open for good'}
-        </div>
+        {allowanceKnown && (
+          <div className="adm-dim" style={{ marginTop: 6 }}>
+            {state.launch_count} of {state.max_launches} launches used
+            {state.launches_remaining > 0
+              ? ` · ${state.launches_remaining} left`
+              : ' · none left, the platform is open for good'}
+          </div>
+        )}
+
+        {!allowanceKnown && (
+          <div className="adm-dim" style={{ marginTop: 6 }}>
+            The API has not reported the launch allowance yet — it is probably
+            mid-deploy. Reload in a minute; nothing here is safe to press until
+            this line goes away.
+          </div>
+        )}
 
         {!allowed && (
           <div className="adm-dim" style={{ marginTop: 12 }}>
@@ -175,7 +198,7 @@ export default function AdminLaunch() {
           </div>
         )}
 
-        {allowed && launched && state.can_reset && (
+        {allowed && launched && allowanceKnown && state.can_reset && (
           <div className="lc-actions">
             <button
               className="adm-btn"
@@ -188,14 +211,14 @@ export default function AdminLaunch() {
           </div>
         )}
 
-        {allowed && launched && !state.can_reset && (
+        {allowed && launched && allowanceKnown && !state.can_reset && (
           <div className="adm-dim" style={{ marginTop: 12 }}>
             The launch allowance is spent, so this one is final — the platform
             cannot be closed from here.
           </div>
         )}
 
-        {allowed && !launched && (
+        {allowed && !launched && allowanceKnown && (
           <div className="lc-actions">
             {!counting && (
               <>
