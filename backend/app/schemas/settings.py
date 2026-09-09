@@ -57,6 +57,18 @@ class NotificationPreferencesRead(BaseModel):
 
     in_app_all: bool = True
     email_reminders: bool = True
+    # Task reminders get their OWN flag rather than reusing `email_reminders`.
+    # That one is read only by discovery_notifications, gating the reminder for
+    # a call the founder paid for -- which is why its switch is labelled "Call
+    # reminders by email". Sharing it would mean silencing task nags also
+    # silences the reminder for a paid call: the exact conflation that was
+    # fixed when the switch was relabelled.
+    email_task_reminders: bool = True
+    # The master switch for the notification fan-out: every bell item that is
+    # emailed is gated on this. Separate from the two above because they are
+    # different promises -- a founder may want the reminder for a call they paid
+    # for while wanting nothing else in their inbox.
+    email_notifications: bool = True
     email_report_ready: bool = True
     reduced_motion: bool = False
 
@@ -68,6 +80,8 @@ class NotificationPreferencesUpdate(BaseModel):
 
     in_app_all: bool | None = None
     email_reminders: bool | None = None
+    email_task_reminders: bool | None = None
+    email_notifications: bool | None = None
     email_report_ready: bool | None = None
     reduced_motion: bool | None = None
     # private_mode removed -- see NotificationPreferencesRead. `extra="forbid"`

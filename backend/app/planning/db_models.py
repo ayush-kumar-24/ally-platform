@@ -79,6 +79,9 @@ class ReminderRow(Base):
     remind_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
     channel: Mapped[str] = mapped_column(String(20), nullable=False, server_default="in_app")
     status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="scheduled", index=True)
+    # server_default "manual": every row that existed before auto-reminders was
+    # created by hand through the API, and must keep being left alone by the sync.
+    source: Mapped[str] = mapped_column(String(20), nullable=False, server_default="manual")
     note: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())

@@ -39,6 +39,7 @@ from sqlalchemy.orm import Session
 from app.calendar_sync import hooks
 from app.db.session import get_db
 from app.planning.service import PlanningService
+from app.services import task_reminders
 
 router = APIRouter(
     prefix="/planning",
@@ -153,6 +154,10 @@ def add_task(goal_id: str, payload: TaskCreate, founder_id: int = Depends(get_cu
         founder_id, goal_id, title=payload.title, priority=payload.priority,
         due_date=payload.due_date, due_time=payload.due_time)
     task = hooks.after_task_saved(db, service, task, timezone_name=payload.timezone)
+    # Schedules the email nudge, or clears it when the task has no date. Same
+    # rule as the calendar hook above: saved first, notified second, and the
+    # task survives either one failing.
+    task_reminders.sync_for_task(service, task, timezone_name=payload.timezone)
     return TaskResponse.from_domain(task)
 
 
@@ -175,6 +180,9 @@ def update_task(task_id: str, payload: TaskUpdate, founder_id: int = Depends(get
     # Updates the existing event rather than adding a second one -- the task
     # carries the event id it created last time.
     task = hooks.after_task_saved(db, service, task, timezone_name=payload.timezone)
+    # Moves the reminder with the date, and cancels it when the task is ticked
+    # off or the date is cleared.
+    task_reminders.sync_for_task(service, task, timezone_name=payload.timezone)
     return TaskResponse.from_domain(task)
 
 
