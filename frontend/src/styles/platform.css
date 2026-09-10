@@ -1538,6 +1538,7 @@ body.auth-active .wc-live{background:var(--auth-primary)}
 body.auth-active .wc-device{color:var(--auth-muted)}
 body.auth-active .wc-device-ic{color:var(--auth-primary-strong)}
 body.auth-active .wc-device b{color:var(--auth-heading)}
+body.auth-active .wc-device kbd{color:var(--auth-primary-strong);background:rgba(16,185,129,.1);border-color:rgba(12,122,84,.26)}
 /* SESSION / RESUME gate */
 body.auth-active .rz-panel{background:var(--auth-surface);box-shadow:var(--auth-shadow)}
 body.auth-active .rz-panel::before{opacity:.4}

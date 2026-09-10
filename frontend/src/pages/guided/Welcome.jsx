@@ -11,6 +11,13 @@ export default function Welcome() {
   // Same fabricated-identity bug as everywhere else this session, but on the
   // very first screen a founder sees their own name on: with no name yet, this
   // greeted every founder as "Ayush" signed in as "ayush@brightloom.in".
+  /* F11 is the Windows/Linux full-screen key; macOS uses Ctrl-Cmd-F, so naming
+     F11 to everyone would send Mac founders after a key that does nothing. */
+  const fullscreenKey =
+    typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/i.test(navigator.userAgent)
+      ? '\u2303\u2318F'
+      : 'F11';
+
   const firstName = user?.name ? user.name.split(' ')[0] : 'there';
   const email = user?.email || '';
 
@@ -175,7 +182,11 @@ export default function Welcome() {
                 <path d="M8.5 21h7M12 17v4" />
               </svg>
             </span>
-            <span>Use a <b>desktop</b> for the best experience — more room to think, and nothing gets cut off.</span>
+            <span>
+              Use a <b>desktop</b> for the best experience — more room to think, and nothing gets cut off.
+              {/* No keyboard on a phone, so the shortcut is desktop-only advice. */}
+              <span className="wc-device-key"> Press <kbd>{fullscreenKey}</kbd> for full screen.</span>
+            </span>
           </p>
         </div>
 
