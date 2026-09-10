@@ -73,7 +73,20 @@ export default function Welcome() {
             <span className="wc-line" aria-hidden="true">
               <i className="wc-spark"></i>
             </span>
-            <div className="wc-node">
+
+            <div className="wc-node" style={{ '--wd': '0s', '--wl': '0s' }}>
+              <span className="wc-ic">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
+                  <path d="M9 4H7a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2" />
+                  <rect x="9" y="2.5" width="6" height="3.5" rx="1.2" />
+                  <path d="M9 13.2l2 2 4-4.4" />
+                </svg>
+              </span>
+              <span className="wc-k">Onboarding</span>
+              <span className="wc-t">A few basics so I know who I'm talking to.</span>
+            </div>
+
+            <div className="wc-node" style={{ '--wd': '.13s', '--wl': '.7s' }}>
               <span className="wc-ic">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
                   <circle cx="12" cy="8" r="4" />
@@ -83,8 +96,8 @@ export default function Welcome() {
               <span className="wc-k">Founder DNA</span>
               <span className="wc-t">How you think — not just the company.</span>
             </div>
-            
-            <div className="wc-node">
+
+            <div className="wc-node" style={{ '--wd': '.27s', '--wl': '1.4s' }}>
               <span className="wc-ic">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
                   <path d="M3 3v18h18" />
@@ -96,8 +109,20 @@ export default function Welcome() {
               <span className="wc-k">Business DNA</span>
               <span className="wc-t">Then how your business really runs.</span>
             </div>
-            
-            <div className="wc-node">
+
+            {/* Founder DNA and Business DNA are not two separate quizzes -- they are
+                one adaptive read, each question shaped by the answer before it. The
+                brace says that visually instead of asking the founder to infer it. */}
+            <div className="wc-group">
+              <span className="wc-group-brace" aria-hidden="true"></span>
+              <span className="wc-group-k">Adaptive Diagnosis</span>
+              {/* Once the grid collapses the brace stops pointing at anything, so
+                  the pairing has to be said in words instead of drawn. */}
+              <span className="wc-group-scope">Founder DNA + Business DNA</span>
+              <span className="wc-group-t">One adaptive read — every question follows your last answer.</span>
+            </div>
+
+            <div className="wc-node" style={{ '--wd': '.41s', '--wl': '2.1s' }}>
               <span className="wc-ic">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
                   <circle cx="12" cy="12" r="9" />
@@ -108,8 +133,8 @@ export default function Welcome() {
               <span className="wc-k">Root Cause</span>
               <span className="wc-t">I connect it to the one real cause.</span>
             </div>
-            
-            <div className="wc-node">
+
+            <div className="wc-node" style={{ '--wd': '.55s', '--wl': '2.8s' }}>
               <span className="wc-ic">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
                   <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -121,14 +146,37 @@ export default function Welcome() {
               <span className="wc-k">Clarity Report</span>
               <span className="wc-t">Your founder report — yours to keep.</span>
             </div>
+
+            <div className="wc-node wc-node-live" style={{ '--wd': '.69s', '--wl': '3.5s' }}>
+              <span className="wc-ic">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
+                  <path d="M21 11.5a8.4 8.4 0 0 1-9 8.4A8.4 8.4 0 0 1 3.6 15L3 20.5l5.5-.6" />
+                  <path d="M3 11.5a8.4 8.4 0 0 1 9-8.4 8.4 8.4 0 0 1 8.4 4.9" />
+                  <circle cx="8.5" cy="11.5" r="1" />
+                  <circle cx="12" cy="11.5" r="1" />
+                  <circle cx="15.5" cy="11.5" r="1" />
+                </svg>
+              </span>
+              <span className="wc-k">Daily Support<i className="wc-live" aria-hidden="true"></i></span>
+              <span className="wc-t">Active every day after the report.</span>
+            </div>
           </div>
 
           <div className="wc-daily">
             <span className="wc-daily-ic">✦</span>
             <span>
-              Then I stay — to brainstorm, plan and decide with you, <b>every day</b>.
+              The report is the start, not the end — I stay on to brainstorm, plan and decide with you, <b>every day</b>.
             </span>
           </div>
+          <p className="wc-device">
+            <span className="wc-device-ic" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
+                <rect x="2.5" y="4" width="19" height="13" rx="2" />
+                <path d="M8.5 21h7M12 17v4" />
+              </svg>
+            </span>
+            <span>Use a <b>desktop</b> for the best experience — more room to think, and nothing gets cut off.</span>
+          </p>
         </div>
 
         <div className="j-bar on" id="jBar" style={{ position: 'fixed', bottom: 0, left: 0, width: '100%', zIndex: 100 }}>
