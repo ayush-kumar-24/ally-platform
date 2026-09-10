@@ -59,6 +59,12 @@ def _clean_str_list(v: list[str] | None) -> list[str] | None:
     return out
 
 
+# founders.linkedin_url is String(300). Bounding at the column's own width
+# means an over-long link is a clean 422 here instead of a DataError at the
+# INSERT -- the same reasoning as `industry`'s max_length=30 below.
+_SOCIAL_URL_MAX_LENGTH = 300
+
+
 def _validate_social_url(v: str | None) -> str | None:
     """The onboarding "social handle" field (Instagram or LinkedIn, whichever
     the founder wants to share) -- stored in the existing linkedin_url column,
@@ -67,6 +73,19 @@ def _validate_social_url(v: str | None) -> str | None:
     actually types here, so it is accepted and normalised to https:// rather
     than rejected -- validating strictly against what people type, not just
     what a browser's address bar would accept.
+
+    An empty handle is a legitimate answer -- the field is optional -- and
+    normalises to None. That is exactly why the length check lives HERE and
+    not as `Field(max_length=...)` alongside this validator in the annotation:
+    a constraint declared there runs on this function's RESULT, and applying
+    max_length to None raises TypeError, which is not a ValidationError, so it
+    escapes Pydantic entirely and surfaces as a 500. That is not theoretical --
+    it is what PATCH /profile did for every founder who saved their profile
+    with the social field blank, which the profile form sends as "" (see
+    FounderProfile.jsx's handleSave). Inside the function is also the only
+    place that can measure the string that will actually be STORED: the
+    https:// prefix above is added after the client's value is bounded, and it
+    is the prefixed string that has to fit founders.linkedin_url.
     """
     if v is None:
         return None
@@ -88,6 +107,11 @@ def _validate_social_url(v: str | None) -> str | None:
         or "." not in parsed.netloc
     ):
         raise ValueError("Enter a real URL, e.g. instagram.com/yourname or linkedin.com/in/yourname.")
+    if len(s) > _SOCIAL_URL_MAX_LENGTH:
+        raise ValueError(
+            f"That link is too long -- paste just the profile URL "
+            f"(up to {_SOCIAL_URL_MAX_LENGTH} characters)."
+        )
     return s
 
 
@@ -113,7 +137,7 @@ Feelings = Annotated[list[Feeling], AfterValidator(_dedupe), Field(max_length=8)
 # does not), so this now just aliases CleanStrList. current_challenges uses
 # CleanStrList directly rather than this name going forward.
 
-SocialUrl = Annotated[str, AfterValidator(_validate_social_url), Field(max_length=500)]
+SocialUrl = Annotated[str, AfterValidator(_validate_social_url)]
 
 
 class RealityCheck(BaseModel):
