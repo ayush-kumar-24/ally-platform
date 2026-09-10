@@ -173,6 +173,14 @@ body.guided .view-wrap{overflow:visible}
    trackpad/wheel gesture and had nothing to scroll, so two-finger scroll did
    nothing instead of chaining up to the window. Same fix as .view-wrap above. */
 body.guided .view.active{overflow:visible;flex:none}
+/* ...except the profile chat, which is a fixed frame with a transcript
+   scrolling inside it rather than a page that grows. `flex:none` sized it to
+   its content, so it overflowed the shell -- upward, taking the nav and the
+   knowledge panel off the top of the screen -- and .chat-scroll, never
+   shorter than what it held, never became a scroller at all. Restores the
+   flex sizing .view.active carries in the platform shell; the viewport cap
+   that makes it mean something is on .guided-shell:has(.chat-view). */
+body.guided .view.chat-view.active{flex:1 1 auto;min-height:0;overflow:hidden}
 body.guided .j-stage{overflow:visible;padding-top:140px}
 body.guided .think,body.guided .call-view{padding-top:64px}
 body.guided .j-stage::before{display:none}          /* single ambient source = #guidedBg */
