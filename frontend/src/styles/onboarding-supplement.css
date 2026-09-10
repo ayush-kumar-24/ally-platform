@@ -904,7 +904,6 @@ body.guided #v-welcome.j-stage{display:flex;align-items:center;justify-content:c
   body.sb-collapsed .nav-item .step-n,
   body.sb-collapsed .nav-item .badge-dot,
   body.sb-collapsed .sb-group,
-  body.sb-collapsed .nav-upsell,
   body.sb-collapsed .sb-user .u-name,
   body.sb-collapsed .sb-user .u-stage,
   body.sb-collapsed .sb-user .u-cog{display:none}

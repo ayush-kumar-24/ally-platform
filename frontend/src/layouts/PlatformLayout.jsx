@@ -15,6 +15,7 @@ import { loadVision } from '../services/vision';
 import { firstSafe } from '../utils/looksLikeToken';
 import {
   IconDashboard,
+  IconCreditCard,
   IconMessageSquare,
   IconUser,
   IconTrendingUp,
@@ -184,6 +185,13 @@ const NAV_GROUPS = [
     label: 'ACCOUNT',
     items: [
       { path: '/app/profile', tip: 'Profile', icon: IconSettings, label: 'Profile', badge: null },
+      /* Plan management belongs with the other account rows. It used to be a
+         card of its own pinned above the founder's name -- the heaviest object
+         in the sidebar, sitting in the spot the eye lands on last, saying
+         exactly what the header pill already says and going exactly where the
+         header pill already goes. planBadge asks for the live "Upgrade" chip,
+         since NAV_GROUPS is a module constant and cannot read the tier. */
+      { path: '/app/billing', tip: 'Plan & billing', icon: IconCreditCard, label: 'Plan & billing', badge: null, planBadge: true },
       /* Not a page -- it starts the tour where the founder already is. The tour
          spotlights the sidebar itself, so sending them somewhere first would
          move the very thing it is about to point at. `action` is what marks an
@@ -359,7 +367,9 @@ export default function PlatformLayout() {
               {group.hideLabel
                 ? <div className="sb-gap" aria-hidden="true" />
                 : <div className="sb-group">{group.label}</div>}
-              {group.items.map(({ path, action, tip, icon: Icon, label, badge, needsReport, needsProfile, comingSoon, lockTip }) => {
+              {group.items.map(({ path, action, tip, icon: Icon, label, badge, planBadge, needsReport, needsProfile, comingSoon, lockTip }) => {
+                /* Only a founder who can actually upgrade is told to. */
+                const itemBadge = planBadge ? (onTopTier ? null : 'Upgrade') : badge;
                 const reportLocked = needsReport && !hasReport;
                 const profileLocked = needsProfile && !profileComplete;
                 const locked = reportLocked || profileLocked || comingSoon;
@@ -390,28 +400,13 @@ export default function PlatformLayout() {
                     <Icon className="ic" />
                     <span className="lbl">{path === '/app/vision' ? visionLabel(hasVision) : label}</span>
                     {locked && <IconLock className="nav-lock" />}
-                    {!locked && badge && <span className="nav-badge">{badge}</span>}
+                    {!locked && itemBadge && <span className="nav-badge">{itemBadge}</span>}
                   </button>
                 );
               })}
             </div>
           ))}
         </nav>
-
-        <div className="nav-upsell">
-          {/* The leading "*" was a stand-in for a dropped icon and was read out
-              as "asterisk" before the plan name on every page. */}
-          {/* No tagline: the old one promised "deeper diagnosis, unlimited chat
-              and Founder MRI", none of which any plan sells. The plan name and
-              the button say what this card is. */}
-          <div className="nu-t"><span>{planLabel}</span></div>
-          <button className="nu-btn" onClick={() => handleNav('/app/billing')}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M12 19V5M5 12l7-7 7 7" />
-            </svg>
-            {onTopTier ? 'Manage plan' : 'Upgrade plan'}
-          </button>
-        </div>
 
         <div className="sb-foot">
           <button className="sb-user" onClick={() => handleNav('/app/profile')}>
