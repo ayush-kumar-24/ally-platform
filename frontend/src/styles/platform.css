@@ -11,6 +11,41 @@
    part that matters: a bare 1fr still refuses to go below min-content. */
 .platform{display:grid;grid-template-columns:var(--sb,248px) 1fr;grid-template-rows:minmax(0,1fr);height:100vh;height:100svh;max-height:100svh;overflow:hidden;transition:grid-template-columns .28s cubic-bezier(.2,.7,.2,1)}
 
+/* The guided onboarding shell -- .platform's counterpart for the signed-out
+   flow. Was an inline style on GuidedLayout's root div; named here so the
+   chat-step rule below has something to hang off.
+
+   overflow-x is `clip`, not `hidden`, and the difference is load-bearing:
+   when one axis is hidden and the other is visible, CSS computes the visible
+   one to `auto`, which made this div a scroll container exactly as tall as
+   its own content -- a scroller with no range that swallowed the wheel
+   instead of letting it reach the window. `clip` clips without forcing the
+   other axis. (Horizontal overflow is held at the root anyway, by
+   html,body{overflow-x:hidden} further down.) */
+.guided-shell{position:relative;min-height:100vh;display:flex;flex-direction:column;overflow-x:clip}
+
+/* The guided flow scrolls the window: every step is a tall, cinematic
+   .j-stage, and onboarding-supplement.css deliberately hands scrolling back
+   to the document (see `body.guided .view-wrap` there).
+
+   The profile step is the one exception. It is a chat -- a fixed frame with a
+   transcript scrolling inside it -- and it was being laid out like the rest,
+   so the shell grew with the conversation and the window became the scroller.
+   Three things broke at once, and they read as three separate bugs: the
+   founder had to drag the browser's scrollbar to follow their own
+   conversation; the nav and the knowledge panel beside it, as tall as the
+   document, scrolled off the top of the screen; and .chat-scroll never
+   overflowed, so the transcript could not follow its newest message --
+   scrollHeight === clientHeight leaves scrollTop nowhere to go, which is why
+   nothing auto-scrolled no matter what the JS asked for.
+
+   :has() so the cap applies only on the step that needs it: no other guided
+   page is bounded, and browsers without :has() simply keep today's behaviour.
+   Same svh pair as .platform above, for the same reason -- on mobile 100vh is
+   the tall-toolbar measurement and overshoots the visible area. */
+.guided-shell:has(.chat-view){height:100vh;height:100svh;max-height:100svh;overflow:hidden}
+
+
 /* ---------------- sidebar ---------------- */
 /* min-height:0 for the same reason .sb-nav needs it, one layer up: .sidebar is
    a GRID item, and a grid item's automatic minimum size floors it at its own
