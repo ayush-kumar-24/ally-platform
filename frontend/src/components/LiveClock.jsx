@@ -52,8 +52,16 @@ export default function LiveClock({ className = '' }) {
       {/* aria-live is off on purpose: announcing a new time every second would
           make the page unusable with a screen reader. The <time> element still
           exposes the value to anything that asks for it. */}
+      {/* 12-hour, always. The locale was left to the browser ([] as the locale
+          argument), so the same clock read "1:22:56 AM" on one machine and
+          "01:22:56" on a founder whose OS is set to a 24-hour region -- the
+          product decides how it tells the time, not whatever region the
+          laptop was set up in. dateTime above still carries the unambiguous
+          ISO value for anything reading the page programmatically. */}
       <time dateTime={now.toISOString()}>
-        {now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' })}
+        {now.toLocaleTimeString('en-US', {
+          hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true,
+        })}
       </time>
     </div>
   );
