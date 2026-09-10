@@ -4,6 +4,7 @@ import { useApp } from '../../context/AppContext';
 import { getProfile, saveOnboardingProfile, toGuidedAnswers } from '../../services/profile';
 import { readable } from '../../utils/profileDisplay';
 import { useVoiceInput } from '../../hooks/useVoiceInput';
+import useAutoScroll from '../../hooks/useAutoScroll';
 import VoiceBars from '../../components/VoiceBars';
 import {
   QUESTIONS as ALL_QUESTIONS,
@@ -78,7 +79,11 @@ export default function ProfileBuild() {
   const [search, setSearch] = useState('');
   const [yesNo, setYesNo] = useState({});      // 'yesno' type: {itemKey: true|false}
 
-  const scrollRef = useRef(null);
+  /* Follows the transcript as it grows. The answer control mounting under the
+     last question, and each bubble's entry animation, both add height after
+     the message itself is committed -- the old one-shot jump ran before that
+     and left the newest question sitting below the fold. */
+  const scrollRef = useAutoScroll([messages, typing, activeQ]);
   const taRef = useRef(null);
   const searchRef = useRef(null);
   const qiRef = useRef(0);
@@ -116,11 +121,6 @@ export default function ProfileBuild() {
   }, []);
   const replyRef = useRef(createReplyPicker());
 
-  const scrollToBottom = () => {
-    const s = scrollRef.current;
-    if (s) s.scrollTop = s.scrollHeight;
-  };
-  useEffect(scrollToBottom, [messages, typing, activeQ]);
 
   /* Focus the answer control as each question appears. Someone answering
      thirteen questions in a row should never have to click into the box first.

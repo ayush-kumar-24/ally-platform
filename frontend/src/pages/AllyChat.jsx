@@ -27,6 +27,7 @@ import { post, ApiError } from '../services/api';
 // "Good evening" -- the exact bug greetingNow's docstring was written to end.
 import { greetingNow } from '../utils/helpers';
 import { useVoiceInput } from '../hooks/useVoiceInput';
+import useAutoScroll from '../hooks/useAutoScroll';
 import VoiceBars from '../components/VoiceBars';
 import Markdown from '../components/Markdown';
 import { usePlan as usePlanGateEntitlements } from '../components/PlanGate';
@@ -167,7 +168,19 @@ export default function AllyChat() {
   const [menuFor, setMenuFor] = useState(null);
   const [renamingId, setRenamingId] = useState(null);
   const [renameDraft, setRenameDraft] = useState('');
-  const scrollRef = useRef(null);
+  /* Set just before older messages are prepended. Without it, growing the
+     transcript upwards trips the follow-the-bottom behaviour and throws the
+     founder back to the newest message -- the precise opposite of what
+     "load older" was clicked for. Holds the scrollHeight from before the
+     prepend, so the view can be pinned to the same message afterwards. */
+  const pinScrollRef = useRef(null);
+
+  /* Follows the transcript as it grows -- a reply's markdown laying out, an
+     attachment thumbnail decoding and the composer growing all add height
+     after the message lands, and the one-shot jump this replaced could not
+     see any of it. Honours pinScrollRef above when older messages are
+     prepended. */
+  const scrollRef = useAutoScroll([messages, typing], { holdRef: pinScrollRef });
   const taRef = useRef(null);
   const fileInputRef = useRef(null);
   // { text, requestId } of the last send() that failed, or null. Live-
@@ -179,26 +192,6 @@ export default function AllyChat() {
   // same turn rather than running the LLM call a second time. Only reused
   // when the resent text is unchanged; an edited retry is a new message.
   const lastFailedRef = useRef(null);
-
-  /* Set just before older messages are prepended. Without it, growing the
-     transcript upwards trips the scroll-to-bottom below and throws the founder
-     back to the newest message -- the precise opposite of what "load older"
-     was clicked for. Holds the scrollHeight from before the prepend, so the
-     view can be pinned to the same message afterwards. */
-  const pinScrollRef = useRef(null);
-
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    if (pinScrollRef.current !== null) {
-      // Keep the founder looking at the same line: everything added went in
-      // above them, so their position moved down by exactly that much.
-      el.scrollTop = el.scrollHeight - pinScrollRef.current;
-      pinScrollRef.current = null;
-      return;
-    }
-    el.scrollTop = el.scrollHeight;
-  }, [messages, typing]);
 
   // A page like Your Vision can hand off here with a message drafted from
   // the founder's own words (see VisionPage's talkAboutTerritory). It only
