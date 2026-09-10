@@ -353,6 +353,17 @@ body.gate .j-bar{display:none!important}
 /* ==== "How the next 20 minutes work" â€” immersive interactive journey ==== */
 #v-expectation.active{overflow:hidden;justify-content:center}
 /* ==================== WELCOME Â· confidence / journey preview ==================== */
+/* The journey sits centred between the two fixed chrome elements -- the step
+   header above and the CTA bar below -- rather than hanging from the top with
+   the slack collecting underneath it. The padding is what reserves room for
+   that chrome; flex centring then balances whatever is left. Scoped to
+   #v-welcome so no other guided step's layout changes. */
+/* min-height:100% resolves to auto here -- the ancestor chain has no definite
+   height -- so the flex box was only ever as tall as its content and had
+   nothing to centre within. 100vh is exact: this stage starts at the top of
+   the document with no offset above it. */
+body.guided #v-welcome.j-stage{display:flex;align-items:center;justify-content:center;min-height:100vh;padding-top:96px;padding-bottom:88px}
+#v-welcome .j-inner{width:100%}
 .wc-inner{position:relative;z-index:2;text-align:center}
 .wc-title{margin:12px auto 7px}
 .wc-sub{max-width:38ch;margin:0 auto}
@@ -419,7 +430,7 @@ body.gate .j-bar{display:none!important}
    not to need this.
    --------------------------------------------------------------------------- */
 @media(max-height:940px){
-  body.guided #v-welcome.j-stage{padding-top:104px;padding-bottom:26px}
+  body.guided #v-welcome.j-stage{padding-top:88px;padding-bottom:80px}
   #v-welcome .j-avatar{width:46px;height:46px;margin-bottom:13px}
   #v-welcome .j-eye{margin-bottom:11px}
   #v-welcome .wc-title{margin-top:6px;margin-bottom:6px}
@@ -438,7 +449,7 @@ body.gate .j-bar{display:none!important}
    not for these. Here the title and the stage icons come down a size too --
    the alternative is the founder scrolling to find the CTA. */
 @media(max-height:800px){
-  body.guided #v-welcome.j-stage{padding-top:72px;padding-bottom:20px}
+  body.guided #v-welcome.j-stage{padding-top:76px;padding-bottom:72px}
   #v-welcome .j-avatar{width:36px;height:36px;margin-bottom:8px}
   #v-welcome .j-eye{margin-bottom:7px}
   #v-welcome .wc-title{font-size:clamp(26px,3.1vw,34px);margin-top:4px;margin-bottom:4px}
