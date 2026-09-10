@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import {
@@ -10,6 +10,7 @@ import {
 import LiveKnowledgeGraph from '../components/LiveKnowledgeGraph';
 import { useVoiceInput } from '../hooks/useVoiceInput';
 import useAutoGrow from '../hooks/useAutoGrow';
+import useAutoScroll from '../hooks/useAutoScroll';
 
 /* The bridge between Founder DNA and the business diagnosis: the founder
    says, in their own words, what they think is wrong — then answers three
@@ -44,11 +45,10 @@ export default function CurrentProblemChat() {
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
   const [failed, setFailed] = useState(false);
-  const scrollRef = useRef(null);
-
-  useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [messages, busy]);
+  /* Follows the transcript as it grows -- including the height that lands
+     after the message does (a growing composer, a font swap, the entry
+     animation), which the old one-shot jump could not see. */
+  const scrollRef = useAutoScroll([messages, busy]);
 
   useEffect(() => {
     let cancelled = false;

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import {
@@ -12,6 +12,7 @@ import {
 import LiveKnowledgeGraph from '../components/LiveKnowledgeGraph';
 import { useVoiceInput } from '../hooks/useVoiceInput';
 import useAutoGrow from '../hooks/useAutoGrow';
+import useAutoScroll from '../hooks/useAutoScroll';
 import VoiceBars from '../components/VoiceBars';
 import Markdown from '../components/Markdown';
 
@@ -54,11 +55,10 @@ export default function FounderDnaChat() {
   // Toggles the completion screen back to the transcript. See the button
   // below for why this replaced a link to the Founder DNA page.
   const [reviewing, setReviewing] = useState(false);
-  const scrollRef = useRef(null);
-
-  useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [messages, busy]);
+  /* Follows the transcript as it grows -- including the height that lands
+     after the message does (a growing composer, a font swap, the entry
+     animation), which the old one-shot jump could not see. */
+  const scrollRef = useAutoScroll([messages, busy]);
 
   useEffect(() => {
     let cancelled = false;

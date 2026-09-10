@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { getCurrentSession, normalise, resumeOrStart, submitAnswer } from '../services/diagnosis';
@@ -6,6 +6,7 @@ import { explainLimit, getMyPlan } from '../services/plans';
 import { useVoiceInput } from '../hooks/useVoiceInput';
 import VoiceBars from '../components/VoiceBars';
 import useAutoGrow from '../hooks/useAutoGrow';
+import useAutoScroll from '../hooks/useAutoScroll';
 import Markdown from '../components/Markdown';
 import FeedbackPrompt from '../components/FeedbackPrompt';
 import LiveKnowledgeGraph from '../components/LiveKnowledgeGraph';
@@ -38,11 +39,10 @@ export default function DiagnosisChat() {
   // entirely -- there is no partial state to resume into, so nothing below it
   // renders at all. See the resumeOrStart().catch below.
   const [blocked, setBlocked] = useState(null);
-  const scrollRef = useRef(null);
-
-  useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [messages, busy]);
+  /* Follows the transcript as it grows -- including the height that lands
+     after the message does (a growing composer, a font swap, the entry
+     animation), which the old one-shot jump could not see. */
+  const scrollRef = useAutoScroll([messages, busy]);
 
   // Resume if a session is in progress, otherwise start one. The server owns the
   // progress, which is what makes closing the tab mid-diagnosis safe.

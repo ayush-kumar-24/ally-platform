@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
+import useAutoScroll from '../hooks/useAutoScroll';
 import { searchFaqs } from '../data/faqs';
 import { ApiError, getAccessToken } from '../services/api';
 import { FEEDBACK, submitFeedback } from '../services/feedback';
@@ -85,7 +86,9 @@ export default function HelpWidget() {
   const buttonRef = useRef(null);
   const inputRef = useRef(null);
   const composeRef = useRef(null);
-  const feedRef = useRef(null);
+  // Keeps the newest message in view, including as the panel is opened,
+  // expanded to full screen, or a reply lays out after it arrives.
+  const feedRef = useAutoScroll([messages, thinking, open, full]);
   const replyTimer = useRef(null);
 
   const suggestions = useMemo(
@@ -184,12 +187,6 @@ export default function HelpWidget() {
     });
     return () => cancelAnimationFrame(id);
   }, [open, composing, full]);
-
-  // Keep the newest message in view.
-  useEffect(() => {
-    const feed = feedRef.current;
-    if (feed) feed.scrollTop = feed.scrollHeight;
-  }, [messages, thinking, open, full]);
 
   // Navigating away closes it; without this the panel stayed open over the
   // page it had just sent the founder to.
