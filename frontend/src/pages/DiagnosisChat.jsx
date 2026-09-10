@@ -313,7 +313,7 @@ export default function DiagnosisChat() {
               {/* Was the literal string 'RV' -- the mock founder's initials,
                   shown to every founder next to their own answers. */}
               <div className={`m-av ${m.role}`} aria-hidden="true">
-                {m.role === 'ally' ? '🤝' : initials}
+                {m.role === 'ally' ? <img src="/ally-logo-mark-on-dark.png" alt="" /> : initials}
               </div>
               <div>
                 <div className="bubble">
@@ -333,7 +333,7 @@ export default function DiagnosisChat() {
               language across both chat surfaces, rather than a new animation. */}
           {busy && (
             <div className="typing" aria-live="polite" aria-label="Ally is thinking">
-              <div className="m-av ally" aria-hidden="true">🤝</div>
+              <div className="m-av ally" aria-hidden="true"><img src="/ally-logo-mark-on-dark.png" alt="" /></div>
               <div className="bubble">
                 <div className="td">
                   <span /><span /><span />

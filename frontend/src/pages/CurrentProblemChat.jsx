@@ -224,7 +224,7 @@ export default function CurrentProblemChat() {
           {messages.map((m, i) => (
             <div key={i} className={`msg ${m.role}`}>
               <div className={`m-av ${m.role}`} aria-hidden="true">
-                {m.role === 'ally' ? '🤝' : initials}
+                {m.role === 'ally' ? <img src="/ally-logo-mark-on-dark.png" alt="" /> : initials}
               </div>
               <div>
                 {/* The one answer quoted verbatim in the report. Saying so
@@ -242,7 +242,7 @@ export default function CurrentProblemChat() {
           ))}
           {busy && (
             <div className="typing" aria-live="polite" aria-label="Ally is thinking">
-              <div className="m-av ally" aria-hidden="true">🤝</div>
+              <div className="m-av ally" aria-hidden="true"><img src="/ally-logo-mark-on-dark.png" alt="" /></div>
               <div className="bubble"><div className="td"><span /><span /><span /></div></div>
             </div>
           )}

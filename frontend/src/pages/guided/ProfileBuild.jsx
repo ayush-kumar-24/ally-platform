@@ -879,13 +879,17 @@ export default function ProfileBuild() {
           <div className="chat-scroll" ref={scrollRef} role="log" aria-live="polite" aria-label="Your conversation with Ally">
             {messages.map((m, i) => (
               <div key={i} className={`msg ${m.who === 'me' ? 'me' : 'ally'}`}>
-                <span className={`m-av ${m.who === 'me' ? 'me' : 'ally'}`}>{m.who === 'me' ? initial : 'A'}</span>
+                {/* Ally is the product's mark, not a monogram -- "A" read as
+                    another person's initial next to the founder's own. */}
+                <span className={`m-av ${m.who === 'me' ? 'me' : 'ally'}`}>
+                  {m.who === 'me' ? initial : <img src="/ally-logo-mark-on-dark.png" alt="" />}
+                </span>
                 <div><div className="bubble">{m.text}</div></div>
               </div>
             ))}
             {typing && (
               <div className="typing">
-                <span className="m-av ally">A</span>
+                <span className="m-av ally"><img src="/ally-logo-mark-on-dark.png" alt="" /></span>
                 <div className="bubble"><span className="td"><span /><span /><span /></span></div>
               </div>
             )}
