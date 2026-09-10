@@ -25,15 +25,31 @@ import { getMyPlan } from '../services/plans';
  * unable to read a plan is our problem, and locking someone out of a product
  * they have paid for is far worse than briefly showing a page they cannot use.
  */
+/**
+ * Paths this gate never redirects away from.
+ *
+ * Billing is here because it is the destination -- redirecting it would loop.
+ *
+ * Profile and Help are here because a plan decides what a founder can DO with
+ * Ally, not whether they can reach their own account. Bouncing them to billing
+ * left someone with no plan unable to see the details we hold about them, edit
+ * them, use the Privacy Center to export or delete their data, or reach support
+ * -- including to ask a question ABOUT buying a plan. A paywall in front of
+ * "contact us" answers a founder's question with the thing they were trying to
+ * ask about.
+ *
+ * Anything added here must be genuinely free of plan-gated content, since the
+ * gate is the only thing standing between it and a founder with no entitlements.
+ */
+const ALWAYS_REACHABLE = ['/app/billing', '/app/profile', '/app/help'];
+
 export default function PlanRequiredGate() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const [checked, setChecked] = useState(false);
 
   useEffect(() => {
-    // Billing is where we are sending them, and the plans page has to stay
-    // reachable to a founder with no plan or the redirect is a loop.
-    if (pathname.startsWith('/app/billing')) return undefined;
+    if (ALWAYS_REACHABLE.some(p => pathname.startsWith(p))) return undefined;
 
     let cancelled = false;
     getMyPlan()
