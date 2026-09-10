@@ -11,9 +11,12 @@ from fastapi.testclient import TestClient
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from pydantic import ValidationError
+
 from app.core.auth import AuthUser, get_current_founder
 from app.db.session import engine, get_db
 from app.main import app
+from app.schemas.founder import FounderUpdate
 from app.services.provisioning import ensure_founder
 
 BASE = "/api/v1/profile"
@@ -237,6 +240,42 @@ def test_social_handle_rejects_garbage(founder_client):
     client, _ = founder_client
     r = client.patch(BASE, json={"linkedin_url": "not a url at all"})
     assert r.status_code == 422
+
+
+# The next three need no database: the bug they guard was entirely in the
+# annotation, and a schema-level test names the failure without a live
+# Postgres to seed a founder in.
+
+@pytest.mark.parametrize("blank", ["", "   "])
+def test_blank_social_handle_is_none_not_a_500(blank):
+    """The profile form sends linkedin_url: "" for a founder who never filled
+    the social field (FounderProfile.jsx handleSave), so this is the ordinary
+    payload of "save my name", not an edge case.
+
+    It used to raise TypeError -- not ValidationError -- out of Pydantic and
+    land as a 500, because `Field(max_length=500)` sat beside the validator in
+    the annotation and ran on its None result. Every founder without a social
+    handle was unable to edit their name or stage.
+    """
+    parsed = FounderUpdate(full_name="New Name", linkedin_url=blank)
+    assert parsed.linkedin_url is None
+    assert parsed.model_dump(exclude_unset=True) == {
+        "full_name": "New Name", "linkedin_url": None,
+    }
+
+
+def test_over_long_social_handle_is_a_422_not_a_dataerror():
+    """Bounded at the column's own width (String(300)), measured on the
+    normalised value, so the check covers the https:// this validator adds."""
+    with pytest.raises(ValidationError):
+        FounderUpdate(linkedin_url="instagram.com/" + "a" * 300)
+
+
+def test_social_handle_length_is_measured_after_the_https_prefix():
+    longest = "instagram.com/" + "a" * (300 - len("https://instagram.com/"))
+    assert len(FounderUpdate(linkedin_url=longest).linkedin_url) == 300
+    with pytest.raises(ValidationError):
+        FounderUpdate(linkedin_url=longest + "a")
 
 
 def test_invisible_gaps_multi_select(founder_client):
