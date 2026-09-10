@@ -80,6 +80,7 @@ export default function TermsOfService() {
       {/* Header */}
       <header className="legal-header">
         <Link to="/" className="legal-logo" aria-label="GoXL — home">
+          <img className="legal-logo-mark" src="/ally-logo-mark-on-dark.png" alt="" width="512" height="512" decoding="async" />
           <div className="lnl-mark">Go<span className="x">XL</span></div>
           <span className="legal-logo-sub">Ally Platform</span>
         </Link>

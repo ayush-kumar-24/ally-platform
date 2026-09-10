@@ -323,11 +323,13 @@ export default function PlatformLayout() {
         <div className="sb-head">
           <div className="sb-head-top">
             {/* The lockup the marketing site uses: the Ally mark beside the
+                product's own name -- the on-dark variant, since this sidebar is
+                dark and the standard mark all but disappeared into it.
                 product's own name. The wide GoXL wordmark that was here named
                 the company, not the thing the founder is signed in to -- and
                 nothing else in the sidebar said "Ally" at all. */}
             <div className="sb-brand">
-              <img className="goxl-logo" src="/ally-logo-mark.png" alt="" width="512" height="512" decoding="async" />
+              <img className="goxl-logo" src="/ally-logo-mark-on-dark.png" alt="" width="512" height="512" decoding="async" />
               <span className="sb-words">
                 <span className="mark">GoXL <i>Ally</i></span>
                 <span className="sub">by GoXL Entrepreneurship</span>

@@ -17,10 +17,11 @@
         } catch (e) { /* storage blocked: the page falls back to the fragment */ }
       })();
     </script>
-    <!-- favicon.svg is 9 kB and scales; ally-logo.png is 519 kB and was being
-         downloaded by every visitor purely to draw a 16px tab icon. The PNG is
-         kept as the apple-touch-icon, where a raster is actually required. -->
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- favicon.svg was a purple lightning bolt -- a scaffold default, not this
+         product's mark -- so every tab showed someone else's logo. favicon.png
+         is the real Ally mark downscaled to 128px (13 kB, well under the
+         519 kB full-size PNG that the SVG was introduced to avoid). -->
+    <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="apple-touch-icon" href="/ally-logo.png" />
     <link rel="manifest" href="/site.webmanifest" />
     <!-- This is the product, not the marketing site. The public face of Ally is

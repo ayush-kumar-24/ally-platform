@@ -113,6 +113,10 @@ export default function GuidedLayout() {
 
       <nav className="guided-nav">
         <a className="gn-logo" href="/" onClick={e => { e.preventDefault(); handleExit(); }}>
+          {/* The mark the platform sidebar already shows. Onboarding was the
+              one place carrying a text-only lockup, so a founder met the
+              wordmark here and the mark for the first time after signing in. */}
+          <span className="gn-logo-mark" aria-hidden="true" />
           <span className="gn-logo-text">Go<span className="x">XL</span></span>
           <span className="al">· Ally</span>
         </a>

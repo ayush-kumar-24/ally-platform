@@ -61,6 +61,14 @@
   gap: 10px;
   text-decoration: none;
 }
+.legal-logo-mark {
+  display: block;
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
+  flex-shrink: 0;
+  user-select: none;
+}
 .legal-logo .lnl-mark {
   font-family: var(--display, 'Montserrat', sans-serif);
   font-weight: 800;

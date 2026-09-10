@@ -1436,6 +1436,12 @@ img,svg,video,canvas{max-width:100%}
    axes so the flex row cannot stretch it. */
 .sb-brand .goxl-logo{width:34px;height:34px;flex:0 0 auto}
 .gn-logo{display:inline-flex;align-items:center;gap:8px}
+/* The guided header carries the same mark as the sidebar brand. The guided
+   steps are dark and the two auth screens are cream, so the mark is a
+   background rather than an <img>: same logo, the variant each ground can
+   actually show. The plain mark on the dark steps was near-invisible. */
+.gn-logo-mark{display:block;width:26px;height:26px;flex-shrink:0;user-select:none;
+  background:url(/ally-logo-mark-on-dark.png) center/contain no-repeat}
 .gn-logo .goxl-logo{height:24px}
 @media(max-width:767px){ .sb-brand .goxl-logo{width:32px;height:32px} }
 
@@ -1505,6 +1511,11 @@ body.auth-active .auth-btn.auth-submit:disabled{opacity:.65;transform:none;curso
 body.auth-active .btn-dark-ghost{background:var(--auth-surface);color:var(--auth-heading);border:1px solid var(--auth-border)}
 body.auth-active .btn-dark-ghost:hover{background:var(--auth-surface-2);border-color:var(--auth-border-2)}
 /* guided chrome recoloured for the light canvas */
+/* .gn-logo-text is #fff for the dark guided steps and had no light-theme
+   counterpart, so on the two cream screens (login, welcome) "Go" was white
+   on near-white and only the green "XL" survived. */
+body.auth-active .gn-logo-mark{background-image:url(/ally-logo-mark.png)}
+body.auth-active .gn-logo-text{color:var(--auth-heading)}
 body.auth-active .gn-logo .al{color:var(--auth-muted-2)}
 body.auth-active .gn-logo:hover .al{color:var(--auth-heading)}
 body.auth-active .gn-stage{color:var(--auth-heading)}
