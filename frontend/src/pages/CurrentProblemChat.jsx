@@ -165,6 +165,7 @@ export default function CurrentProblemChat() {
     context: 'current_problem',
     onTranscribed: (text) => setInput(prev => (prev ? `${prev} ${text}` : text)),
     onError: () => showToast('Could not access the microphone — check your browser permissions.'),
+    inputRef: taRef,
   });
 
   const initials = (user?.initials || user?.name || '?').charAt(0).toUpperCase();

@@ -2362,6 +2362,13 @@ body.lp-done #landing-page { display:none; }
 .voice-meter .vm-dot{width:7px;height:7px;border-radius:50%;background:#f87171;flex-shrink:0;animation:vmblink 1.2s ease-in-out infinite}
 @keyframes vmblink{50%{opacity:.25}}
 .voice-meter .vm-label{font-size:12px;font-weight:650;color:#f87171;letter-spacing:.01em;flex-shrink:0}
+/* Keyboard affordance while recording: Enter stops, Escape discards (see
+   useVoiceInput). Quieter than the "Listening..." label so it reads as a
+   footnote to it, and dropped entirely on a touch-only device, where there is
+   no physical Enter to press and the mic button is the way out -- and on a
+   narrow screen, where the bars need the width more than the hint does. */
+.voice-meter .vm-hint{font-size:11px;color:#7d9488;white-space:nowrap;flex-shrink:0}
+@media (hover:none),(max-width:560px){ .voice-meter .vm-hint{display:none} }
 .voice-meter .vm-bars{display:flex;align-items:center;gap:2px;height:20px;flex:1;min-width:0}
 .voice-meter .vm-bars span{flex:1;min-width:2px;height:12%;border-radius:2px;background:linear-gradient(180deg,#f87171,#ef4444);transition:height .06s linear}
 @media (prefers-reduced-motion:reduce){

@@ -521,14 +521,21 @@ export default function ProfileBuild() {
       setInput((prev) => (prev ? `${prev} ${text}` : text));
     },
     onError: () => showToast('Could not access the microphone — check your browser permissions.'),
+    inputRef: taRef,
   });
 
-  /* See AllyChat for the same fix: measure (and focus) only once React has
-     rendered the dictated text and the textarea is visible again. */
+  /* See AllyChat for the same fix: measure only once React has rendered the
+     dictated text and the textarea is visible again.
+
+     Focus is no longer taken here. This effect runs on every keystroke, so
+     the focus() it used to call fired on all of them, not just the one that
+     mattered -- which meant a founder who clicked away mid-sentence was
+     dragged back into the field by their own half-typed answer. The hook now
+     focuses exactly once, when a transcript lands, and puts the caret at the
+     end so Enter sends it. */
   useEffect(() => {
     if (voice.status !== 'idle') return;
     sizeTa();
-    if (input) taRef.current?.focus();
   }, [input, voice.status]);
 
   /* --- control handlers ---------------------------------------------------- */
@@ -824,6 +831,7 @@ export default function ProfileBuild() {
             <VoiceBars
               getLevel={voice.getLevel}
               label={voice.status === 'transcribing' ? 'Transcribing…' : 'Listening…'}
+              hint={voice.status === 'recording' ? 'Enter to stop · Esc to discard' : null}
             />
           )}
           <label className="sr-only" htmlFor="profText">Your answer to Ally</label>

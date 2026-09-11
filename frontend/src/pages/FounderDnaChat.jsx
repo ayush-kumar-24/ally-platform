@@ -190,6 +190,7 @@ export default function FounderDnaChat() {
     context: 'founder_dna',
     onTranscribed: (text) => setInput(prev => (prev ? `${prev} ${text}` : text)),
     onError: () => showToast('Could not access the microphone — check your browser permissions.'),
+    inputRef: taRef,
   });
 
   const initials = (user?.initials || user?.name || '?').charAt(0).toUpperCase();
@@ -445,6 +446,7 @@ export default function FounderDnaChat() {
               <VoiceBars
                 getLevel={voice.getLevel}
                 label={voice.status === 'transcribing' ? 'Transcribing…' : 'Listening…'}
+                hint={voice.status === 'recording' ? 'Enter to stop · Esc to discard' : null}
               />
             )}
             <label className="sr-only" htmlFor="fdna-answer">Your answer to Ally</label>

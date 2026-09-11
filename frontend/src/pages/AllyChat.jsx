@@ -681,6 +681,7 @@ export default function AllyChat() {
     onTranscribed: (text) => setInput(prev => (prev ? `${prev} ${text}` : text)),
     onUpgradeRequired: () => showToast(upgradeMessage),
     onError: () => showToast('Could not access the microphone — check your browser permissions.'),
+    inputRef: taRef,
   });
 
   /* Re-measure once React has actually rendered the new value AND the field
@@ -1007,6 +1008,7 @@ export default function AllyChat() {
               <VoiceBars
                 getLevel={voice.getLevel}
                 label={voice.status === 'transcribing' ? 'Transcribing…' : 'Listening…'}
+                hint={voice.status === 'recording' ? 'Enter to stop · Esc to discard' : null}
               />
             )}
             {/* Documents only. Images upload happily and Ally cannot read a
