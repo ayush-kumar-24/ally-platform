@@ -8,6 +8,7 @@ import {
   submitCurrentProblemAnswer,
 } from '../services/currentProblem';
 import LiveKnowledgeGraph from '../components/LiveKnowledgeGraph';
+import MessageActions from '../components/MessageActions';
 import { useVoiceInput } from '../hooks/useVoiceInput';
 import useAutoGrow from '../hooks/useAutoGrow';
 import useAutoScroll from '../hooks/useAutoScroll';
@@ -238,6 +239,19 @@ export default function CurrentProblemChat() {
                 )}
                 <div className="bubble">{m.text}</div>
                 <div className="m-meta">{m.time}</div>
+                {/* Copy only, deliberately. An answer here is not a chat
+                    message: submitting it scored it server-side, wrote it into
+                    the evidence set and moved the session on to the next
+                    question. There is nothing an edit could revise -- and
+                    re-sending old text would post it against the question now
+                    on screen, scoring an answer to one question as the answer
+                    to a different one. Real revision needs a backend that can
+                    retract and re-score; until then, no button should imply it
+                    can. */}
+                <MessageActions
+                  text={m.text}
+                  what={m.role === 'ally' ? "Ally's question" : 'your answer'}
+                />
               </div>
             </div>
           ))}
