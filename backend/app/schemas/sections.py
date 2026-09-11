@@ -26,7 +26,7 @@ FounderRead) so historical answers from already-onboarded founders are not
 lost; nothing new writes them going forward.
 """
 
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -103,9 +103,13 @@ class BusinessInfoUpdate(BaseModel):
     customer_segment_other: str | None = Field(default=None, max_length=200)
     # Bounded to match the String(30) column rather than overshooting it.
     industry: str | None = Field(default=None, max_length=30)
-    # No cap here -- the redesigned biggest-challenge question is an
-    # uncapped multi-select, unlike the old "choose up to 3" version.
-    current_challenges: CleanStrList | None = None
+    # Capped at 3, per spec v2.4 Q10 ("Pick up to three"). The control bumps
+    # the oldest pick when a 4th is tapped, so a founder never hits this -- it
+    # bounds a hand-rolled request instead. Bounding matters beyond tidiness:
+    # `current_challenges` is read as the founder's stated priorities, and an
+    # unbounded list of fifteen says nothing about what they actually care
+    # about most.
+    current_challenges: Annotated[CleanStrList, Field(max_length=3)] | None = None
     current_challenges_other: str | None = Field(default=None, max_length=200)
     founder_reality_signals: FounderRealityCheck | None = None
     business_reality_signals: BusinessRealityCheck | None = None

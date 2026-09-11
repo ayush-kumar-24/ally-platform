@@ -12,14 +12,23 @@
 
 import { QUESTIONS } from '../data/onboardingQuestions';
 
+/* A `group` question holds its options on its PARTS, not on itself -- Q3's
+   experience and revenue cards and Q9's invisible gaps all live one level
+   down. Walking only the top level silently lost them, which showed up as a
+   founder's experience reading back as the raw enum ('one_company'). */
+const ASKABLE = QUESTIONS.flatMap((q) => (q.type === 'group' ? q.parts : [q]));
+
 /** { questionKey: { storedValue: shownLabel } }, built from the question set. */
 const LABELS = Object.fromEntries(
-  QUESTIONS
+  ASKABLE
     .filter((q) => Array.isArray(q.options))
     .map((q) => [
       q.key,
       Object.fromEntries(
-        q.options.map((o) => (typeof o === 'string' ? [o, o] : [o.value, o.label])),
+        // An option is a bare string, a {value,label} card, or a
+        // {value,paths} entry that is path-filtered but shown verbatim --
+        // the last of those has no separate label to fall back to.
+        q.options.map((o) => (typeof o === 'string' ? [o, o] : [o.value, o.label ?? o.value])),
       ),
     ]),
 );

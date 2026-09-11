@@ -30,8 +30,11 @@ ALWAYS_REQUIRED: list[tuple[str, str, str]] = [
     # this idea?" write the same column -- whichever path a founder is on,
     # this ends up filled by the end of Section 2.
     ("building_summary", "What you're building", "where_you_are"),
-    ("customer_segment", "Who you serve", "what_you_know"),
-    ("industry", "Industry", "what_you_know"),
+    # Industry and Audience are Section 2 questions (spec v2.4 Q6/Q7), asked
+    # in that order -- they describe the business, not what the founder knows
+    # about it. They sat in Section 3 before this.
+    ("industry", "Industry", "where_you_are"),
+    ("customer_segment", "Who you serve", "where_you_are"),
     ("founder_reality_signals", "Founder Reality", "what_you_know"),
     ("invisible_gaps", "Invisible Gaps", "what_you_know"),
     ("current_challenges", "Biggest Challenge", "final"),
