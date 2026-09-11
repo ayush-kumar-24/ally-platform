@@ -9,12 +9,34 @@ feature. This module is the consumer that was never written, plus the scheduler
 that puts rows in the table in the first place (until now, only a founder
 calling the endpoint by hand could create one, and no client ever did).
 
+WHAT THE EMAIL IS, AS OF 2026-09-11. It is a CONFIRMATION sent the moment a
+task is given a date, not a nudge thirty minutes before it. The thirty-minute
+warning is covered twice over already -- the Google Calendar popup and the
+in-app bell -- and a third copy in the inbox at the same minute was noise.
+
+It also has to work, which the old shape did not. The T-30 email depended on a
+sweep that GitHub Actions was supposed to run every ten minutes and actually
+ran every two to five hours (measured 2026-09-11: 21:09, 23:10, 01:10, 06:05,
+11:14 UTC). Anything more than TASK_REMINDER_MAX_AGE_MINUTES past its moment is
+dropped rather than sent late, so most reminders were silently discarded while
+the job reported a green run. Sending at save time takes the scheduler out of
+the path entirely: the email goes out in the same request that created the
+task, in a background task so a slow SMTP handshake cannot slow the save.
+
+The old T-30 path is left standing but no longer fed -- `sync_for_task` now
+cancels rather than schedules, and `send_due_reminders` below still works if
+anyone ever wants it back.
+
 TWO HALVES, DELIBERATELY SEPARATE:
 
-  `sync_for_task`      runs in the request, after a task is saved. Cheap: it
-                       computes a time and writes at most one row. It NEVER
-                       sends anything, so a mail outage cannot fail a save.
+  `notify_task_scheduled` runs in the request, after a task is saved. It
+                       decides whether this founder gets an email and returns
+                       the work to do; it never sends inline.
+  `sync_for_task`      keeps the legacy T-30 row in step -- which now means
+                       cancelling it. It NEVER sends anything, so a mail
+                       outage cannot fail a save.
   `send_due_reminders` runs in a scheduled job. It sends, and marks sent.
+                       Nothing feeds it any more.
 
 WHY THE TIMING MIRRORS THE CALENDAR. A founder with Google Calendar connected
 already gets a popup at CALENDAR_REMINDER_MINUTES_BEFORE. If this email fired
@@ -83,17 +105,23 @@ def reminder_time_for(due_date: date | None, due_time: time | None,
 
 def sync_for_task(service: PlanningService, task: Task, *,
                   timezone_name: str = "UTC") -> Reminder | None:
-    """Keep the task's AUTO email reminder in step with its due date.
+    """Close out the task's legacy T-30 email reminder.
 
-    Call after every task save. Returns the live reminder, or None when there
-    is nothing to remind about. Never raises: a reminder that fails to schedule
+    Passing remind_at=None cancels any AUTO row this task still has and writes
+    nothing new, which is what retires the T-30 email without a migration: rows
+    scheduled before this change are cancelled the next time their task is
+    touched, and no new ones are created. `timezone_name` is kept in the
+    signature so the call sites read the same as the calendar hook beside them
+    and so restoring the old behaviour is a one-line change here.
+
+    Call after every task save. Never raises: a reminder that fails to sync
     must not cost the founder the task they just typed, which is the same rule
     the calendar hook next door follows.
     """
     try:
         return service.sync_task_reminder(
             task.founder_id, task,
-            remind_at=reminder_time_for(task.due_date, task.due_time, timezone_name),
+            remind_at=None,
             channel=ReminderChannel.EMAIL,
         )
     except Exception as exc:
@@ -147,6 +175,109 @@ def send_task_reminder(to: str, name: str, title: str, when: str,
         f"reminder emails in Profile &gt; Notifications.</p>"
     )
     return send_email(to, subject, text, html)
+
+
+# --- the confirmation, sent the moment a task is scheduled -------------------
+
+def _due_phrase(due_date: date, due_time: time | None, tz: str) -> str:
+    """"Thursday, 11 September at 07:50 PM" -- the moment, as the founder set it.
+
+    A task with a date but no time is shown at CALENDAR_DEFAULT_TASK_HOUR, the
+    same 9am the calendar event uses, so the email and the calendar entry never
+    disagree about when the thing is.
+    """
+    local = datetime.combine(due_date, due_time or time(hour=settings.CALENDAR_DEFAULT_TASK_HOUR),
+                             tzinfo=_zone(tz))
+    return local.strftime("%A, %d %B at %I:%M %p")
+
+
+def send_task_scheduled(to: str, name: str, title: str, when: str) -> bool:
+    """Confirm one newly scheduled task. Returns False if it did not go out.
+
+    No note field, unlike send_task_reminder: a note belongs to a Reminder, not
+    to a Task, so there is never one to show here.
+    """
+    subject = f"Scheduled: {title}"
+    text = (
+        f"Hi {name},\n\n"
+        f"\"{title}\" is on your plan for {when}.\n\n"
+        f"Open Plan Your Day: {_PLAN_URL}\n\n"
+        "You will get a reminder thirty minutes before, in the app and on your calendar.\n\n"
+        "The GoXL Team\n\n"
+        "--\n"
+        "To stop these, turn off task emails in Profile > Notifications."
+    )
+    # escape(): the title is whatever the founder typed. An ampersand in a task
+    # name should not break the markup of their own email.
+    html = (
+        f"<p>Hi {escape(name)},</p>"
+        f"<p><strong>{escape(title)}</strong> is on your plan for {escape(when)}.</p>"
+        f'<p><a href="{_PLAN_URL}">Open Plan Your Day</a></p>'
+        f"<p>You will get a reminder thirty minutes before, in the app and on your calendar.</p>"
+        f"<p>The GoXL Team</p>"
+        f'<p style="color:#6b7280;font-size:12px">To stop these, turn off task '
+        f"emails in Profile &gt; Notifications.</p>"
+    )
+    return send_email(to, subject, text, html)
+
+
+def notify_task_scheduled(db: Session, founder: Founder, task: Task, *,
+                          timezone_name: str = "UTC"):
+    """Decide whether this founder gets a confirmation, and return the sending.
+
+    Returns a zero-argument callable for the caller to run in the background,
+    or None when nothing should be sent. Returning the work instead of doing it
+    keeps SMTP -- which can take seconds, and can hang -- out of the request
+    that just saved the task, and keeps FastAPI out of this module.
+
+    NOTHING IS SENT FOR A TASK WITH NO DUE DATE. There is no moment to confirm;
+    a task with no date is a list item, not an appointment. That is the same
+    line reminder_time_for draws, and it means ticking off a title-only to-do
+    never lands in anyone's inbox.
+
+    Pro only, checked live against `founder.plan_type` rather than at any
+    earlier point: Feature.EMAIL_NOTIFICATIONS sits in the advisor bundle and
+    is sold as Pro on the pricing page.
+    """
+    if task.due_date is None:
+        return None
+    if not founder.email:
+        return None
+
+    try:
+        from app.core.container import container
+        entitlements = container.entitlement_service(db)
+        if not entitlements.has_feature(founder.plan_type, Feature.EMAIL_NOTIFICATIONS):
+            return None
+    except Exception as exc:
+        # A plan lookup that fails must not cost the founder their task, and
+        # must not send either: silence is the safe side of an unknown plan.
+        logger.warning("task email: could not resolve plan, not sending",
+                       extra={"founder_id": founder.founder_id}, exc_info=exc)
+        return None
+
+    if not _wants_task_reminders(founder):
+        return None
+
+    to = founder.email
+    name = founder.full_name or "there"
+    title = task.title
+    when = _due_phrase(task.due_date, task.due_time, timezone_name)
+
+    def _send() -> None:
+        # Captured as plain strings on purpose: this runs after the response,
+        # by which point the request's database session is closed and neither
+        # `founder` nor `task` can be safely touched.
+        try:
+            if not send_task_scheduled(to, name, title, when):
+                logger.warning("task email not delivered",
+                               extra={"founder_id": founder.founder_id,
+                                      "path": f"task={title!r}"})
+        except Exception as exc:
+            logger.warning("task email failed",
+                           extra={"founder_id": founder.founder_id}, exc_info=exc)
+
+    return _send
 
 
 # --- the worker -------------------------------------------------------------

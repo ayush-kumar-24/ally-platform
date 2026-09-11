@@ -341,3 +341,145 @@ def test_one_bad_row_does_not_stop_the_others(worker, monkeypatch):
     counts = worker.run(s, _founder())
     assert counts["failed"] == 1
     assert counts["sent"] == 2          # both attempted; one could not be marked
+
+
+# --- the confirmation sent when a task is scheduled -------------------------
+#
+# Replaced the T-30 email on 2026-09-11. The thirty-minute warning is already
+# delivered twice (Google Calendar popup, in-app bell), and the email version
+# depended on a sweep GitHub ran every two to five hours instead of every ten
+# minutes, so most of them were dropped as stale rather than sent.
+
+
+@pytest.fixture
+def confirm(monkeypatch):
+    """notify_task_scheduled with the plan lookup stubbed and mail captured."""
+    sent = []
+    monkeypatch.setattr(task_reminders, "send_task_scheduled",
+                        lambda *a: sent.append(a) or True)
+
+    def run(founder, task, *, allowed=True, tz="Asia/Kolkata"):
+        from app.core import container as container_mod
+        monkeypatch.setattr(container_mod.container, "entitlement_service",
+                            lambda db: FakeEntitlements(allowed), raising=False)
+        return task_reminders.notify_task_scheduled(
+            FakeDB(founder), founder, task, timezone_name=tz)
+
+    return SimpleNamespace(run=run, sent=sent)
+
+
+def test_scheduling_a_dated_task_emails_a_pro_founder(confirm):
+    s = svc()
+    t = _task(s, due_date=date(2026, 8, 1), due_time=time(15, 0))
+    job = confirm.run(_founder(), t)
+    assert job is not None, "a Pro founder with a dated task should be emailed"
+    job()
+    (to, name, title, when), = confirm.sent
+    assert to == "founder@example.com"
+    assert title == "Call Rajesh about pricing"
+    # 15:00 as the founder set it, in their zone -- not shifted into UTC.
+    assert "03:00 PM" in when
+
+
+def test_nothing_is_sent_until_the_returned_job_is_run(confirm):
+    """The send is handed back, never done inline: SMTP can take seconds and
+    can hang, and neither belongs in the request that saved the task."""
+    s = svc()
+    t = _task(s, due_date=date(2026, 8, 1), due_time=time(15, 0))
+    job = confirm.run(_founder(), t)
+    assert confirm.sent == []
+    job()
+    assert len(confirm.sent) == 1
+
+
+def test_a_task_with_no_due_date_is_not_confirmed(confirm):
+    """No date, no moment to confirm -- a title-only to-do is a list item, not
+    an appointment, and must not reach anyone's inbox."""
+    s = svc()
+    assert confirm.run(_founder(), _task(s)) is None
+    assert confirm.sent == []
+
+
+def test_a_founder_without_the_paid_feature_is_not_emailed(confirm):
+    s = svc()
+    t = _task(s, due_date=date(2026, 8, 1), due_time=time(15, 0))
+    # _founder() fixes plan_type, so it is set after construction rather than
+    # through kwargs it would collide with.
+    founder = _founder()
+    founder.plan_type = "starter"
+    assert confirm.run(founder, t, allowed=False) is None
+    assert confirm.sent == []
+
+
+def test_the_opt_out_silences_the_confirmation(confirm):
+    s = svc()
+    t = _task(s, due_date=date(2026, 8, 1), due_time=time(15, 0))
+    founder = _founder(prefs={"email_task_reminders": False})
+    assert confirm.run(founder, t) is None
+
+
+def test_opting_out_of_call_reminders_does_not_silence_task_emails(confirm):
+    """email_reminders gates the reminder for a call the founder PAID for.
+    Sharing it would mean silencing task mail also silences that."""
+    s = svc()
+    t = _task(s, due_date=date(2026, 8, 1), due_time=time(15, 0))
+    founder = _founder(prefs={"email_reminders": False})
+    assert confirm.run(founder, t) is not None
+
+
+def test_a_founder_with_no_email_address_is_skipped(confirm):
+    s = svc()
+    t = _task(s, due_date=date(2026, 8, 1), due_time=time(15, 0))
+    founder = _founder()
+    founder.email = None
+    assert confirm.run(founder, t) is None
+
+
+def test_a_dateless_time_uses_the_same_default_hour_as_the_calendar(confirm):
+    """A date with no time is 9am in both the calendar event and the email, so
+    the two can never disagree about when the thing is."""
+    s = svc()
+    t = _task(s, due_date=date(2026, 8, 1))
+    confirm.run(_founder(), t)()
+    (_, _, _, when), = confirm.sent
+    assert "09:00 AM" in when
+
+
+def test_a_plan_lookup_failure_sends_nothing(confirm, monkeypatch):
+    """Silence is the safe side of an unknown plan: better no email than one to
+    a founder who has not paid for it."""
+    s = svc()
+    t = _task(s, due_date=date(2026, 8, 1), due_time=time(15, 0))
+    from app.core import container as container_mod
+    monkeypatch.setattr(container_mod.container, "entitlement_service",
+                        lambda db: (_ for _ in ()).throw(RuntimeError("db down")),
+                        raising=False)
+    founder = _founder()
+    assert task_reminders.notify_task_scheduled(
+        FakeDB(founder), founder, t, timezone_name="UTC") is None
+    assert confirm.sent == []
+
+
+def test_a_send_that_fails_is_logged_not_raised(confirm, monkeypatch):
+    """The job runs after the response has gone out. Raising there cannot reach
+    the founder, so it must not take the worker down with it."""
+    s = svc()
+    t = _task(s, due_date=date(2026, 8, 1), due_time=time(15, 0))
+    job = confirm.run(_founder(), t)
+    monkeypatch.setattr(task_reminders, "send_task_scheduled",
+                        lambda *a: (_ for _ in ()).throw(OSError("smtp down")))
+    job()   # must not raise
+
+
+def test_sync_for_task_no_longer_schedules_a_t30_email():
+    """The T-30 row is retired without a migration: sync cancels whatever the
+    task still has and writes nothing new."""
+    s = svc()
+    t = _task(s, due_date=date(2026, 8, 1), due_time=time(15, 0))
+    s.sync_task_reminder(1, t, remind_at=datetime(2026, 8, 1, 14, 30, tzinfo=timezone.utc),
+                         channel=ReminderChannel.EMAIL)
+    assert any(r.status == ReminderStatus.SCHEDULED for r in s.list_reminders(1))
+
+    assert task_reminders.sync_for_task(s, t, timezone_name="UTC") is None
+    assert not any(r.status == ReminderStatus.SCHEDULED for r in s.list_reminders(1)), \
+        "the pre-existing T-30 reminder should have been cancelled"

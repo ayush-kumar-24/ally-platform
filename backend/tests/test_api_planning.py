@@ -198,3 +198,121 @@ class TestPlanGate:
             assert r.json()["error"] == "FeatureNotInPlanError"
         finally:
             self._teardown()
+
+
+# --- the "this is scheduled" email, end to end through the endpoint ---------
+
+
+class _StubDb:
+    """Just enough Session for this route: one Founder lookup, plus the
+    rollback the calendar hook calls when it cannot reach Google. The hook
+    swallows its own failure and returns the task either way, which is what a
+    founder with no calendar connected already gets."""
+
+    def __init__(self, founder):
+        self.founder = founder
+
+    def get(self, model, pk):
+        return self.founder
+
+    def rollback(self):
+        pass
+
+    def commit(self):
+        pass
+
+
+@pytest.fixture
+def mailed(client, monkeypatch):
+    """The planning client, with the founder row and mail both stubbed.
+
+    get_db is overridden rather than mocked deeper so the request goes through
+    the real route, the real background queue and the real plan check --
+    TestClient runs background tasks before returning, so an email queued by
+    the handler has actually been sent by the time the response arrives.
+    """
+    from app.db.session import get_db
+    from app.services import task_reminders
+    from app.core import container as container_mod
+
+    sent = []
+    monkeypatch.setattr(task_reminders, "send_task_scheduled",
+                        lambda *a: sent.append(a) or True)
+    monkeypatch.setattr(container_mod.container, "entitlement_service",
+                        lambda db: SimpleNamespace(has_feature=lambda tier, f: tier == "pro"),
+                        raising=False)
+
+    founder = SimpleNamespace(founder_id=1, email="founder@example.com",
+                              full_name="Ayush", plan_type="pro",
+                              notification_preferences={})
+    app.dependency_overrides[get_db] = lambda: _StubDb(founder)
+    yield SimpleNamespace(http=client.http, service=client.service,
+                          founder=founder, sent=sent)
+    app.dependency_overrides.pop(get_db, None)
+
+
+def _goal_for_mail(client):
+    plan = client.http.post(f"{BASE}/plans", json={"title": "P"}).json()["plan_id"]
+    return client.http.post(f"{BASE}/plans/{plan}/goals", json={"title": "G"}).json()["goal_id"]
+
+
+def test_scheduling_a_task_emails_a_pro_founder_immediately(mailed):
+    """The whole point of the change: the email goes out on save, not thirty
+    minutes before, so it does not depend on a sweep that runs when it likes."""
+    goal = _goal_for_mail(mailed)
+    r = mailed.http.post(f"{BASE}/goals/{goal}/tasks",
+                         json={"title": "Call Rajesh", "due_date": "2026-08-01",
+                               "due_time": "15:00", "timezone": "Asia/Kolkata"})
+    assert r.status_code == 201, r.text
+    assert len(mailed.sent) == 1
+    to, _name, title, when = mailed.sent[0]
+    assert to == "founder@example.com"
+    assert title == "Call Rajesh"
+    assert "03:00 PM" in when
+
+
+def test_a_task_with_no_date_sends_nothing(mailed):
+    goal = _goal_for_mail(mailed)
+    r = mailed.http.post(f"{BASE}/goals/{goal}/tasks", json={"title": "Someday"})
+    assert r.status_code == 201, r.text
+    assert mailed.sent == []
+
+
+def test_a_non_pro_founder_gets_no_email(mailed):
+    mailed.founder.plan_type = "starter"
+    goal = _goal_for_mail(mailed)
+    r = mailed.http.post(f"{BASE}/goals/{goal}/tasks",
+                         json={"title": "Call Rajesh", "due_date": "2026-08-01",
+                               "due_time": "15:00", "timezone": "Asia/Kolkata"})
+    assert r.status_code == 201, r.text
+    assert mailed.sent == []
+
+
+def test_rescheduling_emails_again_but_renaming_does_not(mailed):
+    """A second email is worth sending when the moment moved, and is noise
+    otherwise -- which is how a useful email becomes one people filter out."""
+    goal = _goal_for_mail(mailed)
+    task = mailed.http.post(f"{BASE}/goals/{goal}/tasks",
+                            json={"title": "Call Rajesh", "due_date": "2026-08-01",
+                                  "due_time": "15:00", "timezone": "Asia/Kolkata"}).json()
+    assert len(mailed.sent) == 1
+
+    mailed.http.patch(f"{BASE}/tasks/{task['task_id']}",
+                      json={"title": "Call Rajesh about pricing", "timezone": "Asia/Kolkata"})
+    assert len(mailed.sent) == 1, "a rename is not a reschedule"
+
+    mailed.http.patch(f"{BASE}/tasks/{task['task_id']}",
+                      json={"due_time": "16:30", "timezone": "Asia/Kolkata"})
+    assert len(mailed.sent) == 2, "moving the time should confirm the new one"
+    assert "04:30 PM" in mailed.sent[1][3]
+
+
+def test_ticking_a_task_off_sends_nothing(mailed):
+    goal = _goal_for_mail(mailed)
+    task = mailed.http.post(f"{BASE}/goals/{goal}/tasks",
+                            json={"title": "Call Rajesh", "due_date": "2026-08-01",
+                                  "due_time": "15:00", "timezone": "Asia/Kolkata"}).json()
+    mailed.sent.clear()
+    mailed.http.patch(f"{BASE}/tasks/{task['task_id']}",
+                      json={"status": "done", "timezone": "Asia/Kolkata"})
+    assert mailed.sent == []

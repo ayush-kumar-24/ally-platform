@@ -545,11 +545,16 @@ export default function FounderProfile() {
   const SWITCH_FIELD = {
     notifications: 'in_app_all',
     renewal: 'email_reminders',
+    // Deliberately NOT email_reminders: that one gates the reminder for a
+    // discovery call the founder paid for. Sharing it would mean switching off
+    // task mail also switches off the reminder for their call.
+    taskEmails: 'email_task_reminders',
     reducedMotion: 'reduced_motion',
   };
   const [switches, setSwitches] = useState({
     renewal: true,
     notifications: true,
+    taskEmails: true,
     reducedMotion: false,
   });
   const [switchesLoaded, setSwitchesLoaded] = useState(false);
@@ -565,6 +570,7 @@ export default function FounderProfile() {
         setSwitches({
           notifications: prefs.in_app_all ?? true,
           renewal: prefs.email_reminders ?? true,
+          taskEmails: prefs.email_task_reminders ?? true,
           reducedMotion: prefs.reduced_motion ?? false,
         });
       })
@@ -1312,6 +1318,49 @@ export default function FounderProfile() {
             role="switch"
             aria-checked={switches.renewal}
             aria-label="Call reminders by email"
+          />
+        </div>
+
+        {/* ADDED 2026-09-11, alongside the task email itself. The backend has
+            read notification_preferences.email_task_reminders since task mail
+            shipped, and every one of those emails signs off telling the founder
+            to "turn off task emails in Profile > Notifications" -- a control
+            that did not exist on this page. Pro founders now get an email every
+            time they schedule a task, so the one instruction the email gives
+            them had better be true. */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--bd)', paddingTop: '20px', marginTop: '20px' }}>
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+            <div
+              style={{
+                width: '32px',
+                height: '32px',
+                borderRadius: '50%',
+                background: 'rgba(27,67,50,0.06)',
+                color: 'var(--forest, #1b4332)',
+                display: 'grid',
+                placeItems: 'center',
+                flexShrink: 0
+              }}
+            >
+              <svg viewBox="0 0 24 24" style={{ width: 15, height: 15, fill: 'none', stroke: 'currentColor', strokeWidth: 1.8 }}>
+                <rect x="3" y="4" width="18" height="18" rx="2" />
+                <path d="M16 2v4M8 2v4M3 10h18M9 16l2 2 4-4" />
+              </svg>
+            </div>
+            <div style={{ textAlign: 'left' }}>
+              <div style={{ fontSize: '13px', fontWeight: 650, color: 'var(--ink, #16241c)' }}>Task emails</div>
+              <div style={{ fontSize: '11px', color: 'var(--muted-2)', marginTop: '2px' }}>
+                A confirmation when you schedule something in Plan Your Day
+              </div>
+            </div>
+          </div>
+          <button
+            className={`pr-switch${switches.taskEmails ? ' on' : ''}`}
+            onClick={() => toggleSwitch('taskEmails')}
+            type="button"
+            role="switch"
+            aria-checked={switches.taskEmails}
+            aria-label="Task emails"
           />
         </div>
       </div>
