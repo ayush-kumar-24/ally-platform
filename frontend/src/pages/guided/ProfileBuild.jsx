@@ -436,14 +436,40 @@ export default function ProfileBuild() {
     if (nextQi < questionsRef.current.length) askQ(nextQi); else finish();
   }, [addMe, confirmField, bumpUnd, addAlly, askQ, finish, first, resetControls]);
 
-  /** Only reachable on a question marked `optional` (currently just the
-   * social handle) -- skips without storing anything, so the field simply
-   * stays null rather than being answered with an empty string. */
+  /** Only reachable on a control marked `optional` (currently just the social
+   * handle) -- skips without storing anything, so the field simply stays null
+   * rather than being answered with an empty string.
+   *
+   * Skipping a GROUP's part advances the part, not the question: marking one
+   * part optional must not silently skip the parts after it. No part is
+   * optional today, so this path is unreachable -- it is here so that marking
+   * one optional later is a one-line change rather than a silent bug. */
   const skip = useCallback(async () => {
     if (!awaitingRef.current) return;
     awaitingRef.current = false;
     setActiveQ(-1);
     const i = qiRef.current;
+    const q = questionsRef.current[i];
+
+    if (q.type === 'group') {
+      const parts = activeParts(q, pathRef.current);
+      const nextPart = partIdxRef.current + 1;
+      if (nextPart < parts.length) {
+        addMe('Skipped');
+        partIdxRef.current = nextPart;
+        setPartIdx(nextPart);
+        resetControls();
+        setTyping(true);
+        await sleep(500); if (!alive.current) return;
+        setTyping(false);
+        addAlly(parts[nextPart].q);
+        if (parts[nextPart].prompt) addAlly(parts[nextPart].prompt);
+        awaitingRef.current = true;
+        setActiveQ(i);
+        return;
+      }
+    }
+
     const nextQi = i + 1;
     qiRef.current = nextQi;
     addMe('Skipped');
@@ -451,7 +477,7 @@ export default function ProfileBuild() {
     await sleep(500); if (!alive.current) return;
     setTyping(false);
     if (nextQi < questionsRef.current.length) askQ(nextQi); else finish();
-  }, [addMe, askQ, finish]);
+  }, [addMe, addAlly, askQ, finish, resetControls]);
 
   /* The founder's name arrives from GET /profile *after* mount -- AppContext
      hydrates identity asynchronously. Greeting someone as "there" while their
