@@ -195,3 +195,4 @@ def test_candidate_query_still_filters_on_the_founders_stage_group():
     sql = _candidate_sql(["Stage 0"]).replace("\n", " ")
     assert "primary_stage_group IN" in sql, sql
     assert "'Stage 0'" in sql, sql
+

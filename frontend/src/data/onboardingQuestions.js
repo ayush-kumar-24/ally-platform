@@ -535,7 +535,24 @@ export function questionKeys(question, path) {
   return activeParts(question, path).map((p) => p.key);
 }
 
-/** Questions a founder on `path` is asked -- 11 on both, per spec v2.4. */
+/**
+ * How many questions a founder is asked -- what the progress counter shows.
+ *
+ * NOT `effectiveQuestions(path).length` when the path is unknown. That list is
+ * the SUPERSET (it carries both the one-year vision and the 90-day goal, which
+ * are mutually exclusive), so a founder saw "Question 1 of 12" and then watched
+ * the total drop to 11 the moment they picked their stage -- the denominator
+ * moving under them while the numerator stood still.
+ *
+ * Both paths ask the same number, so there is an honest answer to give before
+ * the stage question narrows anything. The max is a guard rather than a
+ * calculation: if the two ever diverge, the bar under-promises and then fills,
+ * which is the failure worth having -- it never counts backwards.
+ */
 export function questionCount(path) {
-  return effectiveQuestions(path).length;
+  if (path) return effectiveQuestions(path).length;
+  return Math.max(
+    effectiveQuestions(PATH_1).length,
+    effectiveQuestions(PATH_2).length,
+  );
 }

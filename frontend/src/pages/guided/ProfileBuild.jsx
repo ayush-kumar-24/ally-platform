@@ -12,6 +12,7 @@ import {
   activeOptions,
   activeParts,
   effectiveQuestions,
+  questionCount,
   questionKeys,
   SECTIONS,
   STAGE_GROUPS,
@@ -424,7 +425,7 @@ export default function ProfileBuild() {
     const answered = questionsRef.current.filter(
       (x) => questionKeys(x, pathRef.current).every((k) => profileRef.current[k] !== undefined),
     ).length;
-    bumpUnd(Math.round((answered / questionsRef.current.length) * 100), 'Ally learned something new');
+    bumpUnd(Math.round((answered / questionCount(pathRef.current)) * 100), 'Ally learned something new');
 
     setTyping(true);
     await sleep(900); if (!alive.current) return;
@@ -738,7 +739,12 @@ export default function ProfileBuild() {
      rather than four stapled-together blocks, and the step counter is in
      QUESTIONS -- a group counts once, however many parts it asks. */
   const chapter = q ? SECTIONS.find((sec) => sec.key === q.section) : null;
-  const totalQs = questionsRef.current.length;
+  // questionCount(), not questionsRef.current.length -- before the stage answer
+  // that list is the superset of both paths, and showing its length made the
+  // total drop from 12 to 11 mid-flow. Indices are safe to read directly: every
+  // question at or before the stage part is on both paths, so position 1-3
+  // means the same thing either way.
+  const totalQs = questionCount(pathRef.current);
   const stepNo = activeQ >= 0 ? activeQ + 1 : 0;
   const sectionCount = (key) =>
     panelRows.filter((x) => x.section === key && fields[x.key]?.status === 'on').length;
