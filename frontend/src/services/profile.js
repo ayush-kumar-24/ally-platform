@@ -59,10 +59,11 @@ export function updateContext(changes) {
 /** Guided-flow key -> API field, split by the section that owns it. */
 const BUSINESS = {
   stage: 'stage',
-  building: 'building_summary',
-  ideaName: 'building_summary', // same column as `building` -- mutually
-  // exclusive by path (Path 2 vs Path 1), see onboardingQuestions.js
-  productDescription: 'product_description',
+  // Q4's two parts. `buildingName` is the product/company name on Path 2 and
+  // the idea's name on Path 1 -- two mutually exclusive parts writing one
+  // column, see the `building` group in onboardingQuestions.js.
+  buildingName: 'building_summary',
+  buildingDescription: 'product_description',
   problem: 'problem_statement',
   revenue: 'current_revenue',
   audience: 'customer_segment',
@@ -127,9 +128,8 @@ export function toGuidedAnswers(profile) {
     stage: profile.stage_name || '',
     experience: profile.experience_level || '',
     revenue: profile.current_revenue || '',
-    building: profile.building_summary || '',
-    ideaName: profile.building_summary || '',
-    productDescription: profile.product_description || '',
+    buildingName: profile.building_summary || '',
+    buildingDescription: profile.product_description || '',
     problem: profile.problem_statement || '',
     audience: profile.customer_segment || [],
     audienceOther: profile.customer_segment_other || '',

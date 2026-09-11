@@ -9,7 +9,11 @@ import VoiceBars from '../../components/VoiceBars';
 import MessageActions from '../../components/MessageActions';
 import {
   QUESTIONS as ALL_QUESTIONS,
+  activeOptions,
+  activeParts,
   effectiveQuestions,
+  questionCount,
+  questionKeys,
   SECTIONS,
   STAGE_GROUPS,
   STAGE_BY_NAME,
@@ -45,9 +49,29 @@ function isFilled(value) {
   return true;
 }
 
-/** Option lists are either plain strings or {label, value} pairs. */
-const optLabel = (o) => (typeof o === 'string' ? o : o.label);
+/* An option is a bare string, a {label,value} card, or a {value,paths} entry
+   that is path-filtered but displayed verbatim -- the last has no separate
+   label, so it falls back to its own value rather than rendering `undefined`. */
+const optLabel = (o) => (typeof o === 'string' ? o : (o.label ?? o.value));
 const optValue = (o) => (typeof o === 'string' ? o : o.value);
+
+/** The control awaiting an answer: a plain question, or a group's active part. */
+function controlFor(question, path, idx) {
+  if (!question) return null;
+  if (question.type !== 'group') return question;
+  return activeParts(question, path)[idx] || null;
+}
+
+/* The DNA side panel lists FACTS, not questions -- a group's parts each earn
+   their own row (Stage, Experience, Monthly Revenue) even though the three are
+   one question in the flow. Parts inherit their group's section. */
+function panelRowsFor(questions, path) {
+  return questions.flatMap((x) => (
+    x.type === 'group'
+      ? activeParts(x, path).map((part) => ({ ...part, section: x.section }))
+      : [x]
+  ));
+}
 
 /** What the founder sees in the DNA panel and in their own chat bubble. */
 const displayOf = (value) => (Array.isArray(value) ? value.join(', ') : String(value ?? ''));
@@ -79,6 +103,14 @@ export default function ProfileBuild() {
   const [otherText, setOtherText] = useState('');
   const [search, setSearch] = useState('');
   const [yesNo, setYesNo] = useState({});      // 'yesno' type: {itemKey: true|false}
+  /* Which part of a `group` question is being asked. A ref shadows it because
+     answer() reads it inside a useCallback, where the state value would be a
+     stale capture; the state copy exists only so the control re-renders. */
+  const [partIdx, setPartIdx] = useState(0);
+  const partIdxRef = useRef(0);
+  /* A group's answers accumulate here and are committed together when its last
+     part is answered, so one question means one commit and one panel update. */
+  const groupBufRef = useRef({});
 
   /* Follows the transcript as it grows. The answer control mounting under the
      last question, and each bubble's entry animation, both add height after
@@ -95,6 +127,10 @@ export default function ProfileBuild() {
   // (qiRef, askQ(i)) already re-renders on every question change via the
   // state updates that accompany it, so this never needs its own re-render.
   const questionsRef = useRef(ALL_QUESTIONS);
+  /* The founder's path, once the stage answer reveals it. Read by the option
+     and part filters during render; kept as a ref rather than state because
+     every write to it is immediately followed by a setActiveQ that re-renders. */
+  const pathRef = useRef(null);
   const awaitingRef = useRef(false);
   const profileRef = useRef({});
   // What each answered field showed in the transcript/side panel (the founder's
@@ -129,10 +165,12 @@ export default function ProfileBuild() {
      once activeQ has been set. */
   useEffect(() => {
     if (activeQ < 0) return;
-    const { type } = questionsRef.current[activeQ];
+    const ctl = controlFor(questionsRef.current[activeQ], pathRef.current, partIdx);
+    if (!ctl) return;
+    const { type } = ctl;
     if (type === 'short' || type === 'long' || type === 'url') taRef.current?.focus();
     else if (type === 'dropdown') searchRef.current?.focus();
-  }, [activeQ]);
+  }, [activeQ, partIdx]);
 
   useEffect(() => {
     // Don't animate a number nobody can see. requestAnimationFrame does not run
@@ -186,16 +224,27 @@ export default function ProfileBuild() {
     }
   }, []);
 
-  const present = useCallback((i) => {
+  /** Clear the per-control working state. Runs between a group's parts too,
+   *  where the question index deliberately does NOT change. */
+  const resetControls = useCallback(() => {
     setStageGroup(null);
     setPicked([]);
     setOtherText('');
     setSearch('');
     setInput('');
     setYesNo({});
+  }, []);
+
+  const present = useCallback((i, startPart = 0, buf = {}) => {
+    resetControls();
+    partIdxRef.current = startPart;
+    setPartIdx(startPart);
+    // Resuming mid-group seeds the buffer with the parts already answered, so
+    // the commit at the end of the group still writes the whole question.
+    groupBufRef.current = buf;
     awaitingRef.current = true;
     setActiveQ(i);
-  }, []);
+  }, [resetControls]);
 
   const finish = useCallback(() => {
     setActiveQ(-1);
@@ -222,10 +271,9 @@ export default function ProfileBuild() {
       ...prev,
       stage: profileRef.current.stage || prev.stage,
       problem: profileRef.current.problem || prev.problem,
-      // Path 1 (Stage 0) never asks `building` -- only `ideaName`, same
-      // building_summary column. Path 2 never asks `ideaName`. Exactly one
-      // of the two is ever set for a given founder.
-      company: profileRef.current.building || profileRef.current.ideaName || prev.company,
+      // Q4's name part. Path 1 labels an idea, Path 2 names a product -- two
+      // mutually exclusive parts writing one key, so this reads one key.
+      company: profileRef.current.buildingName || prev.company,
       founderProfile: {
         ...(prev?.founderProfile || {}),
         ...profileRef.current,
@@ -235,15 +283,30 @@ export default function ProfileBuild() {
     setShowBar(true);
   }, [addAlly, bumpUnd, first, setUser]);
 
-  const askQ = useCallback(async (i) => {
+  const askQ = useCallback(async (i, startPart = 0, buf = {}) => {
     if (i >= questionsRef.current.length) { finish(); return; }
     const q = questionsRef.current[i];
     setTyping(true);
     await sleep(820); if (!alive.current) return;
     setTyping(false);
-    addAlly(q.q);
-    if (q.prompt) addAlly(q.prompt);
-    present(i);
+    if (q.type === 'group') {
+      const parts = activeParts(q, pathRef.current);
+      const first = parts[startPart];
+      // The group's own headline is worth saying only when it adds something:
+      // not when it repeats the first part's wording (Q3), and not when the
+      // path has narrowed the group to a single part, where the headline would
+      // be introducing a set of one -- and, for Q9 on Path 1, addressing a
+      // business that does not exist.
+      if (q.q && parts.length > 1 && first && q.q !== first.q && startPart === 0) addAlly(q.q);
+      if (first) {
+        addAlly(first.q);
+        if (first.prompt) addAlly(first.prompt);
+      }
+    } else {
+      addAlly(q.q);
+      if (q.prompt) addAlly(q.prompt);
+    }
+    present(i, startPart, buf);
   }, [addAlly, present, finish]);
 
   /**
@@ -264,17 +327,23 @@ export default function ProfileBuild() {
     setActiveQ(-1);
     const i = qiRef.current;
     const q = questionsRef.current[i];
+    const isGroup = q.type === 'group';
+    // What was actually just answered: the question itself, or the group's
+    // current part. Everything below keys off this, not off `q`.
+    const ctl = controlFor(q, pathRef.current, partIdxRef.current);
     // Arrays (multi-select) and plain objects (the 'yesno' reality-check
     // blocks) are stored as-is; everything else is a string.
     const stored = (Array.isArray(value) || isObj) ? value : String(value).trim();
 
     // The stage answer is the one place a founder's path becomes known --
-    // re-filter the remaining question list right here. Every question up to
-    // and including 'stage' is shown on both paths (see STAGE_GROUPS'
-    // position in onboardingQuestions.js), so no already-assigned index ever
-    // shifts under qiRef -- only what comes after this point narrows.
-    if (q.type === 'stage') {
+    // re-filter the remaining question list right here. Every question at or
+    // before the one holding the stage part is shown on both paths (see
+    // onboardingQuestions.js), so no already-assigned index ever shifts under
+    // qiRef -- only what comes after this point narrows. The group's own part
+    // list narrows too, which is what drops the revenue part for Stage 0.
+    if (ctl.type === 'stage') {
       const path = STAGE_BY_NAME[stored]?.path || null;
+      pathRef.current = path;
       questionsRef.current = effectiveQuestions(path);
       profileRef.current.path = path;
     }
@@ -291,10 +360,44 @@ export default function ProfileBuild() {
     addMe(shown);
     setInput('');
     if (taRef.current) taRef.current.style.height = 'auto';
-    const turn = { [q.key]: stored, ...(extra || {}) };
+
+    // Each part lands in the DNA panel as it is given -- the panel lists facts
+    // learned, not questions closed, so a founder watches Stage, Experience and
+    // Revenue appear one by one even though they are one question.
+    displayRef.current = { ...displayRef.current, [ctl.key]: shown };
+    confirmField(ctl.key, shown, true);
+
+    if (isGroup) {
+      groupBufRef.current = { ...groupBufRef.current, [ctl.key]: stored, ...(extra || {}) };
+      // Recomputed AFTER the narrowing above, so answering "Stage 0" here
+      // removes the revenue part from this very group rather than one question
+      // too late.
+      const parts = activeParts(q, pathRef.current);
+      const nextPart = partIdxRef.current + 1;
+      if (nextPart < parts.length) {
+        // Still inside the same question: advance the part, stay on the index.
+        // Deliberately no save and no progress bump yet -- a half-answered
+        // question is not progress, and a partial group must not be written as
+        // though it were complete.
+        profileRef.current = { ...profileRef.current, ...groupBufRef.current };
+        partIdxRef.current = nextPart;
+        setPartIdx(nextPart);
+        resetControls();
+        setTyping(true);
+        await sleep(700); if (!alive.current) return;
+        setTyping(false);
+        addAlly(parts[nextPart].q);
+        if (parts[nextPart].prompt) addAlly(parts[nextPart].prompt);
+        awaitingRef.current = true;
+        setActiveQ(i);
+        return;
+      }
+    }
+
+    const turn = isGroup
+      ? { ...groupBufRef.current, [ctl.key]: stored, ...(extra || {}) }
+      : { [q.key]: stored, ...(extra || {}) };
     profileRef.current = { ...profileRef.current, ...turn };
-    displayRef.current = { ...displayRef.current, [q.key]: shown };
-    confirmField(q.key, shown, true);
     const nextQi = i + 1;
     qiRef.current = nextQi;
     // Save just this turn's answer immediately -- see the "resume support"
@@ -315,31 +418,59 @@ export default function ProfileBuild() {
     // when applicable -- the denominator shrinks the moment path is known,
     // rather than staying pinned to a count that includes questions this
     // founder will never be asked.
-    const answered = questionsRef.current.filter((x) => profileRef.current[x.key] !== undefined).length;
-    bumpUnd(Math.round((answered / questionsRef.current.length) * 100), 'Ally learned something new');
+    // Counted in QUESTIONS, not in answers: a group is one question and only
+    // counts once all of its parts (on this path) are in. Otherwise Q3 alone
+    // would move the bar three times and the founder would see 11 questions
+    // reported as 14.
+    const answered = questionsRef.current.filter(
+      (x) => questionKeys(x, pathRef.current).every((k) => profileRef.current[k] !== undefined),
+    ).length;
+    bumpUnd(Math.round((answered / questionCount(pathRef.current)) * 100), 'Ally learned something new');
 
     setTyping(true);
     await sleep(900); if (!alive.current) return;
     setTyping(false);
-    if (nextQi < questionsRef.current.length) {
-      addAlly(replyRef.current(q.key, replyInput, { first }));
-      await sleep(640); if (!alive.current) return;
-      askQ(nextQi);
-    } else {
-      addAlly(replyRef.current(q.key, replyInput, { first }));
-      await sleep(640); if (!alive.current) return;
-      finish();
-    }
-  }, [addMe, confirmField, bumpUnd, addAlly, askQ, finish, first]);
+    // Keyed on the control that was just answered -- a group has no reply of
+    // its own, and its last part is what the founder actually just said.
+    addAlly(replyRef.current(ctl.key, replyInput, { first }));
+    await sleep(640); if (!alive.current) return;
+    if (nextQi < questionsRef.current.length) askQ(nextQi); else finish();
+  }, [addMe, confirmField, bumpUnd, addAlly, askQ, finish, first, resetControls]);
 
-  /** Only reachable on a question marked `optional` (currently just the
-   * social handle) -- skips without storing anything, so the field simply
-   * stays null rather than being answered with an empty string. */
+  /** Only reachable on a control marked `optional` (currently just the social
+   * handle) -- skips without storing anything, so the field simply stays null
+   * rather than being answered with an empty string.
+   *
+   * Skipping a GROUP's part advances the part, not the question: marking one
+   * part optional must not silently skip the parts after it. No part is
+   * optional today, so this path is unreachable -- it is here so that marking
+   * one optional later is a one-line change rather than a silent bug. */
   const skip = useCallback(async () => {
     if (!awaitingRef.current) return;
     awaitingRef.current = false;
     setActiveQ(-1);
     const i = qiRef.current;
+    const q = questionsRef.current[i];
+
+    if (q.type === 'group') {
+      const parts = activeParts(q, pathRef.current);
+      const nextPart = partIdxRef.current + 1;
+      if (nextPart < parts.length) {
+        addMe('Skipped');
+        partIdxRef.current = nextPart;
+        setPartIdx(nextPart);
+        resetControls();
+        setTyping(true);
+        await sleep(500); if (!alive.current) return;
+        setTyping(false);
+        addAlly(parts[nextPart].q);
+        if (parts[nextPart].prompt) addAlly(parts[nextPart].prompt);
+        awaitingRef.current = true;
+        setActiveQ(i);
+        return;
+      }
+    }
+
     const nextQi = i + 1;
     qiRef.current = nextQi;
     addMe('Skipped');
@@ -347,7 +478,7 @@ export default function ProfileBuild() {
     await sleep(500); if (!alive.current) return;
     setTyping(false);
     if (nextQi < questionsRef.current.length) askQ(nextQi); else finish();
-  }, [addMe, askQ, finish]);
+  }, [addMe, addAlly, askQ, finish, resetControls]);
 
   /* The founder's name arrives from GET /profile *after* mount -- AppContext
      hydrates identity asynchronously. Greeting someone as "there" while their
@@ -383,9 +514,14 @@ export default function ProfileBuild() {
       // answered; before that, every question is in scope -- same fail-open
       // convention as effectiveQuestions(null) itself.
       const path = answers.stage ? (STAGE_BY_NAME[answers.stage]?.path || null) : null;
+      pathRef.current = path;
       questionsRef.current = effectiveQuestions(path);
       profileRef.current.path = path;
       const active = questionsRef.current;
+      // The flat list of facts behind those questions -- a group's parts each
+      // have their own saved answer, so resume reasons in parts and only
+      // rolls up to questions when deciding where to restart.
+      const rows = panelRowsFor(active, path);
 
       // Live-reproduced: an optional question (currently just the social
       // handle) that was genuinely skipped is indistinguishable from "never
@@ -398,9 +534,11 @@ export default function ProfileBuild() {
       // later question otherwise. An optional question with nothing later
       // filled either has genuinely not been reached yet, and is correctly
       // asked.
+      const anyFilled = (x) => questionKeys(x, path).some((k) => isFilled(answers[k]));
+      const allFilled = (x) => questionKeys(x, path).every((k) => isFilled(answers[k]));
       const isResolved = (x, i) =>
-        isFilled(answers[x.key]) ||
-        (x.optional && active.slice(i + 1).some((later) => isFilled(answers[later.key])));
+        allFilled(x) ||
+        (x.optional && active.slice(i + 1).some(anyFilled));
 
       const firstUnanswered = active.findIndex((x, i) => !isResolved(x, i));
       // -1 means every mapped field is already filled/resolved -- treat as
@@ -411,8 +549,20 @@ export default function ProfileBuild() {
       // fetch.
       const startAt = firstUnanswered === -1 ? active.length : firstUnanswered;
 
-      if (startAt > 0) {
-        const filled = active.filter((x) => isFilled(answers[x.key]));
+      // Where inside a group to pick up. A founder who answered the stage but
+      // left before the experience card must not be asked their stage again.
+      const resumeQ = active[startAt];
+      const resumeParts = resumeQ && resumeQ.type === 'group'
+        ? activeParts(resumeQ, path) : [];
+      const startPart = Math.max(0, resumeParts.findIndex((pt) => !isFilled(answers[pt.key])));
+      const resumeBuf = Object.fromEntries(
+        resumeParts.slice(0, startPart)
+          .filter((pt) => isFilled(answers[pt.key]))
+          .map((pt) => [pt.key, answers[pt.key]]),
+      );
+
+      if (startAt > 0 || startPart > 0) {
+        const filled = rows.filter((x) => isFilled(answers[x.key]));
         profileRef.current = {
           ...profileRef.current,
           ...Object.fromEntries(filled.map((x) => [x.key, answers[x.key]])),
@@ -454,7 +604,7 @@ export default function ProfileBuild() {
 
         addAlly(`Welcome back, ${first} — picking up right where we left off.`);
         await sleep(700);
-        askQ(startAt);
+        askQ(startAt, startPart, resumeBuf);
         return;
       }
 
@@ -467,7 +617,11 @@ export default function ProfileBuild() {
   }, [introReady]);
 
   const q = activeQ >= 0 ? questionsRef.current[activeQ] : null;
-  const isText = q && (q.type === 'short' || q.type === 'long' || q.type === 'url');
+  /* The control on screen. For a `group` question that is its current part --
+     everything below (the input type, its options, its cap, its Skip button)
+     belongs to the part, not to the question wrapping it. */
+  const ctrl = controlFor(q, pathRef.current, partIdx);
+  const isText = ctrl && (ctrl.type === 'short' || ctrl.type === 'long' || ctrl.type === 'url');
 
   /** A light heuristic, not a validator -- the backend's _validate_social_url
    * is the real check. This exists only to catch the case a founder types a
@@ -484,7 +638,7 @@ export default function ProfileBuild() {
   };
 
   const submitFreeText = (text) => {
-    if (q?.type === 'url' && q.optional && !looksLikeUrl(text)) { skip(); return; }
+    if (ctrl?.type === 'url' && ctrl.optional && !looksLikeUrl(text)) { skip(); return; }
     answer(text);
   };
 
@@ -544,7 +698,10 @@ export default function ProfileBuild() {
   const toggle = (value) => {
     setPicked((cur) => {
       if (cur.includes(value)) return cur.filter((v) => v !== value);
-      if (q?.max && cur.length >= q.max) return cur;   // cap enforced here
+      // At the cap, a further pick BUMPS THE OLDEST rather than being ignored
+      // (spec v2.4 Q10). Silently dropping the tap was the old behaviour and
+      // read as a broken chip: nothing moved, and nothing said why.
+      if (ctrl?.max && cur.length >= ctrl.max) return [...cur.slice(1), value];
       return [...cur, value];
     });
   };
@@ -552,37 +709,54 @@ export default function ProfileBuild() {
   const submitPicked = () => {
     if (picked.length === 0) return;
     const other = otherText.trim();
-    if (q.otherField) {
+    if (ctrl.otherField) {
       // The "other" option stays in the list as the marker that there is
       // more; the free text it reveals goes to its own column rather than
       // being appended as a pseudo-chip, so the same words are never stored
       // in two places. Applies to both 'chips' and 'multi' -- live-reproduced
       // gap this redesign fixes: current_challenges already offered an
       // "Other" option with nowhere for the typed text to go.
-      answer(picked, other ? { [q.otherField]: other } : undefined);
+      answer(picked, other ? { [ctrl.otherField]: other } : undefined);
       return;
     }
     answer(picked);
   };
 
   const filteredOptions = useMemo(() => {
-    if (!q || q.type !== 'dropdown') return [];
+    if (!ctrl || ctrl.type !== 'dropdown') return [];
+    const opts = activeOptions(ctrl, pathRef.current);
     const term = search.trim().toLowerCase();
-    if (!term) return q.options;
-    return q.options.filter((o) => optLabel(o).toLowerCase().includes(term));
-  }, [q, search]);
+    if (!term) return opts;
+    return opts.filter((o) => optLabel(o).toLowerCase().includes(term));
+  }, [ctrl, search]);
 
+  /* Facts, not questions -- Q3 contributes Stage, Experience and (on Path 2)
+     Monthly Revenue as three separate rows a founder watches fill in. */
+  const panelRows = panelRowsFor(questionsRef.current, pathRef.current);
+
+  /* Chapter eyebrow + progress bar (spec v2.4 s2). The eyebrow shifts at each
+     section boundary so four sections read as one continuous conversation
+     rather than four stapled-together blocks, and the step counter is in
+     QUESTIONS -- a group counts once, however many parts it asks. */
+  const chapter = q ? SECTIONS.find((sec) => sec.key === q.section) : null;
+  // questionCount(), not questionsRef.current.length -- before the stage answer
+  // that list is the superset of both paths, and showing its length made the
+  // total drop from 12 to 11 mid-flow. Indices are safe to read directly: every
+  // question at or before the stage part is on both paths, so position 1-3
+  // means the same thing either way.
+  const totalQs = questionCount(pathRef.current);
+  const stepNo = activeQ >= 0 ? activeQ + 1 : 0;
   const sectionCount = (key) =>
-    questionsRef.current.filter((x) => x.section === key && fields[x.key]?.status === 'on').length;
+    panelRows.filter((x) => x.section === key && fields[x.key]?.status === 'on').length;
 
-  const needsOther = (q?.type === 'chips' || q?.type === 'multi') && !!q?.otherValue && picked.includes(q.otherValue);
-  const atMax = q?.max ? picked.length >= q.max : false;
+  const needsOther = (ctrl?.type === 'chips' || ctrl?.type === 'multi') && !!ctrl?.otherValue && picked.includes(ctrl.otherValue);
+  const atMax = ctrl?.max ? picked.length >= ctrl.max : false;
 
   /* --- the input region, one control per question type --------------------- */
   function renderControl() {
-    if (!q) return null;
+    if (!ctrl) return null;
 
-    if (q.type === 'stage') {
+    if (ctrl.type === 'stage') {
       const group = STAGE_GROUPS.find((g) => g.key === stageGroup);
       if (!group) {
         return (
@@ -634,10 +808,10 @@ export default function ProfileBuild() {
       );
     }
 
-    if (q.type === 'single') {
+    if (ctrl.type === 'single') {
       return (
         <div className="suggs">
-          {q.options.map((o) => (
+          {activeOptions(ctrl, pathRef.current).map((o) => (
             <button
               key={optValue(o)}
               type="button"
@@ -651,22 +825,22 @@ export default function ProfileBuild() {
       );
     }
 
-    if (q.type === 'dropdown') {
+    if (ctrl.type === 'dropdown') {
       // Picking the "other" option doesn't answer immediately -- it waits for
       // the free text behind it (spec: "If Other selected -> show free-text
       // input"), reusing `picked`/`otherText` the same way chips/multi do
       // rather than inventing separate state for a third control.
-      const otherPending = q.otherValue && picked[0] === q.otherValue;
+      const otherPending = ctrl.otherValue && picked[0] === ctrl.otherValue;
       return (
         <div className="ob-drop">
-          <label className="sr-only" htmlFor="obSearch">{q.q}</label>
+          <label className="sr-only" htmlFor="obSearch">{ctrl.q}</label>
           <input
             id="obSearch"
             ref={searchRef}
             className="ob-search"
             type="text"
             value={search}
-            placeholder={q.placeholder}
+            placeholder={ctrl.placeholder}
             onChange={(e) => setSearch(e.target.value)}
             autoComplete="off"
             disabled={otherPending}
@@ -685,7 +859,7 @@ export default function ProfileBuild() {
                     role="option"
                     aria-selected="false"
                     className="ob-drop-opt"
-                    onClick={() => (q.otherValue && v === q.otherValue ? setPicked([v]) : answer(v))}
+                    onClick={() => (ctrl.otherValue && v === ctrl.otherValue ? setPicked([v]) : answer(v))}
                   >
                     {optLabel(o)}
                   </button>
@@ -698,9 +872,9 @@ export default function ProfileBuild() {
               <input
                 className="ob-other"
                 type="text"
-                aria-label={q.otherPlaceholder || 'Tell us more'}
+                aria-label={ctrl.otherPlaceholder || 'Tell us more'}
                 value={otherText}
-                placeholder={q.otherPlaceholder || 'Tell me more…'}
+                placeholder={ctrl.otherPlaceholder || 'Tell me more…'}
                 onChange={(e) => setOtherText(e.target.value)}
                 autoFocus
               />
@@ -714,7 +888,7 @@ export default function ProfileBuild() {
                   disabled={!otherText.trim()}
                   onClick={() => {
                     const text = otherText.trim();
-                    answer(q.otherValue, q.otherField ? { [q.otherField]: text } : undefined, text);
+                    answer(ctrl.otherValue, ctrl.otherField ? { [ctrl.otherField]: text } : undefined, text);
                   }}
                 >
                   Continue
@@ -726,11 +900,11 @@ export default function ProfileBuild() {
       );
     }
 
-    if (q.type === 'yesno') {
-      const allAnswered = q.items.every((it) => yesNo[it.key] !== undefined);
+    if (ctrl.type === 'yesno') {
+      const allAnswered = ctrl.items.every((it) => yesNo[it.key] !== undefined);
       return (
         <div className="ob-yesno">
-          {q.items.map((it) => (
+          {ctrl.items.map((it) => (
             <div key={it.key} className="ob-yesno-row">
               <div className="ob-yesno-text">
                 <span className="ob-yesno-claim">{it.text}</span>
@@ -757,13 +931,13 @@ export default function ProfileBuild() {
             </div>
           ))}
           <div className="ob-multi-foot">
-            <span className="ob-count">{Object.keys(yesNo).length} of {q.items.length} answered</span>
+            <span className="ob-count">{Object.keys(yesNo).length} of {ctrl.items.length} answered</span>
             <button
               type="button"
               className="btn btn-em ob-continue"
               disabled={!allAnswered}
               onClick={() => {
-                const display = q.items.map((it) => `${it.text}: ${yesNo[it.key] ? 'Yes' : 'No'}`).join(' · ');
+                const display = ctrl.items.map((it) => `${it.text}: ${yesNo[it.key] ? 'Yes' : 'No'}`).join(' · ');
                 answer(yesNo, undefined, display);
               }}
             >
@@ -774,11 +948,11 @@ export default function ProfileBuild() {
       );
     }
 
-    if (q.type === 'chips' || q.type === 'multi') {
+    if (ctrl.type === 'chips' || ctrl.type === 'multi') {
       return (
         <div className="ob-multi">
           <div className="ob-chips">
-            {q.options.map((o) => {
+            {activeOptions(ctrl, pathRef.current).map((o) => {
               const v = optValue(o);
               const on = picked.includes(v);
               return (
@@ -787,7 +961,6 @@ export default function ProfileBuild() {
                   type="button"
                   className={`sugg${on ? ' on' : ''}`}
                   aria-pressed={on}
-                  disabled={!on && atMax}
                   onClick={() => toggle(v)}
                 >
                   {optLabel(o)}
@@ -800,16 +973,18 @@ export default function ProfileBuild() {
             <input
               className="ob-other"
               type="text"
-              aria-label={q.otherPlaceholder || 'Tell us more'}
+              aria-label={ctrl.otherPlaceholder || 'Tell us more'}
               value={otherText}
-              placeholder={q.otherPlaceholder || 'Tell me more…'}
+              placeholder={ctrl.otherPlaceholder || 'Tell me more…'}
               onChange={(e) => setOtherText(e.target.value)}
             />
           )}
 
           <div className="ob-multi-foot">
             <span className="ob-count">
-              {q.max ? `${picked.length} of ${q.max} chosen` : `${picked.length} chosen`}
+              {ctrl.max
+                ? `${picked.length} of ${ctrl.max} chosen${atMax ? ' — picking another swaps the first' : ''}`
+                : `${picked.length} chosen`}
             </span>
             <button
               type="button"
@@ -839,8 +1014,8 @@ export default function ProfileBuild() {
           <textarea
             id="profText"
             ref={taRef}
-            rows={q.type === 'long' ? 2 : 1}
-            placeholder={q.placeholder || 'Type your answer…'}
+            rows={ctrl.type === 'long' ? 2 : 1}
+            placeholder={ctrl.placeholder || 'Type your answer…'}
             value={input}
             onChange={onInput}
             onKeyDown={onKeyDown}
@@ -859,18 +1034,18 @@ export default function ProfileBuild() {
             <svg viewBox="0 0 24 24"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z" /></svg>
           </button>
         </div>
-        {q.optional && (
+        {ctrl.optional && (
           <button type="button" className="ob-skip" onClick={skip}>
             Skip — I'd rather not share
           </button>
         )}
-        {q.examples && (
-          <p className="ci-hint">For example: {q.examples.join(' · ')}</p>
+        {ctrl.examples && (
+          <p className="ci-hint">For example: {ctrl.examples.join(' · ')}</p>
         )}
-        {!q.examples && (
+        {!ctrl.examples && (
           <p className="ci-hint">
             Ally is building your founder profile as you talk · Enter to send
-            {q.type === 'long' ? ' · Shift+Enter for a new line' : ''}
+            {ctrl.type === 'long' ? ' · Shift+Enter for a new line' : ''}
           </p>
         )}
       </div>
@@ -884,6 +1059,24 @@ export default function ProfileBuild() {
       <h1 className="sr-only">Building your founder profile</h1>
       <div className="chat">
         <div className="chat-main">
+          {chapter && (
+            <div className="ob-chapter">
+              <div className="ob-chapter-row">
+                <span className="ob-chapter-t">{chapter.chapter}</span>
+                <span className="ob-chapter-n">Question {stepNo} of {totalQs}</span>
+              </div>
+              <div
+                className="ob-chapter-bar"
+                role="progressbar"
+                aria-valuenow={stepNo}
+                aria-valuemin={0}
+                aria-valuemax={totalQs}
+                aria-label="Onboarding progress"
+              >
+                <i style={{ width: `${totalQs ? (stepNo / totalQs) * 100 : 0}%` }} />
+              </div>
+            </div>
+          )}
           {/* aria-live alone announced nothing useful without a role or a name. */}
           <div className="chat-scroll" ref={scrollRef} role="log" aria-live="polite" aria-label="Your conversation with Ally">
             {messages.map((m, i) => (
@@ -939,7 +1132,7 @@ export default function ProfileBuild() {
               // The founder's own path-narrowed list -- a Path 1 founder never
               // sees a "Waiting…" row for a question (revenue, business
               // reality, …) they will never actually be asked.
-              const qs = questionsRef.current.filter((x) => x.section === sec.key);
+              const qs = panelRows.filter((x) => x.section === sec.key);
               return (
                 <div key={sec.key} className={`pfg${sectionsOpen[sec.key] ? ' open' : ''}`}>
                   <div className="pfg-head">

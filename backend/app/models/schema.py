@@ -1324,6 +1324,12 @@ class Questions(Base):
     __table_args__ = (
         CheckConstraint('difficulty_level >= 1 AND difficulty_level <= 5', name='questions_difficulty_level_check'),
         CheckConstraint("primary_stage_group::text = ANY (ARRAY['Stage 0'::character varying, 'Stage 0→1'::character varying, 'Stage 1→10+'::character varying]::text[])", name='questions_primary_stage_group_check'),
+        # The constraint above bounds the VALUE of a tag but never requires
+        # one: a SQL CHECK passes when its expression is NULL. This one
+        # requires it. Added NOT VALID by migration b7e4f2a91c58, so it binds
+        # every INSERT and UPDATE while leaving any untagged legacy row in
+        # place -- which is why the column below is still Optional here.
+        CheckConstraint('primary_stage_group IS NOT NULL', name='questions_stage_group_required'),
         CheckConstraint("priority::text = ANY (ARRAY['CORE'::character varying, 'SUPPLEMENTARY'::character varying]::text[])", name='questions_priority_check'),
         CheckConstraint("question_type::text = ANY (ARRAY['open_text'::character varying, 'rating_scale'::character varying, 'yes_no'::character varying, 'multiple_choice'::character varying]::text[])", name='questions_question_type_check'),
         ForeignKeyConstraint(['follow_up_question_id'], ['questions.question_id'], name='questions_follow_up_question_id_fkey'),

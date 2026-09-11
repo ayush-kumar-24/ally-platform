@@ -26,18 +26,17 @@ function fieldOrder(path) {
     ['stage', 'Entrepreneurial Stage'],
     ['socialHandle', 'Social Handle', { edit: true }],
   ];
-  if (path === PATH_2) {
-    rows.push(
-      ['building', "What You're Building", { edit: true }],
-      ['productDescription', 'What It Is', { edit: true }],
-    );
-  } else if (path === PATH_1) {
-    rows.push(['ideaName', 'Idea Name', { edit: true }]);
-  }
+  rows.push(
+    // Q4's two parts. Path 1 names an idea, Path 2 names a product -- one
+    // column either way, so one row either way.
+    ['buildingName', path === PATH_1 ? 'Idea Name' : "What You're Building", { edit: true }],
+    ['buildingDescription', 'What It Is', { edit: true }],
+  );
   rows.push(
     ['problem', 'Problem Statement', { edit: true }],
-    ['audience', 'Who You Serve'],
+    // Industry before Audience, matching the order they were asked in.
     ['industry', 'Industry'],
+    ['audience', 'Who You Serve'],
   );
   if (path === PATH_2) rows.push(['revenue', 'Monthly Revenue']);
   rows.push(['founderReality', 'Founder Reality', { yesno: true }]);
@@ -56,9 +55,8 @@ function fieldOrder(path) {
  * for `edit: true` rows above -- static rows are never retyped. */
 const SAVE_AS = {
   socialHandle: 'linkedin_url',
-  building: 'building_summary',
-  ideaName: 'building_summary', // same column, mutually exclusive by path
-  productDescription: 'product_description',
+  buildingName: 'building_summary',
+  buildingDescription: 'product_description',
   problem: 'problem_statement',
   oneYearSuccess: 'vision_1_year',
   ninetyDayGoal: 'goal_90_day',
@@ -69,7 +67,10 @@ const SAVE_AS = {
  * to "[object Object]". Same per-item Yes/No summary the live onboarding
  * flow and its resume path already build. */
 function yesNoSummary(key, value) {
-  const q = QUESTIONS.find((x) => x.key === key);
+  // Business Reality is a PART of Q9's group, not a top-level question, so
+  // the lookup has to descend one level or it silently returns ''.
+  const q = QUESTIONS.flatMap((x) => (x.type === 'group' ? x.parts : [x]))
+    .find((x) => x.key === key);
   if (!q || !value) return '';
   return q.items.map((it) => `${it.text}: ${value[it.key] ? 'Yes' : 'No'}`).join(' · ');
 }

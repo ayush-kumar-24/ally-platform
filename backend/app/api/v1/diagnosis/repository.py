@@ -161,17 +161,28 @@ class DiagnosisRepository:
         """Every question still unanswered in this session and valid for the
         founder's stage.
 
-        Questions with a NULL `primary_stage_group` are stage-agnostic and
-        always eligible, which is why the predicate ORs rather than filters.
+        A question must be TAGGED for one of the founder's stage groups to be
+        eligible. An untagged one (NULL `primary_stage_group`) is not a
+        stage-agnostic question that suits everybody -- it is a question nobody
+        decided a stage for, and it used to be served to every founder at every
+        stage on exactly that basis. That is how a scaling founder gets asked
+        an ideation question and an ideation founder gets asked about revenue
+        concentration: silently, with no error and nothing in the logs.
 
-        Note the bank currently contains NO such rows -- every one of the 2127
-        questions is pinned to exactly one group. An earlier version of this
-        docstring claimed stage-agnostic questions were "the majority of the
-        bank"; that has not been true for some time, and believing it hides
-        how narrow a single stage group can be. Market Clarity had just four
-        questions reachable by a scaling founder until
+        The bank has no such rows today -- all 1,213 seeded questions are
+        pinned to exactly one group -- so this changes no founder's diagnosis
+        now. It closes the door for the next question added without a tag,
+        which would otherwise reach everyone. Migration `b7e4f2a91c58` shuts
+        the same door at the database, so an untagged row cannot be inserted in
+        the first place; this is the half that protects sessions running
+        against a database where that constraint has not been validated yet.
+
+        Note how narrow a single stage group can be before assuming this leaves
+        plenty of breadth: Market Clarity had just four questions reachable by a
+        scaling founder until
         `f6d2a81c53e7_retag_market_clarity_scaling_questions` moved 134
-        mis-tagged ones. Check the real distribution before assuming breadth.
+        mis-tagged ones. Check the real distribution rather than trusting that
+        a group is well stocked.
 
         Ordering is left to the engine -- this returns an unordered candidate
         set on purpose.
@@ -180,8 +191,7 @@ class DiagnosisRepository:
 
         stmt: Select = select(Question).where(
             Question.question_id.not_in(answered),
-            (Question.primary_stage_group.is_(None))
-            | (Question.primary_stage_group.in_(stage_groups)),
+            Question.primary_stage_group.in_(stage_groups),
         )
 
         # Do not re-ask what Founder DNA already asked.
