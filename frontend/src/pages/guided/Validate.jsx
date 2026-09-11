@@ -7,15 +7,28 @@ import { useFounderRead } from '../../hooks/useFounderRead';
 /* Keyed to the challenge values onboarding actually stores. Was keyed to
    'challenges', a key that stopped existing when the 2026-08-17 redesign
    renamed it to 'biggestChallenge' -- every founder silently fell through to
-   the same default line again, the exact bug this file's own history already
-   describes once. Also updated for the redesign's option list: 'Team' and
-   'Leadership' merged into one 'Team leadership' option, and 'Decision
-   making' became 'Decision-making' (see onboardingQuestions.js). */
+   the same default line again.
+
+   That is exactly what happened a second time on 2026-09-11: the spec v2.4
+   pass split 'Team leadership' back into 'Team' and 'Leadership' and dropped
+   the hyphen from 'Decision-making', and this map was not updated with it. A
+   founder whose top challenge was any of those three read the generic
+   fallback instead of their own line. The lesson this file keeps having to
+   learn: these keys are onboarding's option values, and they move.
+
+   BOTH spellings are kept on purpose. The new ones are what onboarding writes
+   now; the old ones are still sitting in `current_challenges` for every
+   founder who completed onboarding before that change, and their Validate
+   screen has to keep working too. */
 const INSTINCT_BY_CHALLENGE = {
   'Getting customers': 'Your instinct when growth stalls is to push harder on what already works.',
   Sales: 'Your instinct when the pipeline thins is to sell your way out of it personally.',
   Marketing: 'Your instinct when nobody is listening is to say it louder rather than differently.',
   Hiring: 'Your instinct when the team is stretched is to absorb the work yourself first.',
+  // Current option values.
+  Team: 'Your instinct when the team is stretched is to carry more of it yourself.',
+  Leadership: 'Your instinct when people look to you for direction is to steady them before yourself.',
+  // Pre-2026-09-11 value, still stored for founders who onboarded before the split.
   'Team leadership': 'Your instinct when the team wobbles is to carry more of it yourself.',
   'Cash flow': 'Your instinct when money is tight is to cut before you ask for help.',
   Fundraising: 'Your instinct when runway shortens is to keep building rather than start raising.',
@@ -23,6 +36,8 @@ const INSTINCT_BY_CHALLENGE = {
   Operations: 'Your instinct when things get messy is to hold the process together manually.',
   'Building the product': 'Your instinct when unsure is to build a little more before you ask.',
   'Finding the right idea': 'Your instinct when the path is unclear is to keep exploring rather than commit early.',
+  'Decision making': 'Your instinct when the call is close is to sit with it longer than you need to.',
+  // Pre-2026-09-11 spelling, still stored for founders who onboarded before it changed.
   'Decision-making': 'Your instinct when the call is close is to sit with it longer than you need to.',
   Productivity: 'Your instinct when the day gets away from you is to work later rather than narrower.',
 };

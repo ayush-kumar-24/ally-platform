@@ -47,8 +47,12 @@ def _progress(
 ) -> FounderDnaProgress:
     resolved = sorted(repository.get_resolved_dimensions(founder))
     remaining = [d for d in ALL_DIMENSIONS if d not in resolved]
+    # The count is per stage group, so it has to be asked for by group -- a
+    # founder who changed stage is on a new journey, and the answers from the
+    # old one are not part of the progress being reported here.
+    stage_group = resolve_founder_dna_stage_group(founder)
     return FounderDnaProgress(
-        questions_answered=repository.count_answered(founder.founder_id),
+        questions_answered=repository.count_answered(founder.founder_id, stage_group),
         dimensions_resolved=resolved,
         dimensions_remaining=remaining,
         is_complete=is_complete,
