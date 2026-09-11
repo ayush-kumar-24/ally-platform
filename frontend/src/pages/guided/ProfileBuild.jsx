@@ -6,6 +6,7 @@ import { readable } from '../../utils/profileDisplay';
 import { useVoiceInput } from '../../hooks/useVoiceInput';
 import useAutoScroll from '../../hooks/useAutoScroll';
 import VoiceBars from '../../components/VoiceBars';
+import MessageActions from '../../components/MessageActions';
 import {
   QUESTIONS as ALL_QUESTIONS,
   effectiveQuestions,
@@ -892,7 +893,16 @@ export default function ProfileBuild() {
                 <span className={`m-av ${m.who === 'me' ? 'me' : 'ally'}`}>
                   {m.who === 'me' ? initial : <img src="/ally-logo-mark-on-dark.png" alt="" />}
                 </span>
-                <div><div className="bubble">{m.text}</div></div>
+                <div>
+                  <div className="bubble">{m.text}</div>
+                  {/* Copy only: these answers are written straight into the
+                      founder's profile, and the profile page is where they are
+                      edited afterwards. */}
+                  <MessageActions
+                    text={m.text}
+                    what={m.who === 'me' ? 'your answer' : "Ally's question"}
+                  />
+                </div>
               </div>
             ))}
             {typing && (

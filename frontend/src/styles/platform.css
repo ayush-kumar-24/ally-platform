@@ -386,6 +386,44 @@ body.sb-collapsed .sb-toggle .ic{transform:rotate(180deg)}
 .msg.me .bubble{background:#10B981;color:#06231a;border-bottom-right-radius:5px;font-weight:450}
 .m-meta{font-size:10.5px;color:#7d9488;margin-top:5px}
 .msg.me .m-meta{text-align:right}
+
+/* ---- Per-message controls (copy, and edit where re-sending means something)
+   Hidden until the message is hovered or something inside it takes focus, so
+   a long transcript stays a transcript rather than a wall of buttons. They
+   keep their space either way -- revealing them must not shove the message
+   below down by a row.
+
+   pointer-events go with the opacity so an invisible button cannot be clicked
+   by accident. Keyboard access is unaffected: a tab still lands on the button
+   (opacity does not remove focusability), and that focus trips :focus-within,
+   which makes it visible and clickable in the same moment. */
+.msg-actions{display:flex;gap:2px;margin-top:4px;opacity:0;pointer-events:none;transition:opacity .14s ease}
+.msg:hover .msg-actions,.msg:focus-within .msg-actions{opacity:1;pointer-events:auto}
+.msg.me .msg-actions{justify-content:flex-end}
+/* No hover on a touch screen, so there is no gesture that could ever reveal
+   them -- they are simply always on there. */
+@media (hover:none){ .msg-actions{opacity:1;pointer-events:auto} }
+.msg-act{display:inline-flex;align-items:center;gap:5px;padding:3px 7px;border:0;border-radius:7px;background:transparent;color:#7d9488;font:inherit;font-size:11px;line-height:1;cursor:pointer;transition:background .14s ease,color .14s ease}
+.msg-act:hover{background:rgba(255,255,255,.07);color:#c7d8ce}
+.msg-act:focus-visible{outline:2px solid rgba(16,185,129,.55);outline-offset:1px}
+.msg-act>svg{width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.msg-act.is-copied{color:#34d399}
+.msg-act.is-failed{color:#f87171}
+/* The word is the affordance on a wide screen and noise on a narrow one,
+   where the icon alone has to carry it. */
+@media (max-width:560px){ .msg-act-text{display:none} .msg-act{padding:4px 6px} }
+
+/* ---- Editing a sent message, in place of its bubble -------------------- */
+.msg-edit{display:flex;flex-direction:column;gap:8px;min-width:min(420px,60vw);max-width:100%}
+.msg-edit textarea{width:100%;box-sizing:border-box;padding:13px 17px;border-radius:16px;border:1px solid rgba(16,185,129,.45);background:rgba(255,255,255,.06);color:#eaf3ee;font:inherit;font-size:14.5px;line-height:1.62;resize:none;max-height:40vh;overflow-y:auto}
+.msg-edit textarea:focus{outline:none;border-color:rgba(16,185,129,.8)}
+.msg-edit-row{display:flex;gap:8px;justify-content:flex-end}
+.msg-edit-btn{padding:6px 13px;border-radius:9px;border:1px solid rgba(255,255,255,.14);background:transparent;color:#c7d8ce;font:inherit;font-size:12.5px;cursor:pointer;transition:background .14s ease,border-color .14s ease}
+.msg-edit-btn:hover{background:rgba(255,255,255,.07)}
+.msg-edit-btn.primary{background:#10B981;border-color:#10B981;color:#06231a;font-weight:600}
+.msg-edit-btn.primary:hover{background:#0ea472;border-color:#0ea472}
+.msg-edit-btn:disabled{opacity:.5;cursor:not-allowed}
+.msg-edit-btn:focus-visible{outline:2px solid rgba(16,185,129,.55);outline-offset:2px}
 .reason{display:inline-flex;align-items:center;gap:9px;margin-top:9px;padding:6px 12px;border-radius:10px;background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.22);font-size:11.5px;color:#34d399;font-weight:600}
 .reason .dots{display:flex;gap:3px}
 .reason .dots span{width:5px;height:5px;border-radius:50%;background:currentColor;animation:blink 1.2s infinite}

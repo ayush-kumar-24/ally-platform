@@ -29,6 +29,8 @@ import { greetingNow } from '../utils/helpers';
 import { useVoiceInput } from '../hooks/useVoiceInput';
 import useAutoScroll from '../hooks/useAutoScroll';
 import VoiceBars from '../components/VoiceBars';
+import MessageActions from '../components/MessageActions';
+import MessageEditor from '../components/MessageEditor';
 import Markdown from '../components/Markdown';
 import { usePlan as usePlanGateEntitlements } from '../components/PlanGate';
 import { explainLimit, getMyPlan, can, FEATURES } from '../services/plans';
@@ -481,6 +483,23 @@ export default function AllyChat() {
     return { ok: true, answer, streamed: true, conversation_id: summary?.conversation_id };
   };
 
+  /* Which message is open for editing, by index. Index rather than id: an
+     optimistic message has not been given a server id yet, and the one just
+     sent is exactly the one most likely to need fixing. */
+  const [editingIdx, setEditingIdx] = useState(null);
+
+  /* An edited message goes out as a NEW turn; the original stays in the
+     transcript above it. Not a shortcut -- there is no endpoint that can
+     remove a message once it is persisted, and quietly hiding it in this tab
+     would leave the founder looking at a conversation that does not match the
+     one Ally has. send() already treats edited text as a genuinely new
+     message for idempotency (see requestId below), so this is the shape the
+     send path was written for. */
+  const sendEdited = (text) => {
+    setEditingIdx(null);
+    send(text);
+  };
+
   const send = async (text) => {
     if (!text.trim() || sending) return;
     setLimitNotice(null);
@@ -891,9 +910,17 @@ export default function AllyChat() {
                       : (user?.initials || firstName || '?').charAt(0).toUpperCase()}
                   </div>
                   <div>
+                    {editingIdx === i ? (
+                      <MessageEditor
+                        initialText={m.text}
+                        onSubmit={sendEdited}
+                        onCancel={() => setEditingIdx(null)}
+                      />
+                    ) : (
                     <div className="bubble">
                       {m.role === 'ally' ? <Markdown>{m.text}</Markdown> : m.text}
                     </div>
+                    )}
                     {/* Files delivered with this turn -- read-only here (the
                         message is already sent), so no remove control. */}
                     {(sentAttachments[m.id] || []).length > 0 && (
@@ -911,7 +938,22 @@ export default function AllyChat() {
                     {m.confidence && (
                       <ConfBar pct={m.confidence} />
                     )}
-                    <div className="m-meta">{m.time}</div>
+                    {editingIdx !== i && (
+                      <>
+                        <div className="m-meta">{m.time}</div>
+                        <MessageActions
+                          text={m.text}
+                          what={m.role === 'ally' ? "Ally's reply" : 'your message'}
+                          /* Editing is offered on the founder's own messages
+                             only, and not while a send is already in flight --
+                             a second turn queued behind the first would arrive
+                             out of order. */
+                          onEdit={m.role === 'me' && !sending
+                            ? () => setEditingIdx(i)
+                            : undefined}
+                        />
+                      </>
+                    )}
                   </div>
                 </div>
               ))}

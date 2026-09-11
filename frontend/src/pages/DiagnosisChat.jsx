@@ -8,6 +8,7 @@ import VoiceBars from '../components/VoiceBars';
 import useAutoGrow from '../hooks/useAutoGrow';
 import useAutoScroll from '../hooks/useAutoScroll';
 import Markdown from '../components/Markdown';
+import MessageActions from '../components/MessageActions';
 import FeedbackPrompt from '../components/FeedbackPrompt';
 import LiveKnowledgeGraph from '../components/LiveKnowledgeGraph';
 import { FEEDBACK } from '../services/feedback';
@@ -324,6 +325,19 @@ export default function DiagnosisChat() {
                   {m.role === 'ally' ? <Markdown>{m.text}</Markdown> : m.text}
                 </div>
                 <div className="m-meta">{m.time}</div>
+                {/* Copy only, deliberately. An answer here is not a chat
+                    message: submitAnswer scored it server-side, wrote it into
+                    the evidence set and moved the session on to the next
+                    question. There is nothing an edit could revise -- and
+                    re-sending old text would post it against `question.id`,
+                    the question now on screen, scoring an answer to one
+                    question as the answer to a different one. Real revision
+                    needs a backend that can retract and re-score; until then,
+                    no button should imply it can. */}
+                <MessageActions
+                  text={m.text}
+                  what={m.role === 'ally' ? "Ally's question" : 'your answer'}
+                />
               </div>
             </div>
           ))}
