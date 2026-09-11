@@ -144,3 +144,54 @@ def test_beyond_stage_0_still_requires_the_business_questions(stage_order):
         f"stage {stage_order} should still require {sorted(PATH_1_MUST_NOT_REQUIRE)}, "
         f"missing only reports {sorted(missing)}"
     )
+
+
+# --- The diagnosis bank: an untagged question reaches nobody ----------------
+#
+# Not onboarding, but the same rule one phase later: every question a founder
+# is asked has to be chosen for their stage. `questions.primary_stage_group`
+# was nullable and NULL meant "eligible for everyone", so one question added
+# without a tag would have been asked of every founder at every stage --
+# silently, because nothing about it looks like an error.
+
+class _CapturingDb:
+    """Stands in for a Session just long enough to catch the built query."""
+
+    def __init__(self):
+        self.stmt = None
+
+    def execute(self, stmt):
+        self.stmt = stmt
+        return self
+
+    def scalars(self):
+        return self
+
+    def all(self):
+        return []
+
+
+def _candidate_sql(stage_groups):
+    from app.api.v1.diagnosis.repository import DiagnosisRepository
+
+    db = _CapturingDb()
+    DiagnosisRepository(db).list_candidate_questions(
+        session_id=1, stage_groups=stage_groups, founder_id=None
+    )
+    return str(db.stmt.compile(compile_kwargs={"literal_binds": True}))
+
+
+def test_candidate_query_never_admits_an_untagged_question():
+    sql = _candidate_sql(["Stage 0"])
+    assert "primary_stage_group IS NULL" not in sql.replace("\n", " "), (
+        "the candidate query still treats an untagged question as eligible for "
+        "everyone:\n" + sql
+    )
+
+
+def test_candidate_query_still_filters_on_the_founders_stage_group():
+    """The mirror: closing the NULL branch must not drop stage filtering
+    altogether, which would serve every question to every founder instead."""
+    sql = _candidate_sql(["Stage 0"]).replace("\n", " ")
+    assert "primary_stage_group IN" in sql, sql
+    assert "'Stage 0'" in sql, sql
