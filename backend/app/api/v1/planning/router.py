@@ -4,7 +4,7 @@ Domain errors propagate to the global handler."""
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, BackgroundTasks, Depends
 
 from app.api.v1.planning.dependencies import (
     get_current_founder_id,
@@ -38,6 +38,7 @@ from sqlalchemy.orm import Session
 
 from app.calendar_sync import hooks
 from app.db.session import get_db
+from app.models import Founder
 from app.planning.service import PlanningService
 from app.services import task_reminders
 
@@ -143,8 +144,33 @@ def update_goal(goal_id: str, payload: GoalUpdate, founder_id: int = Depends(get
 # --- tasks ------------------------------------------------------------------
 
 
+def _queue_task_email(background: BackgroundTasks, db: Session, founder_id: int,
+                      task, timezone_name: str) -> None:
+    """Queue the "this is scheduled" email, if this founder should get one.
+
+    The decision (Pro plan, notification preference, does the task even have a
+    date) belongs to the service; this only carries the result to FastAPI's
+    background queue, which runs it after the response has gone out.
+
+    The founder row is fetched here rather than injected, so these routes keep
+    depending on get_current_founder_id like every other route in this file.
+    It costs nothing: get_current_founder_id resolves through get_founder_record,
+    so the row is already in this session's identity map and db.get() does not
+    go back to the database. None means no row -- nothing to email, and no
+    reason to fail a save that already succeeded.
+    """
+    founder = db.get(Founder, founder_id)
+    if founder is None:
+        return
+    job = task_reminders.notify_task_scheduled(
+        db, founder, task, timezone_name=timezone_name)
+    if job is not None:
+        background.add_task(job)
+
+
 @router.post("/goals/{goal_id}/tasks", response_model=TaskResponse, status_code=201, summary="Add a task")
-def add_task(goal_id: str, payload: TaskCreate, founder_id: int = Depends(get_current_founder_id),
+def add_task(goal_id: str, payload: TaskCreate, background: BackgroundTasks,
+             founder_id: int = Depends(get_current_founder_id),
              service: PlanningService = Depends(get_planning_service),
              db: Session = Depends(get_db)) -> TaskResponse:
     # Saved first, synced second, and never the other way round: the task is
@@ -154,10 +180,13 @@ def add_task(goal_id: str, payload: TaskCreate, founder_id: int = Depends(get_cu
         founder_id, goal_id, title=payload.title, priority=payload.priority,
         due_date=payload.due_date, due_time=payload.due_time)
     task = hooks.after_task_saved(db, service, task, timezone_name=payload.timezone)
-    # Schedules the email nudge, or clears it when the task has no date. Same
-    # rule as the calendar hook above: saved first, notified second, and the
-    # task survives either one failing.
+    # Closes out the legacy T-30 email row. Same rule as the calendar hook
+    # above: saved first, notified second, and the task survives either failing.
     task_reminders.sync_for_task(service, task, timezone_name=payload.timezone)
+    # The confirmation goes out now, not thirty minutes before. In the
+    # background so an SMTP handshake -- which can take seconds, and can hang --
+    # is never in the path of the founder's save.
+    _queue_task_email(background, db, founder_id, task, payload.timezone)
     return TaskResponse.from_domain(task)
 
 
@@ -169,20 +198,29 @@ def list_tasks(goal_id: str, founder_id: int = Depends(get_current_founder_id),
 
 
 @router.patch("/tasks/{task_id}", response_model=TaskResponse, summary="Update a task")
-def update_task(task_id: str, payload: TaskUpdate, founder_id: int = Depends(get_current_founder_id),
+def update_task(task_id: str, payload: TaskUpdate, background: BackgroundTasks,
+                founder_id: int = Depends(get_current_founder_id),
                 service: PlanningService = Depends(get_planning_service),
                 db: Session = Depends(get_db)) -> TaskResponse:
     fields = {k: v for k, v in payload.model_dump(exclude_unset=True).items()
               if k not in ("due_date", "due_time", "timezone")}
     fields.update(_date_kwargs(payload, "due_date", "clear_due_date"))
     fields.update(_date_kwargs(payload, "due_time", "clear_due_time"))
+    # Read before the write so the email can tell a reschedule from any other
+    # edit. Renaming a task, or ticking it off, must not re-send a
+    # confirmation for a date that has not moved -- that is how a useful email
+    # becomes one people filter out.
+    before = service.repository.get_task(task_id)
+    was = (before.due_date, before.due_time) if before else (None, None)
     task = service.update_task(founder_id, task_id, **fields)
     # Updates the existing event rather than adding a second one -- the task
     # carries the event id it created last time.
     task = hooks.after_task_saved(db, service, task, timezone_name=payload.timezone)
-    # Moves the reminder with the date, and cancels it when the task is ticked
-    # off or the date is cleared.
+    # Cancels the legacy T-30 row when the task is ticked off or the date is
+    # cleared -- and now on every other save too, since nothing schedules them.
     task_reminders.sync_for_task(service, task, timezone_name=payload.timezone)
+    if (task.due_date, task.due_time) != was:
+        _queue_task_email(background, db, founder_id, task, payload.timezone)
     return TaskResponse.from_domain(task)
 
 
