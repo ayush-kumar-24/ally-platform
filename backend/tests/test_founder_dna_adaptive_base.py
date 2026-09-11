@@ -49,7 +49,10 @@ class _Repo:
     def get_resolved_dimensions(self, founder):
         return set(self._resolved)
 
-    def count_answered(self, founder_id):
+    def count_answered(self, founder_id, stage_group):
+        # Takes stage_group like the real repository: the follow-up budget is
+        # per journey, and a journey belongs to one stage group. The double
+        # would otherwise keep passing while the real call site was wrong.
         return self._answered_total
 
     def answers_per_dimension(self, founder_id, stage_group):

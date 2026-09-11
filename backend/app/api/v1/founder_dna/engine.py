@@ -23,7 +23,14 @@ that dimension is skipped". An earlier cut confined skipping to follow-ups
 that for the first nine turns a founder's answers could not influence the
 next question at all, while the screen said "Adaptive diagnosis".
 
-Shape per stage: 9 base + up to 2 follow-ups + 1 closing = 10-12 asked.
+Shape per stage: 15 base (one per dimension) + up to 2 follow-ups
++ 1 closing = 16-18 asked. The 2 is what MAX_FOUNDER_DNA_QUESTIONS
+leaves once the base arc and the close are paid for, NOT a designed
+number: each stage group has 5 follow-ups authored, so three in five
+can never be reached. This read "9 base ... = 10-12 asked" until
+2026-09-11, which was the shape before the phase went from 9
+dimensions to 15 -- anyone sizing the UX off it planned half a
+journey.
 
 The closing question (`is_closing`, the doc's "wow close") is held back and
 always asked last, even when the ceiling cuts the journey short -- a journey
@@ -216,7 +223,7 @@ class FounderDnaSelectionEngine:
 
         # Base journey done -- follow-ups only where a dimension is still open,
         # and only if answering one still leaves the closing slot affordable.
-        answered = self.repository.count_answered(founder.founder_id)
+        answered = self.repository.count_answered(founder.founder_id, stage_group)
         closing_reserve = 1 if closing is not None else 0
         if answered + closing_reserve < settings.MAX_FOUNDER_DNA_QUESTIONS:
             follow_ups = [q for q in pending if q.dimension_code not in resolved]

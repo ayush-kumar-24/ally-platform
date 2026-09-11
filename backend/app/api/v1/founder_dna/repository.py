@@ -110,9 +110,33 @@ class FounderDnaRepository:
         self.db.flush()
         return answer
 
-    def count_answered(self, founder_id: int) -> int:
-        stmt = select(FounderDnaAnswers.founder_dna_answer_id).where(
-            FounderDnaAnswers.founder_id == founder_id
+    def count_answered(self, founder_id: int, stage_group: str) -> int:
+        """How many questions this founder has answered WITHIN this stage group.
+
+        Stage-scoped, like answers_per_dimension, closing_answered and
+        pool_size_per_dimension beside it -- and like Current Problem's method
+        of the same name, which this was the only sibling to disagree with.
+
+        It counted every answer across every stage group, and it gates two
+        things: the follow-up budget in the engine, and the "questions
+        answered" a founder is shown. A founder who edits their stage
+        mid-journey starts a fresh journey in the new group, so the old
+        group's answers are not part of it -- counting them spent budget on a
+        journey that never happened. Measured on the seeded bank: such a
+        founder was asked 16 questions where an uninterrupted one gets 18,
+        losing exactly the two follow-up slots the adaptive phase has.
+        """
+        stmt = (
+            select(FounderDnaAnswers.founder_dna_answer_id)
+            .join(
+                FounderDnaQuestions,
+                FounderDnaQuestions.founder_dna_question_id
+                == FounderDnaAnswers.founder_dna_question_id,
+            )
+            .where(
+                FounderDnaAnswers.founder_id == founder_id,
+                FounderDnaQuestions.stage_group == stage_group,
+            )
         )
         return len(self.db.execute(stmt).all())
 
