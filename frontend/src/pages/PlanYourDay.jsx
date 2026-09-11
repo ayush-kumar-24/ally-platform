@@ -35,18 +35,14 @@ function SyncBadge({ status }) {
  *  200 characters. Mirrored here so an over-long entry is caught before it is
  *  sent, rather than coming back as a 422 the founder has to interpret.
  *
- *  Deliberately NOT a `maxLength` on the textarea: the cap is per TASK, and
- *  "Plan with Ally" splits on commas, so three 90-character items are a
- *  perfectly valid 280-character box. Capping the box would block that. */
+ *  Deliberately NOT a `maxLength` on the input: a hard cap gives no reason
+ *  for the cut-off, so the length is reported below the field instead. */
 const TASK_TITLE_MAX = 200;
 
-/** The titles a given box of text would become -- comma-split for the Ally
- *  tab, the whole string for manual add. Shared by the submit handler and the
- *  live over-length hint so the two can never disagree about the split. */
-const titlesFrom = (text, activeTab) =>
-  activeTab === 'ally'
-    ? text.split(',').map(s => s.trim()).filter(Boolean)
-    : [text.trim()].filter(Boolean);
+/** The titles a given box of text would become. One task per submit since
+ *  tasks are only ever entered by hand, but kept as a list so the submit handler and
+ *  the live over-length hint keep sharing one definition. */
+const titlesFrom = (text) => [text.trim()].filter(Boolean);
 
 const PRIORITY_RANK = { high: 0, medium: 1, low: 2 };
 const sortByPriority = (tasks) =>
@@ -198,16 +194,13 @@ function TaskEditForm({ task, onSave, onCancel, saving }) {
 
 function PlanYourDayInner() {
   const { user, showToast } = useApp();
-  const [activeTab, setActiveTab] = useState('ally');
   const [inputText, setInputText] = useState('');
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  // Only the manual-add tab exposes this -- "Plan with Ally" is a quick
-  // brain-dump (deterministic comma-splitting, not AI parsing, see the note
-  // on handlePlanMyDay below), so it always defaults to medium rather than
-  // asking the founder to configure something on a "just talk" path. Every
-  // task used to be created medium with no way to set anything else.
+  /* Every task used to be created medium with no way to set anything else,
+     even though the badge and the sort-by-priority logic both already
+     supported all three. */
   const [manualPriority, setManualPriority] = useState('medium');
   /* The date a new task gets, and which day the list below is filtered to --
      one piece of state, because "the day I'm looking at" and "the day I'm
@@ -356,25 +349,17 @@ function PlanYourDayInner() {
     const text = inputText.trim();
     if (!text || submitting) return;
 
-    // "Plan with Ally" accepts a comma-separated brain-dump and turns each
-    // phrase into its own task -- deterministic splitting, not AI parsing;
-    // it doesn't infer times or durations, only what's actually in the text.
-    const titles = titlesFrom(text, activeTab);
+    const titles = titlesFrom(text);
 
     // Checked BEFORE anything is sent or the box is cleared. Reproduced live:
-    // a founder who typed a paragraph with no commas in it produced one
-    // 345-character title, the API rejected it with a 422, and what surfaced
+    // an over-long title was rejected by the API with a 422 and what surfaced
     // was the raw Pydantic error. That specific leak is fixed server-side
     // (middleware/error_handler.py), but a founder should not have to make a
-    // round trip to learn the thing is too long -- and the message they get
-    // back cannot tell them the useful part, which is that commas are what
-    // splits this into separate tasks.
+    // round trip to learn the thing is too long.
     const tooLong = titles.find(t => t.length > TASK_TITLE_MAX);
     if (tooLong) {
       showToast(
-        activeTab === 'ally'
-          ? `That's ${tooLong.length} characters for one task — the limit is ${TASK_TITLE_MAX}. Separate your tasks with commas, or shorten it.`
-          : `That's ${tooLong.length} characters — the limit is ${TASK_TITLE_MAX}. Try shortening it.`,
+        `That's ${tooLong.length} characters — the limit is ${TASK_TITLE_MAX}. Try shortening it.`,
         6000,
       );
       return; // nothing sent, nothing cleared -- what they typed is still there
@@ -383,14 +368,10 @@ function PlanYourDayInner() {
     setSubmitting(true);
     setInputText('');
     try {
-      // Manual add carries whatever the picker is set to; "Plan with Ally"
-      // stays medium for every phrase -- it never asked which of several
-      // brain-dumped items was more urgent than the others.
-      const priority = activeTab === 'manual' ? manualPriority : 'medium';
-      // Every task lands on the day being viewed. A brain-dump split into five
-      // phrases all belongs to the same day -- that is what made it a dump.
+      const priority = manualPriority;
+      // Every task lands on the day being viewed.
       const dueDate = selectedDate || null;
-      const dueTime = activeTab === 'manual' && manualTime ? `${manualTime}:00` : null;
+      const dueTime = manualTime ? `${manualTime}:00` : null;
       for (const title of titles) {
         await addTask(title, { priority, dueDate, dueTime });
       }
@@ -410,11 +391,10 @@ function PlanYourDayInner() {
   // while the numerator only counted today's -- badly undercounting the
   // moment any history existed. Active tasks carry forward into "today" by
   // design (see the isToday() note above), so they belong in the total.
-  /* The first phrase currently over the API's per-task cap, or undefined.
-     Drives the inline warning in the input footer -- computed from the SAME
-     split the submit handler applies, so what the founder is warned about is
-     exactly what would have been rejected. */
-  const overLongTitle = titlesFrom(inputText, activeTab).find(t => t.length > TASK_TITLE_MAX);
+  /* The title currently over the API's per-task cap, or undefined. Computed
+     the SAME way the submit handler computes it, so what the founder is warned
+     about is exactly what would have been rejected. */
+  const overLongTitle = titlesFrom(inputText).find(t => t.length > TASK_TITLE_MAX);
 
   const totalGoals = activeGoals.length + completedGoals.length;
   const completionPct = totalGoals > 0 ? Math.round((completedGoals.length / totalGoals) * 100) : 0;
@@ -489,210 +469,106 @@ function PlanYourDayInner() {
           the day's work rather than a card competing with it. */}
       <QuoteCard size="sm" surface="plan" className="stagger d2" />
 
-      {/* Mode selection tabs.
-
-          These were click-only <div>s: not focusable, no role, no key handler.
-          The manual-task path was the only way to add a task by typing, and a
-          keyboard user could never reach it. Real <button>s in a tablist, with
-          arrow keys and a roving tabindex. */}
       {/* Connect/disconnect. Renders nothing when this deployment cannot offer
           calendar sync, so it never advertises a feature that would 503. */}
       <CalendarConnection onChange={(s) => setCalendarConnected(!!s?.connected)}
                           showToast={showToast} />
 
-      <div className="pl-tabs stagger d2" style={{ marginTop: 24 }} role="tablist" aria-label="Planning mode">
-        <button
-          type="button"
-          role="tab"
-          id="pl-tab-ally"
-          aria-selected={activeTab === 'ally'}
-          aria-controls="pl-panel-ally"
-          tabIndex={activeTab === 'ally' ? 0 : -1}
-          className={`pl-tab ${activeTab === 'ally' ? 'active' : ''}`}
-          onClick={() => setActiveTab('ally')}
-          onKeyDown={(e) => {
-            if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
-              e.preventDefault();
-              setActiveTab('manual');
-              document.getElementById('pl-tab-manual')?.focus();
-            }
-          }}
-        >
-          <div className="pl-tab-ic">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-            </svg>
-          </div>
-          <div className="pl-tab-content">
-            <span className="pl-tab-title">Plan with Ally</span>
-            <span className="pl-tab-desc">List them with commas — I'll add each one.</span>
-          </div>
-        </button>
-
-        <button
-          type="button"
-          role="tab"
-          id="pl-tab-manual"
-          aria-selected={activeTab === 'manual'}
-          aria-controls="pl-panel-manual"
-          tabIndex={activeTab === 'manual' ? 0 : -1}
-          className={`pl-tab ${activeTab === 'manual' ? 'active' : ''}`}
-          onClick={() => setActiveTab('manual')}
-          onKeyDown={(e) => {
-            if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
-              e.preventDefault();
-              setActiveTab('ally');
-              document.getElementById('pl-tab-ally')?.focus();
-            }
-          }}
-        >
-          <div className="pl-tab-ic">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
-            </svg>
-          </div>
-          <div className="pl-tab-content">
-            <span className="pl-tab-title">Plan manually</span>
-            <span className="pl-tab-desc">Create tasks yourself.</span>
-          </div>
-        </button>
-      </div>
-
       {/* Content wrapper */}
       <div className="plan-grid stagger d3">
         <div className="plan-main">
-          {/* Ask Ally card */}
-          {activeTab === 'ally' ? (
-            <div className="pl-input-card" id="pl-panel-ally" role="tabpanel" aria-labelledby="pl-tab-ally">
-              <div className="pl-input-header">
-                <div className="pl-input-avatar">
-                  <svg viewBox="0 0 24 24">
-                    <line x1="12" y1="5" x2="12" y2="19" />
-                    <line x1="5" y1="12" x2="19" y2="12" />
-                  </svg>
-                </div>
-                <div className="pl-input-header-text">
-                  <span className="pl-input-title">
-                    Tell me about your day, {firstName}.
-                  </span>
-                  <span className="pl-input-subtitle">
-                    Meetings, calls, deadlines — however it comes to you.
-                  </span>
-                </div>
-              </div>
+          <div className="pl-input-card stagger d2" style={{ gap: '12px', marginTop: 24 }}>
+            <div className="pl-input-header">
+              <span className="pl-input-title">Add a task</span>
+            </div>
 
-              <label className="sr-only" htmlFor="pl-day">Tell Ally about your day</label>
-              <textarea
-                id="pl-day"
+            {/* Was nowhere -- every manually-added task defaulted to medium
+                with no way to mark anything more or less urgent, even
+                though the badge and sort-by-priority logic both already
+                support all three. */}
+            <div role="radiogroup" aria-label="Priority" className="pl-priority-picker">
+              {['low', 'medium', 'high'].map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  role="radio"
+                  aria-checked={manualPriority === p}
+                  className={`pl-priority-opt ${p}${manualPriority === p ? ' active' : ''}`}
+                  disabled={submitting}
+                  onClick={() => setManualPriority(p)}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+
+            {/* Optional time of day. Without one the task still syncs -- the
+                server places it at a default hour -- but a real time is what
+                makes the "30 minutes before" reminder land when the founder
+                actually needs it. (There is one entry path: a
+                comma-separated brain-dump has no single time. */}
+            <div className="pl-time-row" style={{ display: 'flex', alignItems: 'center',
+                                                  gap: '8px', marginBottom: '10px' }}>
+              <label htmlFor="pl-manual-time"
+                     style={{ fontSize: '12px', color: 'var(--muted-2, #6c7a70)' }}>
+                Time (optional)
+              </label>
+              <input
+                id="pl-manual-time"
+                type="time"
+                className="pl-time-input"
+                style={{ height: '34px', padding: '0 10px', borderRadius: '8px',
+                         border: '1px solid var(--bd, #e7e0d6)', fontFamily: 'inherit',
+                         fontSize: '12.5px', background: '#fff' }}
+                value={manualTime}
+                disabled={submitting}
+                onChange={(e) => setManualTime(e.target.value)}
+              />
+              {calendarConnected && (
+                <span style={{ fontSize: '11.5px', color: 'var(--muted-2, #6c7a70)' }}>
+                  Reminder 30 min before
+                </span>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <label className="sr-only" htmlFor="pl-manual-task">Task description</label>
+              <input
+                id="pl-manual-task"
+                type="text"
                 className="pl-textarea"
+                style={{ minHeight: 'auto', height: '40px', padding: '0 12px' }}
                 placeholder={viewingToday
-                  ? "Call Rajesh about pricing, draft the follow-up email, book the factory visit…"
-                  : `What's on your plate for ${selectedDayLabel}? Separate tasks with commas…`}
+                  ? 'Add a task for today…'
+                  : `Add a task for ${selectedDayLabel}…`}
                 value={inputText}
                 disabled={submitting}
                 onChange={(e) => setInputText(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handlePlanMyDay())}
+                onKeyDown={(e) => e.key === 'Enter' && handlePlanMyDay()}
               />
-
-              <div className="pl-input-footer">
-                {/* The hint becomes the WARNING when something is already too
-                    long, rather than sitting alongside it -- a founder mid-
-                    paragraph finds out here, not after submitting. Same split
-                    the handler uses, so the two cannot disagree. */}
-                <div className="pl-input-hint">
-                  <span className="dot" />
-                  {overLongTitle
-                    ? `That's ${overLongTitle.length} characters for one task — the limit is ${TASK_TITLE_MAX}. Add commas to split it up.`
-                    : "Comma-separate a few things and I'll add them as separate tasks."}
-                </div>
-                <button className="pl-plan-btn" onClick={handlePlanMyDay} disabled={submitting}>
-                  {submitting && <span className="pl-spinner" aria-hidden="true" />}
-                  {submitting ? 'Planning…' : 'Plan my day'}
-                </button>
-              </div>
+              <button
+                className="pl-plan-btn"
+                style={{ height: '40px', padding: '0 20px', flexShrink: 0 }}
+                onClick={handlePlanMyDay}
+                disabled={submitting}
+              >
+                {submitting && <span className="pl-spinner" aria-hidden="true" />}
+                {submitting ? 'Adding…' : 'Add task'}
+              </button>
             </div>
-          ) : (
-            <div className="pl-input-card" style={{ gap: '12px' }} id="pl-panel-manual" role="tabpanel" aria-labelledby="pl-tab-manual">
-              <div className="pl-input-header">
-                <span className="pl-input-title">Add task manually</span>
-              </div>
 
-              {/* Was nowhere -- every manually-added task defaulted to medium
-                  with no way to mark anything more or less urgent, even
-                  though the badge and sort-by-priority logic both already
-                  support all three. */}
-              <div role="radiogroup" aria-label="Priority" className="pl-priority-picker">
-                {['low', 'medium', 'high'].map((p) => (
-                  <button
-                    key={p}
-                    type="button"
-                    role="radio"
-                    aria-checked={manualPriority === p}
-                    className={`pl-priority-opt ${p}${manualPriority === p ? ' active' : ''}`}
-                    disabled={submitting}
-                    onClick={() => setManualPriority(p)}
-                  >
-                    {p}
-                  </button>
-                ))}
+            {/* The over-length warning used to live in the removed Ally
+                panel's footer. The per-task cap still applies here, so
+                without this the founder only learns the title is too long
+                from a toast after pressing Add -- which is the round trip
+                the check exists to avoid. */}
+            {overLongTitle && (
+              <div className="pl-input-hint" role="status">
+                <span className="dot" />
+                {`That's ${overLongTitle.length} characters — the limit is ${TASK_TITLE_MAX}. Try shortening it.`}
               </div>
-
-              {/* Optional time of day. Without one the task still syncs -- the
-                  server places it at a default hour -- but a real time is what
-                  makes the "30 minutes before" reminder land when the founder
-                  actually needs it. Only shown on the manual tab: a
-                  comma-separated brain-dump has no single time. */}
-              <div className="pl-time-row" style={{ display: 'flex', alignItems: 'center',
-                                                    gap: '8px', marginBottom: '10px' }}>
-                <label htmlFor="pl-manual-time"
-                       style={{ fontSize: '12px', color: 'var(--muted-2, #6c7a70)' }}>
-                  Time (optional)
-                </label>
-                <input
-                  id="pl-manual-time"
-                  type="time"
-                  className="pl-time-input"
-                  style={{ height: '34px', padding: '0 10px', borderRadius: '8px',
-                           border: '1px solid var(--bd, #e7e0d6)', fontFamily: 'inherit',
-                           fontSize: '12.5px', background: '#fff' }}
-                  value={manualTime}
-                  disabled={submitting}
-                  onChange={(e) => setManualTime(e.target.value)}
-                />
-                {calendarConnected && (
-                  <span style={{ fontSize: '11.5px', color: 'var(--muted-2, #6c7a70)' }}>
-                    Reminder 30 min before
-                  </span>
-                )}
-              </div>
-
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <label className="sr-only" htmlFor="pl-manual-task">Task description</label>
-                <input
-                  id="pl-manual-task"
-                  type="text"
-                  className="pl-textarea"
-                  style={{ minHeight: 'auto', height: '40px', padding: '0 12px' }}
-                  placeholder={viewingToday
-                    ? 'Add a task for today…'
-                    : `Add a task for ${selectedDayLabel}…`}
-                  value={inputText}
-                  disabled={submitting}
-                  onChange={(e) => setInputText(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handlePlanMyDay()}
-                />
-                <button
-                  className="pl-plan-btn"
-                  style={{ height: '40px', padding: '0 20px', flexShrink: 0 }}
-                  onClick={handlePlanMyDay}
-                  disabled={submitting}
-                >
-                  {submitting && <span className="pl-spinner" aria-hidden="true" />}
-                  {submitting ? 'Adding…' : 'Add task'}
-                </button>
-              </div>
-            </div>
-          )}
+            )}
+          </div>
 
           {/* The list for the selected day. The heading is the calendar's main
               feedback: picking a date visibly changes what is listed here, so
@@ -733,7 +609,7 @@ function PlanYourDayInner() {
                   <>
                     <h3 style={{ fontSize: '15px', fontWeight: 700, margin: '0 0 4px' }}>Nothing planned yet.</h3>
                     <p style={{ fontSize: '12.5px', color: 'var(--muted)', margin: 0 }}>
-                      Type your tasks separated by commas and Ally will add each one.
+                      Add your first task above.
                     </p>
                   </>
                 ) : !viewingToday ? (
@@ -1077,7 +953,7 @@ export default function PlanYourDay() {
       feature={FEATURES.PLAN_YOUR_DAY}
       requiredPlan="Starter"
       title="Plan Your Day is a Starter feature"
-      message="Upgrade to Starter to turn Ally's next steps into a daily plan."
+      message="Upgrade to Starter to set your day's priorities and get reminders to stay on them."
     >
       <PlanYourDayInner />
     </PlanGate>

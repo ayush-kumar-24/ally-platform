@@ -2,76 +2,6 @@
    ALLY — Plan Your Day View Stylesheet
    ========================================================================== */
 
-/* ---- Tab toggle buttons ---- */
-.pl-tabs {
-  display: flex;
-  gap: 14px;
-  margin-bottom: 20px;
-}
-
-.pl-tab {
-  flex: 1;
-  background: #ffffff;
-  border: 1px solid var(--bd, #e7e0d6);
-  border-radius: 14px;
-  padding: 14px 18px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  cursor: pointer;
-  transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
-  text-align: left;
-}
-
-.pl-tab.active {
-  border-color: var(--emerald, #10B981);
-  box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.3);
-}
-
-.pl-tab-ic {
-  width: 38px;
-  height: 38px;
-  border-radius: 10px;
-  display: grid;
-  place-items: center;
-  background: var(--ivory-3, #efe6d9);
-  color: var(--forest, #1B4332);
-  flex-shrink: 0;
-}
-
-.pl-tab.active .pl-tab-ic {
-  background: rgba(16, 185, 129, 0.1);
-  color: var(--emerald, #10B981);
-}
-
-.pl-tab-ic svg {
-  width: 18px;
-  height: 18px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.8;
-}
-
-.pl-tab-content {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.pl-tab-title {
-  font-family: var(--display);
-  font-size: 13.5px;
-  font-weight: 700;
-  color: var(--ink, #16241c);
-}
-
-.pl-tab-desc {
-  font-family: var(--body);
-  font-size: 11px;
-  color: var(--muted-2, #6c7a70);
-}
-
-/* ---- Ask Ally planning box ---- */
 .pl-input-card {
   background: #ffffff;
   border: 1px solid var(--bd, #e7e0d6);
@@ -803,8 +733,6 @@
    into ~150px each and their labels wrapped mid-phrase ("Plan / manually").
    Stacking gives each one a full-width tap target. */
 @media (max-width: 560px) {
-  .pl-tabs { flex-direction: column; gap: 10px; }
-  .pl-tab { width: 100%; }
 }
 
 /* ── Month calendar + Google Calendar connection ───────────────────────────

@@ -36,7 +36,7 @@ const TOUR_STEPS = [
 
   // The tools for doing it.
   { nav: '/app/ally-chat', emoji: '💬', title: 'Talk to Ally', text: 'Think out loud any time. Ally already knows your diagnosis, so you never start from scratch.' },
-  { nav: '/app/plan', emoji: '📅', title: 'Plan Your Day', text: 'Set today’s priorities yourself or let Ally draft them, then get reminders to stay on them.' },
+  { nav: '/app/plan', emoji: '📅', title: 'Plan Your Day', text: 'Set today’s priorities, then get reminders to stay on them.' },
   { nav: '/app/goals', emoji: '🎯', title: 'Goals', text: 'The bigger arcs you are working toward, tracked beyond a single day.' },
   { nav: '/app/vision', emoji: '👁️', title: 'Your Vision', text: 'Where you want this to end up, in your words. Ally reads it when it advises you.' },
   { nav: '/app/frameworks', emoji: '📚', title: 'Frameworks', text: 'Practical models to reach for when you are stuck on a decision.' },
