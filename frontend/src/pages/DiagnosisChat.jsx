@@ -248,6 +248,7 @@ export default function DiagnosisChat() {
     context: 'diagnosis',
     onTranscribed: (text) => setInput(prev => (prev ? `${prev} ${text}` : text)),
     onError: () => showToast('Could not access the microphone — check your browser permissions.'),
+    inputRef: taRef,
   });
 
   const initials = (user?.initials || user?.name || '?').charAt(0).toUpperCase();
@@ -382,6 +383,7 @@ export default function DiagnosisChat() {
               <VoiceBars
                 getLevel={voice.getLevel}
                 label={voice.status === 'transcribing' ? 'Transcribing…' : 'Listening…'}
+                hint={voice.status === 'recording' ? 'Enter to stop · Esc to discard' : null}
               />
             )}
             <label className="sr-only" htmlFor="dg-answer">Your answer to Ally</label>

@@ -14,7 +14,7 @@ const SAMPLE_MS = 55;
  * frame, and routing that through state would re-render the entire chat
  * ~60x/sec for the whole time someone is talking.
  */
-export default function VoiceBars({ getLevel, label = 'Listening…' }) {
+export default function VoiceBars({ getLevel, label = 'Listening…', hint = null }) {
   const barsRef = useRef([]);
 
   useEffect(() => {
@@ -50,6 +50,11 @@ export default function VoiceBars({ getLevel, label = 'Listening…' }) {
     <div className="voice-meter" role="status" aria-live="polite">
       <span className="vm-dot" aria-hidden="true" />
       <span className="vm-label">{label}</span>
+      {/* The keyboard shortcuts are worth nothing if nobody knows they exist,
+          and there is no room for them anywhere else while the meter has the
+          composer's whole width. Hidden by CSS on touch-only devices, where
+          there is no physical Enter to press. */}
+      {hint ? <span className="vm-hint">{hint}</span> : null}
       <div className="vm-bars" aria-hidden="true">
         {Array.from({ length: BAR_COUNT }, (_, i) => (
           <span key={i} ref={(el) => { barsRef.current[i] = el; }} />
