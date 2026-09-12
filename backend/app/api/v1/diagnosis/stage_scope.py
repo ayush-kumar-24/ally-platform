@@ -29,10 +29,10 @@ Strategic Clarity entirely -- 98 of the 245 questions in the shipped Stage 0
 bank, and with them Execution Velocity, Plan-to-Vision Alignment and
 Prioritization Discipline, three of the nine dimensions Part 3 puts at Stage 0.
 
-TWO FILTERS, NOT ONE. Both derive from the same dimension set, and both are
-needed -- see the `business_dna` module docstring for the measurement behind the
-second:
+THREE FILTERS. All derive from the same dimension set -- see the `business_dna`
+module docstring for the measurements behind the second and third:
 
+    dimensions  the finest and most faithful test, via problems.dimension_code
     pillars     which SUBJECTS may be raised, via problems.pillar_id
     categories  what a question is ABOUT, via questions.category
 
@@ -42,17 +42,20 @@ Clarity, which Part 3 puts fully in scope at ideation -- so pillar scope on its
 own would hand a founder with nothing built a run of questions about marketing
 tooling and campaign attribution.
 
-A third filter lives elsewhere and is a different axis again: the repository
+Dimension is the test the document actually specifies, and it is the only one
+that can express Part 3's two dimension-level exclusions (Revenue Concentration
+and Hiring Repeatability, withheld through Stage 0->1) -- both sit in pillars
+that are fully in scope, so no pillar set and no category set can withhold them.
+It applies only where `problems.dimension_code` is populated, which today is a
+minority of the catalogue: the mapping is derivable for five categories and
+needs a content pass for the rest (migration c3f7b28d5e91 and
+scripts/backfill_problem_dimensions.py). An unmapped problem is admitted, not
+dropped -- the coarser two tests still apply to it, and NULL means "not yet
+known", never "not in scope".
+
+A fourth filter lives elsewhere and is a different axis again: the repository
 filters on `primary_stage_group`, which decides how a question is WORDED for
 this founder. Scope decides what may be asked; stage group decides how it reads.
-
-WHAT IS NOT ENFORCEABLE YET. Part 3's two dimension-level exclusions -- Revenue
-Concentration and Hiring Repeatability, withheld through Stage 0->1 -- cannot be
-applied to candidates, because `questions` carries no dimension column. They are
-recorded on the scope as `excluded_dimensions` so the report can state what was
-deliberately not assessed, and so that adding that column later is a filter
-change rather than a redesign. Everything Part 3 states at pillar or category
-granularity IS enforced.
 
 WHERE THE BUDGET LIVES. Not here. `founder_stages.question_budget` holds it, so
 the completion ceiling and the confidence coverage denominator read one number
@@ -75,8 +78,8 @@ from app.api.v1.diagnosis.business_dna import (
     STAGE_1_TO_10_PLUS_EXCLUDED,
     STRATEGIC_CLARITY,
     TEAM_AND_LEADERSHIP,
-    categories_for,
     pillars_for,
+    withheld_categories_for,
 )
 from app.core.logger import logger
 
@@ -131,17 +134,22 @@ class StageScope:
         return pillars_for(self.dimensions)
 
     @cached_property
-    def categories(self) -> frozenset[str] | None:
-        """Question categories in scope, or None when nothing is withheld."""
-        return categories_for(self.dimensions)
+    def withheld_categories(self) -> frozenset[str]:
+        """Question categories this stage must not be asked about. Filtered on.
+
+        Empty for every stage from Validation on. A deny-list rather than an
+        allow-list, for the reason recorded on EXECUTION_CATEGORIES.
+        """
+        return withheld_categories_for(self.dimensions)
 
     @cached_property
     def excluded_dimensions(self) -> frozenset[str]:
         """Dimensions Part 3 withholds at this stage.
 
-        Not filtered on -- `questions` has no dimension column. Carried so the
-        report can name what was deliberately not assessed rather than leaving
-        it looking unanswered.
+        Filtered on for questions whose problem carries a `dimension_code`, and
+        carried regardless so the report can name what was deliberately not
+        assessed rather than leaving it looking unanswered. Most of the
+        catalogue is still unmapped -- see `business_dna.DIMENSION_BY_CATEGORY`.
         """
         return ALL_DIMENSION_CODES - self.dimensions
 
@@ -151,10 +159,14 @@ class StageScope:
 
     @property
     def withholds_nothing(self) -> bool:
-        """True when neither filter would remove anything, so both can be
+        """True when no filter would remove anything, so all three can be
         skipped. Not the same as `covers_all_pillars`: a stage can reach every
-        pillar and still withhold categories within one of them."""
-        return self.covers_all_pillars and self.categories is None
+        pillar and still withhold categories or dimensions within one."""
+        return (
+            self.covers_all_pillars
+            and not self.withheld_categories
+            and not self.excluded_dimensions
+        )
 
 
 #: Scope by `founder_stages.stage_order` (1..8), not stage_id. Order is the

@@ -509,6 +509,7 @@ class Problems(Base):
         Index('idx_problems_code', 'problem_code'),
         Index('idx_problems_embedding', 'embedding', postgresql_ops={'embedding': 'vector_cosine_ops'}, postgresql_using='hnsw', postgresql_where='(embedding IS NOT NULL)'),
         Index('idx_problems_pillar', 'pillar_id'),
+        Index('idx_problems_dimension', 'dimension_code'),
     )
 
     problem_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -522,6 +523,19 @@ class Problems(Base):
     symptoms: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
     pillar_id: Mapped[int] = mapped_column(Integer, nullable=False)
     subcategory: Mapped[Optional[str]] = mapped_column(String(100))
+    #: Which of Business DNA Part 2's twenty dimensions this problem
+    #: assesses. NULLABLE AND MOSTLY NULL, on purpose -- see migration
+    #: c3f7b28d5e91. Part 2 is a diagnostic lens over the six pillars, not a
+    #: partition of the question bank, so whole families (marketing, sales
+    #: and finance execution, fundraising) have no dimension and never will;
+    #: others need a content pass to tell which of their pillar's dimensions
+    #: they belong to. NULL means "not yet known", never "out of scope":
+    #: app/api/v1/diagnosis/engine.py admits an unmapped problem and leans on
+    #: the pillar and category tests instead.
+    #:
+    #: Constrained to FounderDnaDimension's business counterpart, the codes in
+    #: app/api/v1/diagnosis/business_dna.py DIMENSIONS.
+    dimension_code: Mapped[Optional[str]] = mapped_column(String(40))
     related_problem_ids: Mapped[Optional[dict]] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
     embedding: Mapped[Optional[Any]] = mapped_column(Vector(1536), deferred=True)
     created_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True), server_default=text('now()'))

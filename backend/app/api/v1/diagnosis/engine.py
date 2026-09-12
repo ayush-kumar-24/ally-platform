@@ -344,8 +344,8 @@ class QuestionSelectionEngine:
         scoped = candidates
         applied: list[str] = []
 
-        if scope.categories is not None:
-            scoped = [q for q in scoped if q.category in scope.categories]
+        if scope.withheld_categories:
+            scoped = [q for q in scoped if q.category not in scope.withheld_categories]
             applied.append("category")
 
         if not scope.covers_all_pillars:
@@ -356,6 +356,22 @@ class QuestionSelectionEngine:
                     if problem_to_pillar.get(q.problem_id) in scope.pillars
                 ]
                 applied.append("pillar")
+
+        if scope.excluded_dimensions:
+            problem_to_dimension = self._dimension_map_or_none(scope)
+            if problem_to_dimension:
+                # `.get() not in` and not `.get() in scope.dimensions`: a
+                # problem with no dimension recorded is UNKNOWN, not
+                # out of scope, and most of the catalogue is unknown. Dropping
+                # those would empty the candidate set at every stage and hand
+                # the whole bank straight back through the fallback below --
+                # scoping nothing while looking like it scoped everything.
+                scoped = [
+                    q for q in scoped
+                    if problem_to_dimension.get(q.problem_id)
+                    not in scope.excluded_dimensions
+                ]
+                applied.append("dimension")
 
         if not applied:
             return candidates
@@ -379,9 +395,8 @@ class QuestionSelectionEngine:
                 "stage_scope": scope.label,
                 "filters_applied": applied,
                 "pillars_in_scope": sorted(scope.pillars),
-                "categories_in_scope": (
-                    sorted(scope.categories) if scope.categories is not None else None
-                ),
+                "categories_withheld": sorted(scope.withheld_categories),
+                "dimensions_withheld": sorted(scope.excluded_dimensions),
                 "candidates_before": len(candidates),
                 "candidates_after": len(scoped),
             },
@@ -392,7 +407,7 @@ class QuestionSelectionEngine:
         """problem_id -> pillar_id, or None when the pillar test cannot run.
 
         Separate from `_in_scope` so an unavailable map disables only the pillar
-        half of scoping. Returning None where this used to return the whole
+        part of scoping. Returning None where this used to return the whole
         candidate list is the difference between "we cannot check pillars" and
         "we cannot check anything".
         """
@@ -400,11 +415,30 @@ class QuestionSelectionEngine:
             problem_to_pillar = self.repository.problem_to_pillar()
         except Exception:                                  # noqa: BLE001
             logger.warning(
-                "Pillar map unavailable; scoping this stage on category alone",
+                "Pillar map unavailable; scoping this stage without it",
                 extra={"stage_scope": scope.label},
             )
             return None
         return problem_to_pillar or None
+
+    def _dimension_map_or_none(self, scope) -> dict[int, str] | None:
+        """problem_id -> dimension_code, or None when that test cannot run.
+
+        Empty is treated the same as unavailable, and here that is the ordinary
+        case rather than a fault: until the catalogue is mapped there is nothing
+        to filter on, and the two coarser tests carry the scope on their own.
+        Logged at debug rather than warning for exactly that reason -- a warning
+        on every question of every session would say nothing.
+        """
+        try:
+            problem_to_dimension = self.repository.problem_to_dimension()
+        except Exception:                                  # noqa: BLE001
+            logger.warning(
+                "Dimension map unavailable; scoping this stage without it",
+                extra={"stage_scope": scope.label},
+            )
+            return None
+        return problem_to_dimension or None
 
     def order_candidates(
         self, candidates: list[Question], session: DiagnosisSession | None = None

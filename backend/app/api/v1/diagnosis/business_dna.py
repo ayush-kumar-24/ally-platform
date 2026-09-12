@@ -206,20 +206,30 @@ STAGE_1_TO_10_PLUS_EXCLUDED: frozenset[str] = frozenset()
 #: Advisory, not authoritative: the pillar a question actually scores is always
 #: read from problems.pillar_id. This table exists to say what a category IS
 #: ABOUT, which is a different question and the one the stage rule needs.
+#: Measured over both snapshots taken from the live database -- the shipped
+#: question batches and scripts/calibration/bank_stage0.json. Every problem in
+#: those carries exactly one category, so problem -> category -> pillar is
+#: single-valued; Go-To-Market is the one category whose problems straddle two
+#: pillars (104 under Market Clarity, 12 under Revenue Maturity) and is recorded
+#: at its majority.
 PILLAR_BY_CATEGORY: dict[str, int] = {
     "Founder Psychology": FOUNDER_READINESS,
     "Idea & Validation": MARKET_CLARITY,
     "Competitive Awareness": MARKET_CLARITY,
+    "Target Customer & ICP": MARKET_CLARITY,
     "Marketing Execution": MARKET_CLARITY,
     "Go-To-Market": MARKET_CLARITY,
     "Sales Execution": REVENUE_MATURITY,
     "Sales & Revenue": REVENUE_MATURITY,
+    "Business Model Design": REVENUE_MATURITY,
     "Financial Management": REVENUE_MATURITY,
     "Fundraising": REVENUE_MATURITY,
     "Product": PRODUCT_AND_EXECUTION,
+    "Operations & Systems": PRODUCT_AND_EXECUTION,
     "Team & Leadership": TEAM_AND_LEADERSHIP,
     "Opportunity Evaluation": STRATEGIC_CLARITY,
     "Business Planning": STRATEGIC_CLARITY,
+    "Risk Identification": STRATEGIC_CLARITY,
     "Scaling & Operational Maturity": STRATEGIC_CLARITY,
 }
 
@@ -227,29 +237,129 @@ PILLAR_BY_CATEGORY: dict[str, int] = {
 #: has nothing to say about -- the ones that interrogate the EXECUTION of a
 #: going concern rather than the clarity of an idea.
 #:
-#: Every one of these presupposes something an ideation founder does not have:
-#: a channel to market through, a pipeline to run, money moving, or people to
-#: lead. Part 3 puts it as "asking a solo, pre-launch founder about hiring
-#: repeatability or revenue concentration produces noise, not signal" -- the
-#: same reasoning, applied to the whole bank rather than to the two dimensions
-#: it happens to name.
+#: Every one presupposes something an ideation founder does not have: a channel
+#: to market through, a pipeline to run, money moving, or people to lead. Part 3
+#: puts it as "asking a solo, pre-launch founder about hiring repeatability or
+#: revenue concentration produces noise, not signal" -- the same reasoning,
+#: applied to the whole bank rather than to the two dimensions it names.
 #:
-#: This is an ALLOW-list in effect (see `categories_for`), not a deny-list, and
-#: deliberately so: ideation is where the noise costs most and where the bank
-#: is smallest and best understood, so a category seeded later should have to
-#: be admitted on purpose rather than arrive by default. Every other stage
-#: fails open, because Part 3 puts all six pillars in scope from Validation on
-#: and there is nothing left to withhold.
-IDEATION_CATEGORIES = frozenset(
+#: A DENY-list, and the first cut of this was an allow-list, which was a real
+#: bug. An allow-list has to enumerate every category that exists, and the
+#: shipped question batches are not the whole bank: measured against the live
+#: Stage 0 snapshot in scripts/calibration/bank_stage0.json, the allow-list
+#: silently withheld 36 of its 472 questions, among them all 25 tagged
+#: `Target Customer & ICP` -- which is Part 2's Customer Definition (ICP)
+#: dimension, one of the nine Part 3 puts AT ideation. Denying what is known to
+#: presuppose a business fails the safe way round: a category nobody listed here
+#: is still filtered by pillar, and by dimension where one is recorded.
+#:
+#: Only ideation withholds anything. Part 3 puts all six pillars in scope from
+#: Validation on, so there is nothing left to withhold after that.
+EXECUTION_CATEGORIES = frozenset(
     {
-        "Founder Psychology",       # the founder exists before the business does
-        "Idea & Validation",
-        "Competitive Awareness",
-        "Opportunity Evaluation",   # Prioritization Discipline, live at Stage 0
-        "Business Planning",        # Plan-to-Vision Alignment, live at Stage 0
-        "Product",                  # Execution Velocity, live at Stage 0
+        "Marketing Execution",            # pillar 2, and so NOT caught by pillar scope
+        "Go-To-Market",                   # pillar 2, same
+        "Scaling & Operational Maturity",  # pillar 6, same
+        # The rest sit in pillars ideation already excludes. Listed anyway so
+        # the rule reads as a rule rather than as a coincidence of pillar ids.
+        "Sales Execution",
+        "Sales & Revenue",
+        "Financial Management",
+        "Fundraising",
+        "Team & Leadership",
     }
 )
+
+
+#: `questions.category` -> the Part 2 dimension its questions assess, for the
+#: categories where that is a 1:1 fact rather than a judgement call.
+#:
+#: This is the backfill rule for `problems.dimension_code` (migration
+#: c3f7b28d5e91) and the only part of the mapping derivable without reading the
+#: live `problems` table. Each entry was checked against actual question text in
+#: the shipped batches, not inferred from the category name:
+#:
+#:   Business Planning       "What's the biggest gap between where you want this
+#:                            to go and what you're actually spending time on?"
+#:   Opportunity Evaluation  "Are all opportunities right now being treated as
+#:                            equally urgent, or is there a real system for
+#:                            ranking them?"
+#:   Competitive Awareness   "When did you last deliberately go looking for
+#:                            competitors, rather than just noticing one by
+#:                            accident?"
+#:
+#: INVARIANT, asserted below and in the migration: the dimension's pillar equals
+#: the pillar the category's problems already carry. A mapping that moved a
+#: question between pillars would silently rescore it.
+DIMENSION_BY_CATEGORY: dict[str, str] = {
+    "Target Customer & ICP": "customer_definition",
+    "Competitive Awareness": "competitive_awareness",
+    "Business Model Design": "revenue_model_clarity",
+    "Business Planning": "plan_to_vision_alignment",
+    "Opportunity Evaluation": "prioritization_discipline",
+}
+
+#: Categories deliberately NOT in the map above, and why. Kept as data so the
+#: gap is inspectable rather than being the absence of something.
+#:
+#: AMBIGUOUS -- the category spans several of its pillar's dimensions, so any
+#: single assignment would be fake precision. Sampled question text for each:
+#:
+#:   Founder Psychology  "If you had one extra hour today, would it actually go
+#:                        to this idea?"            -> Time Allocation Reality
+#:                       "How often do you catch yourself thinking it would just
+#:                        be faster if I did this myself?" -> Founder Dependency
+#:   Product             reliability metrics / shipping speed / bug ownership
+#:                       -> all three of pillar 4's dimensions
+#:   Team & Leadership   letting someone go / decision documentation / feedback
+#:   Idea & Validation   Problem Definition and Market Sizing Reality both
+#:   Sales & Revenue     conversation craft, which is none of pillar 3's four
+#:
+#: NO DIMENSION -- the doc's twenty do not cover this part of the bank at all.
+#: Part 2 is a diagnostic lens over six pillars; the question bank is an
+#: operational catalogue with families (marketing, sales and finance execution,
+#: fundraising) that the lens simply does not name. These stay NULL permanently
+#: unless Part 2 grows, and NULL is the honest value for them.
+#:
+#: MISFILED -- `Scaling & Operational Maturity` reads as Execution Velocity
+#: ("has your team gotten measurably faster at shipping, or has speed actually
+#: declined?") but its problems carry pillar 6, and Execution Velocity is
+#: pillar 4. Assigning it would break the invariant above, so it is left for the
+#: content pass to resolve along with the pillar id.
+CATEGORIES_WITHOUT_A_DIMENSION: dict[str, str] = {
+    "Founder Psychology": "ambiguous",
+    "Idea & Validation": "ambiguous",
+    "Product": "ambiguous",
+    "Team & Leadership": "ambiguous",
+    "Sales & Revenue": "ambiguous",
+    "Operations & Systems": "ambiguous",
+    "Risk Identification": "ambiguous",
+    "Marketing Execution": "no dimension",
+    "Go-To-Market": "no dimension",
+    "Sales Execution": "no dimension",
+    "Financial Management": "no dimension",
+    "Fundraising": "no dimension",
+    "Scaling & Operational Maturity": "misfiled pillar",
+}
+
+
+def _assert_category_mapping_keeps_its_pillar() -> None:
+    """The invariant in DIMENSION_BY_CATEGORY's docstring, checked at import.
+
+    Cheap (five entries) and it fails at start-up rather than producing a
+    quietly rescored pillar in a founder's report.
+    """
+    for category, dimension_code in DIMENSION_BY_CATEGORY.items():
+        expected = PILLAR_BY_CATEGORY.get(category)
+        actual = DIMENSION_BY_CODE[dimension_code].pillar_id
+        if expected is not None and expected != actual:
+            raise AssertionError(
+                f"{category!r} carries pillar {expected} but maps to "
+                f"{dimension_code!r}, which is pillar {actual}"
+            )
+
+
+_assert_category_mapping_keeps_its_pillar()
 
 
 def pillars_for(dimension_codes: frozenset[str]) -> frozenset[int]:
@@ -267,16 +377,14 @@ def pillars_for(dimension_codes: frozenset[str]) -> frozenset[int]:
     )
 
 
-def categories_for(dimension_codes: frozenset[str]) -> frozenset[str] | None:
-    """Question categories in scope for this dimension set, or None for "all".
+def withheld_categories_for(dimension_codes: frozenset[str]) -> frozenset[str]:
+    """Question categories this stage must not be asked about.
 
-    None rather than the full set so the caller can skip the filter entirely
-    when nothing is being withheld -- and so a category seeded after this was
-    written is admitted at every stage that withholds nothing, rather than
-    silently dropped everywhere.
+    Empty when nothing is withheld, which is every stage from Validation on:
+    Part 3 puts all six pillars in scope there, so there is nothing left to
+    hold back. Only ideation withholds, and it withholds the execution
+    families -- see EXECUTION_CATEGORIES for why this is a deny-list.
     """
     if dimension_codes >= ALL_DIMENSION_CODES - STAGE_0_TO_1_EXCLUDED:
-        # Validation onward: Part 3 puts every pillar in scope, so there is no
-        # category to withhold. Fail open.
-        return None
-    return IDEATION_CATEGORIES
+        return frozenset()
+    return EXECUTION_CATEGORIES

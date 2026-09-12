@@ -20,6 +20,8 @@ class DiagnosisRepository:
         self.db = db
         #: Request-lifetime cache for problem_to_pillar() -- see its docstring.
         self._problem_to_pillar: dict[int, int] | None = None
+        #: Same, for problem_to_dimension().
+        self._problem_to_dimension: dict[int, str] | None = None
 
     # --- Sessions ---
 
@@ -260,6 +262,34 @@ class DiagnosisRepository:
                 problem_id: pillar_id for problem_id, pillar_id in rows
             }
         return self._problem_to_pillar
+
+    def problem_to_dimension(self) -> dict[int, str]:
+        """{problem_id: dimension_code} for problems that have one.
+
+        Same shape, size and memoisation rationale as `problem_to_pillar`, and
+        deliberately a SEPARATE query rather than a second column on that one:
+        the pillar map is complete and load-bearing (an answer with no pillar
+        scores nothing), while this map is partial by design and only ever
+        narrows scope. Keeping them apart means a caller cannot accidentally
+        treat a missing dimension as a missing pillar.
+
+        Problems with a NULL dimension_code are simply absent from the result.
+        That is the normal case for most of the catalogue -- Part 2's twenty
+        dimensions do not name every family in the bank, and the ones they do
+        name mostly need a content pass to assign. See
+        `business_dna.CATEGORIES_WITHOUT_A_DIMENSION`.
+        """
+        if self._problem_to_dimension is None:
+            rows = self.db.execute(
+                _text(
+                    "select problem_id, dimension_code from problems "
+                    "where dimension_code is not null"
+                )
+            ).all()
+            self._problem_to_dimension = {
+                problem_id: dimension_code for problem_id, dimension_code in rows
+            }
+        return self._problem_to_dimension
 
     def answered_count_per_pillar_category(
         self, session_id: int
