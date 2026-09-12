@@ -44,6 +44,9 @@ from app.api.v1.ally.execution.schemas import AIRequest, TokenUsage
 from app.api.v1.ally.memory.clock import Clock, SystemClock
 from app.api.v1.ally.memory.schemas import MemoryType
 from app.core.logger import logger
+from app.plans.errors import TurnExceedsRemainingTokensError
+from app.plans.tokens import turn_cost_estimate
+from app.plans.usage import next_daily_reset
 
 BUILD_CONTEXT = "build_context"
 LOAD_CONVERSATION = "load_conversation"
@@ -147,6 +150,23 @@ class ChatExecutionService:
                                   ai=None, rendered=None, assistant_id=None,
                                   failed_step=RENDER_PROMPT, error=f"prompt: {exc}",
                                   user_message_id=user_message.message_id)
+
+        # 5b. Price the turn before running it. The prompt exists now, so the
+        # only unknown left is the reply, and that is bounded by the cap the
+        # provider will be given -- which makes "can this founder afford this
+        # turn" a question with an answer, for the first time in this path.
+        #
+        # RAISES rather than _finalize()s. Every other failure here is ours
+        # (a prompt that would not render, a provider that would not answer) and
+        # the founder gets a turn back saying so. This one is a quota decision
+        # the route already owns a vocabulary for -- it becomes the same 429 the
+        # daily ceiling returns, carrying the shortfall so the founder can read
+        # a refusal that happens while their counter still shows tokens left.
+        #
+        # The user's message stays in the conversation. It was appended at step
+        # 3, it is what they typed, and dropping it would lose their words to
+        # make our bookkeeping tidy.
+        self._require_token_budget(request, rendered)
 
         # 6. Execute AI (M5 is itself fail-closed -> always returns). Turns that
         # actually need to reason over grounded data (diagnosis/RAG) route to
@@ -315,6 +335,34 @@ class ChatExecutionService:
         )
 
     # --- finalize --------------------------------------------------------
+
+    def _require_token_budget(self, request: ChatRequest, rendered) -> None:
+        """Refuse a turn that cannot fit in what the founder has left today.
+
+        A no-op when `token_budget` is None (quotas not enforced) -- see the
+        field's note: None is not zero.
+        """
+        budget = request.token_budget
+        if budget is None:
+            return
+
+        needed = turn_cost_estimate(
+            getattr(rendered, "system_prompt", None),
+            getattr(rendered, "user_prompt", None),
+            request.reply_token_cap,
+        )
+        if needed <= budget:
+            return
+
+        logger.info(
+            "chat turn refused: would exceed the founder's remaining daily tokens",
+            extra={"founder_id": request.founder_id,
+                   "path": f"needed={needed} remaining={budget}"},
+        )
+        raise TurnExceedsRemainingTokensError(
+            needed=needed, remaining=budget,
+            resets_at=next_daily_reset(self.clock.now()),
+        )
 
     def _finalize(self, request_id, conversation, started, completed, window,
                   *, ai, rendered, assistant_id, failed_step, error,

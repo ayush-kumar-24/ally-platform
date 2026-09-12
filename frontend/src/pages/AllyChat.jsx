@@ -33,7 +33,7 @@ import MessageActions from '../components/MessageActions';
 import MessageEditor from '../components/MessageEditor';
 import Markdown from '../components/Markdown';
 import { usePlan as usePlanGateEntitlements } from '../components/PlanGate';
-import { explainLimit, getMyPlan, can, FEATURES } from '../services/plans';
+import { explainLimit, explainStreamLimit, getMyPlan, can, FEATURES } from '../services/plans';
 
 /**
  * Whether a send goes over /chat/stream instead of /chat/message.
@@ -577,7 +577,16 @@ export default function AllyChat() {
       // there is no root-cause context to reason from. Rendering the empty string
       // would leave a blank bubble and look broken; say what actually happened.
       const reply = (res.answer ?? '').trim();
-      if (res.ok === false || !reply) {
+      /* A turn refused for cost arrives on the streaming path as an error
+         event, not a 429 -- START is already sent by the time the backend
+         knows what the turn costs. Without this it would fall into the generic
+         "I couldn't put together a grounded answer" below, which is the exact
+         confusion this whole change exists to remove: the founder would be
+         told Ally failed, when in fact Ally declined and can say why. */
+      const streamLimit = res.ok === false ? explainStreamLimit(res.error) : null;
+      if (streamLimit) {
+        setLimitNotice(streamLimit);
+      } else if (res.ok === false || !reply) {
         const needsDiagnosis = String(res.error || '').includes('executive_summary')
           || String(res.error || '').includes('top_root_causes');
         setMessages(prev => [...prev, {
@@ -600,15 +609,27 @@ export default function AllyChat() {
          founder already has their answer. */
       refreshSuggestions(convId);
     } catch (err) {
-      /* The message never reached the server, so it must not stay in the
-         transcript looking sent. Take it back out and put the text back in the
-         box -- the copy already promised "your message wasn't lost", while the
-         code had cleared it and left them to retype it. */
-      setMessages(prev => {
-        const last = prev[prev.length - 1];
-        return last?.role === 'me' && last.text === text ? prev.slice(0, -1) : prev;
-      });
-      setInput(text);
+      /* A turn refused for cost is the ONE failure here where the message did
+         reach the server: the budget is only knowable once the prompt has been
+         assembled, and assembling it means the founder's message is already
+         appended to the conversation. Pulling the bubble and re-filling the box
+         would show them a transcript that disagrees with the one on file, and
+         invite them to send it a second time. Every other error below genuinely
+         never landed. */
+      const persisted = err instanceof ApiError
+        && err.code === 'TurnExceedsRemainingTokensError';
+
+      if (!persisted) {
+        /* The message never reached the server, so it must not stay in the
+           transcript looking sent. Take it back out and put the text back in the
+           box -- the copy already promised "your message wasn't lost", while the
+           code had cleared it and left them to retype it. */
+        setMessages(prev => {
+          const last = prev[prev.length - 1];
+          return last?.role === 'me' && last.text === text ? prev.slice(0, -1) : prev;
+        });
+        setInput(text);
+      }
 
       // 403/402/429 are the plan gate doing its job -- show what it means and
       // what to do about it, rather than a generic failure.
@@ -632,6 +653,19 @@ export default function AllyChat() {
     } finally {
       setTyping(false);
       setSending(false);
+      /* Re-read the allowance after every turn, whether it succeeded or was
+         refused.
+
+         The counter used to be fetched once on mount and never again, so it sat
+         frozen at whatever was true when the page loaded while the founder
+         spent their day. That is how one founder came to see "484 of 8,000
+         tokens left today" directly above "Daily limit reached (9,894 of
+         8,000)" -- neither number was wrong, but the first was minutes old and
+         nothing said so. A meter nobody can trust is worse than no meter.
+
+         Unawaited and failure-swallowed: it is a counter, and it must never
+         delay or break the turn it is reporting on. */
+      getMyPlan().then(setPlan).catch(() => { /* keep the last known reading */ });
     }
   };
 

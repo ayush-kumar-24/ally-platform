@@ -76,6 +76,34 @@ class DailyTokenLimitError(PlanError):
         self.resets_at = resets_at
 
 
+class TurnExceedsRemainingTokensError(PlanError):
+    """429 -- this particular turn costs more than the founder has left today.
+
+    DISTINCT FROM DailyTokenLimitError, and the difference is the whole point.
+    That one means "you have nothing left". This one means "you have something
+    left, but not enough for THIS", which is a sentence a founder can only make
+    sense of if we say what the shortfall was. A founder looking at a counter
+    reading 600 and being refused needs to know the turn wanted 1,900 -- without
+    the number, the counter looks broken and the product looks like it is lying.
+
+    Raised BEFORE the provider is called, so a refused turn costs nothing and
+    the founder's recorded usage does not move.
+    """
+
+    def __init__(self, needed: int, remaining: int, resets_at):
+        super().__init__(
+            f"This message needs about {needed:,} tokens and you have "
+            f"{remaining:,} left today. "
+            # %Z for the same reason as DailyTokenLimitError above: the moment
+            # arrives already in the founder's own reset timezone.
+            f"Your allowance resets at {resets_at:%H:%M %Z}.",
+            status_code=429,
+        )
+        self.needed = needed
+        self.remaining = remaining
+        self.resets_at = resets_at
+
+
 class DiagnosisAlreadyCompletedError(PlanError):
     """429 -- the founder has completed their lifetime allowance of diagnoses.
 

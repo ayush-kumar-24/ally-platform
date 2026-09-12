@@ -27,6 +27,7 @@ from app.ai_chat import (
 )
 from app.api.v1.ally.context.builder import AllyContextBuilder
 from app.api.v1.ally.context.errors import FounderNotFoundError
+from app.plans.errors import TurnExceedsRemainingTokensError
 from app.api.v1.ally.execution import MockLLMProvider, build_execution_service
 from app.api.v1.ally.kg import (
     GraphEdge,
@@ -457,3 +458,89 @@ def test_founder_without_diagnosis_can_still_chat():
     r3 = w.send(founder_id=3, message="hi")  # founder 3: valid, no diagnosis
     assert r3.ok is True and r3.trace.failed_step is None
     assert r3.assistant_message_id is not None
+
+
+# --- the daily token budget -------------------------------------------------
+#
+# A turn is priced before it runs (see app/plans/tokens.py). Until this existed
+# the ceiling was checked only as `used < limit`, so a founder with one token
+# left was admitted and charged whatever the turn really cost: measured live,
+# one founder at 7,516 of 8,000 landed at 9,894 and was shown "484 tokens left"
+# beside "Daily limit reached (9,894 of 8,000)".
+
+
+def _budget_world():
+    return _capturing_world()
+
+
+def test_a_turn_that_fits_the_budget_runs_normally():
+    w = _budget_world()
+    r = w.send(token_budget=1_000_000)
+    assert r.ok and r.answer == ANSWER
+    assert len(w.execution.requests) == 1
+
+
+def test_a_turn_that_cannot_fit_is_refused():
+    w = _budget_world()
+    with pytest.raises(TurnExceedsRemainingTokensError):
+        w.send(token_budget=1)
+
+
+def test_a_refused_turn_never_reaches_the_provider():
+    """The point of pricing BEFORE the call: a refusal costs nothing. Charging a
+    founder for a turn we then declined to give them would be the worst of both."""
+    w = _budget_world()
+    with pytest.raises(TurnExceedsRemainingTokensError):
+        w.send(token_budget=1)
+    assert w.execution.requests == []
+
+
+def test_the_refusal_says_what_was_needed_and_what_was_left():
+    """Without both numbers the founder sees a refusal while their counter still
+    reads above zero, and no way to reconcile the two."""
+    w = _budget_world()
+    with pytest.raises(TurnExceedsRemainingTokensError) as excinfo:
+        w.send(token_budget=7)
+    err = excinfo.value
+    assert err.remaining == 7
+    assert err.needed > 7
+    assert "7 left today" in err.message
+    assert err.status_code == 429
+
+
+def test_the_reply_cap_is_part_of_the_price():
+    """A budget that covered only the prompt would admit a turn whose reply then
+    took it past the ceiling -- which is the overshoot, one step later."""
+    w = _budget_world()
+    r = w.send(token_budget=1_000_000, reply_token_cap=0)
+    assert r.ok
+    prompt_only = w.execution.requests[0]
+    assert prompt_only is not None
+
+    w2 = _budget_world()
+    # Same turn, but now the reply is priced at a cap larger than the budget.
+    with pytest.raises(TurnExceedsRemainingTokensError):
+        w2.send(token_budget=900, reply_token_cap=1_000_000)
+
+
+def test_no_budget_means_unmetered_not_broke():
+    """token_budget=None is "this deployment does not enforce quotas". Reading it
+    as zero would refuse every turn on an installation that has no limits."""
+    w = _budget_world()
+    r = w.send(token_budget=None)
+    assert r.ok
+    assert len(w.execution.requests) == 1
+
+
+def test_the_founders_message_survives_a_refusal():
+    """Deliberate: the budget is only knowable once the prompt is assembled, and
+    assembling it means the message is already appended. The client is told so it
+    can leave the bubble alone rather than show a transcript that disagrees with
+    the one on file."""
+    w = _budget_world()
+    conv = w.send(token_budget=1_000_000).conversation_id
+    with pytest.raises(TurnExceedsRemainingTokensError):
+        w.send(conversation_id=conv, message="a second, unaffordable question",
+               token_budget=1)
+    texts = [m.content for m in w.conversations.get_history(conv)]
+    assert "a second, unaffordable question" in texts
