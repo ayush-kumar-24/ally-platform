@@ -329,6 +329,43 @@ def test_worker_drops_a_stale_reminder_without_emailing(worker):
     assert s.list_reminders(1)[0].status == ReminderStatus.SENT
 
 
+def test_a_late_day_before_reminder_still_sends_because_it_beats_the_task(worker):
+    """The old rule measured staleness from the ROW: a "1 day before" reminder
+    delayed four hours was thrown away, even though it was still twenty hours
+    ahead of the task and exactly as useful."""
+    s = svc()
+    t = _task(s, due_date=date(2026, 8, 1), due_time=time(15, 0),
+              reminder_minutes_before=1440)
+    task_reminders.sync_for_task(s, t, timezone_name="UTC")   # remind_at = Jul 31 15:00
+    counts = worker.run(s, _founder(),
+                        now=datetime(2026, 7, 31, 19, 0, tzinfo=timezone.utc))
+    assert counts["sent"] == 1 and counts["stale"] == 0
+
+
+def test_a_late_five_minute_reminder_is_dropped_because_the_task_has_passed(worker):
+    """The mirror image: the old rule would have sent this half an hour AFTER
+    the task was due, which is a nag about something already missed."""
+    s = svc()
+    t = _task(s, due_date=date(2026, 8, 1), due_time=time(15, 0),
+              reminder_minutes_before=5)
+    task_reminders.sync_for_task(s, t, timezone_name="UTC")   # remind_at = 14:55
+    counts = worker.run(s, _founder(),
+                        now=datetime(2026, 8, 1, 15, 30, tzinfo=timezone.utc))
+    assert counts["stale"] == 1 and worker.sent == []
+
+
+def test_an_at_the_time_reminder_survives_the_sweep_running_just_after(worker):
+    """remind_at IS the task's moment for a 0 offset, so every sweep runs after
+    it. Without the grace window this offset could never be delivered."""
+    s = svc()
+    t = _task(s, due_date=date(2026, 8, 1), due_time=time(15, 0),
+              reminder_minutes_before=0)
+    task_reminders.sync_for_task(s, t, timezone_name="UTC")
+    counts = worker.run(s, _founder(),
+                        now=datetime(2026, 8, 1, 15, 1, tzinfo=timezone.utc))
+    assert counts["sent"] == 1
+
+
 def test_worker_closes_out_a_reminder_whose_task_is_gone(worker):
     s = svc()
     t = _due_reminder(s)
@@ -515,15 +552,57 @@ def test_a_send_that_fails_is_logged_not_raised(confirm, monkeypatch):
     job()   # must not raise
 
 
-def test_sync_for_task_no_longer_schedules_a_t30_email():
-    """The T-30 row is retired without a migration: sync cancels whatever the
-    task still has and writes nothing new."""
+def test_sync_for_task_schedules_at_the_founders_own_offset():
+    """The whole point: the row lands at the offset picked in Plan Your Day,
+    not at a platform constant."""
+    s = svc()
+    t = _task(s, due_date=date(2026, 8, 1), due_time=time(15, 0),
+              reminder_minutes_before=15)
+    r = task_reminders.sync_for_task(s, t, timezone_name="UTC")
+    assert r is not None
+    assert r.remind_at == datetime(2026, 8, 1, 14, 45, tzinfo=timezone.utc)
+    assert r.channel == ReminderChannel.EMAIL
+    assert r.status == ReminderStatus.SCHEDULED
+
+
+def test_sync_for_task_falls_back_to_the_platform_default():
+    """A task created before the picker existed still gets a reminder."""
     s = svc()
     t = _task(s, due_date=date(2026, 8, 1), due_time=time(15, 0))
-    s.sync_task_reminder(1, t, remind_at=datetime(2026, 8, 1, 14, 30, tzinfo=timezone.utc),
-                         channel=ReminderChannel.EMAIL)
-    assert any(r.status == ReminderStatus.SCHEDULED for r in s.list_reminders(1))
+    r = task_reminders.sync_for_task(s, t, timezone_name="UTC")
+    assert r.remind_at == datetime(2026, 8, 1, 14, 30, tzinfo=timezone.utc)
 
+
+def test_changing_the_offset_moves_the_reminder():
+    """Editing the picker has to move the row, or the founder's change is a
+    setting that displays correctly and does nothing."""
+    s = svc()
+    t = _task(s, due_date=date(2026, 8, 1), due_time=time(15, 0),
+              reminder_minutes_before=30)
+    first = task_reminders.sync_for_task(s, t, timezone_name="UTC")
+    moved = s.update_task(1, t.task_id, reminder_minutes_before=5)
+    second = task_reminders.sync_for_task(s, moved, timezone_name="UTC")
+
+    assert second.remind_at == datetime(2026, 8, 1, 14, 55, tzinfo=timezone.utc)
+    by_id = {r.reminder_id: r for r in s.list_reminders(1)}
+    assert by_id[first.reminder_id].status == ReminderStatus.CANCELLED
+    assert by_id[second.reminder_id].status == ReminderStatus.SCHEDULED
+    scheduled = [r for r in s.list_reminders(1) if r.status == ReminderStatus.SCHEDULED]
+    assert len(scheduled) == 1, "one task, one reminder"
+
+
+def test_sync_for_task_schedules_nothing_for_a_dateless_task():
+    s = svc()
+    t = _task(s)
     assert task_reminders.sync_for_task(s, t, timezone_name="UTC") is None
-    assert not any(r.status == ReminderStatus.SCHEDULED for r in s.list_reminders(1)), \
-        "the pre-existing T-30 reminder should have been cancelled"
+    assert s.list_reminders(1) == ()
+
+
+def test_adding_a_task_whose_reminder_moment_has_passed_schedules_nothing():
+    """A 2pm task added at 1:50pm with a 30-minute offset has no reminder to
+    give. The confirmation email still goes out, so this is not silence."""
+    s = svc()
+    t = _task(s, due_date=date(2020, 1, 1), due_time=time(15, 0),
+              reminder_minutes_before=30)
+    assert task_reminders.sync_for_task(s, t, timezone_name="UTC") is None
+    assert not any(r.status == ReminderStatus.SCHEDULED for r in s.list_reminders(1))

@@ -259,11 +259,19 @@ def send_task_reminders(
     sweeps above, so whatever cron / EventBridge / pg_cron already runs them can
     run this too.
 
-    **Call this every 15 minutes.** Reminders are scheduled to the minute and
+    **Call this every 1-2 minutes.** Reminders are scheduled to the minute and
     only sent once past it, so the founder's nudge is late by however long the
-    gap between runs is. Idempotent: every row examined moves off "scheduled",
-    whether it was sent, skipped or dropped, so re-running immediately does
-    nothing.
+    gap between runs is -- and the founder now picks that offset themselves in
+    Plan Your Day, where the smallest is five minutes. A fifteen-minute sweep
+    would deliver a "5 minutes before" reminder ten minutes AFTER the task was
+    due, which the staleness check then discards, leaving the founder with the
+    silence this endpoint exists to end. Idempotent: every row examined moves
+    off "scheduled", whether it was sent, skipped or dropped, so re-running
+    immediately does nothing.
+
+    See docs/TASK-REMINDER-SCHEDULE.md for the EventBridge Scheduler setup.
+    The GitHub Actions sweep still calls this too, but only as a backstop:
+    its schedule is best-effort and measured at two-to-five hour gaps.
 
     Note this does nothing useful until EMAIL_HOST is configured -- send_email
     runs in stub mode until then, logging instead of sending. The response
