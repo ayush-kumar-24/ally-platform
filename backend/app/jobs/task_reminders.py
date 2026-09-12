@@ -77,7 +77,7 @@ def main() -> int:
         "task reminder job complete",
         extra={"path": (
             f"sent={result['sent']} stale={result['stale']} "
-            f"skipped_plan={result['skipped_plan']} "
+            f"in_app={result['in_app']} "
             f"skipped_pref={result['skipped_pref']} "
             f"orphaned={result['orphaned']} failed={result['failed']}"
         )},

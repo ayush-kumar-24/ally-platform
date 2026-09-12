@@ -78,6 +78,7 @@ from app.planning.models import (
     ReminderChannel,
     Task,
 )
+from app.notifications.writer import notify
 from app.planning.service import PlanningService
 from app.plans.catalog import Feature
 from app.services.email import send_email
@@ -344,6 +345,38 @@ def notify_task_scheduled(db: Session, founder: Founder, task: Task, *,
     return _send
 
 
+#: The bell's name for this reminder. Registered in notification_types, so it
+#: has the same one-UPDATE kill switch as every other type.
+IN_APP_TYPE = "task_reminder"
+
+
+def _remind_in_app(db: Session, founder: Founder, task: Task,
+                   reminder: Reminder, when: str):
+    """The same nudge, in the bell, for a founder whose plan has no email.
+
+    Keyed on the reminder row rather than the task: rescheduling a task
+    cancels its row and writes a new one, and the founder should be told
+    about the new time. Two sweeps racing the same row still produce one
+    notification, which is what the dedup key is for.
+
+    Never raises -- notify() swallows its own failures, and a bell row that
+    could not be written must not strand the reminder at "scheduled" where
+    it would be retried on every sweep for the rest of time. It returns the
+    row it wrote, or None, and the caller counts on that rather than on
+    having called this at all.
+    """
+    return notify(
+        db,
+        founder_id=founder.founder_id,
+        founder=founder,
+        type=IN_APP_TYPE,
+        title=f"{task.title}",
+        body=f"Due {when}." + (f" {reminder.note}" if reminder.note else ""),
+        action_url="/app/plan",
+        dedup_key=f"task_reminder:{reminder.reminder_id}",
+    )
+
+
 # --- the worker -------------------------------------------------------------
 
 def _wants_task_reminders(founder: Founder) -> bool:
@@ -396,7 +429,11 @@ def send_due_reminders(db: Session, *, now: datetime | None = None) -> dict:
     from app.core.container import container
 
     now = now or datetime.now(timezone.utc)
-    counts = {"sent": 0, "skipped_pref": 0, "skipped_plan": 0,
+    # `sent` is email; `in_app` is the same reminder delivered to the bell for a
+    # founder whose plan does not include email. Both are a reminder that
+    # reached someone -- neither is a skip. `skipped_pref` is the founder
+    # having muted the channel they would have been reached on.
+    counts = {"sent": 0, "in_app": 0, "skipped_pref": 0,
               "stale": 0, "orphaned": 0, "failed": 0}
 
     service: PlanningService = container.planning_service(db)
@@ -447,22 +484,40 @@ def _deliver_one(db: Session, service: PlanningService, entitlements,
         service.mark_reminder_sent(reminder.reminder_id)
         return
 
-    # Sold as Pro on the pricing page (Feature.EMAIL_NOTIFICATIONS lives in the
-    # advisor bundle), so it is checked here rather than at scheduling time: a
-    # founder who upgrades should start getting the reminders already sitting in
-    # the table, and one who downgrades should stop.
-    if not entitlements.has_feature(founder.plan_type, Feature.EMAIL_NOTIFICATIONS):
-        counts["skipped_plan"] += 1
+    # EVERY FOUNDER IS REMINDED. ONLY THE CHANNEL IS SOLD.
+    #
+    # Email is the Pro delivery (Feature.EMAIL_NOTIFICATIONS lives in the
+    # advisor bundle and is priced on the Billing page). Everyone else gets the
+    # same reminder in the bell, at the same moment, for the same task -- a
+    # founder on Starter has still planned their day and still wants telling.
+    #
+    # Checked HERE rather than at scheduling time, which is why the row's
+    # channel says EMAIL whatever the founder's plan: a founder who upgrades
+    # between planning a task and its reminder should get the email, and one
+    # who downgrades in that window should get the bell. The row records the
+    # intent; this decides the delivery from the plan as it stands right now.
+    #
+    # `email_task_reminders` off is the same fork, not silence: the founder
+    # turned off the EMAIL, and the bell has its own switch (`in_app_all`,
+    # honoured inside notify()) for turning off the rest.
+    tz = getattr(founder, "timezone", None) or settings.DISCOVERY_TIMEZONE
+    when = _when_phrase(reminder.remind_at, due_at, tz)
+
+    by_email = (entitlements.has_feature(founder.plan_type, Feature.EMAIL_NOTIFICATIONS)
+                and _wants_task_reminders(founder))
+    if not by_email:
+        # Counted on the ROW, not on the attempt. notify() returns None when
+        # the founder muted the bell, when this reminder is already in it, and
+        # when the write failed and was logged -- and a counter that called all
+        # of those a delivery would report a healthy sweep while founders were
+        # told nothing, which is the exact failure this feature exists to end.
+        if _remind_in_app(db, founder, task, reminder, when) is not None:
+            counts["in_app"] += 1
+        else:
+            counts["skipped_pref"] += 1
         service.mark_reminder_sent(reminder.reminder_id)
         return
 
-    if not _wants_task_reminders(founder):
-        counts["skipped_pref"] += 1
-        service.mark_reminder_sent(reminder.reminder_id)
-        return
-
-    when = _when_phrase(reminder.remind_at, due_at,
-                        getattr(founder, "timezone", None) or settings.DISCOVERY_TIMEZONE)
     send_task_reminder(founder.email, founder.full_name or "there",
                        task.title, when, reminder.note)
     counts["sent"] += 1

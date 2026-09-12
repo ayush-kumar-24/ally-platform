@@ -961,7 +961,15 @@ class Notifications(Base):
     __tablename__ = 'notifications'
     __table_args__ = (
         CheckConstraint("channel::text = ANY (ARRAY['in_app'::character varying, 'email'::character varying]::text[])", name='notifications_channel_check'),
-        CheckConstraint("type::text = ANY (ARRAY['report_ready'::character varying, 'diagnosis_reminder'::character varying, 'discovery_call_reminder'::character varying, 'follow_up'::character varying, 'product_update'::character varying, 'token_limit_reached'::character varying, 'subscription_expiring'::character varying, 'payment_failed'::character varying]::text[])", name='notifications_type_check'),
+        # No CHECK on `type`. Migration d3f8b71c02a9 (2026-09-07) dropped the
+        # eight-value CHECK that used to live here and replaced it with a
+        # foreign key to `notification_types`, whose is_active column is the
+        # kill switch app/notifications/writer.py reads. Leaving the old list
+        # in the model meant any database built from create_all -- local dev,
+        # a scratch test database -- still rejected every type added since,
+        # while production accepted them. `notification_types` has no ORM
+        # model, so the FK is not restated here; the migration is the source
+        # of truth for it.
         ForeignKeyConstraint(['founder_id'], ['founders.founder_id'], ondelete='CASCADE', name='notifications_founder_id_fkey'),
         PrimaryKeyConstraint('notification_id', name='notifications_pkey'),
         Index('idx_notifications_founder', 'founder_id'),
