@@ -194,6 +194,11 @@ export default function AllyChat() {
   // same turn rather than running the LLM call a second time. Only reused
   // when the resent text is unchanged; an edited retry is a new message.
   const lastFailedRef = useRef(null);
+  /* The conversation id and the in-flight upload, held as refs because both are
+     read by send() at the moment it runs -- state would give it whatever the
+     last render saw, which is exactly how a message overtook its own upload. */
+  const convRef = useRef(null);
+  const uploadRef = useRef(null);
 
   // A page like Your Vision can hand off here with a message drafted from
   // the founder's own words (see VisionPage's talkAboutTerritory). It only
@@ -230,6 +235,7 @@ export default function AllyChat() {
     // Only the drawer closes on pick -- a docked column stays put.
     if (histIsDrawer()) setHistOpen(false);
     setMenuFor(null);
+    convRef.current = id;       // keep the ref send() reads in step with the UI
     setActiveConv(id);
     setLoadingThread(true);
     setThreadError(false);
@@ -502,6 +508,24 @@ export default function AllyChat() {
 
   const send = async (text) => {
     if (!text.trim() || sending) return;
+    /* An upload still in flight means the file is not on the conversation yet,
+       and the turn would be assembled without it: the backend reads attachments
+       BY CONVERSATION when it builds the prompt, so a message that overtakes its
+       own upload reaches Ally with an empty attachment block. Ally then says "I
+       don't see any file uploaded in this chat" -- while the founder is looking
+       at their own file in the transcript -- and asks them to upload it again.
+       Live-reported 2026-09-12.
+
+       `uploading` gated only the paperclip button, so Enter and the send button
+       both sailed straight past it. Waiting on the promise rather than refusing
+       the send keeps the founder's message: they pressed send, and they get the
+       turn they asked for, a few hundred milliseconds later with the file
+       actually attached. */
+    if (uploadRef.current) {
+      setTyping(true);
+      try { await uploadRef.current; } catch { /* the upload's own toast said so */ }
+      setTyping(false);
+    }
     setLimitNotice(null);
     setSendError(null);
     // Last turn's suggestions are about last turn. Clearing them here rather
@@ -525,10 +549,17 @@ export default function AllyChat() {
     try {
       // Create the conversation lazily, on the first message, so an abandoned
       // "New chat" click never leaves an empty thread in the founder's history.
-      let convId = activeConv;
+      /* ensureConversation() may already have created one for an attachment.
+         Reading `activeConv` alone raced it: its setState had not landed yet, so
+         send() created a SECOND conversation and posted the message there --
+         leaving the file on the first one, invisible to the turn. The ref is
+         written synchronously at creation, so whichever of the two paths gets
+         there first, the other one follows it. */
+      let convId = activeConv || convRef.current;
       if (!convId) {
         const created = await createConversation(text.slice(0, 60));
         convId = created.conversation_id;
+        convRef.current = convId;
         setActiveConv(convId);
         setConversations(prev => [created, ...prev]);
       }
@@ -673,8 +704,11 @@ export default function AllyChat() {
   // an existing conversation_id up front, so this creates one on demand if there
   // isn't one yet (e.g. attaching a file before typing anything).
   const ensureConversation = async () => {
-    if (activeConv) return activeConv;
+    if (activeConv || convRef.current) return activeConv || convRef.current;
     const created = await createConversation();
+    // Synchronously, before any await a caller might be sitting behind: send()
+    // reads this ref precisely because setState has not landed yet.
+    convRef.current = created.conversation_id;
     setActiveConv(created.conversation_id);
     setConversations(prev => [created, ...prev]);
     return created.conversation_id;
@@ -687,6 +721,10 @@ export default function AllyChat() {
     e.target.value = ''; // allow re-selecting the same file later
     if (!file) return;
     setUploading(true);
+    // Published so send() can wait on it. A ref, not state: send() needs the
+    // value at the moment it runs, not at the moment it last rendered.
+    let settle;
+    uploadRef.current = new Promise((resolve) => { settle = resolve; });
     try {
       const conversationId = await ensureConversation();
       const form = new FormData();
@@ -700,6 +738,10 @@ export default function AllyChat() {
       showToast(err instanceof ApiError ? err.detail : 'Could not attach that file — please try again.');
     } finally {
       setUploading(false);
+      // Released whether the upload landed or failed: a send waiting behind a
+      // failed upload must still go out, without the file.
+      uploadRef.current = null;
+      settle();
     }
   };
 
@@ -763,6 +805,9 @@ export default function AllyChat() {
   const firstName = (user?.name || '').split(' ')[0] || 'there';
 
   const startNew = () => {
+    // Cleared with the state it shadows: a stale id here would post the next
+    // conversation's first message into the previous thread.
+    convRef.current = null;
     setActiveConv(null);
     setMessages([]);
     // Attachments belong to a conversation, so they must not carry over into
