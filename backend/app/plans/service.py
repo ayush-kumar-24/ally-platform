@@ -216,6 +216,22 @@ class EntitlementService:
                          if claimed.free_calls_used >= plan.free_calls_per_month else 0,
                          free_remaining=claimed.free_remaining(plan.free_calls_per_month))
 
+    def remaining_daily_tokens(self, founder_id: int, tier: PlanTier | str | None,
+                               *, source: str = SOURCE_CHAT) -> int:
+        """What is left of today's ceiling for one metered feature.
+
+        Per-source, matching check_chat_allowed: chat and planning have separate
+        ceilings (see Plan.daily_limit_for), so a single combined number would be
+        wrong for both. Never negative -- usage recorded before this change could
+        already sit past the ceiling, and a negative budget would read as a
+        nonsense shortfall in the founder's refusal message.
+        """
+        plan = self.plan_for(tier)
+        now = self._now()
+        limit = plan.daily_limit_for(source)
+        used = self.usage.get_daily(founder_id, usage_day(now), source=source).tokens_used
+        return max(0, limit - used)
+
     # --- summary ----------------------------------------------------------
 
     def entitlements(self, founder_id: int, tier: PlanTier | str | None) -> Entitlements:

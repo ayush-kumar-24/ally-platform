@@ -103,6 +103,10 @@ def post_message(
         session_id=payload.session_id, language=payload.language,
         response_category=payload.response_category, request_id=payload.request_id,
         knowledge_enabled=gate.knowledge_enabled,
+        # Priced against this once the prompt is assembled, and refused before
+        # the provider is called if the turn cannot fit -- so a founder can no
+        # longer end the day past a ceiling they were already warned about.
+        token_budget=gate.remaining_tokens(),
     ))
 
     # Charge for real usage, not an estimate -- the true token count only exists
@@ -138,6 +142,7 @@ def post_stream(
         # Same entitlement as /message. Omitted here, the knowledge base would
         # stay open on the streaming path -- which is the path that matters.
         knowledge_enabled=gate.knowledge_enabled,
+        token_budget=gate.remaining_tokens(),
     )
     # The generator appends its StreamingResponse here once the stream ends;
     # sse_event_stream turns that into the closing `summary` event, which is how

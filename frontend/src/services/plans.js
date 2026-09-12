@@ -121,9 +121,42 @@ export function explainLimit(error) {
     return { kind: 'topup', title: 'Out of credits',
              message: error.detail || 'Top up or upgrade to keep going.' };
   }
+  // Before the generic 429 below, which it would otherwise be swallowed by.
+  // "Daily limit reached" is the wrong sentence here: this founder still has
+  // tokens, just not enough for the turn they tried, and the backend's message
+  // is the only thing that explains a refusal happening while the counter
+  // beside it still reads above zero.
+  if (error.code === 'TurnExceedsRemainingTokensError') {
+    return { kind: 'wait', title: 'Not enough tokens left for that',
+             message: error.detail || "That message needs more tokens than you have left today." };
+  }
   if (error.status === 429) {
     return { kind: 'wait', title: 'Daily limit reached',
              message: error.detail || 'Your allowance resets tomorrow.' };
   }
   return null;
+}
+
+/** Prefix the streaming path uses for the same refusal -- see
+ *  TOKEN_BUDGET_ERROR_CODE in app/ai_chat/streaming/schemas.py. START has
+ *  already been sent by the time the cost is known, so /chat/stream cannot
+ *  answer 429 and puts the code in the error event instead. */
+const STREAM_TOKEN_BUDGET = 'token_budget_exceeded';
+
+/**
+ * The same notice as explainLimit(), for a refusal that arrived as a streamed
+ * error event rather than an HTTP status.
+ *
+ * @param {string} content the ERROR chunk's text
+ * @returns {{kind:string,title:string,message:string}|null}
+ */
+export function explainStreamLimit(content) {
+  const text = String(content || '');
+  if (!text.startsWith(`${STREAM_TOKEN_BUDGET}:`)) return null;
+  return {
+    kind: 'wait',
+    title: 'Not enough tokens left for that',
+    message: text.slice(STREAM_TOKEN_BUDGET.length + 1).trim()
+      || "That message needs more tokens than you have left today.",
+  };
 }

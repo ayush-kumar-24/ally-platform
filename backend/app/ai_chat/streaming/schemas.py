@@ -29,6 +29,15 @@ class ChunkType(str, Enum):
 
 TERMINAL_CHUNKS = frozenset({ChunkType.COMPLETE, ChunkType.ERROR, ChunkType.CANCELLED})
 
+#: Prefix on an ERROR chunk's content when the turn was refused for cost rather
+#: than broken. The streaming path cannot return a 429 -- START has already gone
+#: out by the time the budget is known -- so the code travels in the error text,
+#: and the client keys on it to show the founder a quota notice instead of the
+#: generic "something went wrong". Bare codes ("timeout", "cancelled") are the
+#: convention here; this one carries a message after the colon because the
+#: refusal is only legible with its numbers in it.
+TOKEN_BUDGET_ERROR_CODE = "token_budget_exceeded"
+
 
 @dataclass(frozen=True)
 class StreamingChatRequest:
@@ -47,6 +56,11 @@ class StreamingChatRequest:
     #: a flag that stopped at the streaming boundary would make the Rs 999
     #: knowledge entitlement apply to almost nobody.
     knowledge_enabled: bool = True
+    #: Mirrors ChatRequest.token_budget, and carried for the same reason as
+    #: knowledge_enabled above: /stream is the path the app is moving to, so a
+    #: budget that stopped at the streaming boundary would leave the ceiling
+    #: unenforced for almost every message that actually gets sent.
+    token_budget: int | None = None
 
     def to_chat_request(self, request_id: str | None = None) -> ChatRequest:
         return ChatRequest(
@@ -55,6 +69,7 @@ class StreamingChatRequest:
             language=self.language, response_category=self.response_category,
             request_id=request_id or self.request_id, actor=self.actor,
             knowledge_enabled=self.knowledge_enabled,
+            token_budget=self.token_budget,
         )
 
 

@@ -24,6 +24,7 @@ from app.ai_chat.clock import Clock, SystemClock
 from app.ai_chat.schemas.conversation import MessageRole, MessageTokenUsage
 from app.ai_chat.streaming.events import EventLog, StreamingEventType
 from app.ai_chat.streaming.schemas import (
+    TOKEN_BUDGET_ERROR_CODE,
     ChunkType,
     StreamingChunk,
     StreamingChatRequest,
@@ -31,6 +32,7 @@ from app.ai_chat.streaming.schemas import (
     StreamingResponse,
     StreamingTrace,
 )
+from app.plans.errors import TurnExceedsRemainingTokensError
 
 _SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+")
 # One word plus whatever whitespace trails it, so a word-level split keeps the
@@ -226,7 +228,24 @@ class StreamingGenerator:
             return
 
         # Generate the answer -- assistant persistence DEFERRED.
-        chat = self.chat_service.send_message(request.to_chat_request(request_id), persist_assistant=False)
+        #
+        # The budget refusal is caught rather than allowed to propagate, and
+        # that is forced by where we are: START has already been yielded, so the
+        # response headers are long gone and a 429 is no longer expressible. It
+        # becomes an ERROR chunk instead -- the same shape this generator
+        # already uses for a timeout, a cancel and a failed turn -- carrying a
+        # machine-readable prefix so the client can tell "you cannot afford this
+        # turn" apart from "the turn went wrong" and say so. /chat/message,
+        # which has not sent anything yet, still raises a clean 429.
+        try:
+            chat = self.chat_service.send_message(
+                request.to_chat_request(request_id), persist_assistant=False)
+        except TurnExceedsRemainingTokensError as exc:
+            events.record(StreamingEventType.ERROR, TOKEN_BUDGET_ERROR_CODE)
+            yield emit(ChunkType.ERROR, f"{TOKEN_BUDGET_ERROR_CODE}: {exc.message}")
+            respond(completed=False, cancelled=False, timed_out=False, ok=False,
+                    error=TOKEN_BUDGET_ERROR_CODE)
+            return
         state["conversation_id"] = chat.conversation_id
         state["chat_trace"] = chat.trace
         steps = chat.trace.completed_steps

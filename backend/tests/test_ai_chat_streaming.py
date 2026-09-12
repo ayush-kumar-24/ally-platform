@@ -30,6 +30,7 @@ from app.ai_chat.streaming import (
     chunk_text,
 )
 from app.ai_chat.streaming.events import StreamingEventType as ET
+from app.ai_chat.streaming.schemas import TOKEN_BUDGET_ERROR_CODE
 from app.api.v1.ally.context.builder import AllyContextBuilder
 from app.api.v1.ally.execution import MockLLMProvider, build_execution_service
 from app.api.v1.ally.execution.schemas import TokenUsage
@@ -433,3 +434,51 @@ def test_async_stream_yields_same_chunks():
 
     chunks = asyncio.run(go())
     assert chunks[0].chunk_type == ChunkType.START and chunks[-1].chunk_type == ChunkType.COMPLETE
+
+
+# --- refusing a turn the founder cannot afford ------------------------------
+
+
+def test_a_turn_over_budget_ends_the_stream_with_a_coded_error():
+    """/chat/stream cannot answer 429: START has already gone out by the time the
+    turn's cost is known. The refusal becomes an ERROR chunk instead, carrying a
+    machine-readable prefix so the client can tell "you cannot afford this" apart
+    from "this broke" -- otherwise the founder is told Ally failed, when Ally
+    declined and can say exactly why."""
+    w = StreamWorld()
+    chunks = list(w.streaming.stream(w.req(token_budget=1)))
+
+    kinds = [c.chunk_type for c in chunks]
+    assert kinds[0] == ChunkType.START
+    assert kinds[-1] == ChunkType.ERROR
+    assert ChunkType.TOKEN not in kinds, "nothing should be streamed for a refused turn"
+
+    error = chunks[-1].content
+    assert error.startswith(f"{TOKEN_BUDGET_ERROR_CODE}:")
+    # The founder-facing half survives the prefix -- it is the only thing that
+    # explains a refusal while their counter still reads above zero.
+    assert "left today" in error
+
+
+def test_an_affordable_turn_still_streams():
+    w = StreamWorld()
+    chunks = list(w.streaming.stream(w.req(token_budget=1_000_000)))
+    assert ChunkType.TOKEN in [c.chunk_type for c in chunks]
+    assert chunks[-1].chunk_type == ChunkType.COMPLETE
+
+
+def test_no_budget_streams_as_before():
+    """None means quotas are not enforced here, not that the founder is broke."""
+    w = StreamWorld()
+    chunks = list(w.streaming.stream(w.req()))
+    assert chunks[-1].chunk_type == ChunkType.COMPLETE
+
+
+def test_a_refused_stream_reports_not_ok_with_the_code():
+    w = StreamWorld()
+    sink = []
+    list(w.streaming.stream(w.req(token_budget=1), sink=sink))
+    summary, = sink
+    assert summary.ok is False
+    assert summary.error == TOKEN_BUDGET_ERROR_CODE
+    assert summary.answer == ""

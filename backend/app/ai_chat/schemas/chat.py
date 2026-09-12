@@ -39,6 +39,15 @@ class ChatRequest:
     #: True by default so a caller that predates plan gating is unchanged; the
     #: route is what narrows it, and it is never widened here.
     knowledge_enabled: bool = True
+    #: Tokens this founder has left in today's chat ceiling. None means the
+    #: deployment is not enforcing quotas -- NOT that the budget is zero. Set by
+    #: the route from the plan gate; the turn is priced against it once the
+    #: prompt exists and refused before the provider is called if it cannot fit.
+    token_budget: int | None = None
+    #: The reply length the turn will ask the provider for. Priced at its
+    #: ceiling in that check, because a budget test is only meaningful if its
+    #: answer holds for the reply that actually arrives.
+    reply_token_cap: int = 800
 
 
 @dataclass(frozen=True)

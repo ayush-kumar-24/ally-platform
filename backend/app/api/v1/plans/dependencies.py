@@ -127,6 +127,28 @@ class ChatGate:
         if self.enforced and self.service is not None:
             self.service.require_feature(self.tier, Feature.VOICE_CHAT)
 
+    def remaining_tokens(self, *, source: str = "chat") -> int | None:
+        """How many tokens this founder has left today, or None when unmetered.
+
+        None is not zero and must not be treated as it: it means this deployment
+        is not enforcing quotas at all (the dormant/testing path), and a caller
+        that read it as "no budget" would refuse every turn on an installation
+        that has no limits in the first place.
+
+        Read fresh rather than cached on the gate. A founder can have two tabs
+        open, and the second one's idea of the budget is only worth having if it
+        reflects what the first one already spent.
+        """
+        if not self.enforced or self.service is None:
+            return None
+        try:
+            return self.service.remaining_daily_tokens(self.founder_id, self.tier, source=source)
+        except Exception:                                  # noqa: BLE001
+            # The ceiling is a cost control, not a correctness guarantee, and it
+            # already has a second line of defence in check_chat_allowed. Failing
+            # to read it must not refuse a founder their turn.
+            return None
+
     def record(self, tokens: int, *, is_first_diagnosis: bool = False,
                reason: str = "Ally chat", source: str = "chat") -> dict | None:
         """Charge for real usage, after the model has replied.
