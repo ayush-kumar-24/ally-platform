@@ -13,17 +13,52 @@ That last one is the point. `llm_call_log` is counted before and after, so a
 run that produces plausible-looking output on a dead key is caught rather than
 believed.
 
-    python -m scripts.e2e_journey_check --database-url "postgresql+psycopg2://..." --confirm-writes
-    python -m scripts.e2e_journey_check --database-url "..." --stage 5 --confirm-writes
-    python -m scripts.e2e_journey_check --database-url "..." --cleanup
+TWO WAYS TO GET A FOUNDER, because `founders.user_id` may or may not carry a
+foreign key to `auth.users`:
 
-IT WRITES. A founder, a Founder DNA run, a Current Problem run, a diagnosis
-session, its answers, and a report. Every founder it creates is named
-`e2e+<timestamp>@ally-e2e.local`, and `--cleanup` deletes every founder at that
-domain and everything cascading from them. The database URL must be passed
-explicitly -- it deliberately does NOT read DATABASE_URL, so pointing this at
-production has to be a decision rather than an accident. `--confirm-writes` is
-required on top of that.
+  --stage N          Creates a synthetic founder with a random user_id. Works
+                      on a database with NO such FK -- a disposable local
+                      Postgres provisioned by `alembic upgrade heads` alone,
+                      since that FK is not created by any migration in this
+                      repo (verified: no alembic version references
+                      auth.users or founders_user_id_fkey for the founders
+                      table itself). It fails, correctly, against a database
+                      where that FK exists.
+
+  --founder-email E   Looks up an EXISTING founder by email instead of
+                      creating one -- required for a real Supabase project,
+                      where `founders.user_id` genuinely references
+                      `auth.users` (added outside this repo's migration
+                      history, presumably via the Supabase dashboard). This
+                      script will not, and should not, fabricate a row in
+                      Supabase's own managed auth schema: it can't see the
+                      password-hash format, confirmation tokens, or GoTrue
+                      triggers that schema depends on, and a raw INSERT that
+                      merely satisfies the FK's type is not the same thing as
+                      a real identity. Use an email you already control --
+                      ideally your own account, signed up through the app the
+                      normal way -- not a stranger's real data.
+
+    python -m scripts.e2e_journey_check --database-url "postgresql+psycopg2://..." --stage 1 --confirm-writes
+    python -m scripts.e2e_journey_check --database-url "..." --founder-email you@example.com --confirm-writes
+    python -m scripts.e2e_journey_check --database-url "..." --cleanup
+    python -m scripts.e2e_journey_check --database-url "..." --cleanup-founder-email you@example.com
+
+IT WRITES. In --stage mode: a founder, consent, a Founder DNA run, a Current
+Problem run, a diagnosis session and its answers, and a report. Every founder
+it creates is named `e2e+<timestamp>@ally-e2e.local`; `--cleanup` deletes every
+founder at that domain and everything cascading from them.
+
+In --founder-email mode it writes NOTHING to `founders` or `founder_consents`
+-- only a Founder DNA run, a Current Problem run, a diagnosis session and its
+answers, and a report, all against the founder_id that email already owns.
+`--cleanup-founder-email` removes exactly those (sessions, answers, DNA
+answers, current-problem answers, reports) and leaves the founder and their
+consent alone -- that account is real and outlives this script.
+
+The database URL must be passed explicitly -- it deliberately does NOT read
+DATABASE_URL, so pointing this at a real project has to be a decision rather
+than an accident. `--confirm-writes` is required on top of that.
 
 COST. A full diagnosis is roughly one model call per question plus the
 reasoning pipeline. The repository's own estimate is about Rs 14-15 per run;
@@ -92,58 +127,138 @@ def _llm_calls(db, sa) -> tuple[int, float]:
         return -1, 0.0
 
 
+#: Rows a test run of either mode can add, in the order they must be deleted
+#: (children before parents). `founders` and `founder_consents` are NOT here
+#: -- --stage mode deletes them separately for its own synthetic founders,
+#: --founder-email mode never touches them at all.
+_JOURNEY_TABLES = (
+    ("answers", "founder_id"), ("founder_dna_answers", "founder_id"),
+    ("current_problem_answers", "founder_id"), ("founder_reports", "founder_id"),
+    ("detected_root_causes", "session_id"), ("sessions", "founder_id"),
+)
+
+
+def _delete_journey_rows(db, sa, founder_ids: list) -> None:
+    for table, col in _JOURNEY_TABLES:
+        try:
+            if col == "session_id":
+                db.execute(sa.text(
+                    f"delete from {table} where session_id in "
+                    "(select session_id from sessions where founder_id = any(:f))"),
+                    {"f": founder_ids})
+            else:
+                db.execute(sa.text(f"delete from {table} where {col} = any(:f)"),
+                           {"f": founder_ids})
+        except Exception:                                        # noqa: BLE001
+            db.rollback()  # table may not exist on this schema; keep going
+
+
 def cleanup(db, sa) -> int:
+    """Removes every synthetic --stage founder (@ally-e2e.local) entirely."""
     founders = [r[0] for r in db.execute(sa.text(
         "select founder_id from founders where email like :p"),
         {"p": f"%@{TEST_DOMAIN}"}).all()]
     if not founders:
         print(f"  nothing to clean up at @{TEST_DOMAIN}")
         return 0
-    for table, col in (
-        ("answers", "founder_id"), ("founder_dna_answers", "founder_id"),
-        ("current_problem_answers", "founder_id"), ("founder_reports", "founder_id"),
-        ("detected_root_causes", "session_id"), ("sessions", "founder_id"),
-        ("founder_consents", "founder_id"),
-    ):
-        try:
-            if col == "session_id":
-                db.execute(sa.text(
-                    f"delete from {table} where session_id in "
-                    "(select session_id from sessions where founder_id = any(:f))"),
-                    {"f": founders})
-            else:
-                db.execute(sa.text(f"delete from {table} where {col} = any(:f)"),
-                           {"f": founders})
-        except Exception:                                        # noqa: BLE001
-            db.rollback()  # table may not exist on this schema; keep going
+    _delete_journey_rows(db, sa, founders)
+    try:
+        db.execute(sa.text("delete from founder_consents where founder_id = any(:f)"),
+                   {"f": founders})
+    except Exception:                                            # noqa: BLE001
+        db.rollback()
     db.execute(sa.text("delete from founders where founder_id = any(:f)"), {"f": founders})
     db.commit()
     print(f"  removed {len(founders)} test founder(s) and their data")
     return len(founders)
 
 
+def cleanup_founder_email(db, sa, email: str) -> int:
+    """Removes journey rows for one EXISTING, real founder -- never the founder
+    row or their consent. That account is real and outlives this script."""
+    fid = db.execute(sa.text("select founder_id from founders where email = :e"),
+                     {"e": email}).scalar()
+    if fid is None:
+        print(f"  no founder found with email {email}")
+        return 0
+    _delete_journey_rows(db, sa, [fid])
+    db.commit()
+    print(f"  removed journey data for founder {fid} <{email}> "
+          "(the founder and their consent were left alone)")
+    return 1
+
+
 def _seed_founder(db, sa, stage_order: int) -> tuple[int, str]:
+    """A brand-new synthetic founder with a random user_id.
+
+    Only works where founders.user_id carries no FK to auth.users -- see the
+    module docstring. Raises IntegrityError with a clear message, rather than
+    a bare traceback, when that FK exists and rejects the fabricated id.
+    """
     email = f"e2e+{int(time.time())}@{TEST_DOMAIN}"
-    fid = db.execute(sa.text("""
-        insert into founders (user_id, email, full_name, stage_id, profile_completed,
-                              experience_level, problem_statement, building_summary,
-                              business_name, industry, customer_segment,
-                              current_challenges, goal_90_day, vision_1_year,
-                              founder_reality_signals, invisible_gaps)
-        values (gen_random_uuid(), :e, 'E2E Test Founder', :s, true,
-                'one_company',
-                'Customers churn after the second month and I cannot tell why.',
-                'Compliance SaaS for Indian SMBs.',
-                'Acme Compliance', 'SaaS',
-                '["Business"]'::jsonb, '["Sales","Cash flow"]'::jsonb,
-                'Ten real customer interviews.', 'Series A raised.',
-                '{"clear_next_step": true}'::jsonb, '["pricing"]'::jsonb)
-        returning founder_id"""), {"e": email, "s": stage_order}).scalar_one()
+    try:
+        fid = db.execute(sa.text("""
+            insert into founders (user_id, email, full_name, stage_id, profile_completed,
+                                  experience_level, problem_statement, building_summary,
+                                  business_name, industry, customer_segment,
+                                  current_challenges, goal_90_day, vision_1_year,
+                                  founder_reality_signals, invisible_gaps)
+            values (gen_random_uuid(), :e, 'E2E Test Founder', :s, true,
+                    'one_company',
+                    'Customers churn after the second month and I cannot tell why.',
+                    'Compliance SaaS for Indian SMBs.',
+                    'Acme Compliance', 'SaaS',
+                    '["Business"]'::jsonb, '["Sales","Cash flow"]'::jsonb,
+                    'Ten real customer interviews.', 'Series A raised.',
+                    '{"clear_next_step": true}'::jsonb, '["pricing"]'::jsonb)
+            returning founder_id"""), {"e": email, "s": stage_order}).scalar_one()
+    except Exception as exc:                                      # noqa: BLE001
+        db.rollback()
+        if "user_id" in str(exc) and ("fkey" in str(exc).lower() or "foreign key" in str(exc).lower()):
+            raise SystemExit(
+                "\n  This database enforces a real foreign key from "
+                "founders.user_id to auth.users -- a random UUID cannot "
+                "satisfy it, by design (see the module docstring).\n"
+                "  Use --founder-email <email> instead, naming an account "
+                "that already exists (ideally your own, signed up through "
+                "the app normally)."
+            ) from exc
+        raise
     db.execute(sa.text("""
         insert into founder_consents (consent_id, founder_id, terms_version,
                                       privacy_version, agree_terms, agree_diagnosis)
         values (gen_random_uuid(), :f, 'v1', 'v1', true, true)"""), {"f": fid})
     db.commit()
+    return fid, email
+
+
+def _lookup_founder(db, sa, email: str) -> tuple[int, str]:
+    """An EXISTING founder's id, by email. Never inserts into founders or
+    founder_consents -- see the module docstring for why."""
+    row = db.execute(sa.text(
+        "select founder_id, stage_id, profile_completed from founders "
+        "where email = :e"), {"e": email}).first()
+    if row is None:
+        raise SystemExit(
+            f"\n  No founder exists with email {email!r} on this database.\n"
+            "  --founder-email requires an account that already exists -- "
+            "sign up through the app first, or use --stage on a database "
+            "with no auth.users FK instead."
+        )
+    fid, stage_id, profile_completed = row
+    if not profile_completed:
+        print(f"  warning: founder {fid} <{email}> has profile_completed=false; "
+              "onboarding gates may reject the journey below.")
+    has_consent = db.execute(sa.text(
+        "select 1 from founder_consents where founder_id = :f limit 1"),
+        {"f": fid}).first()
+    if has_consent is None:
+        raise SystemExit(
+            f"\n  Founder {fid} <{email}> has no consent record, and this "
+            "script will not create one on a real account -- consent must "
+            "come from the founder themselves, through the app.\n"
+            "  Complete consent in the app for this account, then re-run."
+        )
     return fid, email
 
 
@@ -204,6 +319,11 @@ def run(args) -> int:
         with SessionLocal() as db:
             cleanup(db, sa)
         return 0
+    if args.cleanup_founder_email:
+        print("CLEANUP (single founder)")
+        with SessionLocal() as db:
+            cleanup_founder_email(db, sa, args.cleanup_founder_email)
+        return 0
 
     print("=" * 74)
     print("CONFIGURATION")
@@ -219,8 +339,13 @@ def run(args) -> int:
 
     with SessionLocal() as db:
         calls_before, cost_before = _llm_calls(db, sa)
-        fid, email = _seed_founder(db, sa, args.stage)
-        print(f"\n  test founder {fid} <{email}> at stage_order {args.stage}")
+        if args.founder_email:
+            fid, email = _lookup_founder(db, sa, args.founder_email)
+            print(f"\n  existing founder {fid} <{email}> (unchanged: not created "
+                  "by this script)")
+        else:
+            fid, email = _seed_founder(db, sa, args.stage)
+            print(f"\n  test founder {fid} <{email}> at stage_order {args.stage}")
 
     from fastapi import Depends
     from sqlalchemy.orm import Session as OrmSession
@@ -329,7 +454,10 @@ def run(args) -> int:
                        "report": (report[1] if report else None)}, fh, indent=1)
         print(f"\n  written to {args.json_out}")
 
-    print(f"\n  clean up with: --database-url ... --cleanup")
+    if args.founder_email:
+        print(f"\n  clean up with: --database-url ... --cleanup-founder-email {email}")
+    else:
+        print(f"\n  clean up with: --database-url ... --cleanup")
     return 0
 
 
@@ -340,19 +468,35 @@ def main(argv=None) -> int:
                    help="SQLAlchemy URL. Deliberately NOT read from DATABASE_URL -- "
                         "this script writes, so the target has to be named.")
     p.add_argument("--stage", type=int, default=1, choices=range(1, 9),
-                   help="founder_stages.stage_order to test as (default 1, Ideation)")
+                   help="founder_stages.stage_order for a NEW synthetic founder "
+                        "(default 1, Ideation). Ignored with --founder-email. "
+                        "Only works on a database with no auth.users FK on "
+                        "founders.user_id -- see the module docstring.")
+    p.add_argument("--founder-email", metavar="EMAIL",
+                   help="use an EXISTING founder by email instead of creating one "
+                        "-- required against a real Supabase project. That "
+                        "account must already exist, with profile and consent "
+                        "completed through the app; this script never creates "
+                        "either on your behalf.")
     p.add_argument("--confirm-writes", action="store_true",
-                   help="required: acknowledges that this creates a founder, a "
-                        "diagnosis and a report in the named database")
+                   help="required: acknowledges that this writes a diagnosis "
+                        "journey and a report into the named database")
     p.add_argument("--cleanup", action="store_true",
                    help=f"delete every @{TEST_DOMAIN} founder and their data, then exit")
+    p.add_argument("--cleanup-founder-email", metavar="EMAIL",
+                   help="delete the journey data (sessions/answers/report) for "
+                        "one existing founder by email, then exit -- leaves the "
+                        "founder and their consent untouched")
     p.add_argument("--allow-unscored", action="store_true",
                    help="run even with scoring off (useful only to test the fallback)")
     p.add_argument("--json-out", metavar="FILE", help="write the full transcript as JSON")
     args = p.parse_args(argv)
 
-    if not args.confirm_writes and not args.cleanup:
-        p.error("--confirm-writes is required (or --cleanup)")
+    exit_actions = (args.cleanup, bool(args.cleanup_founder_email))
+    if not args.confirm_writes and not any(exit_actions):
+        p.error("--confirm-writes is required (or --cleanup / --cleanup-founder-email)")
+    if args.stage != 1 and args.founder_email:
+        p.error("--stage is ignored with --founder-email -- drop one of them")
     return run(args)
 
 
