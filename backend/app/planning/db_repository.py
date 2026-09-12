@@ -51,7 +51,8 @@ def _task(row: TaskRow) -> Task:
                 due_date=row.due_date, source=ItemSource(row.source), created_at=row.created_at,
                 updated_at=row.updated_at, completed_at=row.completed_at,
                 due_time=row.due_time, calendar_event_id=row.calendar_event_id,
-                calendar_sync_status=row.calendar_sync_status)
+                calendar_sync_status=row.calendar_sync_status,
+                reminder_minutes_before=row.reminder_minutes_before)
 
 
 class SqlAlchemyPlanningRepository(PlanningRepository):
@@ -124,7 +125,8 @@ class SqlAlchemyPlanningRepository(PlanningRepository):
             due_date=task.due_date, source=task.source.value, created_at=task.created_at,
             updated_at=task.updated_at, completed_at=task.completed_at,
             due_time=task.due_time, calendar_event_id=task.calendar_event_id,
-            calendar_sync_status=task.calendar_sync_status))
+            calendar_sync_status=task.calendar_sync_status,
+            reminder_minutes_before=task.reminder_minutes_before))
         self.db.commit()
         return task
 
@@ -141,6 +143,7 @@ class SqlAlchemyPlanningRepository(PlanningRepository):
         row.due_time = task.due_time
         row.calendar_event_id = task.calendar_event_id
         row.calendar_sync_status = task.calendar_sync_status
+        row.reminder_minutes_before = task.reminder_minutes_before
         self.db.commit()
         return task
 

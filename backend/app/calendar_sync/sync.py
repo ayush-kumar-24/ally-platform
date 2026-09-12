@@ -17,6 +17,11 @@ event (which starts at midnight) a 30-minutes-before popup fires at 23:30 the
 night before, and a morning-of popup cannot be expressed at all. A task with no
 time of its own is therefore scheduled at CALENDAR_DEFAULT_TASK_HOUR so the
 chosen offset lands somewhere a person is awake.
+
+The offset itself is the task's `reminder_minutes_before` when the founder
+picked one in Plan Your Day, and CALENDAR_REMINDER_MINUTES_BEFORE when they did
+not. Editing a task pushes a PATCH to the event it already owns, so changing
+the picker moves the existing popup rather than adding a second one.
 """
 
 from __future__ import annotations
@@ -48,8 +53,13 @@ def _window(due_date: date, due_time: time | None) -> tuple[datetime, datetime]:
 
 
 def _event_body(title: str, due_date: date, due_time: time | None,
-                timezone_name: str) -> dict:
+                timezone_name: str, reminder_minutes_before: int | None = None) -> dict:
     start, end = _window(due_date, due_time)
+    # The founder's own choice for this task, or the platform default when they
+    # never made one. 0 is a choice ("pop up when it starts"), so this tests
+    # for None rather than falsiness.
+    lead = (settings.CALENDAR_REMINDER_MINUTES_BEFORE
+            if reminder_minutes_before is None else reminder_minutes_before)
     return {
         "summary": title,
         # Says where it came from without shouting. A founder scanning a busy
@@ -64,8 +74,7 @@ def _event_body(title: str, due_date: date, due_time: time | None,
             # the one feature this exists for depends on a setting we never see.
             "useDefault": False,
             "overrides": [
-                {"method": "popup",
-                 "minutes": settings.CALENDAR_REMINDER_MINUTES_BEFORE},
+                {"method": "popup", "minutes": lead},
             ],
         },
     }
@@ -90,7 +99,8 @@ def _usable_connection(db: Session, founder_id: int) -> tuple[CalendarConnection
 def push_task(db: Session, founder_id: int, *, task_id: str, title: str,
               due_date: date | None, due_time: time | None,
               existing_event_id: str | None,
-              timezone_name: str = "UTC") -> tuple[str, str | None]:
+              timezone_name: str = "UTC",
+              reminder_minutes_before: int | None = None) -> tuple[str, str | None]:
     """Create or update this task's calendar event.
 
     Returns (status, event_id). Never raises.
@@ -111,7 +121,7 @@ def push_task(db: Session, founder_id: int, *, task_id: str, title: str,
         return SKIPPED, existing_event_id
     _, token = usable
 
-    body = _event_body(title, due_date, due_time, timezone_name)
+    body = _event_body(title, due_date, due_time, timezone_name, reminder_minutes_before)
 
     try:
         if existing_event_id:

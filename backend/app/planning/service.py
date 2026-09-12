@@ -41,7 +41,7 @@ from app.planning.models import (
     Task,
 )
 from app.planning.repository import PlanningRepository
-from app.planning.validators import validate_description, validate_title
+from app.planning.validators import validate_description, validate_reminder_lead, validate_title
 
 _ACTIVE_STATUSES = (PlanStatus.ACTIVE, PlanStatus.COMPLETED)
 
@@ -174,13 +174,15 @@ class PlanningService:
     def add_task(self, founder_id: int, goal_id: str, *, title: str,
                  priority: Priority = DEFAULT_PRIORITY, due_date: date | None = None,
                  due_time: time | None = None,
+                 reminder_minutes_before: int | None = None,
                  source: ItemSource = ItemSource.MANUAL) -> Task:
         goal = self.get_goal(founder_id, goal_id)
         now = self._now()
         task = Task(task_id=self._new_id(), goal_id=goal_id, plan_id=goal.plan_id, founder_id=founder_id,
                     title=validate_title("title", title), status=DEFAULT_PROGRESS, priority=priority,
                     due_date=due_date, source=source, created_at=now, updated_at=now,
-                    due_time=due_time)
+                    due_time=due_time,
+                    reminder_minutes_before=validate_reminder_lead(reminder_minutes_before))
         return self.repository.add_task(task)
 
     def get_task(self, founder_id: int, task_id: str) -> Task:
@@ -200,7 +202,9 @@ class PlanningService:
     def update_task(self, founder_id: int, task_id: str, *, title: str | None = None,
                     status: ProgressStatus | None = None, priority: Priority | None = None,
                     due_date: date | None = None, clear_due_date: bool = False,
-                    due_time: time | None = None, clear_due_time: bool = False) -> Task:
+                    due_time: time | None = None, clear_due_time: bool = False,
+                    reminder_minutes_before: int | None = None,
+                    clear_reminder_minutes_before: bool = False) -> Task:
         task = self.get_task(founder_id, task_id)
         now = self._now()
         new_status = task.status if status is None else status
@@ -214,6 +218,14 @@ class PlanningService:
             status=new_status, priority=task.priority if priority is None else priority,
             due_date=None if clear_due_date else (task.due_date if due_date is None else due_date),
             due_time=None if drop_time else (task.due_time if due_time is None else due_time),
+            # Unlike the time, the lead survives the date being cleared: it is a
+            # preference about this task ("nudge me a quarter of an hour before
+            # whenever this ends up"), not part of the schedule itself, and
+            # re-dating the task should not silently reset it to the default.
+            reminder_minutes_before=(
+                None if clear_reminder_minutes_before
+                else (task.reminder_minutes_before if reminder_minutes_before is None
+                      else validate_reminder_lead(reminder_minutes_before))),
             completed_at=self._completion(task.completed_at, new_status, now), updated_at=now)
         return self.repository.replace_task(updated)
 

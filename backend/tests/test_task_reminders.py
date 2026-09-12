@@ -19,6 +19,7 @@ from app.planning import (
     ReminderStatus,
     build_planning_service,
 )
+from app.core.config import settings
 from app.services import task_reminders
 
 T0 = datetime(2026, 7, 29, 12, 0, 0, tzinfo=timezone.utc)
@@ -79,6 +80,36 @@ def test_unknown_timezone_falls_back_to_utc_rather_than_failing():
     wrong hour is recoverable; a 500 on adding a task is not."""
     assert task_reminders.reminder_time_for(date(2026, 8, 1), time(9, 0), "Mars/Olympus") \
         == datetime(2026, 8, 1, 8, 30, tzinfo=timezone.utc)
+
+
+def test_the_lead_can_be_set_per_task():
+    """Same rule as the calendar popup, from the same number: the founder's
+    choice, not a platform constant."""
+    when = task_reminders.reminder_time_for(date(2026, 8, 1), time(15, 0), "UTC", 15)
+    assert when == datetime(2026, 8, 1, 14, 45, tzinfo=timezone.utc)
+    at_the_time = task_reminders.reminder_time_for(date(2026, 8, 1), time(15, 0), "UTC", 0)
+    assert at_the_time == datetime(2026, 8, 1, 15, 0, tzinfo=timezone.utc)
+
+
+def test_lead_minutes_for_falls_back_only_when_nothing_was_chosen():
+    """None is "never chose", 0 is a choice -- and they must not collapse."""
+    assert (task_reminders.lead_minutes_for(SimpleNamespace(reminder_minutes_before=None))
+            == settings.TASK_REMINDER_MINUTES_BEFORE)
+    assert task_reminders.lead_minutes_for(SimpleNamespace(reminder_minutes_before=0)) == 0
+    assert task_reminders.lead_minutes_for(SimpleNamespace(reminder_minutes_before=15)) == 15
+
+
+@pytest.mark.parametrize("minutes,phrase", [
+    (0, "when it is due"),
+    (5, "5 minutes before"),
+    (30, "30 minutes before"),
+    (60, "1 hour before"),
+    (120, "2 hours before"),
+    (1440, "1 day before"),
+])
+def test_lead_phrase_reads_like_a_person_wrote_it(minutes, phrase):
+    """"1440 minutes before" is true and reads like a machine."""
+    assert task_reminders.lead_phrase(minutes) == phrase
 
 
 # --- scheduling from a task -------------------------------------------------
@@ -374,11 +405,24 @@ def test_scheduling_a_dated_task_emails_a_pro_founder(confirm):
     job = confirm.run(_founder(), t)
     assert job is not None, "a Pro founder with a dated task should be emailed"
     job()
-    (to, name, title, when), = confirm.sent
+    (to, name, title, when, lead), = confirm.sent
     assert to == "founder@example.com"
     assert title == "Call Rajesh about pricing"
     # 15:00 as the founder set it, in their zone -- not shifted into UTC.
     assert "03:00 PM" in when
+    # No choice was made on this task, so the email states the platform default.
+    assert lead == "30 minutes before"
+
+
+def test_the_confirmation_states_the_offset_the_founder_chose(confirm):
+    """The sentence used to be the hardcoded words "thirty minutes before".
+    Telling a founder who picked an hour that they will be nudged in thirty
+    minutes is the email lying about the one thing it is there to promise."""
+    s = svc()
+    t = _task(s, due_date=date(2026, 8, 1), due_time=time(15, 0),
+              reminder_minutes_before=60)
+    confirm.run(_founder(), t)()
+    assert confirm.sent[0][4] == "1 hour before"
 
 
 def test_nothing_is_sent_until_the_returned_job_is_run(confirm):
@@ -441,7 +485,7 @@ def test_a_dateless_time_uses_the_same_default_hour_as_the_calendar(confirm):
     s = svc()
     t = _task(s, due_date=date(2026, 8, 1))
     confirm.run(_founder(), t)()
-    (_, _, _, when), = confirm.sent
+    (_, _, _, when, _lead), = confirm.sent
     assert "09:00 AM" in when
 
 
