@@ -62,6 +62,9 @@ class TaskResponse(BaseModel):
     # synced | failed | skipped | pending. The UI badges this so a founder is
     # never left believing something reached their calendar when it did not.
     calendar_sync_status: str = "skipped"
+    # null = this founder never chose, so the platform default applies. The UI
+    # renders that as the default rather than as "no reminder".
+    reminder_minutes_before: int | None = None
 
     @classmethod
     def from_domain(cls, t) -> "TaskResponse":
@@ -69,7 +72,8 @@ class TaskResponse(BaseModel):
                    title=t.title, status=t.status.value, priority=t.priority.value, due_date=t.due_date,
                    source=t.source.value, created_at=t.created_at, updated_at=t.updated_at,
                    completed_at=t.completed_at, due_time=t.due_time,
-                   calendar_sync_status=t.calendar_sync_status)
+                   calendar_sync_status=t.calendar_sync_status,
+                   reminder_minutes_before=t.reminder_minutes_before)
 
 
 class GoalWithTasksResponse(BaseModel):

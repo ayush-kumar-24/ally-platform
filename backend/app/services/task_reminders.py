@@ -39,12 +39,15 @@ TWO HALVES, DELIBERATELY SEPARATE:
                        Nothing feeds it any more.
 
 WHY THE TIMING MIRRORS THE CALENDAR. A founder with Google Calendar connected
-already gets a popup at CALENDAR_REMINDER_MINUTES_BEFORE. If this email fired
-at a different offset, that founder would be nudged twice about one task at two
-unrelated moments. TASK_REMINDER_MINUTES_BEFORE defaults to the same 30, and a
-task with a date but no time uses CALENDAR_DEFAULT_TASK_HOUR -- the same 9am the
-calendar path picks, and for the same reason: an offset counted back from
-midnight lands at 23:30 the night before.
+already gets a popup at their chosen offset. If this email fired at a different
+one, that founder would be nudged twice about one task at two unrelated
+moments. So both read the SAME number: the task's own
+`reminder_minutes_before`, chosen in Plan Your Day, falling back to
+TASK_REMINDER_MINUTES_BEFORE / CALENDAR_REMINDER_MINUTES_BEFORE (both 30) for a
+task created before the picker existed. A task with a date but no time uses
+CALENDAR_DEFAULT_TASK_HOUR -- the same 9am the calendar path picks, and for the
+same reason: an offset counted back from midnight lands at 23:30 the night
+before.
 """
 
 from __future__ import annotations
@@ -87,20 +90,39 @@ def _zone(timezone_name: str) -> ZoneInfo:
         return ZoneInfo("UTC")
 
 
+def lead_minutes_for(task: Task | None) -> int:
+    """How far ahead of a task its reminder goes, in minutes.
+
+    The founder's own choice when they made one, and the platform default when
+    they did not -- which is every task created before the picker existed, so
+    this is what keeps their behaviour unchanged. 0 is a choice, not a missing
+    value, which is why this tests for None rather than falsiness.
+    """
+    chosen = getattr(task, "reminder_minutes_before", None)
+    return settings.TASK_REMINDER_MINUTES_BEFORE if chosen is None else chosen
+
+
 def reminder_time_for(due_date: date | None, due_time: time | None,
-                      timezone_name: str = "UTC") -> datetime | None:
+                      timezone_name: str = "UTC",
+                      lead_minutes: int | None = None) -> datetime | None:
     """When to email about a task due at this date/time, as a UTC instant.
 
     None when the task has no due date -- there is nothing to count backwards
     from, and a task with no date is a list item, not an appointment.
+
+    `lead_minutes` is the founder's per-task choice; None falls back to
+    TASK_REMINDER_MINUTES_BEFORE so a caller that has no task in hand still
+    gets the old behaviour.
     """
     if due_date is None:
         return None
+    if lead_minutes is None:
+        lead_minutes = settings.TASK_REMINDER_MINUTES_BEFORE
     local = datetime.combine(
         due_date, due_time or time(hour=settings.CALENDAR_DEFAULT_TASK_HOUR),
         tzinfo=_zone(timezone_name))
     due_utc = local.astimezone(timezone.utc)
-    return due_utc - timedelta(minutes=settings.TASK_REMINDER_MINUTES_BEFORE)
+    return due_utc - timedelta(minutes=lead_minutes)
 
 
 def sync_for_task(service: PlanningService, task: Task, *,
@@ -191,7 +213,25 @@ def _due_phrase(due_date: date, due_time: time | None, tz: str) -> str:
     return local.strftime("%A, %d %B at %I:%M %p")
 
 
-def send_task_scheduled(to: str, name: str, title: str, when: str) -> bool:
+def lead_phrase(minutes: int) -> str:
+    """"15 minutes before" / "2 hours before" / "when it is due".
+
+    Whole hours and whole days are said as hours and days: "1440 minutes
+    before" is technically true and reads like a machine wrote it.
+    """
+    if minutes <= 0:
+        return "when it is due"
+    if minutes % 1440 == 0:
+        days = minutes // 1440
+        return "1 day before" if days == 1 else f"{days} days before"
+    if minutes % 60 == 0:
+        hours = minutes // 60
+        return "1 hour before" if hours == 1 else f"{hours} hours before"
+    return f"{minutes} minutes before"
+
+
+def send_task_scheduled(to: str, name: str, title: str, when: str,
+                        lead: str = "30 minutes before") -> bool:
     """Confirm one newly scheduled task. Returns False if it did not go out.
 
     No note field, unlike send_task_reminder: a note belongs to a Reminder, not
@@ -202,7 +242,7 @@ def send_task_scheduled(to: str, name: str, title: str, when: str) -> bool:
         f"Hi {name},\n\n"
         f"\"{title}\" is on your plan for {when}.\n\n"
         f"Open Plan Your Day: {_PLAN_URL}\n\n"
-        "You will get a reminder thirty minutes before, in the app and on your calendar.\n\n"
+        f"You will get a reminder {lead}, in the app and on your calendar.\n\n"
         "The GoXL Team\n\n"
         "--\n"
         "To stop these, turn off task emails in Profile > Notifications."
@@ -213,7 +253,7 @@ def send_task_scheduled(to: str, name: str, title: str, when: str) -> bool:
         f"<p>Hi {escape(name)},</p>"
         f"<p><strong>{escape(title)}</strong> is on your plan for {escape(when)}.</p>"
         f'<p><a href="{_PLAN_URL}">Open Plan Your Day</a></p>'
-        f"<p>You will get a reminder thirty minutes before, in the app and on your calendar.</p>"
+        f"<p>You will get a reminder {escape(lead)}, in the app and on your calendar.</p>"
         f"<p>The GoXL Team</p>"
         f'<p style="color:#6b7280;font-size:12px">To stop these, turn off task '
         f"emails in Profile &gt; Notifications.</p>"
@@ -263,13 +303,14 @@ def notify_task_scheduled(db: Session, founder: Founder, task: Task, *,
     name = founder.full_name or "there"
     title = task.title
     when = _due_phrase(task.due_date, task.due_time, timezone_name)
+    lead = lead_phrase(lead_minutes_for(task))
 
     def _send() -> None:
         # Captured as plain strings on purpose: this runs after the response,
         # by which point the request's database session is closed and neither
         # `founder` nor `task` can be safely touched.
         try:
-            if not send_task_scheduled(to, name, title, when):
+            if not send_task_scheduled(to, name, title, when, lead):
                 logger.warning("task email not delivered",
                                extra={"founder_id": founder.founder_id,
                                       "path": f"task={title!r}"})
@@ -384,7 +425,7 @@ def _deliver_one(db: Session, service: PlanningService, entitlements,
         service.mark_reminder_sent(reminder.reminder_id)
         return
 
-    due_at = reminder.remind_at + timedelta(minutes=settings.TASK_REMINDER_MINUTES_BEFORE)
+    due_at = reminder.remind_at + timedelta(minutes=lead_minutes_for(task))
     when = _when_phrase(reminder.remind_at, due_at,
                         getattr(founder, "timezone", None) or settings.DISCOVERY_TIMEZONE)
     send_task_reminder(founder.email, founder.full_name or "there",

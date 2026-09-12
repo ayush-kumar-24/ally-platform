@@ -43,6 +43,7 @@ def after_task_saved(db: Session, service: PlanningService, task: Task,
             due_date=task.due_date, due_time=task.due_time,
             existing_event_id=task.calendar_event_id,
             timezone_name=timezone_name,
+            reminder_minutes_before=task.reminder_minutes_before,
         )
         # Nothing changed -- don't spend a write. The common case by far is a
         # founder with no calendar connected adding a dateless task.

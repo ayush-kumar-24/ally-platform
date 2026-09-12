@@ -219,6 +219,21 @@ def test_event_is_timed_and_carries_the_reminder_override():
         {"method": "popup", "minutes": settings.CALENDAR_REMINDER_MINUTES_BEFORE}]
 
 
+def test_the_founders_own_offset_wins_over_the_platform_default():
+    """The picker in Plan Your Day is the whole point: a founder who chose 15
+    must get 15 on the calendar popup, not the platform's 30."""
+    body = sync._event_body("Call five labs", date(2026, 8, 26), time(14, 30),
+                            "Asia/Kolkata", 15)
+    assert body["reminders"]["overrides"] == [{"method": "popup", "minutes": 15}]
+
+
+def test_an_offset_of_zero_is_a_choice_not_a_missing_value():
+    """0 means "pop up when it starts". A falsy check here would silently turn
+    that into thirty minutes before."""
+    body = sync._event_body("Standup", date(2026, 8, 26), time(9, 30), "UTC", 0)
+    assert body["reminders"]["overrides"] == [{"method": "popup", "minutes": 0}]
+
+
 def test_a_task_with_no_time_lands_at_the_default_hour():
     """Not all-day: Google counts reminder offsets back from the start, so an
     all-day event's "30 minutes before" fires at 23:30 the night before."""

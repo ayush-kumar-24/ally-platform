@@ -64,6 +64,10 @@ class TaskRow(Base):
     # Google Calendar sync -- see migration e2b5c8d47f63 and app/calendar_sync/.
     due_time: Mapped[time | None] = mapped_column(Time, nullable=True)
     calendar_event_id: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    # Nullable rather than server_default=30: null means "follow the platform
+    # default", so changing that default later moves every founder who never
+    # expressed a preference, and only them.
+    reminder_minutes_before: Mapped[int | None] = mapped_column(Integer, nullable=True)
     calendar_sync_status: Mapped[str] = mapped_column(
         String(20), nullable=False, server_default="skipped")
 

@@ -103,6 +103,63 @@ def test_task_clear_due_date(client):
     assert client.http.patch(f"{BASE}/tasks/{tid}", json={"due_date": None}).json()["due_date"] is None
 
 
+# --- reminder lead ----------------------------------------------------------
+
+
+def test_task_reminder_lead_defaults_to_null(client):
+    """Null, not 30. The row says "this founder never chose", which is what
+    lets the platform default move later without dragging along every task
+    whose owner simply never opened the picker."""
+    gid = _goal(client, _plan(client))
+    body = client.http.post(f"{BASE}/goals/{gid}/tasks", json={"title": "T"}).json()
+    assert body["reminder_minutes_before"] is None
+
+
+def test_task_reminder_lead_round_trips(client):
+    gid = _goal(client, _plan(client))
+    tid = client.http.post(f"{BASE}/goals/{gid}/tasks",
+                           json={"title": "T", "due_date": "2026-08-01",
+                                 "reminder_minutes_before": 15}).json()["task_id"]
+    assert client.http.get(f"{BASE}/goals/{gid}/tasks").json()["tasks"][0][
+        "reminder_minutes_before"] == 15
+    patched = client.http.patch(f"{BASE}/tasks/{tid}",
+                                json={"reminder_minutes_before": 1440}).json()
+    assert patched["reminder_minutes_before"] == 1440
+
+
+def test_task_reminder_lead_explicit_null_clears_it(client):
+    """Same set/clear convention as the dates: omitted leaves it alone, null
+    puts the task back on the platform default."""
+    gid = _goal(client, _plan(client))
+    tid = client.http.post(f"{BASE}/goals/{gid}/tasks",
+                           json={"title": "T", "reminder_minutes_before": 15}).json()["task_id"]
+    assert client.http.patch(f"{BASE}/tasks/{tid}", json={"title": "Renamed"}).json()[
+        "reminder_minutes_before"] == 15
+    assert client.http.patch(f"{BASE}/tasks/{tid}", json={"reminder_minutes_before": None}).json()[
+        "reminder_minutes_before"] is None
+
+
+def test_clearing_the_due_date_keeps_the_reminder_lead(client):
+    """The lead is a preference about the task, not part of its schedule.
+    Re-dating a task must not silently reset how far ahead it nudges."""
+    gid = _goal(client, _plan(client))
+    tid = client.http.post(f"{BASE}/goals/{gid}/tasks",
+                           json={"title": "T", "due_date": "2026-08-01",
+                                 "due_time": "15:00",
+                                 "reminder_minutes_before": 15}).json()["task_id"]
+    cleared = client.http.patch(f"{BASE}/tasks/{tid}", json={"due_date": None}).json()
+    assert cleared["due_date"] is None and cleared["due_time"] is None
+    assert cleared["reminder_minutes_before"] == 15
+
+
+@pytest.mark.parametrize("bad", [-1, 10081])
+def test_task_reminder_lead_out_of_range_is_422(client, bad):
+    gid = _goal(client, _plan(client))
+    r = client.http.post(f"{BASE}/goals/{gid}/tasks",
+                         json={"title": "T", "reminder_minutes_before": bad})
+    assert r.status_code == 422
+
+
 # --- diagnosis seeding ------------------------------------------------------
 
 
@@ -265,10 +322,39 @@ def test_scheduling_a_task_emails_a_pro_founder_immediately(mailed):
                                "due_time": "15:00", "timezone": "Asia/Kolkata"})
     assert r.status_code == 201, r.text
     assert len(mailed.sent) == 1
-    to, _name, title, when = mailed.sent[0]
+    to, _name, title, when, lead = mailed.sent[0]
     assert to == "founder@example.com"
     assert title == "Call Rajesh"
     assert "03:00 PM" in when
+    # No reminder_minutes_before was sent, so the email states the platform
+    # default rather than inventing one.
+    assert lead == "30 minutes before"
+
+
+def test_the_email_states_the_offset_the_founder_actually_chose(mailed):
+    """The confirmation used to say "thirty minutes before" in hardcoded words.
+    Now that the founder picks the offset, saying 30 to someone who chose 15
+    would be the email confidently lying about when they will be nudged."""
+    goal = _goal_for_mail(mailed)
+    r = mailed.http.post(f"{BASE}/goals/{goal}/tasks",
+                         json={"title": "Call Rajesh", "due_date": "2026-08-01",
+                               "due_time": "15:00", "timezone": "Asia/Kolkata",
+                               "reminder_minutes_before": 15})
+    assert r.status_code == 201, r.text
+    assert r.json()["reminder_minutes_before"] == 15
+    assert mailed.sent[0][4] == "15 minutes before"
+
+
+def test_choosing_zero_is_a_choice_and_not_a_missing_value(mailed):
+    """0 must not collapse into the default the way a falsy check would."""
+    goal = _goal_for_mail(mailed)
+    r = mailed.http.post(f"{BASE}/goals/{goal}/tasks",
+                         json={"title": "Standup", "due_date": "2026-08-01",
+                               "due_time": "09:30", "timezone": "Asia/Kolkata",
+                               "reminder_minutes_before": 0})
+    assert r.status_code == 201, r.text
+    assert r.json()["reminder_minutes_before"] == 0
+    assert mailed.sent[0][4] == "when it is due"
 
 
 def test_a_task_with_no_date_sends_nothing(mailed):
