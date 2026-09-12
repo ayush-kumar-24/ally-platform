@@ -32,6 +32,7 @@ from app.api.v1.reasoning.schemas import (
     BusinessHealthScore,
     PillarScore,
 )
+from app.core.config import settings
 from app.models.diagnosis import Question
 
 _QUANT = Decimal("0.01")
@@ -119,9 +120,10 @@ class RiskInversionPillarScoreStrategy:
     exactly-backwards score that still looks plausible.
 
     Only answered questions count toward the denominator -- a founder who never
-    reached a stage is not penalised for its unseen questions. The caller passes
-    only answered scores and routes a pillar with none to `null` before ever
-    calling here, so `answer_scores` is always non-empty in practice.
+    reached a stage is not penalised for its unseen questions. The caller routes
+    a pillar with too few answers to `null` before ever calling here (see
+    Settings.MIN_ANSWERS_PER_PILLAR_SCORE), so `answer_scores` always holds at
+    least that many in practice.
     """
 
     def score(
@@ -179,9 +181,19 @@ class BusinessHealthScorer:
             scores_by_pillar[pillar_id].append(c.score)
 
         pillar_scores: list[PillarScore] = []
+        minimum = max(1, settings.MIN_ANSWERS_PER_PILLAR_SCORE)
         for pillar in pillars:
             answer_scores = scores_by_pillar.get(pillar.pillar_id, [])
-            if not answer_scores:
+            # Too little evidence is reported as no evidence. A pillar answered
+            # once or twice can only land on a handful of values, and the founder
+            # is shown a BAND -- so a "Critical Gap" off one amber answer is
+            # indistinguishable from one off eight. Showing nothing is honest;
+            # showing a band the sample cannot support is not. See
+            # Settings.MIN_ANSWERS_PER_PILLAR_SCORE.
+            #
+            # assessed_question_count still carries the real count, so a caller
+            # can tell "never asked" (0) from "asked, below the floor" (1-2).
+            if len(answer_scores) < minimum:
                 pillar_scores.append(
                     PillarScore(
                         pillar_id=pillar.pillar_id,
@@ -191,7 +203,7 @@ class BusinessHealthScorer:
                         band=None,
                         red_flag_triggered=False,
                         red_flag_note=None,
-                        assessed_question_count=0,
+                        assessed_question_count=len(answer_scores),
                     )
                 )
                 continue

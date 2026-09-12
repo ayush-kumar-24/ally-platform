@@ -112,20 +112,35 @@ class StageScope:
 
     #: Whether a Business Health Score may be published for this stage.
     #:
-    #: False for ideation. The original reason was arithmetic:
-    #: PILLAR_SCORE_FROM_ANSWERS excludes an unanswered pillar and renormalises
-    #: the remaining weights to sum to 100, and with only Founder Readiness (25)
-    #: and Market Clarity (20) in scope, 45% of the model would be renormalised
-    #: up to 100 and shown to the founder as their "Business Health Score" -- a
-    #: number that reads as a verdict on a business that does not exist yet.
+    #: True everywhere, including ideation, which used to be the one exception.
+    #: The case for excluding it was arithmetic: PILLAR_SCORE_FROM_ANSWERS drops
+    #: an unanswered pillar and renormalises the rest to 100, and with only
+    #: Founder Readiness (25) and Market Clarity (20) in scope, 45% of the model
+    #: was being rescaled to 100 and labelled "Business Health Score" -- a
+    #: verdict on a business that does not exist yet.
     #:
-    #: That argument is weaker now. Part 3 puts four of the six pillars at
-    #: ideation, not two, so the renormalised share is much larger. The flag is
-    #: deliberately left as it was by the change that widened the scope: turning
-    #: it on would newly publish a headline score to every ideation founder,
-    #: which is a product decision and not a consequence of fixing the scope
-    #: table. An ideation founder still gets the Founder DNA Snapshot and an
-    #: Idea Validation read. Revisit with the pillar weights in hand.
+    #: Three things have changed and none of them leave that argument standing:
+    #:
+    #:   * Part 3 puts FOUR pillars at ideation, not two. Only Revenue Maturity
+    #:     and Team & Leadership are out, and those are genuinely inapplicable
+    #:     rather than merely unasked -- excluding them is the correct reading,
+    #:     not a gap in one.
+    #:   * The reader is told. `_business_dna` emits pillars_assessed,
+    #:     pillars_total and assessed_weight_pct, and the narrator renders
+    #:     "Across the four readiness pillars that apply at your stage" rather
+    #:     than implying all six. It prints bands, never raw numbers.
+    #:   * A pillar with too little evidence to support a band no longer gets
+    #:     one at all (Settings.MIN_ANSWERS_PER_PILLAR_SCORE), so a thin session
+    #:     narrows the score rather than inventing precision for it.
+    #:
+    #: Withholding it entirely was costing more than it protected: Part 1 of the
+    #: document promises "which pillar is under the most strain right now, and
+    #: why", and an ideation founder was getting no "Where you stand" section at
+    #: all -- the report simply omitted it.
+    #:
+    #: Kept as a per-stage flag rather than deleted. It is the product switch for
+    #: this decision, and no stage setting it False today is not a reason to make
+    #: the decision unexpressible.
     emits_business_health: bool
 
     @cached_property
@@ -179,7 +194,7 @@ class StageScope:
 _IDEATION = StageScope(
     label="Ideation",
     dimensions=ALL_DIMENSION_CODES - STAGE_0_EXCLUDED,
-    emits_business_health=False,
+    emits_business_health=True,
 )
 
 _EARLY = StageScope(

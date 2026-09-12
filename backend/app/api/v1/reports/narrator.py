@@ -211,11 +211,12 @@ class TemplateNarrator:
                     "There is more detail when you are ready for it -- it can wait.")
         parts = []
         if band:
-            # NOT hardcoded "six". Stage scoping means an early-stage founder is
-            # assessed on fewer -- 3 pillars at Validation, 4 at Prototype -- and
-            # the score renormalises onto those, so a fixed "across the six
-            # readiness pillars" told the founder we had looked at three pillars
-            # we never asked them about.
+            # NOT hardcoded "six". Stage scoping means an ideation founder is
+            # assessed on four (Business DNA Part 3), and any stage can lose a
+            # pillar the session gave too few answers to score. The total
+            # renormalises onto what remains, so a fixed "across the six
+            # readiness pillars" told the founder we had looked at pillars we
+            # never asked them about.
             total = s.get("pillars_total") or 6
             assessed = s.get("pillars_assessed") or total
             scope = (

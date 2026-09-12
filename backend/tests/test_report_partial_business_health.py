@@ -1,22 +1,25 @@
 """A Business Health Score must say how much of the business it looked at.
 
-PILLAR_SCORE_FROM_ANSWERS excludes an unanswered pillar and renormalises the
+PILLAR_SCORE_FROM_ANSWERS excludes a pillar it cannot score and renormalises the
 remaining weights to 100. That is the right call -- scoring an unasked pillar 0
 would be worse -- but it makes a partial assessment indistinguishable from a
 whole one in the number itself.
 
-Stage scoping turned that from an edge case into the normal path. By pillar
-weight, a founder is assessed on:
+Stage scoping turned that from an edge case into the normal path, and there are
+now two ways a pillar drops out:
 
-    Ideation           2 of 6 pillars   45% of the model   (no score at all)
-    Validation         3 of 6           60%
-    Prototype / MVP    4 of 6           80%
-    Early Traction+    6 of 6          100%
+    OUT OF SCOPE   Business DNA Part 3 does not put it at this stage. Ideation
+                   is diagnosed on four of the six -- Revenue Maturity and Team
+                   & Leadership are genuinely inapplicable before there is
+                   revenue or a team. Every stage from Validation on is on all
+                   six.
+    TOO THIN       The session produced fewer than MIN_ANSWERS_PER_PILLAR_SCORE
+                   answers for it. Can happen at any stage.
 
-Ideation already emits nothing. Validation and Prototype emit a score, and the
-report used to introduce it as "Across the six readiness pillars..." however few
-had been assessed -- telling the founder we had read three pillars we never
-asked them a single question about.
+Both come back as score=None and both are excluded from the overall. The
+report used to introduce whatever survived as "Across the six readiness
+pillars..." however few had been assessed -- telling the founder we had read
+pillars we never asked them a single question about.
 """
 
 from types import SimpleNamespace
@@ -127,3 +130,30 @@ def test_a_full_assessment_records_the_whole_model():
     dna = ReasoningService._business_dna(None, health)
 
     assert dna["pillars_assessed"] == dna["pillars_total"] == 6
+
+
+# --- ideation is scored, and the floor is what makes that safe -------------
+
+def test_ideation_emits_a_business_health_score():
+    """It used to emit nothing, so an ideation founder's report had no "Where
+    you stand" section at all -- while Part 1 of the document promises exactly
+    that read. The case for suppressing it was that two pillars renormalised to
+    100 reads as a verdict on a business that does not exist; Part 3 puts four
+    pillars at ideation, and the narrator now scopes the sentence to them."""
+    from app.api.v1.diagnosis.stage_scope import SCOPE_BY_STAGE_ORDER
+
+    assert SCOPE_BY_STAGE_ORDER[1].emits_business_health
+
+
+def test_every_stage_emits_a_business_health_score():
+    from app.api.v1.diagnosis.stage_scope import SCOPE_BY_STAGE_ORDER
+
+    assert all(s.emits_business_health for s in SCOPE_BY_STAGE_ORDER.values())
+
+
+def test_an_ideation_report_says_four_pillars_applied():
+    """End of the chain: four in-scope pillars reach the founder as a sentence
+    about four, not about six."""
+    prose = TemplateNarrator()._business_dna(_slots(4), TONE)
+    assert "four readiness pillars that apply at your stage" in prose
+    assert "six" not in prose

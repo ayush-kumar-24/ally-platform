@@ -1051,11 +1051,12 @@ class ReasoningService:
             return None
         # How much of the model this score was actually built on.
         #
-        # PILLAR_SCORE_FROM_ANSWERS excludes an unanswered pillar and renormalises
-        # the rest to 100, so a partial assessment produces a number that LOOKS
-        # like a whole-business score. Stage scoping makes that routine rather than
-        # rare: a Validation founder is diagnosed on 3 of 6 pillars (60% of the
-        # weight) and a Prototype founder on 4 (80%). Ideation emits nothing at all.
+        # PILLAR_SCORE_FROM_ANSWERS excludes a pillar with too little evidence and
+        # renormalises the rest to 100, so a partial assessment produces a number
+        # that LOOKS like a whole-business score. Stage scoping makes that routine
+        # rather than rare: under Business DNA Part 3 an ideation founder is
+        # diagnosed on 4 of the 6 pillars, and every stage can lose a pillar the
+        # session did not get enough answers for.
         #
         # The renormalisation itself is right -- scoring an unasked pillar 0 would
         # be worse. What was missing is any way for the reader to know. These three
