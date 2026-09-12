@@ -187,8 +187,22 @@ def upgrade() -> None:
     """)
 
     # 57 seed rows, ids 98-154 -- see founder_dna_questions_seed.sql.
+    #
+    # exec_driver_sql, NOT op.execute. op.execute wraps a plain string in
+    # sa.text(), which parses `:name` as a bind parameter -- and every row here
+    # is a JSON literal full of `"key":value`. The first one reaches SQLAlchemy
+    # as a bind called "98" with nothing bound to it:
+    #
+    #   StatementError: A value is required for bind parameter '98'
+    #
+    # So this migration could never run on a fresh database; the environments
+    # that have these rows got them from founder_dna_questions_seed.sql by hand.
+    # exec_driver_sql hands the string to the driver untouched, which is what a
+    # verbatim seed dump needs. Caught by provisioning a clean PostgreSQL 16 and
+    # running `alembic upgrade heads` end to end.
+    bind = op.get_bind()
     for statement in _SEED_STATEMENTS:
-        op.execute(statement)
+        bind.exec_driver_sql(statement)
 
     # The seed above inserts explicit ids via json_populate_record, which
     # does NOT advance the SERIAL sequence (it bypasses nextval()). Left
