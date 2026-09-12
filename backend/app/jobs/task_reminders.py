@@ -8,7 +8,8 @@ the gap between runs is -- fifteen minutes of lateness on a thirty-minute
 warning is tolerable, an hour is not.
 
 Rows that came due while this was not running are dropped rather than sent (see
-TASK_REMINDER_MAX_AGE_MINUTES); they are reported as `stale` so an outage shows
+TASK_REMINDER_GRACE_MINUTES past the task itself); they are reported as `stale`
+so an outage shows
 up in the scheduler's logs instead of arriving in somebody's inbox as twenty
 emails about yesterday.
 

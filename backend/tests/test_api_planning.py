@@ -160,6 +160,39 @@ def test_task_reminder_lead_out_of_range_is_422(client, bad):
     assert r.status_code == 422
 
 
+def test_adding_a_dated_task_schedules_its_reminder(client):
+    """End to end through the route: the founder picks 15 minutes, a reminder
+    row exists at 15 minutes before, ready for the sweep to deliver."""
+    gid = _goal(client, _plan(client))
+    r = client.http.post(f"{BASE}/goals/{gid}/tasks",
+                         json={"title": "Call Rajesh", "due_date": "2026-08-01",
+                               "due_time": "15:00", "timezone": "UTC",
+                               "reminder_minutes_before": 15})
+    assert r.status_code == 201, r.text
+
+    reminders = client.http.get(f"{BASE}/reminders").json()["reminders"]
+    scheduled = [x for x in reminders if x["status"] == "scheduled"]
+    assert len(scheduled) == 1
+    assert scheduled[0]["remind_at"].startswith("2026-08-01T14:45")
+    assert scheduled[0]["channel"] == "email"
+
+
+def test_a_dateless_task_schedules_no_reminder(client):
+    gid = _goal(client, _plan(client))
+    client.http.post(f"{BASE}/goals/{gid}/tasks", json={"title": "Someday"})
+    assert client.http.get(f"{BASE}/reminders").json()["reminders"] == []
+
+
+def test_ticking_a_task_off_cancels_its_reminder(client):
+    gid = _goal(client, _plan(client))
+    tid = client.http.post(f"{BASE}/goals/{gid}/tasks",
+                           json={"title": "T", "due_date": "2026-08-01",
+                                 "due_time": "15:00", "timezone": "UTC"}).json()["task_id"]
+    client.http.patch(f"{BASE}/tasks/{tid}", json={"status": "done"})
+    statuses = [x["status"] for x in client.http.get(f"{BASE}/reminders").json()["reminders"]]
+    assert statuses and all(st == "cancelled" for st in statuses)
+
+
 # --- diagnosis seeding ------------------------------------------------------
 
 
