@@ -96,11 +96,12 @@ def test_no_band_produces_no_claim_at_all():
 
 # --- the persisted snapshot carries the coverage --------------------------
 
-def _pillar(pillar_id, score, weight):
+def _pillar(pillar_id, score, weight, covered=("a", "b", "c"), total=3):
     return SimpleNamespace(
         pillar_id=pillar_id, pillar_name=f"P{pillar_id}", weight=weight, score=score,
         band=("Strong" if score is not None else None), red_flag_triggered=False,
         red_flag_note=None, assessed_question_count=(3 if score is not None else 0),
+        dimensions_in_scope=covered, dimensions_total=total,
     )
 
 
@@ -157,3 +158,19 @@ def test_an_ideation_report_says_four_pillars_applied():
     prose = TemplateNarrator()._business_dna(_slots(4), TONE)
     assert "four readiness pillars that apply at your stage" in prose
     assert "six" not in prose
+
+
+def test_the_snapshot_carries_each_pillars_dimension_coverage():
+    """So the report can qualify a pillar name that stands for part of the
+    pillar -- see test_pillar_dimension_coverage.py."""
+    from app.api.v1.reasoning.service import ReasoningService
+
+    health = _health([
+        _pillar(4, 60, 15, covered=("Execution Velocity",), total=3),
+        _pillar(2, 80, 20, covered=("a", "b", "c", "d"), total=4),
+    ])
+    dna = ReasoningService._business_dna(None, health)
+
+    assert dna["pillars"][0]["dimensions_in_scope"] == ["Execution Velocity"]
+    assert dna["pillars"][0]["dimensions_total"] == 3
+    assert dna["pillars"][1]["dimensions_total"] == 4

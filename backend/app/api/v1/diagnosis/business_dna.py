@@ -148,6 +148,18 @@ def dimensions_in(pillar_id: int) -> frozenset[str]:
     return frozenset(d.code for d in DIMENSIONS if d.pillar_id == pillar_id)
 
 
+def dimension_names(codes) -> tuple[str, ...]:
+    """Part 2's own names for these dimensions, in the document's order.
+
+    Ordered by DIMENSIONS rather than by the caller's set so a pillar's
+    dimensions always read in the same sequence, whatever order they arrived in
+    -- these names reach the founder in a report line, and a list that reshuffles
+    between two runs of the same report looks like the finding changed.
+    """
+    wanted = set(codes)
+    return tuple(d.name for d in DIMENSIONS if d.code in wanted)
+
+
 # ---------------------------------------------------------------------------
 # Part 3 -- The Business DNA Journey, By Stage.
 #

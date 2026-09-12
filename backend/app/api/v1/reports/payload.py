@@ -62,6 +62,14 @@ class PillarFinding:
     red_flag_note: str | None
     band_description: str | None = None  # score_bands description for `band` (shown)
 
+    #: Which of this pillar's Part 2 dimensions the founder's stage covers, and
+    #: how many it has. Empty/0 means no coverage claim -- an older report row
+    #: stored before this existed, or a founder whose stage could not be
+    #: resolved. Rendered as a qualifier on the pillar's name; see
+    #: narrator._pillar_label.
+    dimensions_in_scope: tuple[str, ...] = ()
+    dimensions_total: int = 0
+
 
 @dataclass(frozen=True)
 class ArchetypeFinding:
@@ -249,6 +257,8 @@ def build_report_payload(db: Session, report) -> ReportPayload:
             band_description=band_desc.get((p.get("pillar_id"), p.get("band"))),
             red_flag_triggered=bool(p.get("red_flag_triggered")),
             red_flag_note=p.get("red_flag_note"),
+            dimensions_in_scope=tuple(p.get("dimensions_in_scope") or ()),
+            dimensions_total=int(p.get("dimensions_total") or 0),
         )
         for p in (bd.get("pillars") or [])
     )

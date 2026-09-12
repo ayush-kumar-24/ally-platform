@@ -24,6 +24,7 @@ from collections.abc import Sequence
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Protocol, runtime_checkable
 
+from app.api.v1.diagnosis.stage_scope import resolve_scope
 from app.api.v1.reasoning.errors import FeatureDisabledError
 from app.api.v1.reasoning.interfaces import ReasoningContext
 from app.api.v1.reasoning.repository import ReasoningRepository
@@ -180,9 +181,19 @@ class BusinessHealthScorer:
                 continue
             scores_by_pillar[pillar_id].append(c.score)
 
+        # Which of each pillar's Part 2 dimensions this founder's STAGE covers.
+        # Attached to every pillar, scored or not, so the report can qualify a
+        # pillar name that stands for only part of the pillar. None when the
+        # stage is unknown, which yields no coverage claim rather than a wrong
+        # one -- same fail-open convention as the scope filters themselves.
+        scope = resolve_scope(getattr(context, "founder", None)) if context else None
+
         pillar_scores: list[PillarScore] = []
         minimum = max(1, settings.MIN_ANSWERS_PER_PILLAR_SCORE)
         for pillar in pillars:
+            covered, total = (
+                scope.coverage_of(pillar.pillar_id) if scope is not None else ((), 0)
+            )
             answer_scores = scores_by_pillar.get(pillar.pillar_id, [])
             # Too little evidence is reported as no evidence. A pillar answered
             # once or twice can only land on a handful of values, and the founder
@@ -204,6 +215,8 @@ class BusinessHealthScorer:
                         red_flag_triggered=False,
                         red_flag_note=None,
                         assessed_question_count=len(answer_scores),
+                        dimensions_in_scope=covered,
+                        dimensions_total=total,
                     )
                 )
                 continue
@@ -222,6 +235,8 @@ class BusinessHealthScorer:
                     red_flag_triggered=flagged,
                     red_flag_note=pillar.red_flag_note if flagged else None,
                     assessed_question_count=len(answer_scores),
+                    dimensions_in_scope=covered,
+                    dimensions_total=total,
                 )
             )
 

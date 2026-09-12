@@ -353,6 +353,25 @@ class PillarScore:
     red_flag_note: str | None
     assessed_question_count: int
 
+    #: Which of this pillar's Business DNA Part 2 dimensions the founder's STAGE
+    #: covers, by the document's own names, and how many the pillar has in total.
+    #:
+    #: Part 3 scopes several pillars partially -- Product & Execution is one of
+    #: three dimensions at ideation, Revenue Maturity three of four through
+    #: Stage 0->1 -- and without this the report prints the pillar's full name
+    #: over a reading taken from part of it. "Product & Execution" implies the
+    #: product was assessed; at ideation only its execution pace was.
+    #:
+    #: A property of the STAGE, not of the session: it says what the assessment
+    #: covers, which is the same for every founder at that stage. Per-session
+    #: coverage would need `problems.dimension_code`, still mostly NULL.
+    #:
+    #: Defaulted so a caller that does not resolve a scope (an unknown stage, a
+    #: test fixture) gets a pillar with no coverage claim rather than a wrong one:
+    #: empty names with a 0 total renders no qualifier at all.
+    dimensions_in_scope: tuple[str, ...] = ()
+    dimensions_total: int = 0
+
 
 @dataclass(frozen=True)
 class BusinessHealthScore:

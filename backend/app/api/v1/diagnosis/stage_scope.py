@@ -78,6 +78,8 @@ from app.api.v1.diagnosis.business_dna import (
     STAGE_1_TO_10_PLUS_EXCLUDED,
     STRATEGIC_CLARITY,
     TEAM_AND_LEADERSHIP,
+    dimension_names,
+    dimensions_in,
     pillars_for,
     withheld_categories_for,
 )
@@ -167,6 +169,30 @@ class StageScope:
         catalogue is still unmapped -- see `business_dna.DIMENSION_BY_CATEGORY`.
         """
         return ALL_DIMENSION_CODES - self.dimensions
+
+    def coverage_of(self, pillar_id: int) -> tuple[tuple[str, ...], int]:
+        """(names of this pillar's live dimensions, how many it has in total).
+
+        What the stage COVERS, not what the session happened to ask. Part 3
+        decides this and it is the same for every founder at a stage, which is
+        what makes it safe to put in a report label: it describes the assessment,
+        not the founder. Per-session coverage would need
+        `problems.dimension_code`, which is mostly still NULL.
+
+        A pillar out of scope entirely comes back as `((), total)` rather than
+        raising -- the caller may be labelling a pillar the stage never assessed,
+        and "none of its three" is the honest answer for one of those.
+        """
+        live = dimensions_in(pillar_id) & self.dimensions
+        return dimension_names(live), len(dimensions_in(pillar_id))
+
+    def covers_all_of(self, pillar_id: int) -> bool:
+        """True when every one of this pillar's dimensions is live at this stage.
+
+        The common case, and the one that must produce NO label qualifier: a
+        pillar assessed in full is just the pillar.
+        """
+        return dimensions_in(pillar_id) <= self.dimensions
 
     @property
     def covers_all_pillars(self) -> bool:

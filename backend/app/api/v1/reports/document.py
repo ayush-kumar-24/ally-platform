@@ -50,6 +50,11 @@ def _tone(score: int) -> str:
 #: are the fallback for a pillar the narrative did not describe.
 _BAND_WORDS = {"t-critical": "Critical gap", "t-watch": "Developing", "t-ok": "Strong"}
 
+#: Same spelling-out the narrator uses, so the page and the prose count the
+#: same pillars the same way. Falls back to the digit outside the range,
+#: which six pillars cannot reach.
+_WORDS = {1: "one", 2: "two", 3: "three", 4: "four", 5: "five", 6: "six"}
+
 
 def _band_word(score: int) -> str:
     return _BAND_WORDS[_tone(score)]
@@ -225,18 +230,58 @@ def _pillar_bands(narrative) -> dict[str, str]:
     return out
 
 
+def _coverage_note(pillar: Mapping[str, Any]) -> str:
+    """"Execution Velocity only", when the stage covers part of this pillar.
+
+    The same claim `narrator._pillar_label` makes in prose, in the bar's
+    secondary line rather than its name -- the name is the key `_pillar_bands`
+    looks a band up by, so qualifying it there would silently break the band
+    beside every partial pillar.
+    """
+    covered = [str(d) for d in (pillar.get("dimensions_in_scope") or ())]
+    total = int(pillar.get("dimensions_total") or 0)
+    if not total or not covered or len(covered) >= total:
+        return ""
+    if len(covered) == 1:
+        return f"{covered[0]} only"
+    return f"{', '.join(covered[:-1])} and {covered[-1]} only"
+
+
 def _standing(pillars: Sequence[Mapping[str, Any]], bands: Mapping[str, str]) -> str:
+    """The pillar bars, lowest first.
+
+    ASSESSED PILLARS ONLY. A pillar with no score is one the stage never put in
+    scope, or one the session gave too few answers to (see
+    Settings.MIN_ANSWERS_PER_PILLAR_SCORE). Its score arrives as None, `_num`
+    floors that to 0, and 0 is a Critical gap that sorts to the TOP -- so this
+    page opened an ideation founder with "Revenue Maturity: Critical gap" and
+    "Team & Leadership: Critical gap" for two pillars they were never asked a
+    single question about. The generator's narrative path already drops them
+    ("a bandless row ... reads as a pillar that failed rather than one that was
+    never in scope"); this path reads the raw insights instead and did not.
+    """
+    pillars = [p for p in pillars if p.get("score") is not None]
     if not pillars:
         return ""
     ranked = sorted(pillars, key=lambda p: _num(p.get("score")))
     bars = "".join(
         _bar(str(p.get("pillar_name") or "Pillar"), _num(p.get("score")),
-             f"{_num(p.get('weight'))}% of overall" if p.get("weight") else "",
+             " · ".join(part for part in (
+                 f"{_num(p.get('weight'))}% of overall" if p.get("weight") else "",
+                 _coverage_note(p),
+             ) if part),
              band=bands.get(str(p.get("pillar_name") or "")))
         for p in ranked
     )
-    return ("<p>Six pillars, weighted by how much each one decides survival at your "
-            "stage. Lowest first &mdash; that is also the order to work in.</p>"
+    # NOT hardcoded "Six". Business DNA Part 3 puts four pillars at ideation, and
+    # a pillar the session could not gather enough answers for drops out at any
+    # stage -- so this counts what is actually on the page. Saying "six" over
+    # four bars is the same overstatement the per-pillar coverage note exists to
+    # prevent, one level up.
+    count = _WORDS.get(len(ranked), str(len(ranked))).capitalize()
+    noun = "pillar" if len(ranked) == 1 else "pillars"
+    return (f"<p>{count} {noun}, weighted by how much each one decides survival at "
+            "your stage. Lowest first &mdash; that is also the order to work in.</p>"
             f'<div class="bars">{bars}</div>')
 
 

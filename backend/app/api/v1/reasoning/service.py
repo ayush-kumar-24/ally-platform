@@ -1079,6 +1079,10 @@ class ReasoningService:
                     "band": p.band,
                     "red_flag_triggered": p.red_flag_triggered,
                     "red_flag_note": p.red_flag_note,
+                    # What the STAGE covers of this pillar, so the report can
+                    # qualify a name that stands for only part of it.
+                    "dimensions_in_scope": list(p.dimensions_in_scope),
+                    "dimensions_total": p.dimensions_total,
                     "assessed_question_count": p.assessed_question_count,
                 }
                 for p in business_health.pillars
