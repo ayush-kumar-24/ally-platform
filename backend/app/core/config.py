@@ -1,8 +1,16 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.core.paths import ENV_FILE
+
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    # ENV_FILE is absolute. With the bare relative ".env" this used to
+    # carry, pydantic resolved it against the working directory -- so this
+    # and load_dotenv() in app.main could read two different files, or
+    # neither. See app/core/paths.py.
+    model_config = SettingsConfigDict(
+        env_file=ENV_FILE, env_file_encoding="utf-8", extra="ignore"
+    )
 
     # --- App ---
     APP_NAME: str = "Ally Backend API"
