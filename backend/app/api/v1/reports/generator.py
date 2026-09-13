@@ -424,7 +424,15 @@ class ReportNarrativeGenerator:
                             None if (pf.name == "Founder Readiness" and pf.band == "Critical Gap")
                             else pf.band_description),
                         "red_flag_triggered": pf.red_flag_triggered,
-                        "red_flag_note": pf.red_flag_note} for pf in p.pillars]
+                        "red_flag_note": pf.red_flag_note,
+                        # Part 3 scopes some pillars partially -- Product &
+                        # Execution is one of three dimensions at ideation. The
+                        # narrator qualifies the pillar's name with these so the
+                        # founder is not shown a whole-pillar heading over a
+                        # reading taken from part of it.
+                        "dimensions_in_scope": list(pf.dimensions_in_scope),
+                        "dimensions_total": pf.dimensions_total}
+                       for pf in p.pillars]
             # Only pillars that were actually assessed. Stage scoping leaves the
             # rest with no score and no band, and a bandless row on a founder's
             # Business DNA page reads as a pillar that failed rather than one that

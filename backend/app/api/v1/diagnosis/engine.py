@@ -187,10 +187,10 @@ class QuestionSelectionEngine:
 
         Pillars OUT OF SCOPE for the founder's stage never reach this key --
         `candidate_questions` has already removed them -- so "every pillar" here
-        means every pillar the stage is diagnosed on. At ideation that is two,
-        and the round-robin spreads the budget across those two rather than
-        manufacturing turns for four pillars with nothing to say. See
-        `stage_scope.py`.
+        means every pillar the stage is diagnosed on. At ideation that is four
+        (Business DNA Part 3), and the round-robin spreads the budget across
+        those four rather than manufacturing turns for Revenue Maturity and
+        Team & Leadership, which have nothing to say yet. See `stage_scope.py`.
 
         Degrades to `_sort_key` if the pillar map is unavailable for any
         reason -- a coverage optimisation must never be able to stop the
@@ -301,7 +301,23 @@ class QuestionSelectionEngine:
         return self._in_scope(candidates, founder)
 
     def _in_scope(self, candidates: list[Question], founder: Founder) -> list[Question]:
-        """Drop questions whose pillar the founder's stage is not diagnosed on.
+        """Drop questions the founder's stage is not diagnosed on.
+
+        Two independent tests, both derived from the same Part 3 dimension set
+        (see `stage_scope`), and both applied:
+
+          PILLAR    which subjects may be raised at all, read through
+                    problems.pillar_id.
+          CATEGORY  what the question is actually about, read straight off
+                    questions.category.
+
+        The second is not implied by the first. Marketing Execution questions
+        are filed under Market Clarity, which Part 3 puts fully in scope at
+        ideation -- so pillar scope alone admits campaign-attribution questions
+        to a founder with nothing built. Category scope is what makes "no
+        revenue and no marketing questions before there is a business" a rule
+        rather than an accident of how the Stage 0 bank happens to be tagged
+        today.
 
         Filtering here rather than in the ranking key is deliberate. The bias in
         `_sort_key_for` only reorders, so an out-of-scope question would still be
@@ -309,38 +325,66 @@ class QuestionSelectionEngine:
         case an ideation founder hits. Scope is a rule about what may be asked,
         not a preference about what to ask first, so it removes candidates.
 
+        The two tests DEGRADE INDEPENDENTLY. The pillar test needs a database
+        lookup and the category test does not, so an unavailable pillar map
+        drops the pillar test and keeps the category one, rather than
+        abandoning both and handing an ideation founder the whole bank.
+
         Never returns empty when it was given a non-empty set. A scope that
-        matches nothing means the pillar map and the bank disagree, and ending a
-        founder's diagnosis early over a data problem is worse than asking a
+        matches nothing means the bank and the scope table disagree, and ending
+        a founder's diagnosis early over a data problem is worse than asking a
         question that is off-topic for their stage. Same reasoning as the
         round-robin's degrade path: correctness of coverage must never be able to
         stop the assessment from finding a next question.
         """
         scope = resolve_scope(founder)
-        if scope is None or scope.covers_all_pillars or not candidates:
+        if scope is None or scope.withholds_nothing or not candidates:
             return candidates
 
-        try:
-            problem_to_pillar = self.repository.problem_to_pillar()
-        except Exception:                                  # noqa: BLE001
-            logger.warning(
-                "Pillar map unavailable; cannot scope this stage's diagnosis",
-                extra={"stage_scope": scope.label},
-            )
+        scoped = candidates
+        applied: list[str] = []
+
+        if scope.withheld_categories:
+            scoped = [q for q in scoped if q.category not in scope.withheld_categories]
+            applied.append("category")
+
+        if not scope.covers_all_pillars:
+            problem_to_pillar = self._pillar_map_or_none(scope)
+            if problem_to_pillar:
+                scoped = [
+                    q for q in scoped
+                    if problem_to_pillar.get(q.problem_id) in scope.pillars
+                ]
+                applied.append("pillar")
+
+        if scope.excluded_dimensions:
+            problem_to_dimension = self._dimension_map_or_none(scope)
+            if problem_to_dimension:
+                # `.get() not in` and not `.get() in scope.dimensions`: a
+                # problem with no dimension recorded is UNKNOWN, not
+                # out of scope, and most of the catalogue is unknown. Dropping
+                # those would empty the candidate set at every stage and hand
+                # the whole bank straight back through the fallback below --
+                # scoping nothing while looking like it scoped everything.
+                scoped = [
+                    q for q in scoped
+                    if problem_to_dimension.get(q.problem_id)
+                    not in scope.excluded_dimensions
+                ]
+                applied.append("dimension")
+
+        if not applied:
             return candidates
 
-        if not problem_to_pillar:
-            return candidates
-
-        scoped = [
-            q for q in candidates
-            if problem_to_pillar.get(q.problem_id) in scope.pillars
-        ]
         if not scoped:
             logger.warning(
                 "Stage scope matched no candidate question; leaving the set "
                 "unscoped rather than ending the diagnosis",
-                extra={"stage_scope": scope.label, "candidates": len(candidates)},
+                extra={
+                    "stage_scope": scope.label,
+                    "filters_applied": applied,
+                    "candidates": len(candidates),
+                },
             )
             return candidates
 
@@ -349,12 +393,52 @@ class QuestionSelectionEngine:
             extra={
                 "stage": "stage_scope",
                 "stage_scope": scope.label,
+                "filters_applied": applied,
                 "pillars_in_scope": sorted(scope.pillars),
+                "categories_withheld": sorted(scope.withheld_categories),
+                "dimensions_withheld": sorted(scope.excluded_dimensions),
                 "candidates_before": len(candidates),
                 "candidates_after": len(scoped),
             },
         )
         return scoped
+
+    def _pillar_map_or_none(self, scope) -> dict[int, int] | None:
+        """problem_id -> pillar_id, or None when the pillar test cannot run.
+
+        Separate from `_in_scope` so an unavailable map disables only the pillar
+        part of scoping. Returning None where this used to return the whole
+        candidate list is the difference between "we cannot check pillars" and
+        "we cannot check anything".
+        """
+        try:
+            problem_to_pillar = self.repository.problem_to_pillar()
+        except Exception:                                  # noqa: BLE001
+            logger.warning(
+                "Pillar map unavailable; scoping this stage without it",
+                extra={"stage_scope": scope.label},
+            )
+            return None
+        return problem_to_pillar or None
+
+    def _dimension_map_or_none(self, scope) -> dict[int, str] | None:
+        """problem_id -> dimension_code, or None when that test cannot run.
+
+        Empty is treated the same as unavailable, and here that is the ordinary
+        case rather than a fault: until the catalogue is mapped there is nothing
+        to filter on, and the two coarser tests carry the scope on their own.
+        Logged at debug rather than warning for exactly that reason -- a warning
+        on every question of every session would say nothing.
+        """
+        try:
+            problem_to_dimension = self.repository.problem_to_dimension()
+        except Exception:                                  # noqa: BLE001
+            logger.warning(
+                "Dimension map unavailable; scoping this stage without it",
+                extra={"stage_scope": scope.label},
+            )
+            return None
+        return problem_to_dimension or None
 
     def order_candidates(
         self, candidates: list[Question], session: DiagnosisSession | None = None

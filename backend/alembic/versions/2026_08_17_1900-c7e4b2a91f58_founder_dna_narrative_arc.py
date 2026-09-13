@@ -47,7 +47,8 @@ _NEW_FORMATS = ('narrative', 'scenario', 'forced_choice')
 
 
 def upgrade() -> None:
-    cols = {c['name'] for c in inspect(op.get_bind()).get_columns(_TABLE)}
+    inspector = inspect(op.get_bind())
+    cols = {c['name'] for c in inspector.get_columns(_TABLE)}
 
     if 'arc_position' not in cols:
         # Slot in the doc's per-stage table. Defaults to 0 so any row seeded
@@ -66,7 +67,21 @@ def upgrade() -> None:
             'options', postgresql.JSONB(astext_type=sa.Text()), nullable=True))
 
     # Widen the format CHECK to admit forced_choice.
-    op.drop_constraint('founder_dna_questions_format_check', _TABLE, type_='check')
+    #
+    # Guarded like the columns above, and for the same reason one branch over:
+    # b4e9a17c6d32 creates this table from scratch for RDS, already widened and
+    # already indexed. On a FRESH database both branches run and that one sorts
+    # first, so an unguarded DROP/CREATE here fails the whole upgrade:
+    #
+    #   DuplicateTable: relation "uq_founder_dna_one_closing_per_stage"
+    #   already exists
+    #
+    # Its own anchor guard only protects itself. Caught by provisioning a clean
+    # PostgreSQL 16 and running `alembic upgrade heads` end to end -- which no
+    # environment had done, because every existing one predates the split.
+    checks = {c["name"] for c in inspector.get_check_constraints(_TABLE)}
+    if "founder_dna_questions_format_check" in checks:
+        op.drop_constraint("founder_dna_questions_format_check", _TABLE, type_="check")
     op.create_check_constraint(
         'founder_dna_questions_format_check', _TABLE,
         "format = ANY (ARRAY[" + ",".join(f"'{f}'" for f in _NEW_FORMATS) + "]::text[])",
@@ -76,10 +91,13 @@ def upgrade() -> None:
     # singular by design ("ends on ONE deliberately bigger question"), and the
     # engine reserves exactly one slot for it. A second would silently never
     # be asked.
-    op.create_index(
-        'uq_founder_dna_one_closing_per_stage', _TABLE, ['stage_group'],
-        unique=True, postgresql_where=sa.text('is_closing'),
-    )
+    if 'uq_founder_dna_one_closing_per_stage' not in {
+        i["name"] for i in inspector.get_indexes(_TABLE)
+    }:
+        op.create_index(
+            'uq_founder_dna_one_closing_per_stage', _TABLE, ['stage_group'],
+            unique=True, postgresql_where=sa.text('is_closing'),
+        )
 
 
 def downgrade() -> None:

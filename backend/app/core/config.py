@@ -242,6 +242,24 @@ class Settings(BaseSettings):
     # much of THIS diagnosis is done", and a diagnosis is this many questions.
     MAX_DIAGNOSIS_QUESTIONS: int = 30
 
+    # Fewest answers a readiness pillar needs before it gets a score and a band
+    # rather than being reported as not assessed.
+    #
+    # Each answer is 0, 1 or 2 (green/amber/red) and a pillar's score is the mean
+    # inverted onto 0-100, so the number of answers IS the resolution of the
+    # score. One answer can only ever produce 0, 50 or 100 -- three bands with
+    # nothing in between -- and the founder is shown a band, not a sample size,
+    # so "Critical Gap" off a single amber reads exactly like "Critical Gap" off
+    # eight. Three is the floor because it is the first count whose scale has
+    # more steps than the band table has bands.
+    #
+    # A pillar below the floor is reported the same way as one never asked
+    # (score None, no band, no red flag) and is excluded from the overall
+    # weighted score, which renormalises over what remains. The two are still
+    # distinguishable downstream: assessed_question_count is 0 for never-asked
+    # and 1-2 for below-floor.
+    MIN_ANSWERS_PER_PILLAR_SCORE: int = 3
+
     # --- Founder DNA (phase 2, adaptive) ---
     # Safety ceiling for the Founder DNA phase, which runs BEFORE the
     # diagnosis above (see founders.founder_dna_completed_at). Unlike

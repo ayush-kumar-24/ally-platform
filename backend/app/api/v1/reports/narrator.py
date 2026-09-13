@@ -13,6 +13,7 @@ cannot leak facts between sections -- and falls back to the template on any erro
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Callable, Protocol
 
@@ -98,6 +99,49 @@ class SectionNarrator(Protocol):
 #: Spelled out so the prose reads as prose. Falls back to the digit for
 #: anything outside the range, which cannot happen with six pillars.
 _WORDS = {1: "one", 2: "two", 3: "three", 4: "four", 5: "five", 6: "six"}
+
+
+def _and_list(items: Sequence[str]) -> str:
+    """"a", "a and b", "a, b and c" -- prose, not a comma-joined dump."""
+    items = list(items)
+    if len(items) <= 1:
+        return items[0] if items else ""
+    return f"{', '.join(items[:-1])} and {items[-1]}"
+
+
+def _pillar_label(pillar: Mapping[str, Any]) -> str:
+    """A pillar's name, qualified when the stage covers only part of it.
+
+        Market Clarity
+        Product & Execution (Execution Velocity only)
+        Strategic Clarity (Plan-to-Vision Alignment and Prioritization Discipline only)
+
+    Business DNA Part 3 scopes several pillars partially. At ideation, Product &
+    Execution is one dimension of three, and Founder Readiness and Strategic
+    Clarity are two of three; through Stage 0->1, Revenue Maturity is three of
+    four and Team & Leadership two of three. Printing the bare pillar name over
+    those readings overstates them -- "Product & Execution: Needs Attention"
+    tells a pre-launch founder their product was assessed, when what was assessed
+    was how fast they move.
+
+    The qualifier names the dimensions rather than counting them ("1 of 3"),
+    because a founder cannot act on a count. It uses Part 2's own wording, so the
+    report and the document say the same words for the same thing.
+
+    NO qualifier when the stage covers the whole pillar, which is the common case
+    -- every pillar at Growth and above, and most of them earlier. Also none when
+    the coverage is unknown (`dimensions_total` 0): an older report row stored
+    before this existed, or a founder whose stage could not be resolved. Silence
+    is right for both; a claim about coverage we cannot support is worse than no
+    claim.
+    """
+    name = str(pillar.get("pillar_name") or "")
+    covered = [str(d) for d in (pillar.get("dimensions_in_scope") or ())]
+    total = int(pillar.get("dimensions_total") or 0)
+
+    if not total or not covered or len(covered) >= total:
+        return name
+    return f"{name} ({_and_list(covered)} only)"
 
 
 class TemplateNarrator:
@@ -211,11 +255,12 @@ class TemplateNarrator:
                     "There is more detail when you are ready for it -- it can wait.")
         parts = []
         if band:
-            # NOT hardcoded "six". Stage scoping means an early-stage founder is
-            # assessed on fewer -- 3 pillars at Validation, 4 at Prototype -- and
-            # the score renormalises onto those, so a fixed "across the six
-            # readiness pillars" told the founder we had looked at three pillars
-            # we never asked them about.
+            # NOT hardcoded "six". Stage scoping means an ideation founder is
+            # assessed on four (Business DNA Part 3), and any stage can lose a
+            # pillar the session gave too few answers to score. The total
+            # renormalises onto what remains, so a fixed "across the six
+            # readiness pillars" told the founder we had looked at pillars we
+            # never asked them about.
             total = s.get("pillars_total") or 6
             assessed = s.get("pillars_assessed") or total
             scope = (
@@ -231,11 +276,13 @@ class TemplateNarrator:
         pillars = s.get("pillars", [])
         strong = [p for p in pillars if p.get("band") == "Strong"]
         if strong:
-            parts.append("Strongest: " + ", ".join(p["pillar_name"] for p in strong) + ".")
+            parts.append(
+                "Strongest: " + ", ".join(_pillar_label(p) for p in strong) + "."
+            )
         concern = [p for p in pillars if p.get("band") in ("Critical Gap", "Needs Attention")]
         for p in concern:
             desc = p.get("band_description")
-            line = f"{p['pillar_name']} — {p.get('band')}."
+            line = f"{_pillar_label(p)} — {p.get('band')}."
             if desc:
                 line += f" {desc}"
             parts.append(line)

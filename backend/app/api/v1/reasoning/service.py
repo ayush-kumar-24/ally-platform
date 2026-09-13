@@ -488,12 +488,14 @@ class ReasoningService:
         start = time.perf_counter()
         scope = resolve_scope(context.founder)
         if scope is not None and not scope.emits_business_health:
-            # An ideation founder is diagnosed on two pillars. Scoring them would
-            # renormalise 45% of the model up to 100 and present it as a verdict
-            # on a business that does not exist yet -- see StageScope.
-            # emits_business_health. Their report is the Founder DNA Snapshot and
-            # the Idea Validation read; `business_dna` stays null, which the
-            # report and dashboard already handle.
+            # An ideation founder is diagnosed on part of the model, so scoring
+            # it would renormalise that part up to 100 and present it as a
+            # verdict on a business that does not exist yet -- see
+            # StageScope.emits_business_health, which records why this is still
+            # off now that Part 3 puts four pillars at ideation rather than two.
+            # Their report is the Founder DNA Snapshot and the Idea Validation
+            # read; `business_dna` stays null, which the report and dashboard
+            # already handle.
             business_health = None
             logger.info(
                 "business health omitted for this stage",
@@ -1049,11 +1051,12 @@ class ReasoningService:
             return None
         # How much of the model this score was actually built on.
         #
-        # PILLAR_SCORE_FROM_ANSWERS excludes an unanswered pillar and renormalises
-        # the rest to 100, so a partial assessment produces a number that LOOKS
-        # like a whole-business score. Stage scoping makes that routine rather than
-        # rare: a Validation founder is diagnosed on 3 of 6 pillars (60% of the
-        # weight) and a Prototype founder on 4 (80%). Ideation emits nothing at all.
+        # PILLAR_SCORE_FROM_ANSWERS excludes a pillar with too little evidence and
+        # renormalises the rest to 100, so a partial assessment produces a number
+        # that LOOKS like a whole-business score. Stage scoping makes that routine
+        # rather than rare: under Business DNA Part 3 an ideation founder is
+        # diagnosed on 4 of the 6 pillars, and every stage can lose a pillar the
+        # session did not get enough answers for.
         #
         # The renormalisation itself is right -- scoring an unasked pillar 0 would
         # be worse. What was missing is any way for the reader to know. These three
@@ -1076,6 +1079,10 @@ class ReasoningService:
                     "band": p.band,
                     "red_flag_triggered": p.red_flag_triggered,
                     "red_flag_note": p.red_flag_note,
+                    # What the STAGE covers of this pillar, so the report can
+                    # qualify a name that stands for only part of it.
+                    "dimensions_in_scope": list(p.dimensions_in_scope),
+                    "dimensions_total": p.dimensions_total,
                     "assessed_question_count": p.assessed_question_count,
                 }
                 for p in business_health.pillars
