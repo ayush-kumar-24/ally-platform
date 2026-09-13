@@ -197,10 +197,11 @@ class QuestionSelectionEngine:
         assessment from finding a next question.
         """
         try:
-            problem_to_pillar = self.repository.problem_to_pillar()
-            per_cat = self.repository.answered_count_per_pillar_category(
-                session.session_id
-            )
+            with self.repository.db.begin_nested():
+                problem_to_pillar = self.repository.problem_to_pillar()
+                per_cat = self.repository.answered_count_per_pillar_category(
+                    session.session_id
+                )
         except Exception:                                  # noqa: BLE001
             logger.warning(
                 "Pillar round-robin unavailable; using the category order",
@@ -412,7 +413,8 @@ class QuestionSelectionEngine:
         "we cannot check anything".
         """
         try:
-            problem_to_pillar = self.repository.problem_to_pillar()
+            with self.repository.db.begin_nested():
+                problem_to_pillar = self.repository.problem_to_pillar()
         except Exception:                                  # noqa: BLE001
             logger.warning(
                 "Pillar map unavailable; scoping this stage without it",
@@ -431,7 +433,8 @@ class QuestionSelectionEngine:
         on every question of every session would say nothing.
         """
         try:
-            problem_to_dimension = self.repository.problem_to_dimension()
+            with self.repository.db.begin_nested():
+                problem_to_dimension = self.repository.problem_to_dimension()
         except Exception:                                  # noqa: BLE001
             logger.warning(
                 "Dimension map unavailable; scoping this stage without it",
