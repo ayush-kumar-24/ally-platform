@@ -72,6 +72,20 @@ flagged as having finished: founder-dna/start and current-problem/start then
 returned no question at all, both phases walked zero questions, and the run
 still printed a full-looking report built on the diagnosis alone.
 
+TWO PERSONAS, AND WHY BOTH MATTER. `--persona weak` (the default) answers as
+a founder who has not done the work; `--persona strong` answers the same six
+dimensions done properly. One run on its own cannot tell a working classifier
+from a harsh one: the weak set produced nine reds and five ambers with every
+assessed pillar at Critical Gap, which is the right answer for those inputs and
+is also exactly what a scorer stuck on "bad" would print. Run both against the
+same founder and compare. Bands that separate mean the model is reading the
+answers; bands that do not mean it is not, whatever the report says.
+
+The strong set stays deliberately early-stage -- rigorous, not big. Answers
+describing a funded, scaled company would be measured against the confidence
+engine's stage_coherence_factor and the comparison would come back reflecting
+stage mismatch rather than answer quality.
+
 The database URL must be passed explicitly -- it deliberately does NOT read
 DATABASE_URL, so pointing this at a real project has to be a decision rather
 than an accident. `--confirm-writes` is required on top of that.
@@ -96,7 +110,11 @@ TEST_DOMAIN = "ally-e2e.local"
 #: Answers with enough substance for a classifier to have an opinion. A run
 #: answering "test" to everything tells you the plumbing works and nothing
 #: about whether the scoring does.
-ANSWERS = [
+#: WEAK. A founder who has not done the work: no market sizing, no pricing
+#: rationale, no planning rhythm, no analytics, nothing written down. Every
+#: gap here is one a pillar actually scores, so a working classifier should
+#: band this badly.
+WEAK_ANSWERS = [
     "We have about ten paying customers, mostly from my own network, and two "
     "churned last month without telling me why.",
     "Honestly I spend most of the week firefighting support and very little on "
@@ -111,9 +129,59 @@ ANSWERS = [
     "out who does what each morning.",
 ]
 
+#: STRONG. The same six dimensions, answered by a founder who HAS done the
+#: work -- talked to strangers, tested willingness to pay, sized the market
+#: bottom-up, instrumented the product, holds a planning rhythm, wrote the
+#: split down.
+#:
+#: DELIBERATELY STILL EARLY-STAGE. The temptation is to write a scaled
+#: company -- crores of revenue, a team of thirty -- but the founders this
+#: runs against are at Ideation, and the confidence engine carries a
+#: stage_coherence_factor that reads answers against the founder's stage.
+#: Answers describing a Series B would make the comparison measure stage
+#: mismatch rather than the thing being tested. Strong here means rigorous,
+#: not big: everything below is available to somebody six weeks in who
+#: simply did the work rather than avoiding it.
+STRONG_ANSWERS = [
+    "Forty-one conversations with people I had never met -- I found them "
+    "through two industry Slack groups and cold email, not my own network. "
+    "Nine offered to pay before I had anything to sell, and I have notes on "
+    "every call in one doc, tagged by which of the three problems they "
+    "actually led with.",
+    "Mondays are two hours on the one question that decides the week, and I "
+    "protect them -- the rest is execution against what that produced. Last "
+    "Monday it was whether to build the integration or keep doing it by "
+    "hand, and I chose by hand for another month because it is the cheaper "
+    "way to learn what the integration should be.",
+    "Bottom-up: roughly eleven thousand firms in this bracket in India, I "
+    "can reach maybe four hundred through the two channels I have actually "
+    "tested, and at the price nine people already agreed to that is a real "
+    "business but not a venture-scale one yet. I wrote that down because the "
+    "top-down number flattered me and I did not trust it.",
+    "I instrumented the three steps that matter before I shipped it, so I "
+    "can see that eleven of nineteen people who start the flow finish it, "
+    "and where the other eight stop. That drop-off is the next thing I fix, "
+    "and I know it is the next thing because I can see it, not because "
+    "somebody complained loudly.",
+    "I tested three prices with real people, not a survey -- asked for money "
+    "and watched what happened. At the middle one, six of nine said yes "
+    "without negotiating, which tells me it is too low rather than right, "
+    "and I have a note to retest higher next month with the same script.",
+    "Two of us, and we wrote the split down in week one precisely because "
+    "everyone told us not to bother: I own product and customer "
+    "conversations, she owns the build, and we agreed in writing who decides "
+    "when we disagree. It has already been used once.",
+]
 
-def _answer_for(n: int) -> str:
-    return ANSWERS[n % len(ANSWERS)]
+#: Kept as the module-level default so anything importing ANSWERS still works.
+ANSWERS = WEAK_ANSWERS
+
+PERSONAS = {"weak": WEAK_ANSWERS, "strong": STRONG_ANSWERS}
+
+
+def _answer_for(n: int, persona: str = "weak") -> str:
+    answers = PERSONAS[persona]
+    return answers[n % len(answers)]
 
 
 # ---------------------------------------------------------------------------
@@ -339,7 +407,7 @@ def _resolve_existing_founder(db, sa, *, email: str | None = None,
     return fid, label
 
 
-def _walk(client, start_path, answer_path, id_field, label, out):
+def _walk(client, start_path, answer_path, id_field, label, out, persona="weak"):
     """Drive one question/answer phase to completion, recording every question."""
     r = client.post(start_path)
     if r.status_code not in (200, 201):
@@ -367,7 +435,7 @@ def _walk(client, start_path, answer_path, id_field, label, out):
     while q:
         out.append(q)
         n = len(out)
-        body = {id_field: q[id_field], "answer_text": _answer_for(n)}
+        body = {id_field: q[id_field], "answer_text": _answer_for(n, persona)}
         a = client.post(answer_path, json=body)
         if a.status_code not in (200, 201):
             print(f"  FAIL {answer_path} -> {a.status_code} {a.text[:200]}")
@@ -429,6 +497,8 @@ def run(args) -> int:
     print("CONFIGURATION")
     print("=" * 74)
     lines, scoring_on = _config_report(settings)
+    # Which answers produced this. A band means nothing without it.
+    lines.append(f"  answer persona        {args.persona}")
     print("\n".join(lines))
     if not scoring_on and not args.allow_unscored:
         print("\n  ABORT: scoring is not configured, so every answer would be "
@@ -464,12 +534,13 @@ def run(args) -> int:
     print("=" * 74)
     ok = (
         _walk(client, "/api/v1/founder-dna/start", "/api/v1/founder-dna/answer",
-              "founder_dna_question_id", "Founder DNA", dna)
+              "founder_dna_question_id", "Founder DNA", dna, args.persona)
         and _walk(client, "/api/v1/current-problem/start",
                   "/api/v1/current-problem/answer",
-                  "current_problem_question_id", "Current Problem", problem)
+                  "current_problem_question_id", "Current Problem", problem,
+                  args.persona)
         and _walk(client, "/api/v1/diagnosis/start", "/api/v1/diagnosis/answer",
-                  "question_id", "Diagnosis", diagnosis)
+                  "question_id", "Diagnosis", diagnosis, args.persona)
     )
     if not ok:
         return 1
@@ -516,6 +587,7 @@ def run(args) -> int:
         bands = db.execute(sa.text(
             "select score_label, count(*) from answers where founder_id=:f "
             "group by 1 order by 2 desc"), {"f": fid}).all()
+    print(f"  answer persona          {args.persona}")
     print(f"  answer bands            {dict(bands) or 'none'}")
     if len(bands) == 1 and bands[0][0] == "amber":
         print("    ^ every answer identical -- this is the unscored fallback, "
@@ -598,6 +670,13 @@ def main(argv=None) -> int:
                    help="same as --cleanup-founder-email, but by founder_id")
     p.add_argument("--allow-unscored", action="store_true",
                    help="run even with scoring off (useful only to test the fallback)")
+    p.add_argument("--persona", choices=sorted(PERSONAS), default="weak",
+                   help="which answer set to reply with. 'weak' (default) is a "
+                        "founder who has not done the work; 'strong' is the same "
+                        "six dimensions done properly, still at the same stage. "
+                        "Run both against the same founder and compare the bands: "
+                        "if they come out the same, the scorer is not reading the "
+                        "answers, whatever the band says.")
     p.add_argument("--json-out", metavar="FILE", help="write the full transcript as JSON")
     args = p.parse_args(argv)
 

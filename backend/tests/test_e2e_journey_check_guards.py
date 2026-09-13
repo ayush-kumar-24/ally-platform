@@ -17,6 +17,10 @@ import pytest
 
 from scripts.e2e_journey_check import (
     _JOURNEY_STAMPS,
+    PERSONAS,
+    STRONG_ANSWERS,
+    WEAK_ANSWERS,
+    _answer_for,
     _clear_journey_stamps,
     _walk,
 )
@@ -152,3 +156,64 @@ def test_clear_journey_stamps_survives_a_schema_without_those_columns():
     db = _FakeDb(explode=True)
     _clear_journey_stamps(db, _FakeSa, [3704])
     assert db.rolled_back is True
+
+
+# --- personas ----------------------------------------------------------
+
+
+def test_both_personas_answer_the_same_six_dimensions():
+    """The comparison is only meaningful if the sets differ in quality and
+    not in what they are about."""
+    assert len(WEAK_ANSWERS) == len(STRONG_ANSWERS) == 6
+    assert set(PERSONAS) == {"weak", "strong"}
+
+
+def test_weak_is_the_default_so_existing_runs_are_unchanged():
+    assert _answer_for(0) == _answer_for(0, "weak") == WEAK_ANSWERS[0]
+
+
+def test_personas_give_genuinely_different_answers():
+    for i in range(6):
+        assert _answer_for(i, "weak") != _answer_for(i, "strong")
+
+
+def test_answers_cycle_by_index():
+    assert _answer_for(6, "strong") == _answer_for(0, "strong")
+    assert _answer_for(13, "weak") == _answer_for(1, "weak")
+
+
+def test_strong_answers_carry_the_evidence_the_weak_ones_lack():
+    """Not a style check: each phrase is the thing a pillar scores on. If a
+    rewrite drops them, the strong run stops testing what it claims to."""
+    blob = " ".join(STRONG_ANSWERS).lower()
+    for evidence in ("never met", "wrote", "tested", "bottom-up",
+                     "drop-off", "in writing"):
+        assert evidence in blob, f"strong answers no longer show {evidence!r}"
+
+
+def test_strong_answers_stay_at_the_founder_s_stage():
+    """A scaled-company answer would make the run measure stage mismatch
+    against the confidence engine's stage_coherence_factor rather than
+    answer quality."""
+    blob = " ".join(STRONG_ANSWERS).lower()
+    for overreach in ("series a", "series b", "crore", "million in revenue",
+                      "arr", "our team of"):
+        assert overreach not in blob, f"strong answers overreach: {overreach!r}"
+
+
+def test_walk_sends_the_persona_it_was_given():
+    client = _Client(
+        {"question": _q(1)},
+        [{"is_complete": True, "next_question": None}],
+    )
+    sent = []
+    original = client.post
+
+    def _spy(path, json=None):
+        if json is not None:
+            sent.append(json["answer_text"])
+        return original(path, json)
+
+    client.post = _spy
+    _walk(client, "/start", "/answer", "founder_dna_question_id", "X", [], "strong")
+    assert sent and sent[0] in STRONG_ANSWERS
