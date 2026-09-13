@@ -55,6 +55,11 @@ class TaskCreate(BaseModel):
     # default hour, because a reminder offset is only meaningful against a
     # timed event -- see app/calendar_sync/sync.py.
     due_time: time | None = None
+    # How far ahead of the task the founder wants the nudge. Omitted (or null)
+    # keeps the platform default -- the picker in Plan Your Day always sends a
+    # value, but the API stays usable without one. Bounded here as well as in
+    # the service so a bad value is a 422 rather than a domain error.
+    reminder_minutes_before: int | None = Field(default=None, ge=0, le=10080)
     # The founder's IANA zone, so "9am" means 9am where they are. Sent by the
     # browser (Intl.DateTimeFormat().resolvedOptions().timeZone). UTC is a
     # deliberate fallback rather than a guess at their location: wrong by a
@@ -69,4 +74,7 @@ class TaskUpdate(BaseModel):
     priority: Priority | None = None
     due_date: date | None = None
     due_time: time | None = None
+    # Explicit null clears it back to the platform default, the same
+    # set/clear convention the date fields above use.
+    reminder_minutes_before: int | None = Field(default=None, ge=0, le=10080)
     timezone: str = Field(default="UTC", max_length=64)

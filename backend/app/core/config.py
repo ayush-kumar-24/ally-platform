@@ -1,8 +1,16 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.core.paths import ENV_FILE
+
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    # ENV_FILE is absolute. With the bare relative ".env" this used to
+    # carry, pydantic resolved it against the working directory -- so this
+    # and load_dotenv() in app.main could read two different files, or
+    # neither. See app/core/paths.py.
+    model_config = SettingsConfigDict(
+        env_file=ENV_FILE, env_file_encoding="utf-8", extra="ignore"
+    )
 
     # --- App ---
     APP_NAME: str = "Ally Backend API"
@@ -620,12 +628,13 @@ class Settings(BaseSettings):
     # connected and one without should be nudged at the same moment, or the
     # same task nags twice at two different times.
     TASK_REMINDER_MINUTES_BEFORE: int = 30
-    # A reminder whose time passed while the worker was not running is stale.
-    # Sending "due in 30 minutes" for something that was due yesterday is worse
-    # than sending nothing, so anything older than this is dropped (marked sent,
-    # not retried forever). Sized to survive a weekend of downtime being
-    # noticed on Monday without a burst of archaeology landing in an inbox.
-    TASK_REMINDER_MAX_AGE_MINUTES: int = 180
+    # How late a reminder may be delivered, measured from the TASK's moment and
+    # not from the row's. A reminder is worth sending while it is still ahead
+    # of the thing it warns about, whatever offset the founder picked; past
+    # that it is a nag about something already missed, so it is dropped (marked
+    # sent, not retried forever). The grace covers the "at the time" offset,
+    # where the reminder moment IS the task's and every sweep runs after it.
+    TASK_REMINDER_GRACE_MINUTES: int = 10
 
     # --- Notification emails ---
     # Per founder, per run. A safety valve, not a policy: the dedup keys already
@@ -635,7 +644,7 @@ class Settings(BaseSettings):
     # run". Anything over the cap is not lost; it goes out on the next run.
     NOTIFICATION_EMAIL_MAX_PER_RUN: int = 10
     # A notification that sat unsent this long is not worth an email. Same
-    # reasoning as TASK_REMINDER_MAX_AGE_MINUTES: after an outage, "here is
+    # reasoning as TASK_REMINDER_GRACE_MINUTES: after an outage, "here is
     # everything you missed" is how a founder learns to filter us.
     NOTIFICATION_EMAIL_MAX_AGE_HOURS: int = 24
 

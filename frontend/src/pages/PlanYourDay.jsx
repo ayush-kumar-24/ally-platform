@@ -48,6 +48,46 @@ const titlesFrom = (text, activeTab) =>
     ? text.split(',').map(s => s.trim()).filter(Boolean)
     : [text.trim()].filter(Boolean);
 
+/** How far ahead of a task the founder can ask to be reminded.
+ *
+ *  A fixed list rather than a free number box: these are the offsets people
+ *  actually pick, every one of them is a valid value server-side, and a
+ *  dropdown cannot produce "-5" or "9999" the way a text field can.
+ *
+ *  0 is a real option, not "off" -- it means nudge me at the moment it is due.
+ *  There is no "no reminder" entry because a task with no date never gets one
+ *  anyway, and a dated task the founder chose a time for is precisely the
+ *  thing they want to be told about.
+ */
+const REMINDER_OPTIONS = [
+  { minutes: 0, label: 'At the time', short: 'at the time' },
+  { minutes: 5, label: '5 minutes before', short: '5m before' },
+  { minutes: 10, label: '10 minutes before', short: '10m before' },
+  { minutes: 15, label: '15 minutes before', short: '15m before' },
+  { minutes: 30, label: '30 minutes before', short: '30m before' },
+  { minutes: 60, label: '1 hour before', short: '1h before' },
+  { minutes: 120, label: '2 hours before', short: '2h before' },
+  { minutes: 1440, label: '1 day before', short: '1d before' },
+];
+
+/** What the server falls back to when a task carries no choice of its own --
+ *  CALENDAR_REMINDER_MINUTES_BEFORE / TASK_REMINDER_MINUTES_BEFORE, both 30.
+ *  Mirrored here so a task created before the picker existed shows the offset
+ *  it will actually be reminded at, rather than a blank. */
+const DEFAULT_REMINDER_MINUTES = 30;
+
+/** The task's own choice, or the platform default. `?? ` and not `||`: 0 is a
+ *  choice, and treating it as missing would silently turn "at the time" into
+ *  "thirty minutes before". */
+const reminderMinutesOf = (task) => task.reminder_minutes_before ?? DEFAULT_REMINDER_MINUTES;
+
+/** "15m before" for the task row. Falls back to plain minutes for a value the
+ *  picker cannot produce -- one set through the API directly, say. */
+function reminderShort(minutes) {
+  const opt = REMINDER_OPTIONS.find(o => o.minutes === minutes);
+  return opt ? opt.short : `${minutes}m before`;
+}
+
 const PRIORITY_RANK = { high: 0, medium: 1, low: 2 };
 const sortByPriority = (tasks) =>
   [...tasks].sort((a, b) => (PRIORITY_RANK[a.priority] ?? 1) - (PRIORITY_RANK[b.priority] ?? 1));
@@ -142,12 +182,37 @@ function TaskMenu({ onEdit, onDelete }) {
   );
 }
 
-/** Replaces a task row in place while editing -- title + priority, the same
- * two fields the manual-add form takes, so editing isn't a different,
- * smaller feature than creating. */
+/** The reminder-offset dropdown. One component so the add form and the edit
+ *  form cannot drift apart on which offsets exist or what they are called. */
+function ReminderSelect({ id, value, onChange, disabled, ariaLabel = 'Reminder' }) {
+  return (
+    <select
+      id={id}
+      aria-label={ariaLabel}
+      className="pl-reminder-select"
+      style={{ height: '34px', padding: '0 8px', borderRadius: '8px',
+               border: '1px solid var(--bd, #e7e0d6)', fontFamily: 'inherit',
+               fontSize: '12.5px', background: '#fff', color: 'inherit' }}
+      value={value}
+      disabled={disabled}
+      onChange={(e) => onChange(Number(e.target.value))}
+    >
+      {REMINDER_OPTIONS.map(o => (
+        <option key={o.minutes} value={o.minutes}>{o.label}</option>
+      ))}
+    </select>
+  );
+}
+
+/** Replaces a task row in place while editing -- title, priority and how far
+ * ahead to be reminded, the same three fields the manual-add form takes, so
+ * editing isn't a different, smaller feature than creating. */
 function TaskEditForm({ task, onSave, onCancel, saving }) {
   const [title, setTitle] = useState(task.title);
   const [priority, setPriority] = useState(task.priority);
+  // Seeded from what the task will actually be reminded at, so opening the
+  // editor and saving without touching this cannot quietly change it.
+  const [reminderMinutes, setReminderMinutes] = useState(reminderMinutesOf(task));
   const canSave = title.trim().length > 0;
 
   return (
@@ -161,7 +226,7 @@ function TaskEditForm({ task, onSave, onCancel, saving }) {
         value={title}
         disabled={saving}
         onChange={(e) => setTitle(e.target.value)}
-        onKeyDown={(e) => e.key === 'Enter' && canSave && onSave({ title: title.trim(), priority })}
+        onKeyDown={(e) => e.key === 'Enter' && canSave && onSave({ title: title.trim(), priority, reminderMinutes })}
         autoFocus
       />
       <div role="radiogroup" aria-label="Priority" className="pl-priority-picker">
@@ -179,12 +244,24 @@ function TaskEditForm({ task, onSave, onCancel, saving }) {
           </button>
         ))}
       </div>
+      {/* Only meaningful on a dated task -- there is nothing to count back
+          from otherwise, and offering the choice would imply a reminder that
+          is never going to arrive. */}
+      {task.due_date && (
+        <ReminderSelect
+          id={`pl-edit-reminder-${task.task_id}`}
+          value={reminderMinutes}
+          onChange={setReminderMinutes}
+          disabled={saving}
+          ariaLabel="Remind me"
+        />
+      )}
       <button
         type="button"
         className="pl-plan-btn"
         style={{ height: '36px', padding: '0 14px' }}
         disabled={saving || !canSave}
-        onClick={() => onSave({ title: title.trim(), priority })}
+        onClick={() => onSave({ title: title.trim(), priority, reminderMinutes })}
       >
         {saving && <span className="pl-spinner" aria-hidden="true" />}
         {saving ? 'Saving…' : 'Save'}
@@ -215,6 +292,12 @@ function PlanYourDayInner() {
      remove. Defaults to today so the page opens on the founder's actual day. */
   const [selectedDate, setSelectedDate] = useState(todayKey);
   const [manualTime, setManualTime] = useState('');
+  /* How far ahead of the task the founder wants the nudge. Manual tab only,
+     for the same reason as the priority picker: "Plan with Ally" is a
+     brain-dump of several things at once, and one reminder offset across all
+     of them would be a guess. Defaults to 30 -- what the label used to state
+     as a fact, now the starting point of a choice. */
+  const [manualReminder, setManualReminder] = useState(DEFAULT_REMINDER_MINUTES);
   const [calendarConnected, setCalendarConnected] = useState(false);
   /* Escape hatch from the day filter. Reset whenever the founder picks a
      different day -- "show everything" is a momentary override, and leaving
@@ -236,10 +319,10 @@ function PlanYourDayInner() {
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  const handleSaveEdit = async (task, { title, priority }) => {
+  const handleSaveEdit = async (task, { title, priority, reminderMinutes }) => {
     setSavingEdit(true);
     try {
-      await updateTask(task.task_id, { title, priority });
+      await updateTask(task.task_id, { title, priority, reminderMinutes });
       setEditingTaskId(null);
       await refresh();
     } catch (err) {
@@ -391,8 +474,11 @@ function PlanYourDayInner() {
       // phrases all belongs to the same day -- that is what made it a dump.
       const dueDate = selectedDate || null;
       const dueTime = activeTab === 'manual' && manualTime ? `${manualTime}:00` : null;
+      // Same manual-tab-only rule as the priority above. An Ally brain-dump
+      // sends undefined, which leaves the server on its own default.
+      const reminderMinutes = activeTab === 'manual' ? manualReminder : undefined;
       for (const title of titles) {
-        await addTask(title, { priority, dueDate, dueTime });
+        await addTask(title, { priority, dueDate, dueTime, reminderMinutes });
       }
       setManualTime('');
       await refresh();
@@ -637,13 +723,15 @@ function PlanYourDayInner() {
                 ))}
               </div>
 
-              {/* Optional time of day. Without one the task still syncs -- the
-                  server places it at a default hour -- but a real time is what
-                  makes the "30 minutes before" reminder land when the founder
-                  actually needs it. Only shown on the manual tab: a
-                  comma-separated brain-dump has no single time. */}
+              {/* Optional time of day, and how far ahead of it to be nudged.
+                  Without a time the task still syncs -- the server places it at
+                  a default hour, 9am -- but a real time is what makes the
+                  chosen offset land when the founder actually needs it. Only
+                  shown on the manual tab: a comma-separated brain-dump has no
+                  single time, so it has no single reminder either. */}
               <div className="pl-time-row" style={{ display: 'flex', alignItems: 'center',
-                                                    gap: '8px', marginBottom: '10px' }}>
+                                                    gap: '8px', marginBottom: '4px',
+                                                    flexWrap: 'wrap' }}>
                 <label htmlFor="pl-manual-time"
                        style={{ fontSize: '12px', color: 'var(--muted-2, #6c7a70)' }}>
                   Time (optional)
@@ -659,11 +747,44 @@ function PlanYourDayInner() {
                   disabled={submitting}
                   onChange={(e) => setManualTime(e.target.value)}
                 />
-                {calendarConnected && (
-                  <span style={{ fontSize: '11.5px', color: 'var(--muted-2, #6c7a70)' }}>
-                    Reminder 30 min before
-                  </span>
-                )}
+                {/* Was the words "Reminder 30 min before" -- a statement about
+                    a number the founder had no way to change, shown only to
+                    founders with a calendar connected. It is a control now,
+                    and it is always shown: the offset is stored on the task
+                    either way, and a founder who connects their calendar later
+                    should not have to go back and re-set it. */}
+                <label htmlFor="pl-manual-reminder"
+                       style={{ fontSize: '12px', color: 'var(--muted-2, #6c7a70)' }}>
+                  Remind me
+                </label>
+                <ReminderSelect
+                  id="pl-manual-reminder"
+                  value={manualReminder}
+                  onChange={setManualReminder}
+                  disabled={submitting}
+                  ariaLabel="Remind me"
+                />
+              </div>
+
+              {/* Says what the offset is counted back FROM, which is the one
+                  thing a founder cannot see from the controls themselves -- a
+                  task with no time is placed at 9am, so "30 minutes before"
+                  means 8:30 and not half an hour from now.
+
+                  And says plainly where the nudge arrives. Right now the popup
+                  IS the reminder: without a connected calendar the choice is
+                  stored on the task and nothing pops up, so telling a founder
+                  they will be reminded would be a promise this does not yet
+                  keep. */}
+              <div style={{ fontSize: '11.5px', color: 'var(--muted-2, #6c7a70)',
+                            marginBottom: '10px' }}>
+                {manualReminder === 0
+                  ? `At ${manualTime || '9:00'}, when it's due.`
+                  : `${reminderShort(manualReminder)} ${manualTime || '9:00'}${
+                      manualTime ? '' : ' — the default hour for a task with no time'}.`}
+                {calendarConnected
+                  ? ' Pops up on your calendar.'
+                  : ' Connect your calendar to get the reminder.'}
               </div>
 
               <div style={{ display: 'flex', gap: '10px' }}>
@@ -796,6 +917,7 @@ function PlanYourDayInner() {
                                 <polyline points="12 6 12 12 16 14" />
                               </svg>
                               due {task.due_date}{task.due_time ? ` · ${task.due_time.slice(0, 5)}` : ''}
+                              {` · remind ${reminderShort(reminderMinutesOf(task))}`}
                             </span>
                           )}
                           {/* Only ever renders for 'synced' or 'failed'. A

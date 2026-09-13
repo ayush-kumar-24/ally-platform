@@ -9,42 +9,56 @@ feature. This module is the consumer that was never written, plus the scheduler
 that puts rows in the table in the first place (until now, only a founder
 calling the endpoint by hand could create one, and no client ever did).
 
-WHAT THE EMAIL IS, AS OF 2026-09-11. It is a CONFIRMATION sent the moment a
-task is given a date, not a nudge thirty minutes before it. The thirty-minute
-warning is covered twice over already -- the Google Calendar popup and the
-in-app bell -- and a third copy in the inbox at the same minute was noise.
+TWO EMAILS PER DATED TASK, AS OF 2026-09-12, AND THEY DO DIFFERENT JOBS.
 
-It also has to work, which the old shape did not. The T-30 email depended on a
-sweep that GitHub Actions was supposed to run every ten minutes and actually
-ran every two to five hours (measured 2026-09-11: 21:09, 23:10, 01:10, 06:05,
-11:14 UTC). Anything more than TASK_REMINDER_MAX_AGE_MINUTES past its moment is
-dropped rather than sent late, so most reminders were silently discarded while
-the job reported a green run. Sending at save time takes the scheduler out of
-the path entirely: the email goes out in the same request that created the
-task, in a background task so a slow SMTP handshake cannot slow the save.
+  The CONFIRMATION goes out the moment a task is given a date: "this is on
+  your plan for Thursday at 3pm, and I will remind you fifteen minutes
+  before." It is sent from the request that saved the task, so no scheduler
+  stands between a founder and the acknowledgement that their plan was heard.
 
-The old T-30 path is left standing but no longer fed -- `sync_for_task` now
-cancels rather than schedules, and `send_due_reminders` below still works if
-anyone ever wants it back.
+  The REMINDER goes out at the founder's own offset -- five minutes before,
+  thirty, a day, whatever they picked in Plan Your Day. This is the one that
+  needs a scheduler, and it is the one this module's worker half delivers.
+
+WHY THE REMINDER WAS OFF BETWEEN 2026-09-11 AND 2026-09-12, and what had to
+change before turning it back on. It was retired for two stated reasons. One
+was wrong: the claim that a T-30 in-app bell already covered it. There is no
+in-app bell at T-minus-anything -- `app/notifications/rules.py` only has
+day-level digests -- so for a founder with no Google Calendar the email was
+the only reminder they had, and retiring it left them with none.
+
+The other reason was entirely right and had to be fixed rather than argued
+with. Delivery depended on a sweep GitHub Actions was configured to run every
+ten minutes and in fact ran every two to five hours (measured 2026-09-11:
+21:09, 23:10, 01:10, 06:05, 11:14 UTC; still true on 2026-09-12: 01:12, 05:53,
+10:11, 13:37). Most reminders were dropped as stale while the job reported a
+green run. Turning scheduling back on without fixing that would have rebuilt
+the same silence. The sweep is therefore driven by EventBridge Scheduler at a
+one-to-two minute cadence -- see docs/TASK-REMINDER-SCHEDULE.md -- and the
+GitHub Actions sweep is demoted to a backstop. The cadence matters more than
+it used to: the smallest offset a founder can pick is five minutes, so a
+fifteen-minute sweep would deliver it after the task was already due.
 
 TWO HALVES, DELIBERATELY SEPARATE:
 
   `notify_task_scheduled` runs in the request, after a task is saved. It
                        decides whether this founder gets an email and returns
                        the work to do; it never sends inline.
-  `sync_for_task`      keeps the legacy T-30 row in step -- which now means
-                       cancelling it. It NEVER sends anything, so a mail
-                       outage cannot fail a save.
-  `send_due_reminders` runs in a scheduled job. It sends, and marks sent.
-                       Nothing feeds it any more.
+  `sync_for_task`      keeps the task's one reminder row in step with its date,
+                       its time and its offset. It NEVER sends anything, so a
+                       mail outage cannot fail a save.
+  `send_due_reminders` runs in the scheduled sweep. It sends, and marks sent.
 
 WHY THE TIMING MIRRORS THE CALENDAR. A founder with Google Calendar connected
-already gets a popup at CALENDAR_REMINDER_MINUTES_BEFORE. If this email fired
-at a different offset, that founder would be nudged twice about one task at two
-unrelated moments. TASK_REMINDER_MINUTES_BEFORE defaults to the same 30, and a
-task with a date but no time uses CALENDAR_DEFAULT_TASK_HOUR -- the same 9am the
-calendar path picks, and for the same reason: an offset counted back from
-midnight lands at 23:30 the night before.
+already gets a popup at their chosen offset. If this email fired at a different
+one, that founder would be nudged twice about one task at two unrelated
+moments. So both read the SAME number: the task's own
+`reminder_minutes_before`, chosen in Plan Your Day, falling back to
+TASK_REMINDER_MINUTES_BEFORE / CALENDAR_REMINDER_MINUTES_BEFORE (both 30) for a
+task created before the picker existed. A task with a date but no time uses
+CALENDAR_DEFAULT_TASK_HOUR -- the same 9am the calendar path picks, and for the
+same reason: an offset counted back from midnight lands at 23:30 the night
+before.
 """
 
 from __future__ import annotations
@@ -64,6 +78,7 @@ from app.planning.models import (
     ReminderChannel,
     Task,
 )
+from app.notifications.writer import notify
 from app.planning.service import PlanningService
 from app.plans.catalog import Feature
 from app.services.email import send_email
@@ -87,32 +102,56 @@ def _zone(timezone_name: str) -> ZoneInfo:
         return ZoneInfo("UTC")
 
 
+def lead_minutes_for(task: Task | None) -> int:
+    """How far ahead of a task its reminder goes, in minutes.
+
+    The founder's own choice when they made one, and the platform default when
+    they did not -- which is every task created before the picker existed, so
+    this is what keeps their behaviour unchanged. 0 is a choice, not a missing
+    value, which is why this tests for None rather than falsiness.
+    """
+    chosen = getattr(task, "reminder_minutes_before", None)
+    return settings.TASK_REMINDER_MINUTES_BEFORE if chosen is None else chosen
+
+
 def reminder_time_for(due_date: date | None, due_time: time | None,
-                      timezone_name: str = "UTC") -> datetime | None:
+                      timezone_name: str = "UTC",
+                      lead_minutes: int | None = None) -> datetime | None:
     """When to email about a task due at this date/time, as a UTC instant.
 
     None when the task has no due date -- there is nothing to count backwards
     from, and a task with no date is a list item, not an appointment.
+
+    `lead_minutes` is the founder's per-task choice; None falls back to
+    TASK_REMINDER_MINUTES_BEFORE so a caller that has no task in hand still
+    gets the old behaviour.
     """
     if due_date is None:
         return None
+    if lead_minutes is None:
+        lead_minutes = settings.TASK_REMINDER_MINUTES_BEFORE
     local = datetime.combine(
         due_date, due_time or time(hour=settings.CALENDAR_DEFAULT_TASK_HOUR),
         tzinfo=_zone(timezone_name))
     due_utc = local.astimezone(timezone.utc)
-    return due_utc - timedelta(minutes=settings.TASK_REMINDER_MINUTES_BEFORE)
+    return due_utc - timedelta(minutes=lead_minutes)
 
 
 def sync_for_task(service: PlanningService, task: Task, *,
                   timezone_name: str = "UTC") -> Reminder | None:
-    """Close out the task's legacy T-30 email reminder.
+    """Put the task's reminder row where the founder asked for it.
 
-    Passing remind_at=None cancels any AUTO row this task still has and writes
-    nothing new, which is what retires the T-30 email without a migration: rows
-    scheduled before this change are cancelled the next time their task is
-    touched, and no new ones are created. `timezone_name` is kept in the
-    signature so the call sites read the same as the calendar hook beside them
-    and so restoring the old behaviour is a one-line change here.
+    One AUTO row per task, at `due - reminder_minutes_before`. Idempotent and
+    safe to call after every save, which is what keeps the row honest: moving
+    the date, moving the time, or changing the offset in the picker all land
+    here and `sync_task_reminder` rewrites the row to match. Ticking the task
+    off, or clearing its date, cancels it instead.
+
+    NOTHING IS SCHEDULED FOR A MOMENT THAT HAS ALREADY PASSED. Adding a 2pm
+    task at 1:50pm with a thirty-minute offset has no reminder to give: 1:30pm
+    is gone. `sync_task_reminder` cancels rather than raising in that case, and
+    the founder still gets the confirmation email that goes out on save, so
+    they are not left with silence.
 
     Call after every task save. Never raises: a reminder that fails to sync
     must not cost the founder the task they just typed, which is the same rule
@@ -121,7 +160,8 @@ def sync_for_task(service: PlanningService, task: Task, *,
     try:
         return service.sync_task_reminder(
             task.founder_id, task,
-            remind_at=None,
+            remind_at=reminder_time_for(task.due_date, task.due_time,
+                                        timezone_name, lead_minutes_for(task)),
             channel=ReminderChannel.EMAIL,
         )
     except Exception as exc:
@@ -191,8 +231,32 @@ def _due_phrase(due_date: date, due_time: time | None, tz: str) -> str:
     return local.strftime("%A, %d %B at %I:%M %p")
 
 
-def send_task_scheduled(to: str, name: str, title: str, when: str) -> bool:
+def lead_phrase(minutes: int) -> str:
+    """"15 minutes before" / "2 hours before" / "when it is due".
+
+    Whole hours and whole days are said as hours and days: "1440 minutes
+    before" is technically true and reads like a machine wrote it.
+    """
+    if minutes <= 0:
+        return "when it is due"
+    if minutes % 1440 == 0:
+        days = minutes // 1440
+        return "1 day before" if days == 1 else f"{days} days before"
+    if minutes % 60 == 0:
+        hours = minutes // 60
+        return "1 hour before" if hours == 1 else f"{hours} hours before"
+    return f"{minutes} minutes before"
+
+
+def send_task_scheduled(to: str, name: str, title: str, when: str,
+                        lead: str = "30 minutes before") -> bool:
     """Confirm one newly scheduled task. Returns False if it did not go out.
+
+    The promise it makes has to be one the system keeps. It used to say the
+    reminder would arrive "in the app and on your calendar" -- there is no
+    in-app reminder at T-minus-anything, and a founder with no Google Calendar
+    connected had neither. It now promises the email, which is the thing this
+    module actually sends, at the offset the founder actually chose.
 
     No note field, unlike send_task_reminder: a note belongs to a Reminder, not
     to a Task, so there is never one to show here.
@@ -202,7 +266,7 @@ def send_task_scheduled(to: str, name: str, title: str, when: str) -> bool:
         f"Hi {name},\n\n"
         f"\"{title}\" is on your plan for {when}.\n\n"
         f"Open Plan Your Day: {_PLAN_URL}\n\n"
-        "You will get a reminder thirty minutes before, in the app and on your calendar.\n\n"
+        f"I will email you again {lead}.\n\n"
         "The GoXL Team\n\n"
         "--\n"
         "To stop these, turn off task emails in Profile > Notifications."
@@ -213,7 +277,7 @@ def send_task_scheduled(to: str, name: str, title: str, when: str) -> bool:
         f"<p>Hi {escape(name)},</p>"
         f"<p><strong>{escape(title)}</strong> is on your plan for {escape(when)}.</p>"
         f'<p><a href="{_PLAN_URL}">Open Plan Your Day</a></p>'
-        f"<p>You will get a reminder thirty minutes before, in the app and on your calendar.</p>"
+        f"<p>I will email you again {escape(lead)}.</p>"
         f"<p>The GoXL Team</p>"
         f'<p style="color:#6b7280;font-size:12px">To stop these, turn off task '
         f"emails in Profile &gt; Notifications.</p>"
@@ -263,13 +327,14 @@ def notify_task_scheduled(db: Session, founder: Founder, task: Task, *,
     name = founder.full_name or "there"
     title = task.title
     when = _due_phrase(task.due_date, task.due_time, timezone_name)
+    lead = lead_phrase(lead_minutes_for(task))
 
     def _send() -> None:
         # Captured as plain strings on purpose: this runs after the response,
         # by which point the request's database session is closed and neither
         # `founder` nor `task` can be safely touched.
         try:
-            if not send_task_scheduled(to, name, title, when):
+            if not send_task_scheduled(to, name, title, when, lead):
                 logger.warning("task email not delivered",
                                extra={"founder_id": founder.founder_id,
                                       "path": f"task={title!r}"})
@@ -278,6 +343,38 @@ def notify_task_scheduled(db: Session, founder: Founder, task: Task, *,
                            extra={"founder_id": founder.founder_id}, exc_info=exc)
 
     return _send
+
+
+#: The bell's name for this reminder. Registered in notification_types, so it
+#: has the same one-UPDATE kill switch as every other type.
+IN_APP_TYPE = "task_reminder"
+
+
+def _remind_in_app(db: Session, founder: Founder, task: Task,
+                   reminder: Reminder, when: str):
+    """The same nudge, in the bell, for a founder whose plan has no email.
+
+    Keyed on the reminder row rather than the task: rescheduling a task
+    cancels its row and writes a new one, and the founder should be told
+    about the new time. Two sweeps racing the same row still produce one
+    notification, which is what the dedup key is for.
+
+    Never raises -- notify() swallows its own failures, and a bell row that
+    could not be written must not strand the reminder at "scheduled" where
+    it would be retried on every sweep for the rest of time. It returns the
+    row it wrote, or None, and the caller counts on that rather than on
+    having called this at all.
+    """
+    return notify(
+        db,
+        founder_id=founder.founder_id,
+        founder=founder,
+        type=IN_APP_TYPE,
+        title=f"{task.title}",
+        body=f"Due {when}." + (f" {reminder.note}" if reminder.note else ""),
+        action_url="/app/plan",
+        dedup_key=f"task_reminder:{reminder.reminder_id}",
+    )
 
 
 # --- the worker -------------------------------------------------------------
@@ -304,13 +401,23 @@ def send_due_reminders(db: Session, *, now: datetime | None = None) -> dict:
     nudge is late by however long the gap between runs is. Fifteen minutes of
     lateness on a 30-minute warning is tolerable; an hour is not.
 
-    STALE ROWS ARE DROPPED, NOT SENT. If the job stops for a day, every reminder
-    that came due meanwhile is still sitting at "scheduled". Sending them on
-    recovery means a founder opens their inbox to twenty emails about tasks that
-    were due yesterday -- so anything older than TASK_REMINDER_MAX_AGE_MINUTES is
-    marked sent without an email. It is counted separately (`stale`) precisely
-    so that a scheduler's logs show the outage instead of hiding it in a
-    cheerful "sent: 0".
+    STALE ROWS ARE DROPPED, NOT SENT, AND STALENESS IS MEASURED FROM THE TASK,
+    NOT FROM THE ROW. A reminder is worth sending for exactly as long as it is
+    still ahead of the thing it is warning about. That is the only test that
+    behaves for every offset the founder can pick:
+
+      * a "5 minutes before" row delivered two hours late would arrive after
+        the task was due -- a nag about something already missed, which a
+        fixed age limit measured from the row would have happily sent;
+      * a "1 day before" row delayed four hours is still twenty hours ahead of
+        the task and perfectly useful -- and the same fixed limit would have
+        thrown it away.
+
+    So the test is `now <= due_at + TASK_REMINDER_GRACE_MINUTES`. The grace
+    exists for the "at the time" offset, where remind_at IS due_at and any
+    sweep at all runs after it. Dropped rows are counted separately (`stale`)
+    so a scheduler's logs show an outage instead of hiding it in a cheerful
+    "sent: 0".
 
     EVERY ROW IS MARKED, WHATEVER HAPPENS. Skipped for plan, skipped for
     preference, task deleted, stale -- all of them move off "scheduled". A row
@@ -322,18 +429,21 @@ def send_due_reminders(db: Session, *, now: datetime | None = None) -> dict:
     from app.core.container import container
 
     now = now or datetime.now(timezone.utc)
-    counts = {"sent": 0, "skipped_pref": 0, "skipped_plan": 0,
+    # `sent` is email; `in_app` is the same reminder delivered to the bell for a
+    # founder whose plan does not include email. Both are a reminder that
+    # reached someone -- neither is a skip. `skipped_pref` is the founder
+    # having muted the channel they would have been reached on.
+    counts = {"sent": 0, "in_app": 0, "skipped_pref": 0,
               "stale": 0, "orphaned": 0, "failed": 0}
 
     service: PlanningService = container.planning_service(db)
     entitlements = container.entitlement_service(db)
-    cutoff = now - timedelta(minutes=settings.TASK_REMINDER_MAX_AGE_MINUTES)
 
     for reminder in service.due_reminders(before=now):
         if reminder.channel != ReminderChannel.EMAIL:
             continue                                   # in_app rows are the bell's business
         try:
-            _deliver_one(db, service, entitlements, reminder, counts, cutoff)
+            _deliver_one(db, service, entitlements, reminder, counts, now)
         except Exception as exc:
             # One founder's bad row must not stop the other founders' reminders.
             counts["failed"] += 1
@@ -346,7 +456,7 @@ def send_due_reminders(db: Session, *, now: datetime | None = None) -> dict:
 
 
 def _deliver_one(db: Session, service: PlanningService, entitlements,
-                 reminder: Reminder, counts: dict, cutoff: datetime) -> None:
+                 reminder: Reminder, counts: dict, now: datetime) -> None:
     task = service.repository.get_task(reminder.task_id)
     founder = db.get(Founder, reminder.founder_id)
 
@@ -365,28 +475,49 @@ def _deliver_one(db: Session, service: PlanningService, entitlements,
         service.mark_reminder_sent(reminder.reminder_id)
         return
 
-    if reminder.remind_at < cutoff:
+    # Past the moment it was warning about (see send_due_reminders). Measured
+    # from the task, so the offset the founder chose decides how long the row
+    # stays worth sending.
+    due_at = reminder.remind_at + timedelta(minutes=lead_minutes_for(task))
+    if now > due_at + timedelta(minutes=settings.TASK_REMINDER_GRACE_MINUTES):
         counts["stale"] += 1
         service.mark_reminder_sent(reminder.reminder_id)
         return
 
-    # Sold as Pro on the pricing page (Feature.EMAIL_NOTIFICATIONS lives in the
-    # advisor bundle), so it is checked here rather than at scheduling time: a
-    # founder who upgrades should start getting the reminders already sitting in
-    # the table, and one who downgrades should stop.
-    if not entitlements.has_feature(founder.plan_type, Feature.EMAIL_NOTIFICATIONS):
-        counts["skipped_plan"] += 1
+    # EVERY FOUNDER IS REMINDED. ONLY THE CHANNEL IS SOLD.
+    #
+    # Email is the Pro delivery (Feature.EMAIL_NOTIFICATIONS lives in the
+    # advisor bundle and is priced on the Billing page). Everyone else gets the
+    # same reminder in the bell, at the same moment, for the same task -- a
+    # founder on Starter has still planned their day and still wants telling.
+    #
+    # Checked HERE rather than at scheduling time, which is why the row's
+    # channel says EMAIL whatever the founder's plan: a founder who upgrades
+    # between planning a task and its reminder should get the email, and one
+    # who downgrades in that window should get the bell. The row records the
+    # intent; this decides the delivery from the plan as it stands right now.
+    #
+    # `email_task_reminders` off is the same fork, not silence: the founder
+    # turned off the EMAIL, and the bell has its own switch (`in_app_all`,
+    # honoured inside notify()) for turning off the rest.
+    tz = getattr(founder, "timezone", None) or settings.DISCOVERY_TIMEZONE
+    when = _when_phrase(reminder.remind_at, due_at, tz)
+
+    by_email = (entitlements.has_feature(founder.plan_type, Feature.EMAIL_NOTIFICATIONS)
+                and _wants_task_reminders(founder))
+    if not by_email:
+        # Counted on the ROW, not on the attempt. notify() returns None when
+        # the founder muted the bell, when this reminder is already in it, and
+        # when the write failed and was logged -- and a counter that called all
+        # of those a delivery would report a healthy sweep while founders were
+        # told nothing, which is the exact failure this feature exists to end.
+        if _remind_in_app(db, founder, task, reminder, when) is not None:
+            counts["in_app"] += 1
+        else:
+            counts["skipped_pref"] += 1
         service.mark_reminder_sent(reminder.reminder_id)
         return
 
-    if not _wants_task_reminders(founder):
-        counts["skipped_pref"] += 1
-        service.mark_reminder_sent(reminder.reminder_id)
-        return
-
-    due_at = reminder.remind_at + timedelta(minutes=settings.TASK_REMINDER_MINUTES_BEFORE)
-    when = _when_phrase(reminder.remind_at, due_at,
-                        getattr(founder, "timezone", None) or settings.DISCOVERY_TIMEZONE)
     send_task_reminder(founder.email, founder.full_name or "there",
                        task.title, when, reminder.note)
     counts["sent"] += 1

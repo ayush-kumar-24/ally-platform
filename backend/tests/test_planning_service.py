@@ -241,6 +241,29 @@ def test_schedule_and_list_reminder():
     assert len(lst) == 1 and lst[0].reminder_id == r.reminder_id
 
 
+@pytest.mark.parametrize("bad", [-1, 10081, 1.5, True])
+def test_reminder_lead_is_bounded_and_whole(bad):
+    """The picker cannot produce these; the API can. A bad lead must fail at
+    the domain edge rather than reaching the calendar push as a popup a week
+    and a half early -- or, for a bool, as `minutes: True`."""
+    s = svc()
+    g = s.add_goal(1, s.create_plan(1, title="P").plan_id, title="G")
+    with pytest.raises(InvalidPlanningInputError):
+        s.add_task(1, g.goal_id, title="T", reminder_minutes_before=bad)
+
+
+def test_reminder_lead_survives_a_status_change():
+    """Ticking a task off and re-opening it must not reset how far ahead it
+    nudges -- the founder set that once and never touched it again."""
+    s = svc()
+    g = s.add_goal(1, s.create_plan(1, title="P").plan_id, title="G")
+    t = s.add_task(1, g.goal_id, title="T", due_date=date(2026, 8, 1),
+                   reminder_minutes_before=15)
+    assert t.reminder_minutes_before == 15
+    done = s.update_task(1, t.task_id, status=ProgressStatus.DONE)
+    assert done.reminder_minutes_before == 15
+
+
 def test_schedule_reminder_past_time_rejected():
     s = svc()
     t = _task_for(s)

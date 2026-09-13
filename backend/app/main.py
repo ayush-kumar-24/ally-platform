@@ -1,5 +1,9 @@
 from dotenv import load_dotenv
 
+# A leaf module: it imports nothing from this app, so naming the .env path
+# here cannot pull app.core.config in before the file has been loaded.
+from app.core.paths import ENV_FILE, stray_env_files
+
 # Must run before any other app import. pydantic-settings (app.core.config)
 # reads .env into its own private store and never touches the real process
 # environment -- nothing else in this codebase calls load_dotenv() either.
@@ -31,7 +35,11 @@ from dotenv import load_dotenv
 # authentication failed (401)". override=True
 # makes .env -- this project's actual source of truth -- win over whatever
 # is already sitting in the shell/machine environment.
-load_dotenv(override=True)
+#
+# ENV_FILE, not a bare ".env": the bare name resolves against the current
+# working directory, so starting from the repository root read a repo-root
+# .env and never opened backend/.env at all. See app/core/paths.py.
+load_dotenv(ENV_FILE, override=True)
 
 from pathlib import Path
 
@@ -169,6 +177,23 @@ if ":6543" not in (settings.DATABASE_URL or "") and _per_process * 2 > _SESSION_
                 "with EMAXCONNSESSION and endpoints will 500 intermittently. "
                 "Lower DB_POOL_SIZE/DB_POOL_MAX_OVERFLOW, or -- the real fix -- "
                 "point DATABASE_URL at the transaction-mode pooler on port 6543"
+            ),
+        },
+    )
+
+_stray_env = stray_env_files()
+if _stray_env:
+    logger.warning(
+        "env_files_ignored",
+        extra={
+            "loaded": str(ENV_FILE),
+            "ignored": _stray_env,
+            "impact": (
+                "these files sit next to .env and NOTHING reads them -- they "
+                "are not fallbacks and not profiles. Only .env is loaded. If "
+                "one of them holds the values you expect, copy it over .env; "
+                "otherwise delete it, because a stale alternate beside the "
+                "live file reads like configuration and is not"
             ),
         },
     )

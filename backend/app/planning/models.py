@@ -99,6 +99,13 @@ class Task:
     # task they believe reached their calendar and did not is worse than one
     # they know did not.
     calendar_sync_status: str = "skipped"
+    # How many minutes before the task the founder wants to be reminded. None
+    # means "whatever the platform default is" (CALENDAR_REMINDER_MINUTES_BEFORE
+    # / TASK_REMINDER_MINUTES_BEFORE, both 30) -- which is what every task
+    # created before this field existed gets, so the default is unchanged for
+    # anything already in the table. 0 is a real, distinct value: remind me at
+    # the time itself.
+    reminder_minutes_before: int | None = None
 
 
 @dataclass(frozen=True)

@@ -1,8 +1,8 @@
 /**
  * Journey — Coming soon.
  *
- * The hero matches the reference design (see PROGRESS.md / the mockup this
- * was built from). The timeline itself is deliberately NOT built: the
+ * The hero matches the reference design (the mockup this was built
+ * from). The timeline itself is deliberately NOT built: the
  * mockup's entries ("2018 · Started the first venture", "2022 · Crossed
  * ₹1Cr revenue"...) are sample copy for one fictional founder, and nothing
  * in this app derives a real founder's actual milestones yet. Shipping that

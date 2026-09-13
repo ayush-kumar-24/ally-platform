@@ -10,7 +10,15 @@
 #
 # The two mail sweeps are the delivery half of features that had none: task
 # reminders and bell notifications were both written to the database and never
-# sent to anybody. Ten minutes is inside the fifteen they are designed for.
+# sent to anybody.
+#
+# THIS IS A BACKSTOP FOR TASK REMINDERS, NOT THE SCHEDULE. A founder picks
+# their own reminder offset in Plan Your Day and the smallest is five minutes,
+# which this cannot serve: the cron below says ten minutes and the runs
+# actually land two to five hours apart (measured over 2026-09-10..12). The
+# real schedule is EventBridge Scheduler at one-minute cadence -- see
+# backend/docs/TASK-REMINDER-SCHEDULE.md. Running both is harmless: every row
+# the sweep examines moves off "scheduled" whether it was sent or skipped.
 #
 # GitHub's scheduled runs are best-effort and can be delayed under load, and
 # GitHub disables schedules after 60 days without repo activity. That is

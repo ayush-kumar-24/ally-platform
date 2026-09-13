@@ -19,6 +19,7 @@ from app.planning import (
     ReminderStatus,
     build_planning_service,
 )
+from app.core.config import settings
 from app.services import task_reminders
 
 T0 = datetime(2026, 7, 29, 12, 0, 0, tzinfo=timezone.utc)
@@ -79,6 +80,36 @@ def test_unknown_timezone_falls_back_to_utc_rather_than_failing():
     wrong hour is recoverable; a 500 on adding a task is not."""
     assert task_reminders.reminder_time_for(date(2026, 8, 1), time(9, 0), "Mars/Olympus") \
         == datetime(2026, 8, 1, 8, 30, tzinfo=timezone.utc)
+
+
+def test_the_lead_can_be_set_per_task():
+    """Same rule as the calendar popup, from the same number: the founder's
+    choice, not a platform constant."""
+    when = task_reminders.reminder_time_for(date(2026, 8, 1), time(15, 0), "UTC", 15)
+    assert when == datetime(2026, 8, 1, 14, 45, tzinfo=timezone.utc)
+    at_the_time = task_reminders.reminder_time_for(date(2026, 8, 1), time(15, 0), "UTC", 0)
+    assert at_the_time == datetime(2026, 8, 1, 15, 0, tzinfo=timezone.utc)
+
+
+def test_lead_minutes_for_falls_back_only_when_nothing_was_chosen():
+    """None is "never chose", 0 is a choice -- and they must not collapse."""
+    assert (task_reminders.lead_minutes_for(SimpleNamespace(reminder_minutes_before=None))
+            == settings.TASK_REMINDER_MINUTES_BEFORE)
+    assert task_reminders.lead_minutes_for(SimpleNamespace(reminder_minutes_before=0)) == 0
+    assert task_reminders.lead_minutes_for(SimpleNamespace(reminder_minutes_before=15)) == 15
+
+
+@pytest.mark.parametrize("minutes,phrase", [
+    (0, "when it is due"),
+    (5, "5 minutes before"),
+    (30, "30 minutes before"),
+    (60, "1 hour before"),
+    (120, "2 hours before"),
+    (1440, "1 day before"),
+])
+def test_lead_phrase_reads_like_a_person_wrote_it(minutes, phrase):
+    """"1440 minutes before" is true and reads like a machine."""
+    assert task_reminders.lead_phrase(minutes) == phrase
 
 
 # --- scheduling from a task -------------------------------------------------
@@ -216,10 +247,18 @@ def _founder(**kw):
 @pytest.fixture
 def worker(monkeypatch):
     """Runs send_due_reminders against an in-memory planning service, capturing
-    every email instead of sending one."""
+    every email instead of sending one -- and every bell row instead of
+    writing one, since the same reminder goes to the bell for a founder whose
+    plan has no email."""
     sent = []
     monkeypatch.setattr(task_reminders, "send_task_reminder",
                         lambda *a, **kw: sent.append(a) or True)
+    belled = []
+    # Returns a stand-in ROW, because that is what the worker counts on: a
+    # real notify() returns None when it wrote nothing, and the worker must
+    # not report a delivery in that case.
+    monkeypatch.setattr(task_reminders, "notify",
+                        lambda db, **kw: belled.append(kw) or SimpleNamespace(notification_id=len(belled)))
 
     def run(service, founder, *, allowed=True, now=None):
         from app.core import container as container_mod
@@ -230,7 +269,7 @@ def worker(monkeypatch):
         return task_reminders.send_due_reminders(
             FakeDB(founder), now=now or datetime(2026, 8, 1, 15, 0, tzinfo=timezone.utc))
 
-    return SimpleNamespace(run=run, sent=sent)
+    return SimpleNamespace(run=run, sent=sent, belled=belled)
 
 
 def _due_reminder(s, *, remind_at=datetime(2026, 8, 1, 14, 30, tzinfo=timezone.utc)):
@@ -265,20 +304,74 @@ def test_worker_leaves_a_reminder_whose_time_has_not_come(worker):
     assert s.list_reminders(1)[0].status == ReminderStatus.SCHEDULED
 
 
-def test_worker_skips_a_founder_without_the_paid_feature(worker):
+def test_a_founder_without_the_paid_feature_is_reminded_in_the_bell(worker):
+    """Every founder is reminded; only the channel is sold. Starter plans a
+    day too, and used to get nothing at all at the reminder moment."""
     s = svc()
     _due_reminder(s)
     counts = worker.run(s, _founder(), allowed=False)
-    assert counts["skipped_plan"] == 1 and worker.sent == []
+
+    assert counts["in_app"] == 1 and counts["sent"] == 0
+    assert worker.sent == [], "no email for a plan that does not include it"
+    assert len(worker.belled) == 1
+    bell = worker.belled[0]
+    assert bell["type"] == "task_reminder"
+    assert bell["action_url"] == "/app/plan"
+    assert "Call Rajesh about pricing" in bell["title"]
+    assert "in 30 minutes" in bell["body"]
     # Still closed out: a row left scheduled is re-examined forever.
     assert s.list_reminders(1)[0].status == ReminderStatus.SENT
 
 
-def test_worker_respects_the_opt_out(worker):
+def test_turning_off_the_email_moves_the_reminder_to_the_bell(worker):
+    """`email_task_reminders` off means no EMAIL, not no reminder -- the bell
+    has its own switch for that (in_app_all, honoured inside notify)."""
     s = svc()
     _due_reminder(s)
     counts = worker.run(s, _founder(prefs={"email_task_reminders": False}))
-    assert counts["skipped_pref"] == 1 and worker.sent == []
+    assert counts["in_app"] == 1 and worker.sent == []
+    assert len(worker.belled) == 1
+
+
+def test_a_pro_founder_gets_the_email_and_no_bell(worker):
+    """The two channels are alternatives, not a pair -- a Pro founder being
+    told twice about one task is how a useful reminder becomes noise."""
+    s = svc()
+    _due_reminder(s)
+    counts = worker.run(s, _founder())
+    assert counts["sent"] == 1 and counts["in_app"] == 0
+    assert worker.belled == []
+
+
+def test_a_bell_row_that_was_not_written_is_not_counted_as_delivered(worker, monkeypatch):
+    """notify() returns None when the founder muted the bell, when the row is
+    already there, and when the write failed. Counting those as `in_app` would
+    report a healthy sweep while the founder was told nothing -- which is the
+    precise failure this whole feature exists to end."""
+    monkeypatch.setattr(task_reminders, "notify", lambda db, **kw: None)
+    s = svc()
+    _due_reminder(s)
+    counts = worker.run(s, _founder(), allowed=False)
+    assert counts["in_app"] == 0
+    assert counts["skipped_pref"] == 1
+    # Still closed out -- an unwritable row must not be retried forever.
+    assert s.list_reminders(1)[0].status == ReminderStatus.SENT
+
+
+def test_the_bell_reminder_is_keyed_per_reminder_so_rescheduling_re_notifies(worker):
+    """Keyed on the row, not the task: moving a task cancels its reminder and
+    writes a new one, and the founder needs telling about the new time."""
+    s = svc()
+    t = _due_reminder(s)
+    worker.run(s, _founder(), allowed=False)
+    first = worker.belled[0]["dedup_key"]
+    assert first.startswith("task_reminder:")
+
+    moved = s.update_task(1, t.task_id, due_date=date(2026, 8, 2))
+    task_reminders.sync_for_task(s, moved, timezone_name="UTC")
+    worker.run(s, _founder(), allowed=False,
+               now=datetime(2026, 8, 2, 15, 0, tzinfo=timezone.utc))
+    assert worker.belled[1]["dedup_key"] != first
 
 
 def test_opting_out_of_call_reminders_does_not_silence_task_reminders(worker):
@@ -296,6 +389,43 @@ def test_worker_drops_a_stale_reminder_without_emailing(worker):
     counts = worker.run(s, _founder())
     assert counts["stale"] == 1 and worker.sent == []
     assert s.list_reminders(1)[0].status == ReminderStatus.SENT
+
+
+def test_a_late_day_before_reminder_still_sends_because_it_beats_the_task(worker):
+    """The old rule measured staleness from the ROW: a "1 day before" reminder
+    delayed four hours was thrown away, even though it was still twenty hours
+    ahead of the task and exactly as useful."""
+    s = svc()
+    t = _task(s, due_date=date(2026, 8, 1), due_time=time(15, 0),
+              reminder_minutes_before=1440)
+    task_reminders.sync_for_task(s, t, timezone_name="UTC")   # remind_at = Jul 31 15:00
+    counts = worker.run(s, _founder(),
+                        now=datetime(2026, 7, 31, 19, 0, tzinfo=timezone.utc))
+    assert counts["sent"] == 1 and counts["stale"] == 0
+
+
+def test_a_late_five_minute_reminder_is_dropped_because_the_task_has_passed(worker):
+    """The mirror image: the old rule would have sent this half an hour AFTER
+    the task was due, which is a nag about something already missed."""
+    s = svc()
+    t = _task(s, due_date=date(2026, 8, 1), due_time=time(15, 0),
+              reminder_minutes_before=5)
+    task_reminders.sync_for_task(s, t, timezone_name="UTC")   # remind_at = 14:55
+    counts = worker.run(s, _founder(),
+                        now=datetime(2026, 8, 1, 15, 30, tzinfo=timezone.utc))
+    assert counts["stale"] == 1 and worker.sent == []
+
+
+def test_an_at_the_time_reminder_survives_the_sweep_running_just_after(worker):
+    """remind_at IS the task's moment for a 0 offset, so every sweep runs after
+    it. Without the grace window this offset could never be delivered."""
+    s = svc()
+    t = _task(s, due_date=date(2026, 8, 1), due_time=time(15, 0),
+              reminder_minutes_before=0)
+    task_reminders.sync_for_task(s, t, timezone_name="UTC")
+    counts = worker.run(s, _founder(),
+                        now=datetime(2026, 8, 1, 15, 1, tzinfo=timezone.utc))
+    assert counts["sent"] == 1
 
 
 def test_worker_closes_out_a_reminder_whose_task_is_gone(worker):
@@ -374,11 +504,24 @@ def test_scheduling_a_dated_task_emails_a_pro_founder(confirm):
     job = confirm.run(_founder(), t)
     assert job is not None, "a Pro founder with a dated task should be emailed"
     job()
-    (to, name, title, when), = confirm.sent
+    (to, name, title, when, lead), = confirm.sent
     assert to == "founder@example.com"
     assert title == "Call Rajesh about pricing"
     # 15:00 as the founder set it, in their zone -- not shifted into UTC.
     assert "03:00 PM" in when
+    # No choice was made on this task, so the email states the platform default.
+    assert lead == "30 minutes before"
+
+
+def test_the_confirmation_states_the_offset_the_founder_chose(confirm):
+    """The sentence used to be the hardcoded words "thirty minutes before".
+    Telling a founder who picked an hour that they will be nudged in thirty
+    minutes is the email lying about the one thing it is there to promise."""
+    s = svc()
+    t = _task(s, due_date=date(2026, 8, 1), due_time=time(15, 0),
+              reminder_minutes_before=60)
+    confirm.run(_founder(), t)()
+    assert confirm.sent[0][4] == "1 hour before"
 
 
 def test_nothing_is_sent_until_the_returned_job_is_run(confirm):
@@ -441,7 +584,7 @@ def test_a_dateless_time_uses_the_same_default_hour_as_the_calendar(confirm):
     s = svc()
     t = _task(s, due_date=date(2026, 8, 1))
     confirm.run(_founder(), t)()
-    (_, _, _, when), = confirm.sent
+    (_, _, _, when, _lead), = confirm.sent
     assert "09:00 AM" in when
 
 
@@ -471,15 +614,57 @@ def test_a_send_that_fails_is_logged_not_raised(confirm, monkeypatch):
     job()   # must not raise
 
 
-def test_sync_for_task_no_longer_schedules_a_t30_email():
-    """The T-30 row is retired without a migration: sync cancels whatever the
-    task still has and writes nothing new."""
+def test_sync_for_task_schedules_at_the_founders_own_offset():
+    """The whole point: the row lands at the offset picked in Plan Your Day,
+    not at a platform constant."""
+    s = svc()
+    t = _task(s, due_date=date(2026, 8, 1), due_time=time(15, 0),
+              reminder_minutes_before=15)
+    r = task_reminders.sync_for_task(s, t, timezone_name="UTC")
+    assert r is not None
+    assert r.remind_at == datetime(2026, 8, 1, 14, 45, tzinfo=timezone.utc)
+    assert r.channel == ReminderChannel.EMAIL
+    assert r.status == ReminderStatus.SCHEDULED
+
+
+def test_sync_for_task_falls_back_to_the_platform_default():
+    """A task created before the picker existed still gets a reminder."""
     s = svc()
     t = _task(s, due_date=date(2026, 8, 1), due_time=time(15, 0))
-    s.sync_task_reminder(1, t, remind_at=datetime(2026, 8, 1, 14, 30, tzinfo=timezone.utc),
-                         channel=ReminderChannel.EMAIL)
-    assert any(r.status == ReminderStatus.SCHEDULED for r in s.list_reminders(1))
+    r = task_reminders.sync_for_task(s, t, timezone_name="UTC")
+    assert r.remind_at == datetime(2026, 8, 1, 14, 30, tzinfo=timezone.utc)
 
+
+def test_changing_the_offset_moves_the_reminder():
+    """Editing the picker has to move the row, or the founder's change is a
+    setting that displays correctly and does nothing."""
+    s = svc()
+    t = _task(s, due_date=date(2026, 8, 1), due_time=time(15, 0),
+              reminder_minutes_before=30)
+    first = task_reminders.sync_for_task(s, t, timezone_name="UTC")
+    moved = s.update_task(1, t.task_id, reminder_minutes_before=5)
+    second = task_reminders.sync_for_task(s, moved, timezone_name="UTC")
+
+    assert second.remind_at == datetime(2026, 8, 1, 14, 55, tzinfo=timezone.utc)
+    by_id = {r.reminder_id: r for r in s.list_reminders(1)}
+    assert by_id[first.reminder_id].status == ReminderStatus.CANCELLED
+    assert by_id[second.reminder_id].status == ReminderStatus.SCHEDULED
+    scheduled = [r for r in s.list_reminders(1) if r.status == ReminderStatus.SCHEDULED]
+    assert len(scheduled) == 1, "one task, one reminder"
+
+
+def test_sync_for_task_schedules_nothing_for_a_dateless_task():
+    s = svc()
+    t = _task(s)
     assert task_reminders.sync_for_task(s, t, timezone_name="UTC") is None
-    assert not any(r.status == ReminderStatus.SCHEDULED for r in s.list_reminders(1)), \
-        "the pre-existing T-30 reminder should have been cancelled"
+    assert s.list_reminders(1) == ()
+
+
+def test_adding_a_task_whose_reminder_moment_has_passed_schedules_nothing():
+    """A 2pm task added at 1:50pm with a 30-minute offset has no reminder to
+    give. The confirmation email still goes out, so this is not silence."""
+    s = svc()
+    t = _task(s, due_date=date(2020, 1, 1), due_time=time(15, 0),
+              reminder_minutes_before=30)
+    assert task_reminders.sync_for_task(s, t, timezone_name="UTC") is None
+    assert not any(r.status == ReminderStatus.SCHEDULED for r in s.list_reminders(1))

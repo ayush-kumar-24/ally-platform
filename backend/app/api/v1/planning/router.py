@@ -51,7 +51,12 @@ router = APIRouter(
 
 
 def _date_kwargs(payload, field: str, clear_flag: str) -> dict:
-    """Translate an optional date field into set/clear kwargs (explicit null clears)."""
+    """Translate an optional field into set/clear kwargs (explicit null clears).
+
+    Named for the date fields it was written for, but the convention -- omitted
+    means "leave alone", null means "clear it" -- is what any nullable field
+    needs, so the reminder lead uses it too.
+    """
     if field not in payload.model_fields_set:
         return {}
     value = getattr(payload, field)
@@ -178,7 +183,8 @@ def add_task(goal_id: str, payload: TaskCreate, background: BackgroundTasks,
     # founder what they typed.
     task = service.add_task(
         founder_id, goal_id, title=payload.title, priority=payload.priority,
-        due_date=payload.due_date, due_time=payload.due_time)
+        due_date=payload.due_date, due_time=payload.due_time,
+        reminder_minutes_before=payload.reminder_minutes_before)
     task = hooks.after_task_saved(db, service, task, timezone_name=payload.timezone)
     # Closes out the legacy T-30 email row. Same rule as the calendar hook
     # above: saved first, notified second, and the task survives either failing.
@@ -203,9 +209,11 @@ def update_task(task_id: str, payload: TaskUpdate, background: BackgroundTasks,
                 service: PlanningService = Depends(get_planning_service),
                 db: Session = Depends(get_db)) -> TaskResponse:
     fields = {k: v for k, v in payload.model_dump(exclude_unset=True).items()
-              if k not in ("due_date", "due_time", "timezone")}
+              if k not in ("due_date", "due_time", "reminder_minutes_before", "timezone")}
     fields.update(_date_kwargs(payload, "due_date", "clear_due_date"))
     fields.update(_date_kwargs(payload, "due_time", "clear_due_time"))
+    fields.update(_date_kwargs(payload, "reminder_minutes_before",
+                               "clear_reminder_minutes_before"))
     # Read before the write so the email can tell a reschedule from any other
     # edit. Renaming a task, or ticking it off, must not re-send a
     # confirmation for a date that has not moved -- that is how a useful email
