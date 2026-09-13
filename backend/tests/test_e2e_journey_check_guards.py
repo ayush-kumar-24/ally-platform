@@ -372,3 +372,70 @@ def test_walk_names_the_fallbacks_so_a_weak_run_is_visible(capsys):
     printed = capsys.readouterr().out
     assert "0 matched on topic" in printed
     assert "1 fell back" in printed
+
+
+# --- the gaps that manufactured findings -------------------------------
+#
+# Every root cause in the strong run traced to a fallback or a mismatch,
+# not to a strong answer. RC-1088 "No Breakdown from Annual Goal to Weekly
+# Action" was rank 1 and a top finding off ONE question, because "five
+# years" pulled a Business Planning question into the purpose answer.
+
+
+def _topic_index(answer, persona="strong"):
+    return [a for _, a in ANSWER_BANK[persona]].index(answer)
+
+
+def test_a_question_about_today_is_planning_not_purpose():
+    """The RC-1088 regression. It asks what today did, not why it matters."""
+    answer, matched = match_answer(
+        "What did you actually do today that moves you toward the life you "
+        "picture in five years?", "strong")
+    assert matched
+    assert _topic_index(answer) == 1, "expected the time/planning topic"
+
+
+def test_five_years_alone_does_not_mean_purpose():
+    """A date is not a subject."""
+    _, matched = match_answer("Where will you be in five years?", "strong")
+    assert matched is False
+
+
+def test_five_years_still_reads_as_purpose_with_a_defining_term():
+    answer, matched = match_answer(
+        "Picture this venture thriving five years from now -- what does "
+        "'thriving' actually look like?", "strong")
+    assert matched
+    assert _topic_index(answer) == 9, "expected the purpose topic"
+
+
+def test_hours_spent_is_a_time_question():
+    answer, matched = match_answer(
+        "Think about yesterday. How many actual hours went into this idea "
+        "versus just thinking about it?", "strong")
+    assert matched
+    assert _topic_index(answer) == 1, "expected the time/planning topic"
+
+
+def test_rivals_can_be_asked_about_without_the_word_competitor():
+    answer, matched = match_answer(
+        "Do you have any actual process for finding out who else solves this "
+        "problem, or does it happen randomly?", "strong")
+    assert matched
+    assert _topic_index(answer) == 2, "expected the market/competitors topic"
+
+
+def test_walk_marks_which_questions_got_the_generic_answer():
+    """The summary separates bands the persona earned from bands the
+    fallback earned; that needs a per-question flag."""
+    out = []
+    client = _Client(
+        {"question": {"question_id": 1,
+                      "question_text": "What colour is the sky?"}},
+        [{"next_question": {"question_id": 2,
+                            "question_text": "When did you last sit down "
+                                             "specifically to plan?"}},
+         {"is_complete": True, "next_question": None}],
+    )
+    _walk(client, "/start", "/answer", "question_id", "X", out, "strong")
+    assert [q["_fell_back"] for q in out] == [True, False]

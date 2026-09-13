@@ -150,11 +150,20 @@ _TOPICS = (
     # time, planning, priorities, focus
     (("plan", "priorit", "schedul", "deep work", "eats the most", "sat down",
       "spent hours", "your time", "specific time", "every hour",
-      "avoiding right now", "decided not to do", "left over"),
+      "actual hours", "hours went into", "avoiding right now",
+      "decided not to do", "left over",
+      # "what did you actually do today that moves you toward the life you
+      # picture in five years" is a planning question, not a purpose one --
+      # it asks what today did, not why the venture matters. Without these
+      # it went to purpose on "five years" and manufactured RC-1088 as a
+      # rank-1 top finding off a category holding one answer.
+      "actually do today", "moves you toward"),
      ("week", "focus", "switching")),
     # market size, research, competitors
     (("market", "competitor", "how many businesses", "count or estimate",
-      "would actually need this"),
+      "would actually need this",
+      # "who else solves this problem" never says "competitor"
+      "who else solves", "else is solving", "who else is"),
      ("estimate", "size", "research")),
     # product, analytics, what got shipped
     (("product", "analytics", "you've built", "shipped", "actually used",
@@ -180,9 +189,11 @@ _TOPICS = (
       "told to you straight"),
      ("harsh", "difficult")),
     # motivation, purpose, vision
-    (("why does", "deserve", "thriving", "five years", "vision",
-      "grabbed you", "origin story", "opening line", "advice right now"),
-     ("matters", "picture")),
+    (("why does", "deserve", "thriving", "vision", "grabbed you",
+      "origin story", "opening line", "advice right now"),
+     # "five years" is a date, not a subject. As a defining term it pulled a
+     # Business Planning question about what you did TODAY into purpose.
+     ("matters", "picture", "five years")),
 )
 
 #: WEAK. A founder who has not done the work: no market sizing, no pricing
@@ -606,6 +617,9 @@ def _walk(client, start_path, answer_path, id_field, label, out, persona="weak")
         out.append(q)
         n = len(out)
         answer, matched = match_answer(q.get("question_text", ""), persona)
+        # Recorded on the question itself so the summary can separate bands
+        # earned by the persona from bands earned by the generic answer.
+        q["_fell_back"] = not matched
         if matched:
             matched_count += 1
         body = {id_field: q[id_field], "answer_text": answer}
@@ -757,17 +771,42 @@ def run(args) -> int:
         print(f"  {i:2d}. {q.get('question_text','')}")
     print("\n-- Diagnosis --")
     for i, q in enumerate(diagnosis, 1):
-        print(f"  {i:2d}. [{q.get('category')}] {q.get('question_text','')}")
+        generic = "  <- generic answer" if q.get("_fell_back") else ""
+        print(f"  {i:2d}. [{q.get('category')}] {q.get('question_text','')}{generic}")
 
     print("\n" + "=" * 74)
     print("RESULT")
     print("=" * 74)
+    # Bands split by whether the answer was the persona's or the generic
+    # fallback. This matters more than it looks: a fallback does not read as
+    # neutral to the classifier, it reads as evasion, so it scores red
+    # whichever persona sent it. On a category holding a single question that
+    # is enough to manufacture a top finding -- RC-1088 was rank 1 on exactly
+    # that. Reporting the split stops the next reader crediting the founder
+    # with a gap that belongs to this script.
+    fallback_qids = {q.get("question_id") for q in diagnosis if q.get("_fell_back")}
     with SessionLocal() as db:
-        bands = db.execute(sa.text(
-            "select score_label, count(*) from answers where founder_id=:f "
-            "group by 1 order by 2 desc"), {"f": fid}).all()
+        rows = db.execute(sa.text(
+            "select question_id, score_label from answers where founder_id=:f"),
+            {"f": fid}).all()
+
+    def _tally(pairs):
+        out: dict = {}
+        for _, label in pairs:
+            out[label or "unscored"] = out.get(label or "unscored", 0) + 1
+        return dict(sorted(out.items(), key=lambda kv: -kv[1]))
+
+    answered = _tally(rows)
+    on_topic = _tally([r for r in rows if r[0] not in fallback_qids])
+    generic = _tally([r for r in rows if r[0] in fallback_qids])
+
     print(f"  answer persona          {args.persona}")
-    print(f"  answer bands            {dict(bands) or 'none'}")
+    print(f"  answer bands            {answered or 'none'}")
+    if generic:
+        print(f"    of which on topic     {on_topic or 'none'}")
+        print(f"    of which generic      {generic}"
+              "   <- the script had no answer for these; read them as"
+              " harness noise, not as the founder")
     if len(bands) == 1 and bands[0][0] == "amber":
         print("    ^ every answer identical -- this is the unscored fallback, "
               "not a real classification")
