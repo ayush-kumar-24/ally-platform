@@ -86,15 +86,21 @@ anyway.
 A healthy run returns 200 with counts:
 
 ```json
-{"sent": 0, "skipped_pref": 0, "skipped_plan": 0,
+{"sent": 0, "in_app": 0, "skipped_pref": 0,
  "stale": 0, "orphaned": 0, "failed": 0, "email_configured": true}
 ```
+
+`sent` is reminders emailed to Pro founders. `in_app` is the same reminder
+delivered to the notification bell for founders on every other plan — they get
+the feature, email is the part that is sold. Both are deliveries; neither is a
+skip.
 
 Check these three things:
 
 1. **`email_configured` is `true`.** If it is `false`, `EMAIL_HOST` is not set
-   on the backend and nothing can be sent, no matter how often this runs. The
-   field exists precisely so a green schedule cannot hide that.
+   on the backend and no Pro founder can be emailed, no matter how often this
+   runs — bell reminders still work. The field exists precisely so a green
+   schedule cannot hide that.
 2. **`stale` stays at 0.** Anything above zero means reminders are arriving too
    late to be worth sending — the sweep is not running often enough, or is not
    running at all between long gaps.
