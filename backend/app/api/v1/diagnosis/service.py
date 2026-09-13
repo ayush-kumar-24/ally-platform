@@ -205,7 +205,8 @@ class DiagnosisService:
             limit = plan.diagnosis_lifetime_limit
             if limit <= 0:                      # 0 = unlimited
                 return
-            used = self.repository.count_completed_sessions(founder.founder_id)
+            with self.db.begin_nested():
+                used = self.repository.count_completed_sessions(founder.founder_id)
         except Exception:                       # noqa: BLE001
             logger.warning(
                 "Diagnosis limit check failed; allowing the diagnosis",
@@ -805,7 +806,8 @@ class DiagnosisService:
         one from the outside.
         """
         try:
-            brief = build_founder_brief(self.db, founder)
+            with self.db.begin_nested():
+                brief = build_founder_brief(self.db, founder)
         except Exception as exc:  # noqa: BLE001
             logger.warning("founder brief unavailable; advisor picks on the answer alone",
                            extra={"stage": "adaptive_questions",

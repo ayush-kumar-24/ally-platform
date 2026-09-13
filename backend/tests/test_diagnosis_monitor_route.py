@@ -14,6 +14,7 @@ sub-threshold category anyway.
 NO_CATEGORY_ABOVE_THRESHOLD_ACTION.
 """
 
+import contextlib
 from decimal import Decimal
 from types import SimpleNamespace
 
@@ -23,6 +24,10 @@ from app.api.v1.diagnosis import incremental_confidence as ic
 from app.api.v1.diagnosis.service import DiagnosisService
 from app.api.v1.reasoning.schemas import SessionAssessment
 from app.models import RoutingState, SessionStatus
+
+#: `_healthy_enough_to_stop` wraps its DB read in a SAVEPOINT, so even a `db`
+#: these tests never really query needs a begin_nested() to stand in for.
+_FAKE_DB = SimpleNamespace(begin_nested=lambda: contextlib.nullcontext())
 
 
 # --- the healthy-stop predicate -------------------------------------------
@@ -46,26 +51,26 @@ def coverage_rule(monkeypatch):
 def test_a_flagged_category_never_stops_early(coverage_rule):
     """Something IS wrong -- the diagnosis has a problem to pursue."""
     assert not ic._healthy_enough_to_stop(
-        None, _assessment(flagged=True), answered=30, founder=_founder())
+        _FAKE_DB, _assessment(flagged=True), answered=30, founder=_founder())
 
 
 def test_a_clean_session_stops_once_coverage_is_met(coverage_rule):
     assert ic._healthy_enough_to_stop(
-        None, _assessment(flagged=False), answered=23, founder=_founder(30))
+        _FAKE_DB, _assessment(flagged=False), answered=23, founder=_founder(30))
 
 
 def test_a_clean_session_keeps_going_below_coverage(coverage_rule):
     """22 of 30 is 73%, under the 75% bar -- not yet enough to call an all-clear."""
     assert not ic._healthy_enough_to_stop(
-        None, _assessment(flagged=False), answered=22, founder=_founder(30))
+        _FAKE_DB, _assessment(flagged=False), answered=22, founder=_founder(30))
 
 
 def test_coverage_follows_the_stage_budget(coverage_rule):
     """An ideation founder's 75% is 11 questions, not 23."""
     assert ic._healthy_enough_to_stop(
-        None, _assessment(flagged=False), answered=11, founder=_founder(14))
+        _FAKE_DB, _assessment(flagged=False), answered=11, founder=_founder(14))
     assert not ic._healthy_enough_to_stop(
-        None, _assessment(flagged=False), answered=10, founder=_founder(14))
+        _FAKE_DB, _assessment(flagged=False), answered=10, founder=_founder(14))
 
 
 def test_the_minimum_answer_floor_still_applies(coverage_rule):
@@ -75,7 +80,7 @@ def test_the_minimum_answer_floor_still_applies(coverage_rule):
     tiny = _founder(4)                       # 75% of 4 is 3
     assert ic.MIN_ANSWERS_BEFORE_COMPLETION > 3
     assert not ic._healthy_enough_to_stop(
-        None, _assessment(flagged=False), answered=3, founder=tiny)
+        _FAKE_DB, _assessment(flagged=False), answered=3, founder=tiny)
 
 
 def test_an_unavailable_threshold_keeps_asking(monkeypatch):
@@ -86,7 +91,7 @@ def test_an_unavailable_threshold_keeps_asking(monkeypatch):
         raise RuntimeError("scoring_rules unreachable")
     monkeypatch.setattr(ic, "_monitor_min_coverage", boom)
     assert not ic._healthy_enough_to_stop(
-        None, _assessment(flagged=False), answered=30, founder=_founder())
+        _FAKE_DB, _assessment(flagged=False), answered=30, founder=_founder())
 
 
 def test_the_default_coverage_is_stricter_than_the_report_threshold_floor():

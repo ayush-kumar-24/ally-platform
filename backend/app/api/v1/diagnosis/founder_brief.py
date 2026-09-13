@@ -132,15 +132,16 @@ def build_founder_brief(db: Session, founder: Any, *,
     # omitting the section -- a missing brief must never break the interview.
     if include_problem and founder_id is not None:
         try:
-            rows = db.execute(text("""
-                SELECT q.question_text, a.answer_text
-                  FROM current_problem_answers a
-                  JOIN current_problem_questions q
-                    ON q.current_problem_question_id = a.current_problem_question_id
-                 WHERE a.founder_id = :f
-                 ORDER BY a.answered_at
-                 LIMIT :n
-            """), {"f": founder_id, "n": _MAX_PROBLEM_TURNS}).fetchall()
+            with db.begin_nested():
+                rows = db.execute(text("""
+                    SELECT q.question_text, a.answer_text
+                      FROM current_problem_answers a
+                      JOIN current_problem_questions q
+                        ON q.current_problem_question_id = a.current_problem_question_id
+                     WHERE a.founder_id = :f
+                     ORDER BY a.answered_at
+                     LIMIT :n
+                """), {"f": founder_id, "n": _MAX_PROBLEM_TURNS}).fetchall()
             said = [f"- {_clean(r[1], _DNA_ANSWER)}" for r in rows if _clean(r[1], _DNA_ANSWER)]
             if said:
                 parts.append("What they said the problem is:\n" + "\n".join(said))
@@ -149,15 +150,16 @@ def build_founder_brief(db: Session, founder: Any, *,
 
     if include_dna and founder_id is not None:
         try:
-            rows = db.execute(text("""
-                SELECT q.dimension_code, a.answer_text
-                  FROM founder_dna_answers a
-                  JOIN founder_dna_questions q
-                    ON q.founder_dna_question_id = a.founder_dna_question_id
-                 WHERE a.founder_id = :f
-                 ORDER BY a.answered_at DESC
-                 LIMIT :n
-            """), {"f": founder_id, "n": _MAX_DNA_TURNS}).fetchall()
+            with db.begin_nested():
+                rows = db.execute(text("""
+                    SELECT q.dimension_code, a.answer_text
+                      FROM founder_dna_answers a
+                      JOIN founder_dna_questions q
+                        ON q.founder_dna_question_id = a.founder_dna_question_id
+                     WHERE a.founder_id = :f
+                     ORDER BY a.answered_at DESC
+                     LIMIT :n
+                """), {"f": founder_id, "n": _MAX_DNA_TURNS}).fetchall()
             dna = [f"- {r[0]}: {_clean(r[1], _DNA_ANSWER)}"
                    for r in rows if _clean(r[1], _DNA_ANSWER)]
             if dna:

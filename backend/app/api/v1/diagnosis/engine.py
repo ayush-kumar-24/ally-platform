@@ -274,7 +274,8 @@ class QuestionSelectionEngine:
         if session.routing_state != RoutingState.VALIDATE.value:
             return set()
         try:
-            return self.repository.get_detected_root_cause_ids(session.session_id)
+            with self.repository.db.begin_nested():
+                return self.repository.get_detected_root_cause_ids(session.session_id)
         except Exception:                                  # noqa: BLE001
             # Question selection must never fail on an optional preference.
             logger.warning("Validate-mode bias unavailable; using the default order",

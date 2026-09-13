@@ -68,9 +68,10 @@ async def recompute(
     try:
         from app.api.v1.reasoning.deps import build_reasoning_service_for_scoring
 
-        assessment = await build_reasoning_service_for_scoring(db).assess_only(
-            session, founder
-        )
+        with db.begin_nested():
+            assessment = await build_reasoning_service_for_scoring(db).assess_only(
+                session, founder
+            )
     except Exception as exc:                                  # noqa: BLE001
         logger.warning(
             "Incremental confidence failed; diagnosis continues",
@@ -145,11 +146,13 @@ def _healthy_enough_to_stop(
         from app.api.v1.reasoning.config import monitor_eligible
 
         stage = getattr(founder, "stage", None)
+        with db.begin_nested():
+            min_coverage = _monitor_min_coverage(db)
         return monitor_eligible(
             any_category_flagged=assessment.any_category_flagged,
             answered=answered,
             budget=settings.question_budget(getattr(stage, "question_budget", None)),
-            min_coverage=_monitor_min_coverage(db),
+            min_coverage=min_coverage,
             min_answers=MIN_ANSWERS_BEFORE_COMPLETION,
         )
     except Exception as exc:                                  # noqa: BLE001
