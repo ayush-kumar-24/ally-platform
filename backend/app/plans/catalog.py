@@ -374,7 +374,7 @@ PLANS: dict[PlanTier, Plan] = {
         daily_token_limit=3_500,
         free_calls_per_month=0,
         features=_BASE | _WORKSPACE,
-        tagline="For founders working on the business weekly.",
+        tagline="For founders working on the business daily.",
     ),
     PlanTier.PRO: Plan(
         tier=PlanTier.PRO,
