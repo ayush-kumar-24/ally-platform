@@ -13,7 +13,7 @@ Usage (PowerShell):
 import os
 import sys
 
-import psycopg2
+import psycopg
 
 pw = os.environ.get("PGPASSWORD")
 if not pw:
@@ -21,7 +21,7 @@ if not pw:
     sys.exit(1)
 
 try:
-    conn = psycopg2.connect(
+    conn = psycopg.connect(
         host="aws-1-ap-south-1.pooler.supabase.com",
         port=5432,
         dbname="postgres",
