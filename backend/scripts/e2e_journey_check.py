@@ -26,7 +26,7 @@ foreign key to `auth.users`:
                       where that FK exists.
 
   --founder-email E   Looks up an EXISTING founder by email instead of
-                      creating one -- required for a real Supabase project,
+  --founder-id N      creating one -- required for a real Supabase project,
                       where `founders.user_id` genuinely references
                       `auth.users` (added outside this repo's migration
                       history, presumably via the Supabase dashboard). This
@@ -35,26 +35,32 @@ foreign key to `auth.users`:
                       password-hash format, confirmation tokens, or GoTrue
                       triggers that schema depends on, and a raw INSERT that
                       merely satisfies the FK's type is not the same thing as
-                      a real identity. Use an email you already control --
-                      ideally your own account, signed up through the app the
-                      normal way -- not a stranger's real data.
+                      a real identity. Use an account you already control --
+                      ideally your own, signed up through the app the normal
+                      way -- not a stranger's real data. --founder-id is the
+                      same lookup keyed on the primary key instead of email,
+                      for when you already know the id and would rather not
+                      pass an email on the command line at all.
 
     python -m scripts.e2e_journey_check --database-url "postgresql+psycopg2://..." --stage 1 --confirm-writes
     python -m scripts.e2e_journey_check --database-url "..." --founder-email you@example.com --confirm-writes
+    python -m scripts.e2e_journey_check --database-url "..." --founder-id 12345 --confirm-writes
     python -m scripts.e2e_journey_check --database-url "..." --cleanup
     python -m scripts.e2e_journey_check --database-url "..." --cleanup-founder-email you@example.com
+    python -m scripts.e2e_journey_check --database-url "..." --cleanup-founder-id 12345
 
 IT WRITES. In --stage mode: a founder, consent, a Founder DNA run, a Current
 Problem run, a diagnosis session and its answers, and a report. Every founder
 it creates is named `e2e+<timestamp>@ally-e2e.local`; `--cleanup` deletes every
 founder at that domain and everything cascading from them.
 
-In --founder-email mode it writes NOTHING to `founders` or `founder_consents`
--- only a Founder DNA run, a Current Problem run, a diagnosis session and its
-answers, and a report, all against the founder_id that email already owns.
-`--cleanup-founder-email` removes exactly those (sessions, answers, DNA
-answers, current-problem answers, reports) and leaves the founder and their
-consent alone -- that account is real and outlives this script.
+In --founder-email / --founder-id mode it writes NOTHING to `founders` or
+`founder_consents` -- only a Founder DNA run, a Current Problem run, a
+diagnosis session and its answers, and a report, all against the founder_id
+that account already owns. `--cleanup-founder-email` / `--cleanup-founder-id`
+remove exactly those (sessions, answers, DNA answers, current-problem
+answers, reports) and leave the founder and their consent alone -- that
+account is real and outlives this script.
 
 The database URL must be passed explicitly -- it deliberately does NOT read
 DATABASE_URL, so pointing this at a real project has to be a decision rather
@@ -173,17 +179,20 @@ def cleanup(db, sa) -> int:
     return len(founders)
 
 
-def cleanup_founder_email(db, sa, email: str) -> int:
+def cleanup_founder_journey(db, sa, *, fid: int | None = None, email: str | None = None,
+                           label: str | None = None) -> int:
     """Removes journey rows for one EXISTING, real founder -- never the founder
     row or their consent. That account is real and outlives this script."""
-    fid = db.execute(sa.text("select founder_id from founders where email = :e"),
-                     {"e": email}).scalar()
     if fid is None:
-        print(f"  no founder found with email {email}")
-        return 0
+        fid = db.execute(sa.text("select founder_id from founders where email = :e"),
+                         {"e": email}).scalar()
+        if fid is None:
+            print(f"  no founder found with email {email}")
+            return 0
+    label = label or f"founder_id={fid}"
     _delete_journey_rows(db, sa, [fid])
     db.commit()
-    print(f"  removed journey data for founder {fid} <{email}> "
+    print(f"  removed journey data for {label} "
           "(the founder and their consent were left alone)")
     return 1
 
@@ -232,34 +241,57 @@ def _seed_founder(db, sa, stage_order: int) -> tuple[int, str]:
     return fid, email
 
 
-def _lookup_founder(db, sa, email: str) -> tuple[int, str]:
-    """An EXISTING founder's id, by email. Never inserts into founders or
-    founder_consents -- see the module docstring for why."""
-    row = db.execute(sa.text(
-        "select founder_id, stage_id, profile_completed from founders "
-        "where email = :e"), {"e": email}).first()
-    if row is None:
-        raise SystemExit(
+def _resolve_existing_founder(db, sa, *, email: str | None = None,
+                              founder_id: int | None = None) -> tuple[int, str]:
+    """An EXISTING founder's id, by email or by id -- exactly one of the two.
+
+    Never inserts into founders or founder_consents -- see the module
+    docstring for why. Returns (fid, label): label is the email when looked up
+    by email, or `founder_id=N` when looked up by id, so id-mode never has to
+    read or print an email it was not given.
+    """
+    assert (email is None) != (founder_id is None), "pass exactly one of email/founder_id"
+
+    if email is not None:
+        row = db.execute(sa.text(
+            "select founder_id, stage_id, profile_completed from founders "
+            "where email = :e"), {"e": email}).first()
+        not_found = (
             f"\n  No founder exists with email {email!r} on this database.\n"
             "  --founder-email requires an account that already exists -- "
             "sign up through the app first, or use --stage on a database "
             "with no auth.users FK instead."
         )
+        label = email
+    else:
+        row = db.execute(sa.text(
+            "select founder_id, stage_id, profile_completed from founders "
+            "where founder_id = :f"), {"f": founder_id}).first()
+        not_found = (
+            f"\n  No founder exists with founder_id={founder_id} on this database.\n"
+            "  --founder-id requires an account that already exists -- "
+            "sign up through the app first, or use --stage on a database "
+            "with no auth.users FK instead."
+        )
+        label = f"founder_id={founder_id}"
+
+    if row is None:
+        raise SystemExit(not_found)
     fid, stage_id, profile_completed = row
     if not profile_completed:
-        print(f"  warning: founder {fid} <{email}> has profile_completed=false; "
-              "onboarding gates may reject the journey below.")
+        print(f"  warning: {label} has profile_completed=false; onboarding "
+              "gates may reject the journey below.")
     has_consent = db.execute(sa.text(
         "select 1 from founder_consents where founder_id = :f limit 1"),
         {"f": fid}).first()
     if has_consent is None:
         raise SystemExit(
-            f"\n  Founder {fid} <{email}> has no consent record, and this "
-            "script will not create one on a real account -- consent must "
-            "come from the founder themselves, through the app.\n"
+            f"\n  {label} has no consent record, and this script will not "
+            "create one on a real account -- consent must come from the "
+            "founder themselves, through the app.\n"
             "  Complete consent in the app for this account, then re-run."
         )
-    return fid, email
+    return fid, label
 
 
 def _walk(client, start_path, answer_path, id_field, label, out):
@@ -319,10 +351,13 @@ def run(args) -> int:
         with SessionLocal() as db:
             cleanup(db, sa)
         return 0
-    if args.cleanup_founder_email:
+    if args.cleanup_founder_email or args.cleanup_founder_id:
         print("CLEANUP (single founder)")
         with SessionLocal() as db:
-            cleanup_founder_email(db, sa, args.cleanup_founder_email)
+            if args.cleanup_founder_email:
+                cleanup_founder_journey(db, sa, email=args.cleanup_founder_email)
+            else:
+                cleanup_founder_journey(db, sa, fid=args.cleanup_founder_id)
         return 0
 
     print("=" * 74)
@@ -337,15 +372,17 @@ def run(args) -> int:
               "--allow-unscored to run anyway.")
         return 2
 
+    using_existing = bool(args.founder_email or args.founder_id)
     with SessionLocal() as db:
         calls_before, cost_before = _llm_calls(db, sa)
-        if args.founder_email:
-            fid, email = _lookup_founder(db, sa, args.founder_email)
-            print(f"\n  existing founder {fid} <{email}> (unchanged: not created "
+        if using_existing:
+            fid, label = _resolve_existing_founder(
+                db, sa, email=args.founder_email, founder_id=args.founder_id)
+            print(f"\n  existing founder {fid} ({label}) (unchanged: not created "
                   "by this script)")
         else:
-            fid, email = _seed_founder(db, sa, args.stage)
-            print(f"\n  test founder {fid} <{email}> at stage_order {args.stage}")
+            fid, label = _seed_founder(db, sa, args.stage)
+            print(f"\n  test founder {fid} <{label}> at stage_order {args.stage}")
 
     from fastapi import Depends
     from sqlalchemy.orm import Session as OrmSession
@@ -455,7 +492,9 @@ def run(args) -> int:
         print(f"\n  written to {args.json_out}")
 
     if args.founder_email:
-        print(f"\n  clean up with: --database-url ... --cleanup-founder-email {email}")
+        print(f"\n  clean up with: --database-url ... --cleanup-founder-email {label}")
+    elif args.founder_id:
+        print(f"\n  clean up with: --database-url ... --cleanup-founder-id {fid}")
     else:
         print(f"\n  clean up with: --database-url ... --cleanup")
     return 0
@@ -478,6 +517,9 @@ def main(argv=None) -> int:
                         "account must already exist, with profile and consent "
                         "completed through the app; this script never creates "
                         "either on your behalf.")
+    p.add_argument("--founder-id", type=int, metavar="N",
+                   help="same as --founder-email, but by founder_id -- avoids "
+                        "naming an email on the command line at all")
     p.add_argument("--confirm-writes", action="store_true",
                    help="required: acknowledges that this writes a diagnosis "
                         "journey and a report into the named database")
@@ -487,16 +529,25 @@ def main(argv=None) -> int:
                    help="delete the journey data (sessions/answers/report) for "
                         "one existing founder by email, then exit -- leaves the "
                         "founder and their consent untouched")
+    p.add_argument("--cleanup-founder-id", type=int, metavar="N",
+                   help="same as --cleanup-founder-email, but by founder_id")
     p.add_argument("--allow-unscored", action="store_true",
                    help="run even with scoring off (useful only to test the fallback)")
     p.add_argument("--json-out", metavar="FILE", help="write the full transcript as JSON")
     args = p.parse_args(argv)
 
-    exit_actions = (args.cleanup, bool(args.cleanup_founder_email))
+    exit_actions = [args.cleanup, bool(args.cleanup_founder_email),
+                    bool(args.cleanup_founder_id)]
+    if sum(exit_actions) > 1:
+        p.error("--cleanup / --cleanup-founder-email / --cleanup-founder-id "
+                "are mutually exclusive")
     if not args.confirm_writes and not any(exit_actions):
-        p.error("--confirm-writes is required (or --cleanup / --cleanup-founder-email)")
-    if args.stage != 1 and args.founder_email:
-        p.error("--stage is ignored with --founder-email -- drop one of them")
+        p.error("--confirm-writes is required (or one of the --cleanup* flags)")
+
+    if args.founder_email and args.founder_id:
+        p.error("--founder-email and --founder-id are mutually exclusive")
+    if args.stage != 1 and (args.founder_email or args.founder_id):
+        p.error("--stage is ignored with --founder-email/--founder-id -- drop one of them")
     return run(args)
 
 
