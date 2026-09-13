@@ -2521,6 +2521,45 @@ body.lp-done #landing-page { display:none; }
   .qc-sm::before{font-size:74px}
 }
 
+/* --- checkout: who the payment is for ------------------------------------ */
+/* Sits above the discount code, same quiet register: a founder who never
+   touches it should not feel like they skipped a step. */
+.bl-billing{margin-bottom:16px}
+.bl-billing-legend{font-size:10.5px;font-weight:800;letter-spacing:.1em;
+  text-transform:uppercase;color:#6c7a70;margin-bottom:8px}
+.bl-billing-opts{display:flex;gap:8px;margin-bottom:0}
+.bl-billing-opt{position:relative;flex:1;display:flex;align-items:flex-start;gap:8px;
+  border:1px solid rgba(27,67,50,.18);border-radius:10px;padding:10px 11px;
+  cursor:pointer;background:#fff;transition:border-color .15s ease,background .15s ease}
+.bl-billing-opt:hover{border-color:rgba(27,67,50,.35)}
+.bl-billing-opt input{position:absolute;opacity:0;width:0;height:0}
+.bl-billing-dot{flex:0 0 auto;width:15px;height:15px;margin-top:1px;border-radius:50%;
+  border:1.5px solid #c3cdc5;background:#fff;transition:border-color .15s ease,box-shadow .15s ease}
+.bl-billing-opt input:checked ~ .bl-billing-dot{border-color:#1b4332;border-width:5px;
+  box-shadow:0 0 0 3px rgba(27,67,50,.1)}
+.bl-billing-opt.checked{border-color:#1b4332;background:rgba(27,67,50,.05)}
+.bl-billing-opt input:focus-visible ~ .bl-billing-dot{outline:2px solid #1b4332;outline-offset:2px}
+.bl-billing-title{display:block;font-size:13px;font-weight:650;color:#16241c;line-height:1.35}
+.bl-billing-sub{display:block;font-size:11.5px;color:#7d9488;line-height:1.4;margin-top:1px}
+.bl-billing-fields{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.bl-billing-field-wide{grid-column:1 / -1}
+.bl-billing-label{display:block;font-size:11.5px;font-weight:650;color:#3d4a41;margin-bottom:4px}
+.bl-billing-label em{font-weight:500;font-style:normal;color:#8a9a92}
+.bl-billing-field input,.bl-billing-field textarea{
+  display:block;width:100%;border:1px solid rgba(27,67,50,.22);border-radius:10px;
+  padding:10px 12px;font-size:13px;font-family:inherit;background:#fff;color:#1b4332}
+.bl-billing-field textarea{resize:vertical;min-height:56px}
+.bl-billing-field input::placeholder,.bl-billing-field textarea::placeholder{color:#8a9a92}
+.bl-billing-field input:focus,.bl-billing-field textarea:focus{
+  outline:none;border-color:#1b4332;box-shadow:0 0 0 3px rgba(27,67,50,.1)}
+.bl-billing-field input:disabled,.bl-billing-field textarea:disabled{background:#f4f6f5;color:#8a9a92}
+.bl-billing-field input[aria-invalid="true"]{border-color:#b91c1c;box-shadow:0 0 0 3px rgba(185,28,28,.1)}
+.bl-billing-err{grid-column:1 / -1;margin:2px 2px 0;font-size:12px;line-height:1.5;color:#b91c1c}
+@media (max-width:640px){
+  .bl-billing-opts{flex-direction:column}
+  .bl-billing-fields{grid-template-columns:1fr}
+}
+
 /* --- checkout discount code ---------------------------------------------- */
 /* Sits between the error alerts and the Pay button. Deliberately quiet: a
    founder without a code should not feel they are missing a better price. */

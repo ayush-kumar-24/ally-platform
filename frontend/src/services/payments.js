@@ -29,7 +29,7 @@
  * the backend order does not carry.
  */
 
-import { post } from './api';
+import { patch, post } from './api';
 import { getMyPlan } from './plans';
 
 const CHECKOUT_JS_URL = 'https://checkout.razorpay.com/v1/checkout.js';
@@ -55,6 +55,28 @@ export function startCheckout(tier, couponCode = null) {
  */
 export function validateCoupon(tier, code) {
   return post('/payments/coupons/validate', { tier, code });
+}
+
+/**
+ * Attach who the payment is for -- personal or business use, and for a
+ * business, whatever invoice details were filled in -- to a payment that
+ * already exists.
+ *
+ * Not part of `startCheckout`: the order (and its payment row) is created
+ * the instant the checkout screen opens, before the founder has had any
+ * chance to answer the question. The caller sends this instead, any number
+ * of times as the fields are edited, and each call replaces the last.
+ *
+ * Best-effort by design -- callers should swallow a rejection rather than let
+ * it interrupt anything: an invoicing preference must never be able to block
+ * a payment. See app/payments/billing.py for what is kept and what is
+ * quietly dropped.
+ *
+ * @param {number} paymentId
+ * @param {{use:'personal'|'business', company?:string, gstin?:string, address?:string}} billing
+ */
+export function setCheckoutBilling(paymentId, billing) {
+  return patch(`/payments/${paymentId}/billing`, billing);
 }
 
 /**

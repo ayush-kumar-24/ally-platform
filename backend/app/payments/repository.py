@@ -6,6 +6,7 @@ rest of the Admin Panel already does)."""
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 
 from sqlalchemy import text
@@ -75,6 +76,19 @@ class PaymentRepository:
         ).mappings().first()
         return _to_record(row)
 
+    def get_by_payment_id(self, payment_id: int) -> PaymentRecord | None:
+        """Looked up by the internal id the checkout response hands back --
+        used only to check ownership before `set_billing` writes to it."""
+        row = self.db.execute(
+            text(
+                "SELECT payment_id, founder_id, status, gateway_order_id, "
+                "       gateway_payment_id, amount_inr, subscription_id, plan_tier "
+                "FROM payments WHERE payment_id = :pid"
+            ),
+            {"pid": payment_id},
+        ).mappings().first()
+        return _to_record(row)
+
     def get_by_gateway_payment_id(self, gateway_payment_id: str) -> PaymentRecord | None:
         """The idempotency check: Razorpay retries webhook deliveries, and a
         `gateway_payment_id` already recorded here means this exact payment
@@ -101,6 +115,22 @@ class PaymentRepository:
                 "WHERE payment_id = :pid"
             ),
             {"gpid": gateway_payment_id, "at": paid_at, "sid": subscription_id, "pid": payment_id},
+        )
+        self.db.commit()
+
+    def set_billing(self, payment_id: int, billing: dict | None) -> None:
+        """Attach the personal/business answer and invoice details to a
+        payment row that already exists.
+
+        Not part of `create_pending`: the order (and this row) is created the
+        instant the checkout screen opens, before the founder has had a
+        chance to fill anything in -- see PaymentService.set_billing. This
+        can run any number of times before the payment is captured as the
+        founder edits the fields; each call replaces the last.
+        """
+        self.db.execute(
+            text("UPDATE payments SET billing = :billing WHERE payment_id = :pid"),
+            {"billing": json.dumps(billing) if billing is not None else None, "pid": payment_id},
         )
         self.db.commit()
 

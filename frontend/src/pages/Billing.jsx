@@ -4,7 +4,10 @@ import { MOCK_PLANS } from '../data/mockData';
 import { getProfile } from '../services/profile';
 import { getCatalog, getMyPlan } from '../services/plans';
 import { refreshPlanName } from '../hooks/usePlanName';
-import { confirmPayment, openCheckout, startCheckout, validateCoupon, waitForPlanActivation } from '../services/payments';
+import {
+  confirmPayment, openCheckout, setCheckoutBilling, startCheckout, validateCoupon,
+  waitForPlanActivation,
+} from '../services/payments';
 
 /** The Knowledge libraries, in the order the sidebar lists them.
  *
@@ -94,6 +97,132 @@ function CheckIcon({ size = 18, color = '#10B981' }) {
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5">
       <polyline points="20 6 9 17 4 12" />
     </svg>
+  );
+}
+
+/* Same shape the backend accepts (app/payments/billing.py): state code, PAN,
+   entity number, 'Z', checksum. Checked here only so a typo is pointed out
+   while the founder can still fix it -- the backend re-validates and drops
+   whatever does not match rather than ever refusing the payment over it. */
+const GSTIN_RE = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][0-9A-Z]Z[0-9A-Z]$/;
+
+/**
+ * Who a payment is for, asked once above the discount code.
+ *
+ * Personal is the default and costs nothing to skip. Business opens three
+ * optional fields so the invoice can be raised correctly the first time
+ * instead of the accounts team chasing the founder for them afterwards.
+ *
+ * `onChange` fires with `{use, company?, gstin?, address?}` -- cleaned, but
+ * not yet saved anywhere; the caller (CheckoutView) owns persisting it, on
+ * its own schedule, against the payment that exists once the order does.
+ */
+function BillingDetails({ onChange, disabled }) {
+  const [use, setUse] = useState('personal');
+  const [company, setCompany] = useState('');
+  const [gstin, setGstin] = useState('');
+  const [address, setAddress] = useState('');
+  const [gstinTouched, setGstinTouched] = useState(false);
+
+  const cleanGstin = gstin.replace(/[\s-]/g, '').toUpperCase();
+  const gstinOk = !cleanGstin || GSTIN_RE.test(cleanGstin);
+
+  // Re-emitted on every change so the caller can debounce its own save; this
+  // component holds the fields, not the decision of when to persist them.
+  useEffect(() => {
+    const payload = { use };
+    if (use === 'business') {
+      const trimmedCompany = company.trim().replace(/\s+/g, ' ');
+      const trimmedAddress = address.trim();
+      if (trimmedCompany) payload.company = trimmedCompany;
+      if (cleanGstin && GSTIN_RE.test(cleanGstin)) payload.gstin = cleanGstin;
+      if (trimmedAddress) payload.address = trimmedAddress;
+    }
+    onChange(payload);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [use, company, gstin, address]);
+
+  return (
+    <div className="bl-billing">
+      <div className="bl-billing-legend">Who is this payment for?</div>
+      <div className="bl-billing-opts">
+        {[
+          { value: 'personal', title: 'Personal use', sub: 'Invoice in your own name' },
+          { value: 'business', title: 'Business use', sub: 'GST invoice, company name' },
+        ].map((opt) => (
+          <label
+            key={opt.value}
+            className={`bl-billing-opt${use === opt.value ? ' checked' : ''}`}
+          >
+            <input
+              type="radio"
+              name="billing-use"
+              value={opt.value}
+              checked={use === opt.value}
+              disabled={disabled}
+              onChange={() => setUse(opt.value)}
+            />
+            <span className="bl-billing-dot" aria-hidden="true" />
+            <span>
+              <span className="bl-billing-title">{opt.title}</span>
+              <span className="bl-billing-sub">{opt.sub}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+
+      {use === 'business' && (
+        <div className="bl-billing-fields">
+          <label className="bl-billing-field">
+            <span className="bl-billing-label">Company name <em>(optional)</em></span>
+            <input
+              type="text"
+              maxLength={120}
+              autoComplete="organization"
+              placeholder="Your registered business name"
+              value={company}
+              disabled={disabled}
+              onChange={(e) => setCompany(e.target.value)}
+            />
+          </label>
+          <label className="bl-billing-field">
+            <span className="bl-billing-label">GST number <em>(optional)</em></span>
+            <input
+              type="text"
+              maxLength={20}
+              spellCheck="false"
+              autoCapitalize="characters"
+              autoComplete="off"
+              placeholder="22AAAAA0000A1Z5"
+              style={{ textTransform: 'uppercase', letterSpacing: '.04em' }}
+              value={gstin}
+              disabled={disabled}
+              aria-invalid={gstinTouched && !gstinOk ? 'true' : undefined}
+              onChange={(e) => setGstin(e.target.value)}
+              onBlur={() => setGstinTouched(true)}
+            />
+          </label>
+          <label className="bl-billing-field bl-billing-field-wide">
+            <span className="bl-billing-label">Billing address <em>(optional)</em></span>
+            <textarea
+              rows={2}
+              maxLength={400}
+              autoComplete="street-address"
+              placeholder="Street, city, state and PIN code"
+              value={address}
+              disabled={disabled}
+              onChange={(e) => setAddress(e.target.value)}
+            />
+          </label>
+          {gstinTouched && !gstinOk && (
+            <p className="bl-billing-err" role="alert">
+              That GST number doesn&apos;t look right — it should be 15 characters, like
+              22AAAAA0000A1Z5. Everything else here is still kept.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -352,6 +481,34 @@ function CheckoutView({ plan, onBack, onPaid }) {
   const alive = useRef(true);
   useEffect(() => () => { alive.current = false; }, []);
 
+  /* The personal/business answer, held here rather than in state: it changes
+     on every keystroke and none of those need a re-render of their own --
+     BillingDetails already re-renders itself. Debounced so typing a company
+     name does not fire a request per character. */
+  const billingRef = useRef({ use: 'personal' });
+  const billingSaveTimer = useRef(null);
+  const saveBilling = useCallback((paymentId, billing) => {
+    if (!paymentId) return Promise.resolve();
+    // Best-effort, by contract: an invoicing preference must never be able
+    // to fail or delay a payment, so nothing here is surfaced to the founder
+    // and nothing here is awaited by anything that matters.
+    return setCheckoutBilling(paymentId, billing).catch(() => {});
+  }, []);
+  const handleBillingChange = useCallback((billing) => {
+    billingRef.current = billing;
+    if (billingSaveTimer.current) clearTimeout(billingSaveTimer.current);
+    billingSaveTimer.current = setTimeout(() => {
+      if (alive.current && order?.payment_id) saveBilling(order.payment_id, billingRef.current);
+    }, 600);
+  }, [order?.payment_id, saveBilling]);
+  // A fresh order -- the first one, or the one a coupon just rebuilt -- is a
+  // new payment row that knows nothing about what was already typed. Carry
+  // it over rather than requiring the founder to re-answer the question
+  // because they tried a discount code.
+  useEffect(() => {
+    if (order?.payment_id) saveBilling(order.payment_id, billingRef.current);
+  }, [order?.payment_id, saveBilling]);
+
   const createOrder = useCallback((couponCode = null) => {
     setOrder(null);
     setOrderError(null);
@@ -423,6 +580,11 @@ function CheckoutView({ plan, onBack, onPaid }) {
     if (!order || payState !== 'idle') return;
     setPayError(null);
     setPayState('opening');
+    // Flush the debounced save now rather than trusting the timer: a founder
+    // who fills the fields and immediately hits Pay must not open Razorpay's
+    // widget before the last keystroke was ever sent.
+    if (billingSaveTimer.current) { clearTimeout(billingSaveTimer.current); billingSaveTimer.current = null; }
+    await saveBilling(order.payment_id, billingRef.current);
     let outcome;
     try {
       outcome = await openCheckout({ order, planName: plan.name, prefill });
@@ -510,6 +672,11 @@ function CheckoutView({ plan, onBack, onPaid }) {
               <span>{payError}</span>
             </div>
           )}
+
+          {/* Who the payment is for. Sits above the discount code and Pay --
+              answering it changes nothing about what is charged, but it has
+              to be filled in before Pay is pressed, not chased afterwards. */}
+          <BillingDetails onChange={handleBillingChange} disabled={busy} />
 
           {/* Discount code. Sits above Pay because it changes what Pay costs,
               and a founder who spots it afterwards has already committed. */}

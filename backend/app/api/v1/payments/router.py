@@ -122,6 +122,38 @@ def start_checkout(
     return CheckoutResponse.from_domain(session)
 
 
+class BillingRequest(BaseModel):
+    """Who the payment is for. Personal or business, and for a business the
+    optional invoice details the founder chose to give -- company name,
+    GSTIN, billing address. Every field is optional and validated (and, if
+    malformed, silently dropped rather than refused) by
+    app/payments/billing.py: nothing here may fail a checkout."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    use: str | None = None
+    company: str | None = Field(default=None, max_length=200)
+    gstin: str | None = Field(default=None, max_length=40)
+    address: str | None = Field(default=None, max_length=800)
+
+
+@router.patch("/{payment_id}/billing", status_code=204,
+             summary="Attach personal/business use and invoice details to a payment")
+def set_billing(
+    payment_id: int,
+    payload: BillingRequest,
+    founder: Founder = Depends(get_founder_record),
+    service=Depends(get_payment_service),
+) -> None:
+    """Not part of `POST /payments/checkout`: the order (and this payment
+    row) is created the instant the checkout screen opens, before the
+    founder has had a chance to answer the personal/business question. The
+    frontend calls this instead, any number of times, as the founder fills
+    the fields in and again just before Pay -- each call replaces the last,
+    and a failed or skipped call never blocks the payment itself."""
+    service.set_billing(founder.founder_id, payment_id, payload.model_dump(exclude_none=True))
+
+
 class ConfirmRequest(BaseModel):
     """Exactly what Razorpay's Checkout.js handler hands the browser. No amount,
     no tier, no founder id: everything that decides the outcome is either

@@ -40,6 +40,7 @@ from app.payments.errors import (
     PaymentGatewayUnavailableError,
     PaymentsNotConfiguredError,
 )
+from app.payments.billing import parse_billing
 from app.payments.gateway import PaymentGateway, PaymentGatewayError
 from app.payments.models import CheckoutSession, WebhookOutcome, WebhookResult
 from app.payments.repository import PaymentRepository
@@ -181,6 +182,25 @@ class PaymentService:
             discount_paise=discount_inr * 100 if discount_inr else None,
             coupon_code=coupon.code if coupon is not None else None,
         )
+
+    def set_billing(self, founder_id: int, payment_id: int, billing_payload: Any) -> None:
+        """Attach the personal/business answer and invoice details the
+        checkout screen collected.
+
+        Ownership is checked before anything is written, the same way
+        `confirm_checkout` checks it: this endpoint is reachable with a
+        founder's own token, so a payment id belonging to someone else must
+        look exactly like one that does not exist. Beyond that nothing here
+        can fail loudly -- `parse_billing` drops whatever does not validate
+        rather than raising, because a GSTIN typo must never be able to
+        interrupt a checkout that is otherwise fine.
+        """
+        payment = self.repository.get_by_payment_id(payment_id)
+        if payment is None or payment.founder_id != founder_id:
+            raise PaymentNotFoundError()
+
+        billing = parse_billing(billing_payload)
+        self.repository.set_billing(payment_id, billing)
 
     def confirm_checkout(self, founder_id: int, *, order_id: str, gateway_payment_id: str,
                          signature: str | None = None) -> WebhookResult:
