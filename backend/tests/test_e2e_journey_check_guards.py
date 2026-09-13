@@ -26,6 +26,7 @@ from scripts.e2e_journey_check import (
     _answer_for,
     _clear_journey_stamps,
     _walk,
+    band_summary,
     match_answer,
 )
 
@@ -439,3 +440,55 @@ def test_walk_marks_which_questions_got_the_generic_answer():
     )
     _walk(client, "/start", "/answer", "question_id", "X", out, "strong")
     assert [q["_fell_back"] for q in out] == [True, False]
+
+
+# --- the RESULT block --------------------------------------------------
+#
+# These exist because a NameError shipped here. The split was added, `bands`
+# became `answered`, the flat-amber check three lines below still said
+# `bands`, and RESULT died after the bands and before the pillars, model
+# calls and cost. Every test covered the matching; none covered the
+# reporting, so a paid run printed a traceback where its summary should
+# have been.
+
+
+def test_band_summary_runs_to_the_end():
+    """The regression, stated plainly: it must not raise."""
+    lines = band_summary([(1, "red"), (2, "green")], {1})
+    assert lines and all(isinstance(x, str) for x in lines)
+
+
+def test_band_summary_splits_generic_from_on_topic():
+    lines = band_summary(
+        [(1, "red"), (2, "red"), (3, "green"), (4, "amber")], {1, 2})
+    assert "'red': 2" in lines[0] and "'green': 1" in lines[0]
+    assert "on topic" in lines[1] and "'green': 1" in lines[1]
+    assert "generic" in lines[2] and "'red': 2" in lines[2]
+
+
+def test_band_summary_stays_quiet_when_nothing_fell_back():
+    lines = band_summary([(1, "green"), (2, "green")], set())
+    assert len(lines) == 1
+    assert "generic" not in lines[0]
+
+
+def test_band_summary_still_flags_flat_amber():
+    """Unscored answers reach the pipeline as one band for everything. That
+    is about SCORING, not about this script's answers, and survived the
+    refactor that broke its neighbour."""
+    lines = band_summary([(1, "amber"), (2, "amber"), (3, "amber")], set())
+    assert any("unscored fallback" in x for x in lines)
+
+
+def test_band_summary_does_not_cry_flat_amber_on_a_real_spread():
+    lines = band_summary([(1, "amber"), (2, "green"), (3, "red")], set())
+    assert not any("unscored fallback" in x for x in lines)
+
+
+def test_band_summary_handles_an_unscored_label():
+    lines = band_summary([(1, None), (2, "green")], set())
+    assert "unscored" in lines[0]
+
+
+def test_band_summary_handles_no_answers_at_all():
+    assert band_summary([], set()) == ["  answer bands            none"]

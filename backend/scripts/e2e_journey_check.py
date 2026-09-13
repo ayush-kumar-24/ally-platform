@@ -355,6 +355,46 @@ def match_answer(question_text: str, persona: str = "weak") -> tuple[str, bool]:
     return best, True
 
 
+def _tally(pairs) -> dict:
+    out: dict = {}
+    for _, label in pairs:
+        out[label or "unscored"] = out.get(label or "unscored", 0) + 1
+    return dict(sorted(out.items(), key=lambda kv: -kv[1]))
+
+
+def band_summary(rows, fallback_qids) -> list[str]:
+    """The RESULT block's band lines, as strings.
+
+    A function rather than inline printing because inline printing is how a
+    NameError shipped: the split was added, `bands` was renamed to
+    `answered`, the flat-amber check three lines below still said `bands`,
+    and the whole RESULT block died after the bands and before the pillars,
+    model calls and cost. Every test covered the matching and none covered
+    the reporting, so nothing caught it until a paid run printed a
+    traceback where its summary should have been.
+
+    `rows` is (question_id, score_label); `fallback_qids` are the questions
+    that got the generic answer.
+    """
+    answered = _tally(rows)
+    lines = [f"  answer bands            {answered or 'none'}"]
+
+    generic = _tally([r for r in rows if r[0] in fallback_qids])
+    if generic:
+        on_topic = _tally([r for r in rows if r[0] not in fallback_qids])
+        lines.append(f"    of which on topic     {on_topic or 'none'}")
+        lines.append(f"    of which generic      {generic}"
+                     "   <- the script had no answer for these; read them"
+                     " as harness noise, not as the founder")
+
+    # About SCORING being off, not about this script's answers: one band for
+    # everything is the signature of answers reaching the pipeline unscored.
+    if len(answered) == 1 and "amber" in answered:
+        lines.append("    ^ every answer identical -- this is the unscored "
+                     "fallback, not a real classification")
+    return lines
+
+
 def _answer_for(n: int, persona: str = "weak", question_text: str | None = None) -> str:
     """The answer to send. With question text, the topic match; without it,
     the old index cycle, which is what callers that have no question have."""
@@ -790,26 +830,9 @@ def run(args) -> int:
             "select question_id, score_label from answers where founder_id=:f"),
             {"f": fid}).all()
 
-    def _tally(pairs):
-        out: dict = {}
-        for _, label in pairs:
-            out[label or "unscored"] = out.get(label or "unscored", 0) + 1
-        return dict(sorted(out.items(), key=lambda kv: -kv[1]))
-
-    answered = _tally(rows)
-    on_topic = _tally([r for r in rows if r[0] not in fallback_qids])
-    generic = _tally([r for r in rows if r[0] in fallback_qids])
-
     print(f"  answer persona          {args.persona}")
-    print(f"  answer bands            {answered or 'none'}")
-    if generic:
-        print(f"    of which on topic     {on_topic or 'none'}")
-        print(f"    of which generic      {generic}"
-              "   <- the script had no answer for these; read them as"
-              " harness noise, not as the founder")
-    if len(bands) == 1 and bands[0][0] == "amber":
-        print("    ^ every answer identical -- this is the unscored fallback, "
-              "not a real classification")
+    for line in band_summary(rows, fallback_qids):
+        print(line)
 
     if report:
         bd = report[1] or {}
