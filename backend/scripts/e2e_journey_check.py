@@ -101,6 +101,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import time
 from datetime import datetime, timezone
@@ -110,76 +111,244 @@ TEST_DOMAIN = "ally-e2e.local"
 #: Answers with enough substance for a classifier to have an opinion. A run
 #: answering "test" to everything tells you the plumbing works and nothing
 #: about whether the scoring does.
-#: WEAK. A founder who has not done the work: no market sizing, no pricing
-#: rationale, no planning rhythm, no analytics, nothing written down. Every
-#: gap here is one a pillar actually scores, so a working classifier should
-#: band this badly.
-WEAK_ANSWERS = [
-    "We have about ten paying customers, mostly from my own network, and two "
-    "churned last month without telling me why.",
-    "Honestly I spend most of the week firefighting support and very little on "
-    "anything that compounds.",
-    "I have never sat down and worked out the real size of this market. I know "
-    "the problem is real because I had it myself.",
-    "The last thing I shipped took six weeks and almost nobody has used it. I "
-    "built it because one loud customer asked.",
-    "I do not really know why we charge what we charge. I copied a competitor's "
-    "pricing page when we launched and never revisited it.",
-    "There are two of us. Neither of us owns anything in writing, we just work "
-    "out who does what each morning.",
-]
+#: Answers tagged with the question topics they actually answer.
+#:
+#: WHY TAGGED AT ALL. Answers used to be handed out round-robin by question
+#: index, so which answer met which question was luck, and the luck was bad:
+#: the strong run's analytics question drew the cofounder paragraph, and
+#: "explain this idea in one breath" drew the one about planning rhythm. The
+#: engine then read an answer that genuinely did not address the question,
+#: scored it red, and RC-441 Weak Product Analytics was detected against a
+#: founder whose answer said the product was instrumented. The reds were
+#: measuring the harness, not the founder.
+#:
+#: Each entry is (topic keywords, answer). Keywords are substrings matched
+#: against the lowercased question text, stemmed so one entry catches the
+#: variants -- "pric" for price/pricing/priced, "custom" for
+#: customer/customers. The answer with the most distinct hits wins.
+#:
+#: BOTH PERSONAS COVER THE SAME TOPICS IN THE SAME ORDER. That is what makes
+#: the runs comparable: a question matches the same slot in either persona,
+#: so the only thing differing between two runs is the quality of the answer
+#: that lands, never which subject got discussed.
+#:
+#: The first six are the business dimensions. The last four exist because
+#: Founder DNA asks about the founder, not the business -- 18 of the ~36
+#: questions in a full journey -- and with only business answers in the bank
+#: that whole phase fell through to the generic reply.
 
-#: STRONG. The same six dimensions, answered by a founder who HAS done the
-#: work -- talked to strangers, tested willingness to pay, sized the market
-#: bottom-up, instrumented the product, holds a planning rhythm, wrote the
-#: split down.
+#: (defining terms, supporting terms) per topic. A defining term means the
+#: question is about this topic -- "feedback", "competitor", "cofounder".
+#: A supporting term only leans that way -- "money", "build", "week" -- and
+#: on its own is coincidence.
+_TOPICS = (
+    # customers, validation, who actually pays
+    (("customer", "spoken to", "talked to", "interview", "personal network",
+      "validat", "pays for this", "anyone else told", "problem is real",
+      "actually uses it"),
+     ("talk to", "audience", "demand", "stranger")),
+    # time, planning, priorities, focus
+    (("plan", "priorit", "schedul", "deep work", "eats the most", "sat down",
+      "spent hours", "your time", "specific time", "every hour",
+      "avoiding right now", "decided not to do", "left over"),
+     ("week", "focus", "switching")),
+    # market size, research, competitors
+    (("market", "competitor", "how many businesses", "count or estimate",
+      "would actually need this"),
+     ("estimate", "size", "research")),
+    # product, analytics, what got shipped
+    (("product", "analytics", "you've built", "shipped", "actually used",
+      "prototype"),
+     ("tools", "build", "usage", "feature")),
+    # pricing, money, financial boundaries
+    (("pricing", "what we charge", "charge for", "financial", "revenue",
+      "clean boundary", "money move"),
+     ("money", "cost", "price")),
+    # team, roles, who decides
+    (("team", "cofounder", "co-founder", "who owns", "the split",
+      "decide together"),
+     ("hire", "role")),
+    # risk
+    (("risk", "could fail", "downside", "worst case", "thought about risk"),
+     ("go wrong", "unsettle", "fail")),
+    # decisions under uncertainty, stress
+    (("decision", "decide fast", "big unknown", "uncertainty",
+      "under pressure", "completely drained"),
+     ("decide", "unknown", "stress", "drained")),
+    # feedback, criticism, blind spots
+    (("feedback", "criticis", "blind spot", "pointed out", "dismisses your",
+      "told to you straight"),
+     ("harsh", "difficult")),
+    # motivation, purpose, vision
+    (("why does", "deserve", "thriving", "five years", "vision",
+      "grabbed you", "origin story", "opening line", "advice right now"),
+     ("matters", "picture")),
+)
+
+#: WEAK. A founder who has not done the work: no market sizing, no pricing
+#: rationale, no planning rhythm, no analytics, nothing written down.
+_WEAK_TEXTS = (
+    "About ten paying customers, mostly from my own network, and two churned "
+    "last month without telling me why. I have not spoken to anyone outside "
+    "the people I already knew.",
+    "I spend most of the week firefighting support and very little on "
+    "anything that compounds. I have not sat down to plan since the week I "
+    "started.",
+    "I have never worked out the real size of this market. I know the problem "
+    "is real because I had it myself, and I have never gone looking for who "
+    "else is solving it.",
+    "The last thing I shipped took six weeks and almost nobody has used it. I "
+    "built it because one loud customer asked, and I would only know someone "
+    "used it if they told me.",
+    "I do not really know why we charge what we charge. I copied a "
+    "competitor's pricing page when we launched and never revisited it, and "
+    "my own money and the business money are in the same account.",
+    "There are two of us. Neither of us owns anything in writing, we just "
+    "work out who does what each morning, and we have never agreed who "
+    "decides when we disagree.",
+    "I have worried about it plenty but never written anything down. If you "
+    "asked me for the list I would have to make it up on the spot.",
+    "I usually put the decision off and hope it resolves itself, and when it "
+    "does not I pick whichever option is in front of me that day.",
+    "Someone told me something useful about six weeks ago and I found a "
+    "reason it did not apply. I have not gone back to it since.",
+    "Honestly I have not put it into words. I know it matters to me but if "
+    "you asked me to say why in one sentence I would struggle.",
+)
+
+#: STRONG. The same topics, in the same order, answered by a founder who HAS
+#: done the work.
 #:
 #: DELIBERATELY STILL EARLY-STAGE. The temptation is to write a scaled
-#: company -- crores of revenue, a team of thirty -- but the founders this
-#: runs against are at Ideation, and the confidence engine carries a
-#: stage_coherence_factor that reads answers against the founder's stage.
-#: Answers describing a Series B would make the comparison measure stage
-#: mismatch rather than the thing being tested. Strong here means rigorous,
-#: not big: everything below is available to somebody six weeks in who
-#: simply did the work rather than avoiding it.
-STRONG_ANSWERS = [
-    "Forty-one conversations with people I had never met -- I found them "
-    "through two industry Slack groups and cold email, not my own network. "
-    "Nine offered to pay before I had anything to sell, and I have notes on "
-    "every call in one doc, tagged by which of the three problems they "
-    "actually led with.",
+#: company -- crores of revenue, a team of thirty -- but these founders are
+#: at Ideation, and the confidence engine carries a stage_coherence_factor
+#: that reads answers against the founder's stage. Answers describing a
+#: Series B would make the comparison measure stage mismatch rather than the
+#: thing being tested. Strong here means rigorous, not big.
+_STRONG_TEXTS = (
+    "Forty-one conversations with people I had never met, found through two "
+    "industry Slack groups and cold email rather than my own network. Nine "
+    "offered to pay before I had anything to sell, and the notes are in one "
+    "doc tagged by which of the three problems they led with.",
     "Mondays are two hours on the one question that decides the week, and I "
     "protect them -- the rest is execution against what that produced. Last "
-    "Monday it was whether to build the integration or keep doing it by "
-    "hand, and I chose by hand for another month because it is the cheaper "
-    "way to learn what the integration should be.",
-    "Bottom-up: roughly eleven thousand firms in this bracket in India, I "
-    "can reach maybe four hundred through the two channels I have actually "
-    "tested, and at the price nine people already agreed to that is a real "
-    "business but not a venture-scale one yet. I wrote that down because the "
-    "top-down number flattered me and I did not trust it.",
-    "I instrumented the three steps that matter before I shipped it, so I "
-    "can see that eleven of nineteen people who start the flow finish it, "
-    "and where the other eight stop. That drop-off is the next thing I fix, "
-    "and I know it is the next thing because I can see it, not because "
-    "somebody complained loudly.",
-    "I tested three prices with real people, not a survey -- asked for money "
-    "and watched what happened. At the middle one, six of nine said yes "
-    "without negotiating, which tells me it is too low rather than right, "
-    "and I have a note to retest higher next month with the same script.",
+    "Monday it was whether to build the integration or keep doing it by hand, "
+    "and I chose by hand for another month because it is the cheaper way to "
+    "learn what the integration should be.",
+    "Bottom-up: roughly eleven thousand firms in this bracket in India, about "
+    "four hundred reachable through the two channels I have actually tested. "
+    "I wrote it down because the top-down number flattered me and I did not "
+    "trust it, and I check the three nearest alternatives every month.",
+    "I instrumented the three steps that matter before I shipped it, so I can "
+    "see that eleven of nineteen people who start the flow finish it, and "
+    "where the other eight stop. That drop-off is the next thing I fix, and I "
+    "know it is next because I can see it rather than because someone "
+    "complained.",
+    "I tested three prices with real people rather than a survey -- asked for "
+    "money and watched what happened. At the middle one, six of nine said yes "
+    "without negotiating, which tells me it is too low rather than right. The "
+    "business account is separate from mine and has been since week one.",
     "Two of us, and we wrote the split down in week one precisely because "
     "everyone told us not to bother: I own product and customer "
     "conversations, she owns the build, and we agreed in writing who decides "
     "when we disagree. It has already been used once.",
-]
+    "Five written down, reviewed monthly. The one that actually worries me is "
+    "channel concentration -- both channels I have tested run through the "
+    "same two communities, and I have no third.",
+    "I write the decision down with what would have to be true for it to be "
+    "wrong, then set a date to check. The integration call last month is on "
+    "that list with a review date of the fourteenth.",
+    "Someone told me six weeks ago that I was optimising a flow nobody had "
+    "asked for. I stopped that week, went back to the interview notes, and "
+    "she was right -- it was not in any of them.",
+    "Because I watched people give up on something they needed for want of "
+    "anyone willing to explain it, and I can say that in one sentence because "
+    "I have had to say it to forty-one strangers.",
+)
 
-#: Kept as the module-level default so anything importing ANSWERS still works.
-ANSWERS = WEAK_ANSWERS
+assert len(_WEAK_TEXTS) == len(_STRONG_TEXTS) == len(_TOPICS)
+
+#: A question that matches no topic still gets an answer of the right
+#: quality. Quality is the variable under test; subject is not, so the
+#: fallback is deliberately topic-neutral -- it must not smuggle in evidence
+#: (or the absence of it) about a dimension the question never raised.
+FALLBACKS = {
+    "weak": "Honestly, no -- I have not done that. I keep meaning to and then "
+            "find something else to deal with instead.",
+    "strong": "Yes, and I can point at where -- I write these down as I go "
+              "and review them on a set day rather than when I happen to "
+              "remember.",
+}
+
+ANSWER_BANK = {
+    "weak": tuple(zip(_TOPICS, _WEAK_TEXTS)),
+    "strong": tuple(zip(_TOPICS, _STRONG_TEXTS)),
+}
+
+#: The texts alone, in topic order -- the index-based fallback when no
+#: question text is available, and what anything importing these expects.
+WEAK_ANSWERS = _WEAK_TEXTS
+STRONG_ANSWERS = _STRONG_TEXTS
 
 PERSONAS = {"weak": WEAK_ANSWERS, "strong": STRONG_ANSWERS}
 
 
-def _answer_for(n: int, persona: str = "weak") -> str:
+#: A defining term is worth two, a supporting term one, and two points are
+#: needed to match at all. So one defining term is enough, two supporting
+#: terms are enough, and a single supporting term is not -- which is the
+#: point: "the last time you..." opens a dozen questions that have nothing
+#: to do with time management, and a wrong answer is worse than the generic
+#: one. It gets scored as though the founder failed to address a subject
+#: they were never asked about, which is exactly how RC-441 Weak Product
+#: Analytics came to be detected against a founder whose answer described an
+#: instrumented product.
+_DEFINING_WEIGHT, _SUPPORTING_WEIGHT = 2, 1
+_MATCH_THRESHOLD = 2
+
+
+def _score(topic, text: str) -> tuple[int, int]:
+    """(defining hits, total score) for one topic against one question.
+
+    Terms match at a word boundary. That matters: plain substring matching
+    scored "Which one recharges you?" against the pricing answer, because
+    "charge" sits inside "recharges". Stems still work -- "plan" matches
+    "planning" -- because only the start is anchored.
+
+    Defining hits lead the comparison so that a question naming several
+    topics goes to the one it is really asking about: "could fail in a way
+    that costs you real time or money" scores two either way, but only risk
+    scores it on a defining term.
+    """
+    defining, supporting = topic
+    d = sum(1 for t in defining if re.search(r"\b" + re.escape(t), text))
+    sup = sum(1 for t in supporting if re.search(r"\b" + re.escape(t), text))
+    return d, d * _DEFINING_WEIGHT + sup * _SUPPORTING_WEIGHT
+
+
+def match_answer(question_text: str, persona: str = "weak") -> tuple[str, bool]:
+    """(answer, matched) for one question -- the answer whose topic scores
+    highest, or the persona's fallback when nothing clears the threshold.
+
+    `matched` is reported at the end of each phase, because a run where most
+    questions fell back is measuring the fallback line, not the persona, and
+    its bands should be read that way.
+    """
+    low = (question_text or "").lower()
+    best, best_rank = None, (0, 0)
+    for topic, answer in ANSWER_BANK[persona]:
+        rank = _score(topic, low)
+        if rank > best_rank:
+            best, best_rank = answer, rank
+    if best is None or best_rank[1] < _MATCH_THRESHOLD:
+        return FALLBACKS[persona], False
+    return best, True
+
+
+def _answer_for(n: int, persona: str = "weak", question_text: str | None = None) -> str:
+    """The answer to send. With question text, the topic match; without it,
+    the old index cycle, which is what callers that have no question have."""
+    if question_text:
+        return match_answer(question_text, persona)[0]
     answers = PERSONAS[persona]
     return answers[n % len(answers)]
 
@@ -414,6 +583,7 @@ def _walk(client, start_path, answer_path, id_field, label, out, persona="weak")
         print(f"  FAIL {start_path} -> {r.status_code} {r.text[:200]}")
         return False
     q = (r.json() or {}).get("question")
+    matched_count = 0
     if q is None:
         # A null question means "this phase is already complete for this
         # founder" -- and that is a FAILURE here, not a pass. This check
@@ -435,7 +605,10 @@ def _walk(client, start_path, answer_path, id_field, label, out, persona="weak")
     while q:
         out.append(q)
         n = len(out)
-        body = {id_field: q[id_field], "answer_text": _answer_for(n, persona)}
+        answer, matched = match_answer(q.get("question_text", ""), persona)
+        if matched:
+            matched_count += 1
+        body = {id_field: q[id_field], "answer_text": answer}
         a = client.post(answer_path, json=body)
         if a.status_code not in (200, 201):
             print(f"  FAIL {answer_path} -> {a.status_code} {a.text[:200]}")
@@ -459,7 +632,13 @@ def _walk(client, start_path, answer_path, id_field, label, out, persona="weak")
     if not out:
         print(f"  FAIL {label}: 0 questions answered")
         return False
-    print(f"  {label}: {len(out)} question(s) answered")
+    # How many questions got an answer actually about them. A phase that
+    # mostly fell back is measuring the fallback line, not the persona, and
+    # its bands should be read that way.
+    fell_back = len(out) - matched_count
+    detail = f", {fell_back} fell back to the generic answer" if fell_back else ""
+    print(f"  {label}: {len(out)} question(s) answered "
+          f"({matched_count} matched on topic{detail})")
     return True
 
 

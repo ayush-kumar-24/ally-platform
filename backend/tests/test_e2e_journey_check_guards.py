@@ -17,12 +17,16 @@ import pytest
 
 from scripts.e2e_journey_check import (
     _JOURNEY_STAMPS,
+    _MATCH_THRESHOLD,
+    ANSWER_BANK,
+    FALLBACKS,
     PERSONAS,
     STRONG_ANSWERS,
     WEAK_ANSWERS,
     _answer_for,
     _clear_journey_stamps,
     _walk,
+    match_answer,
 )
 
 
@@ -161,11 +165,14 @@ def test_clear_journey_stamps_survives_a_schema_without_those_columns():
 # --- personas ----------------------------------------------------------
 
 
-def test_both_personas_answer_the_same_six_dimensions():
+def test_both_personas_cover_the_same_topics_in_the_same_order():
     """The comparison is only meaningful if the sets differ in quality and
-    not in what they are about."""
-    assert len(WEAK_ANSWERS) == len(STRONG_ANSWERS) == 6
+    not in what they are about -- so slot N is the same subject in both."""
+    assert len(WEAK_ANSWERS) == len(STRONG_ANSWERS) == len(ANSWER_BANK["weak"])
     assert set(PERSONAS) == {"weak", "strong"}
+    weak_topics = [t for t, _ in ANSWER_BANK["weak"]]
+    strong_topics = [t for t, _ in ANSWER_BANK["strong"]]
+    assert weak_topics == strong_topics
 
 
 def test_weak_is_the_default_so_existing_runs_are_unchanged():
@@ -173,13 +180,15 @@ def test_weak_is_the_default_so_existing_runs_are_unchanged():
 
 
 def test_personas_give_genuinely_different_answers():
-    for i in range(6):
+    for i in range(len(WEAK_ANSWERS)):
         assert _answer_for(i, "weak") != _answer_for(i, "strong")
 
 
-def test_answers_cycle_by_index():
-    assert _answer_for(6, "strong") == _answer_for(0, "strong")
-    assert _answer_for(13, "weak") == _answer_for(1, "weak")
+def test_answers_still_cycle_by_index_when_no_question_text_is_given():
+    """The old behaviour, kept for callers that have no question to match."""
+    n = len(WEAK_ANSWERS)
+    assert _answer_for(n, "strong") == _answer_for(0, "strong")
+    assert _answer_for(n + 1, "weak") == _answer_for(1, "weak")
 
 
 def test_strong_answers_carry_the_evidence_the_weak_ones_lack():
@@ -203,7 +212,9 @@ def test_strong_answers_stay_at_the_founder_s_stage():
 
 def test_walk_sends_the_persona_it_was_given():
     client = _Client(
-        {"question": _q(1)},
+        {"question": {"founder_dna_question_id": 1,
+                      "question_text": "When did you last sit down "
+                                       "specifically to plan?"}},
         [{"is_complete": True, "next_question": None}],
     )
     sent = []
@@ -217,3 +228,147 @@ def test_walk_sends_the_persona_it_was_given():
     client.post = _spy
     _walk(client, "/start", "/answer", "founder_dna_question_id", "X", [], "strong")
     assert sent and sent[0] in STRONG_ANSWERS
+
+
+# --- topic matching ----------------------------------------------------
+#
+# Answers used to be handed out round-robin by question index, so which
+# answer met which question was luck. The strong run's analytics question
+# drew the cofounder paragraph and was scored red, and RC-441 Weak Product
+# Analytics was detected against a founder whose answer said the product was
+# instrumented. These tests are about that.
+
+
+ANALYTICS_Q = ("Do you have any way to see how someone actually used what "
+               "you've built, or would you only know if they told you?")
+
+
+@pytest.mark.parametrize("persona", ["weak", "strong"])
+def test_the_analytics_question_gets_the_analytics_answer(persona):
+    """The RC-441 regression, stated as a test."""
+    answer, matched = match_answer(ANALYTICS_Q, persona)
+    assert matched
+    assert answer == ANSWER_BANK[persona][3][1], "expected the product topic"
+
+
+def test_strong_analytics_answer_actually_describes_instrumentation():
+    answer, _ = match_answer(ANALYTICS_Q, "strong")
+    assert "instrumented" in answer
+
+
+def test_terms_match_at_a_word_boundary():
+    """'charge' sits inside 'recharges'. Substring matching sent an energy
+    question to the pricing answer."""
+    _, matched = match_answer(
+        "Which one actually recharges you -- working alone in a silent room, "
+        "or a loud room full of people?", "strong")
+    assert matched is False
+
+
+def test_one_supporting_term_is_not_enough():
+    """'the last time you...' opens a dozen unrelated questions."""
+    _, matched = match_answer(
+        "Tell me about the last time you laughed at work.", "weak")
+    assert matched is False
+
+
+def test_one_defining_term_is_enough():
+    answer, matched = match_answer(
+        "Tell me about the last time you had to give someone difficult "
+        "feedback.", "weak")
+    assert matched
+    assert answer == ANSWER_BANK["weak"][8][1], "expected the feedback topic"
+
+
+def test_a_multi_topic_question_goes_to_its_defining_term():
+    """Scores two either way; only risk scores on a defining term."""
+    answer, matched = match_answer(
+        "When this idea could fail in a way that costs you real time or "
+        "money, does that possibility excite you or unsettle you?", "strong")
+    assert matched
+    assert answer == ANSWER_BANK["strong"][6][1], "expected the risk topic"
+
+
+def test_a_question_listing_several_areas_goes_to_the_one_it_asks_about():
+    answer, matched = match_answer(
+        "Which areas have you thought about risk in -- finance, legal, "
+        "operations, market, team -- and which haven't you touched?", "weak")
+    assert matched
+    assert answer == ANSWER_BANK["weak"][6][1], "expected the risk topic"
+
+
+def test_no_match_returns_the_persona_fallback():
+    for persona in ("weak", "strong"):
+        answer, matched = match_answer("What colour is the sky?", persona)
+        assert matched is False
+        assert answer == FALLBACKS[persona]
+
+
+def test_both_personas_match_the_same_topic_for_the_same_question():
+    """What makes two runs comparable: the same question reaches the same
+    slot in either persona, so only answer QUALITY differs between runs,
+    never which subject got discussed."""
+    questions = [ANALYTICS_Q,
+                 "When was the last time you sat down specifically to plan?",
+                 "How many people outside your personal network have you "
+                 "spoken to about this problem?",
+                 "Is your sense of what financial controls you need based on "
+                 "evidence, or mostly on gut feeling?"]
+    for q in questions:
+        weak, w_ok = match_answer(q, "weak")
+        strong, s_ok = match_answer(q, "strong")
+        assert w_ok and s_ok, q
+        weak_texts = [a for _, a in ANSWER_BANK["weak"]]
+        strong_texts = [a for _, a in ANSWER_BANK["strong"]]
+        assert weak_texts.index(weak) == strong_texts.index(strong), q
+
+
+def test_threshold_is_documented_as_two():
+    """Named so the tests above read as intent rather than coincidence."""
+    assert _MATCH_THRESHOLD == 2
+
+
+def test_every_topic_is_reachable_by_at_least_one_real_question():
+    """A topic nothing can match is dead weight pretending to be coverage."""
+    reachable = set()
+    for q in [
+        "How many customers have you spoken to outside your personal network?",
+        "When did you last sit down specifically to plan?",
+        "How many businesses would actually need this?",
+        ANALYTICS_Q,
+        "Why do you charge for it what you charge for it?",
+        "Who owns what between you and your cofounder?",
+        "What is the biggest risk you have taken on this?",
+        "When you face a big unknown, how do you decide?",
+        "When did someone last give you difficult feedback?",
+        "In one sentence, why does this problem deserve your next few years?",
+    ]:
+        answer, matched = match_answer(q, "strong")
+        assert matched, q
+        reachable.add([a for _, a in ANSWER_BANK["strong"]].index(answer))
+    assert reachable == set(range(len(ANSWER_BANK["strong"])))
+
+
+def test_walk_reports_how_many_answers_matched(capsys):
+    client = _Client(
+        {"question": {"founder_dna_question_id": 1,
+                      "question_text": ANALYTICS_Q}},
+        [{"is_complete": True, "next_question": None}],
+    )
+    _walk(client, "/start", "/answer", "founder_dna_question_id", "X", [],
+          "strong")
+    printed = capsys.readouterr().out
+    assert "1 matched on topic" in printed
+
+
+def test_walk_names_the_fallbacks_so_a_weak_run_is_visible(capsys):
+    client = _Client(
+        {"question": {"founder_dna_question_id": 1,
+                      "question_text": "What colour is the sky?"}},
+        [{"is_complete": True, "next_question": None}],
+    )
+    _walk(client, "/start", "/answer", "founder_dna_question_id", "X", [],
+          "weak")
+    printed = capsys.readouterr().out
+    assert "0 matched on topic" in printed
+    assert "1 fell back" in printed
