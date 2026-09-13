@@ -27,7 +27,6 @@ existed. A diagnosis is never blocked on filling a library gap.
 from __future__ import annotations
 
 import asyncio
-import json
 from collections.abc import Mapping, Sequence
 from decimal import Decimal
 
@@ -39,7 +38,7 @@ from app.api.v1.reasoning.schemas import (
 from app.core.logger import logger
 from app.models.enums import ConfirmationStatus
 from app.services.llm.base import LLMMessage, LLMRequest, LLMRole
-from app.services.llm.text import run_sync
+from app.services.llm.text import loads_json, run_sync
 
 _SYSTEM = (
     "You advise startup founders. You are given a root cause diagnosed in a "
@@ -169,4 +168,4 @@ class LLMRecommendationFallback:
         response = run_sync(
             asyncio.wait_for(self.provider.generate(request), self.timeout_seconds)
         )
-        return json.loads(response.text)
+        return loads_json(response.text)

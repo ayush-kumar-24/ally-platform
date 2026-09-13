@@ -35,7 +35,7 @@ from decimal import Decimal
 from app.api.v1.reasoning.engines.archetype import ArchetypeEngine, ArchetypeMatch
 from app.core.logger import logger
 from app.services.llm.base import LLMError, LLMMessage, LLMRequest, LLMRole
-from app.services.llm.text import run_sync
+from app.services.llm.text import loads_json, run_sync
 
 _SYSTEM = (
     "You classify a startup founder into exactly one archetype from a fixed list. "
@@ -142,7 +142,7 @@ class LLMArchetypeAssigner:
         response = run_sync(
             asyncio.wait_for(self.provider.generate(request), self.timeout_seconds)
         )
-        return json.loads(response.text)
+        return loads_json(response.text)
 
     def _to_match(self, payload: dict, by_code: dict) -> ArchetypeMatch | None:
         code = str(payload.get("archetype_code") or "").strip()

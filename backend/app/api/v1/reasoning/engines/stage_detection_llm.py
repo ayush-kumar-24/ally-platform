@@ -71,7 +71,7 @@ from app.api.v1.reasoning.schemas import AnswerClassification, StageDetection
 from app.core.logger import logger
 from app.models.diagnosis import Question
 from app.services.llm.base import LLMError, LLMMessage, LLMRequest, LLMRole
-from app.services.llm.text import run_sync
+from app.services.llm.text import loads_json, run_sync
 
 _QUANT = Decimal("0.0001")
 _ZERO = Decimal("0")
@@ -232,7 +232,7 @@ class LLMStageInferenceStrategy:
         response = run_sync(
             asyncio.wait_for(self.provider.generate(request), self.timeout_seconds)
         )
-        return json.loads(response.text)
+        return loads_json(response.text)
 
     def _to_detection(
         self, payload: dict, by_name: dict[str, object], context: ReasoningContext

@@ -54,13 +54,23 @@ Problem run, a diagnosis session and its answers, and a report. Every founder
 it creates is named `e2e+<timestamp>@ally-e2e.local`; `--cleanup` deletes every
 founder at that domain and everything cascading from them.
 
-In --founder-email / --founder-id mode it writes NOTHING to `founders` or
-`founder_consents` -- only a Founder DNA run, a Current Problem run, a
-diagnosis session and its answers, and a report, all against the founder_id
-that account already owns. `--cleanup-founder-email` / `--cleanup-founder-id`
-remove exactly those (sessions, answers, DNA answers, current-problem
-answers, reports) and leave the founder and their consent alone -- that
-account is real and outlives this script.
+In --founder-email / --founder-id mode it never creates or deletes a
+`founders` or `founder_consents` row -- it writes only a Founder DNA run, a
+Current Problem run, a diagnosis session and its answers, and a report, all
+against the founder_id that account already owns.
+`--cleanup-founder-email` / `--cleanup-founder-id` remove exactly those
+(sessions, answers, DNA answers, current-problem answers, reports) and leave
+the founder and their consent in place -- that account is real and outlives
+this script.
+
+The one exception, and it matters: cleanup also sets
+`founders.founder_dna_completed_at` and `current_problem_completed_at` back
+to null. Those two columns are journey state living on the founder row, not
+identity. Cleanup used to skip them to keep a "writes nothing to founders"
+promise, and the result was a founder with the answers deleted but still
+flagged as having finished: founder-dna/start and current-problem/start then
+returned no question at all, both phases walked zero questions, and the run
+still printed a full-looking report built on the diagnosis alone.
 
 The database URL must be passed explicitly -- it deliberately does NOT read
 DATABASE_URL, so pointing this at a real project has to be a decision rather
@@ -144,7 +154,35 @@ _JOURNEY_TABLES = (
 )
 
 
+#: Journey state that lives on the `founders` row itself rather than in a
+#: child table. Deleting the answers without clearing these leaves a founder
+#: marked complete with nothing behind it -- and the next run's
+#: founder-dna/start and current-problem/start then serve no question at all,
+#: because `current_state()` short-circuits on the timestamp. That is how a
+#: journey check came back "0 question(s) answered" for two whole phases.
+_JOURNEY_STAMPS = ("founder_dna_completed_at", "current_problem_completed_at")
+
+
+def _clear_journey_stamps(db, sa, founder_ids: list) -> None:
+    """Reset the phase-completion timestamps on `founders`.
+
+    This is the one place cleanup touches the founders row, and it is
+    deliberate: these two columns are journey state, not identity. Nothing
+    about who the founder is, their consent, plan or profile is altered --
+    only the record of having finished a phase, which is exactly what
+    cleanup is removing everywhere else.
+    """
+    try:
+        db.execute(sa.text(
+            "update founders set "
+            + ", ".join(f"{c} = null" for c in _JOURNEY_STAMPS)
+            + " where founder_id = any(:f)"), {"f": founder_ids})
+    except Exception:                                            # noqa: BLE001
+        db.rollback()  # column may not exist on this schema; keep going
+
+
 def _delete_journey_rows(db, sa, founder_ids: list) -> None:
+    _clear_journey_stamps(db, sa, founder_ids)
     for table, col in _JOURNEY_TABLES:
         try:
             if col == "session_id":
@@ -181,8 +219,15 @@ def cleanup(db, sa) -> int:
 
 def cleanup_founder_journey(db, sa, *, fid: int | None = None, email: str | None = None,
                            label: str | None = None) -> int:
-    """Removes journey rows for one EXISTING, real founder -- never the founder
-    row or their consent. That account is real and outlives this script."""
+    """Removes journey rows for one EXISTING, real founder.
+
+    Never removes the founder or their consent -- that account is real and
+    outlives this script. It does write two columns ON the founders row:
+    founder_dna_completed_at and current_problem_completed_at are reset to
+    null, because they record having finished a phase whose answers this
+    function is deleting. Leaving them set is what made a cleaned founder
+    unable to re-run Founder DNA or Current Problem at all.
+    """
     if fid is None:
         fid = db.execute(sa.text("select founder_id from founders where email = :e"),
                          {"e": email}).scalar()
@@ -301,6 +346,23 @@ def _walk(client, start_path, answer_path, id_field, label, out):
         print(f"  FAIL {start_path} -> {r.status_code} {r.text[:200]}")
         return False
     q = (r.json() or {}).get("question")
+    if q is None:
+        # A null question means "this phase is already complete for this
+        # founder" -- and that is a FAILURE here, not a pass. This check
+        # exists to prove the phases run; a phase that served nothing proved
+        # nothing. It used to slip through: `while q:` simply never entered,
+        # and the walk printed "0 question(s) answered" and returned True
+        # under a confident-looking summary.
+        #
+        # The usual cause is exactly the one this script can create: cleanup
+        # removes the answer rows but the completion timestamp on `founders`
+        # (founder_dna_completed_at / current_problem_completed_at) stays set,
+        # leaving the founder marked complete with no answers behind it.
+        print(f"  FAIL {label}: no question served -- this phase reports "
+              "itself already complete for this founder.\n"
+              "       Run --cleanup-founder-id <id> (which now clears the "
+              "completion timestamps too) and try again.")
+        return False
     reprompts = 0
     while q:
         out.append(q)
@@ -326,6 +388,9 @@ def _walk(client, start_path, answer_path, id_field, label, out):
             if not q:
                 break
         q = data.get("next_question")
+    if not out:
+        print(f"  FAIL {label}: 0 questions answered")
+        return False
     print(f"  {label}: {len(out)} question(s) answered")
     return True
 
