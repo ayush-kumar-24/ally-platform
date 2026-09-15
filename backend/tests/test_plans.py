@@ -247,14 +247,20 @@ def test_starter_buys_the_conversation_but_not_ally_initiating():
         assert s.has_feature(PlanTier.PRO, feature), feature
 
 
-def test_free_never_out_grants_paid_on_the_scarce_perks():
+def test_free_never_out_grants_paid_on_the_scarce_perk():
     """Free deliberately out-grants Rs 499 on features that cost us only tokens
-    (see the catalog comment). It must never do so on the two that cost someone
-    else something real: an inbox we send to, and a place in the call queue
-    ahead of founders who paid for it."""
+    (see the catalog comment). PRIORITY_CALL is the one it must never take:
+    a place in the call queue ahead of founders who paid for it is taken FROM
+    someone, which no amount of testing-phase generosity justifies.
+
+    EMAIL_NOTIFICATIONS used to be held to the same line and no longer is. It
+    is not scarce in that sense -- it costs us a send, not another founder's
+    slot -- and the team tests on Free accounts, so withholding it meant
+    nobody building the reminder path ever saw one arrive. It leaves with the
+    rest of _FREE_TESTING at PUBLIC_LAUNCH."""
     s, _ = svc()
-    assert not s.has_feature(PlanTier.FREE, Feature.EMAIL_NOTIFICATIONS)
     assert not s.has_feature(PlanTier.FREE, Feature.PRIORITY_CALL)
+    assert s.has_feature(PlanTier.FREE, Feature.EMAIL_NOTIFICATIONS)
 
 
 def test_voice_in_chat_is_paid_only():

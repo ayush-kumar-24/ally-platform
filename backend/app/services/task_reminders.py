@@ -299,9 +299,10 @@ def notify_task_scheduled(db: Session, founder: Founder, task: Task, *,
     line reminder_time_for draws, and it means ticking off a title-only to-do
     never lands in anyone's inbox.
 
-    Pro only, checked live against `founder.plan_type` rather than at any
-    earlier point: Feature.EMAIL_NOTIFICATIONS sits in the advisor bundle and
-    is sold as Pro on the pricing page.
+    Gated on Feature.EMAIL_NOTIFICATIONS and checked live against
+    `founder.plan_type` rather than at any earlier point. That is Pro on the
+    pricing page, plus Free for as long as the testing-phase feature set
+    stands (see catalog._FREE_TESTING) so the team receives what it builds.
     """
     if task.due_date is None:
         return None
@@ -486,10 +487,11 @@ def _deliver_one(db: Session, service: PlanningService, entitlements,
 
     # EVERY FOUNDER IS REMINDED. ONLY THE CHANNEL IS SOLD.
     #
-    # Email is the Pro delivery (Feature.EMAIL_NOTIFICATIONS lives in the
-    # advisor bundle and is priced on the Billing page). Everyone else gets the
-    # same reminder in the bell, at the same moment, for the same task -- a
-    # founder on Starter has still planned their day and still wants telling.
+    # Email is the paid delivery (Feature.EMAIL_NOTIFICATIONS -- Pro on the
+    # Billing page, and Free while the testing-phase set stands). Everyone else
+    # gets the same reminder in the bell, at the same moment, for the same task
+    # -- a founder on Starter has still planned their day and still wants
+    # telling.
     #
     # Checked HERE rather than at scheduling time, which is why the row's
     # channel says EMAIL whatever the founder's plan: a founder who upgrades
