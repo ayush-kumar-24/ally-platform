@@ -72,6 +72,16 @@ flagged as having finished: founder-dna/start and current-problem/start then
 returned no question at all, both phases walked zero questions, and the run
 still printed a full-looking report built on the diagnosis alone.
 
+THREE PERSONAS, ON TWO DIFFERENT AXES. weak and strong differ in QUALITY at
+one stage, and that pair is the discrimination test. traction differs in
+STAGE at one quality, and exists because quality cannot be measured with
+answers that do not fit the questions: run at Early Traction, the strong set
+fell back on nine of thirty diagnosis questions and eleven of sixteen Founder
+DNA ones, the fallback scored red, and report #96 returned Founder Readiness
+and Product & Execution at Critical Gap off findings that belonged to this
+script. Use weak/strong at Ideation and Validation; use traction from
+Prototype/MVP up.
+
 TWO PERSONAS, AND WHY BOTH MATTER. `--persona weak` (the default) answers as
 a founder who has not done the work; `--persona strong` answers the same six
 dimensions done properly. One run on its own cannot tell a working classifier
@@ -157,7 +167,10 @@ _TOPICS = (
       # it asks what today did, not why the venture matters. Without these
       # it went to purpose on "five years" and manufactured RC-1088 as a
       # rank-1 top finding off a category holding one answer.
-      "actually do today", "moves you toward"),
+      "actually do today", "moves you toward",
+      # Early Traction asks about energy as conditions for good work:
+      # "the last stretch of work that gave you real momentum".
+      "real momentum", "conditions made it", "stretch of work"),
      ("week", "focus", "switching")),
     # market size, research, competitors
     (("market", "competitor", "how many businesses", "count or estimate",
@@ -170,8 +183,13 @@ _TOPICS = (
       "prototype"),
      ("tools", "build", "usage", "feature")),
     # pricing, money, financial boundaries
+    #
+    # "behind your price" and "your price" are here because "walk me through
+    # the math behind your price" fell through to the generic answer and was
+    # scored red: every pricing term in this topic said "pricing", and that
+    # question says "price".
     (("pricing", "what we charge", "charge for", "financial", "revenue",
-      "clean boundary", "money move"),
+      "clean boundary", "money move", "behind your price", "your price"),
      ("money", "cost", "price")),
     # team, roles, who decides
     (("team", "cofounder", "co-founder", "who owns", "the split",
@@ -183,15 +201,24 @@ _TOPICS = (
      ("go wrong", "unsettle", "fail")),
     # decisions under uncertainty, stress
     (("decision", "decide fast", "big unknown", "uncertainty",
-      "under pressure", "completely drained"),
-     ("decide", "unknown", "stress", "drained")),
+      "under pressure", "completely drained",
+      # later-stage phrasings of the same two dimensions
+      "completely overwhelmed", "push through", "shut down", "got to you"),
+     ("decide", "unknown", "stress", "drained", "reach out")),
     # feedback, criticism, blind spots
     (("feedback", "criticis", "blind spot", "pointed out", "dismisses your",
-      "told to you straight"),
+      "told to you straight",
+      # "what have you had to learn the hard way" is the same dimension asked
+      # of someone who has now had time to learn it
+      "learn the hard way", "get wrong first", "got wrong first"),
      ("harsh", "difficult")),
     # motivation, purpose, vision
     (("why does", "deserve", "thriving", "vision", "grabbed you",
-      "origin story", "opening line", "advice right now"),
+      "origin story", "opening line", "advice right now",
+      # later-stage origin, motivation, vision and values phrasings
+      "worth actually building", "what tipped it", "last win",
+      "one number", "really working", "tempted you to compromise",
+      "you'd said mattered"),
      # "five years" is a date, not a subject. As a defining term it pulled a
      # Business Planning question about what you did TODAY into purpose.
      ("matters", "picture", "five years")),
@@ -216,8 +243,108 @@ _TOPICS = (
     # marked down on "what eats the most time", because it never names a
     # time-waster. Two Founder Psychology answers, and RC-974 behind them.
     (("eats the most", "spent hours", "without actually moving",
-      "need that much time", "didn't need"),
+      "need that much time", "didn't need",
+      # the same question once there is a team and a queue to be pulled into
+      "context-switch", "pulled you away", "lost real time"),
      ("waste", "looking back")),
+)
+
+#: THE OPERATING TOPICS -- everything a founder with customers, staff and
+#: money gets asked and a pre-launch founder does not.
+#:
+#: Measured, not guessed: these are the subjects that fell through to the
+#: generic answer in the Early Traction run (report #96). Nine of thirty
+#: diagnosis answers were generic there and eight of those nine scored RED,
+#: because a non-answer reads to the classifier as evasion. Founder Readiness
+#: and Product & Execution both came back Critical Gap on the strength of
+#: questions about delegation, single points of failure, and what is written
+#: down -- none of which the Ideation topics have a slot for.
+#:
+#: Appended, never substituted. The first fifteen topics stay exactly as the
+#: weak and strong runs see them, so those runs remain comparable with every
+#: run that came before.
+#:
+#: TIE-BREAKING. `match_answer` keeps the first topic on an equal score, and
+#: the fifteen above are all earlier, so an operating topic that merely ties
+#: loses. Several deliberately carry more than one defining phrase for that
+#: reason: "team" alone scores 2 for the team topic, so a question about role
+#: clarity needs 3+ to land where it belongs. test_stage_4_question_routing
+#: pins all thirty real questions against this.
+_OPERATING_TOPICS = (
+    # delegation -- handing work over, and whether anyone was taught how
+    (("delegat", "been taught", "how you want something", "just guess",
+      "hand off", "handing over", "taking over"),
+     ("teach", "show them", "someone else")),
+    # founder dependency -- the bus factor
+    (("got sick", "only you know", "genuinely wait", "second-in-command",
+      "required you personally", "in your absence", "would simply stop",
+      "stop happening", "nobody else could pick up", "without you explaining",
+      "ran without you"),
+     ("personally", "a week", "everything waits")),
+    # what is written down -- process, SOPs, institutional memory
+    #
+    # "anything tracking" rather than "system for tracking": the latter also
+    # appears in "is there any system for tracking who owns what", which
+    # belongs to role clarity. This topic is earlier, so on a tie it would
+    # have taken that question away from the slot that answers it.
+    (("written down", "step-by-step procedure", "written step-by-step",
+      "live in your head", "lives in your head", "only in someone's head",
+      "someone's head", "documented", "anything written",
+      "anything tracking", "due and when"),
+     ("process", "procedure", "notes", "in writing")),
+    # role clarity -- who owns what, on paper
+    (("expected of each person", "who owns what", "role clarity",
+      "live in conversations", "tracking who owns"),
+     ("responsibilit", "ownership", "in writing", "each person")),
+    # decision rights -- how a disagreement actually gets settled
+    (("who owned a task", "clear way to resolve", "disagreed about who",
+      "decision rights", "make a real decision"),
+     ("resolve", "disagree", "settle")),
+    # performance -- knowing whether the team is working, not just busy
+    (("actually performing", "performing well", "just staying busy",
+      "staying busy", "how do you know if your team"),
+     ("performance", "review", "busy")),
+    # hiring, and holding on to the wrong person
+    (("kept someone on", "longer than you should", "replacing them",
+      "hire", "hiring", "let someone go"),
+     ("team member", "harder than")),
+    # retention and churn -- who stays and who leaves
+    (("churn", "sticks around", "stick around", "renew", "cancel",
+      "stop paying", "retention"),
+     ("leaves", "separates a customer")),
+    # the buying journey -- how a customer actually decides
+    (("buying journey", "how they decide", "decision to buy",
+      "sales cycle", "how a customer finds"),
+     ("journey", "buying", "scale of 1 to 5")),
+    # pricing in practice -- consistency, not the rationale
+    (("present pricing", "presenting pricing", "varies each time",
+      "vary each time", "quote", "discount"),
+     ("consistent", "each time")),
+    # cash and profit -- the money rhythm
+    (("cash position", "profitable", "just generating revenue",
+      "runway", "burn", "margin", "check your cash"),
+     ("regular schedule", "prompts you", "last month")),
+    # evidence of traction -- what proves it works, to someone else
+    (("real evidence", "evidence of market demand", "beyond your own belief",
+      "personally convinced", "fundraising pitch", "prove the problem",
+      "what evidence would you show"),
+     ("evidence", "proof", "traction")),
+    # marketing -- whether a campaign has a definition of success
+    (("campaign", "launch a campaign", "success actually looks like",
+      "figure that out after", "marketing"),
+     ("define", "success", "channel")),
+    # ICP drift -- who you built for versus who actually pays
+    (("originally designed", "designed it for", "who your paying customers",
+      "matches reality", "still matches", "same type of customer",
+      "actually are, versus"),
+     ("drift", "versus who", "understanding of your customer")),
+    # what running this has done to the founder -- how they have changed, and
+    # the thing they have not said out loud. Founder DNA's closing question at
+    # this stage, and no earlier topic is about it: Ideation has no "before"
+    # to compare against and nothing yet worth not saying.
+    (("how you show up", "show up now", "before you started building",
+      "haven't told anyone", "not told anyone", "about running this"),
+     ("different", "versus before", "changed")),
 )
 
 #: WEAK. A founder who has not done the work: no market sizing, no pricing
@@ -329,7 +456,175 @@ _STRONG_TEXTS = (
     "capped at an hour on Fridays now.",
 )
 
+#: TRACTION. An operator eleven months in: sixty-two paying customers, four
+#: people, money coming in every month. Same rigour as the strong set, moved
+#: forward two stages -- and that is the whole point of it.
+#:
+#: WHY A THIRD PERSONA AT ALL. weak and strong differ in QUALITY at one stage;
+#: this differs in STAGE at one quality. The strong set is deliberately
+#: pre-launch ("nine offered to pay before I had anything to sell"), so at
+#: Early Traction it had nothing to say to two thirds of Founder DNA and to
+#: nine of thirty diagnosis questions. Those fell back, the fallback reads as
+#: evasion, and report #96 came back with Founder Readiness and Product &
+#: Execution at Critical Gap off eight reds that belonged to the harness.
+#:
+#: The answers stay AT Early Traction and do not overshoot. A founder
+#: describing a Series B is measured against the confidence engine's
+#: stage_coherence_factor and the result reports stage mismatch instead of
+#: answer quality -- the same trap the strong set's note warns about, one
+#: stage further along.
+_TRACTION_TEXTS = (
+    # --- the fifteen shared topics, in an operator's voice -----------------
+    "Sixty-two paying, and I speak to six every month on a rota so it is not "
+    "only the loudest ones I hear from. Eleven of the sixty-two came from "
+    "people I already knew; the rest came through two channels I can name. "
+    "The notes live in one doc tagged by what they were doing before us.",
+    "Thursday mornings are two hours nothing gets into, and the week's work "
+    "is set against whatever that produces. Last Thursday it was whether to "
+    "take the enterprise pilot or finish onboarding automation -- we chose "
+    "onboarding, because the pilot would have cost us the four smaller "
+    "customers we already have.",
+    "About eleven thousand firms in this bracket in India, four hundred "
+    "reachable through the two channels we have actually worked. We lose to "
+    "the same competitor in roughly three of every ten deals and I know why: "
+    "they have the integration we have not built yet. I check them monthly.",
+    "Instrumented before we shipped it, so I can see that thirty-one of "
+    "sixty-two use it weekly and eight have not opened it in a month. The "
+    "eight are the ones I call. The drop-off is at the import step and that "
+    "is what we are fixing this quarter.",
+    "Three tiers. The middle one started from what a firm this size already "
+    "loses to the problem -- about a day a week of somebody's time -- and I "
+    "priced at a fifth of that. Six of nine said yes without negotiating, so "
+    "it is still too low, and the next cohort goes up in April.",
+    "Four of us: two engineers, one on support, me on customers and pricing. "
+    "Who decides what is written down and we settled it in week one, "
+    "including who breaks a tie. It has been used twice and both times it "
+    "stopped an argument becoming a fortnight.",
+    "Five written down, reviewed monthly. The one that actually worries me is "
+    "that both channels run through the same two communities, and I have no "
+    "third -- which is also why I am not spending on paid acquisition yet.",
+    "I write the decision down with what would have to be true for it to be "
+    "wrong, then set a date to check. The enterprise pilot call is on that "
+    "list with a review date of the fourteenth and the condition written next "
+    "to it.",
+    "Our support person told me six weeks ago that I answer tickets she is "
+    "meant to own, and that it was making her slower rather than faster. She "
+    "was right. I stopped, and the ones I was reaching for first are now the "
+    "three types she escalates by rule.",
+    "Because I watched firms this size pay penalties for something nobody had "
+    "ever shown them how to track, and I can say that in one sentence because "
+    "I have said it to sixty-two people who then paid for it.",
+    "Trusted. Not the biggest and not the first -- if the sixty-two would "
+    "recommend us to someone in their position without me asking, that is "
+    "doing it well. Nineteen already have, and that is the number I watch.",
+    "Firms this size lose a day a week to compliance filings they all do the "
+    "same bad way, and we do it for them in an hour. I have said that "
+    "sentence to sixty-two customers and cut something out of it every time "
+    "somebody looked confused halfway through.",
+    "In my old job, the last quarter before I left -- we paid a late fee on "
+    "something nobody had been told was theirs to file, and I rebuilt the "
+    "same tracking spreadsheet three times that year. That is where this "
+    "started.",
+    "A no-code form, a spreadsheet and about two hundred lines of glue for "
+    "the first nine months, and we have replaced roughly half of that since. "
+    "I checked what existed first: three tools do eighty per cent of it, and "
+    "we only build the part none of them do.",
+    "Answering support tickets that are not mine. I caught it when I looked "
+    "at where last month went and saw eleven hours in a queue we hired "
+    "someone to own. It is capped at the Friday escalations now.",
+
+    # --- the operating topics ---------------------------------------------
+    # delegation
+    "Taught, not guessed -- and I got that wrong for the first half of this "
+    "year. Now anything I hand over I do once alongside them, then they do "
+    "the next one while I watch, and the third is theirs with the notes we "
+    "wrote together. Onboarding went across that way in March and I have not "
+    "touched one since.",
+    # founder dependency
+    "Two things: the pricing conversation on anything above the middle tier, "
+    "and the quarterly filing logic nobody else has had to change yet. If I "
+    "were out for a week the filings would still go, because the rules are "
+    "written and our engineer has run them twice with me sitting out. The "
+    "pricing calls would wait, and that is the one I am fixing next.",
+    # written down
+    "Written down, in one place the team can open. Onboarding, the escalation "
+    "rules and the monthly close each have a step-by-step someone other than "
+    "the author has followed end to end at least once -- that is the test, "
+    "not whether the document exists. The filing logic is the exception and "
+    "it is on this quarter's list.",
+    # role clarity
+    "In writing, one line each, and we reread it at the monthly. Support owns "
+    "every ticket to resolution, our senior engineer owns what ships, I own "
+    "pricing and anything a customer signs. The gap we found in February was "
+    "that nobody owned data corrections, so they sat for days; that has a "
+    "name against it now.",
+    # decision rights
+    "It is written down: whoever owns the area decides, and if it crosses two "
+    "areas it comes to me the same day rather than sitting. We agreed that in "
+    "week one and it has settled two disagreements -- one about refunding a "
+    "customer, one about shipping with a known bug.",
+    # performance
+    "Three things per person we agreed at the start of the quarter, and we "
+    "look at them monthly rather than at the end when it is too late to act. "
+    "For support it is time to first reply and how many tickets come back a "
+    "second time -- the second one matters more, because busy and effective "
+    "look identical on the first.",
+    # hiring / holding on too long
+    "Yes, once, for about two months longer than I should have, because "
+    "hiring again felt worse than the problem. It cost us two customers who "
+    "left quietly. I now write down what would have to change and by when, "
+    "and I say it out loud to them, which makes the date real.",
+    # retention / churn
+    "Four have left in eleven months and I know why for all four: two never "
+    "got through the import, one had a person leave who was the only one "
+    "using us, one outgrew what we do. The ones who stay have a second user "
+    "inside the first month -- that is the single strongest signal we have "
+    "and it now drives onboarding.",
+    # buying journey
+    "Four steps and I can name where they stall: somebody feels the pain at "
+    "a filing deadline, asks in one of two communities, tries us on one "
+    "filing, then has to get their accountant to agree. The accountant step "
+    "is where deals die, so we now offer to talk to the accountant directly.",
+    # pricing presentation
+    "Same three tiers, same page, same order, every time -- I stopped "
+    "improvising after I gave two customers different numbers for the same "
+    "thing in one week and had to honour both. Discounts are annual-only and "
+    "capped at ten per cent, and anything outside that comes to me.",
+    # cash and profit
+    "Every Monday, same fifteen minutes, whether or not anything prompts it. "
+    "Last month was profitable but only just, and only because one "
+    "annual payment landed in it -- on the monthly figures alone we were "
+    "about even. I keep the two numbers separate for exactly that reason.",
+    # evidence of traction
+    "Sixty-two paying, nineteen unprompted referrals, and revenue that has "
+    "grown every month for seven months without paid acquisition. The "
+    "strongest piece is not the growth though -- it is that thirty-one use it "
+    "weekly. Somebody could believe none of my opinions and still check all "
+    "four of those.",
+    # marketing
+    "Written down before it starts, or we do not start it. The last one was "
+    "a guide for one community with a target of twenty-five signups and "
+    "eight trials; it got thirty-one and five, so it half worked and I know "
+    "which half. The trial number is the one that decides whether we do it "
+    "again.",
+    # ICP drift
+    "I checked in January and I was wrong. We designed for firms of twenty "
+    "to fifty people and the ones who actually stay are ten to twenty, where "
+    "there is no full-time finance person at all. We moved the messaging to "
+    "match what pays rather than what I drew, and the next cohort converted "
+    "better.",
+    # how running this has changed the founder
+    "I answer fewer things myself and I am slower to say yes, which took "
+    "about eight months and two bad calls to learn. The part I have not "
+    "really said out loud is that the month we became profitable I felt "
+    "almost nothing, and I have been trying to work out since whether that "
+    "means I picked the wrong number to care about.",
+)
+
+_TRACTION_TOPICS = _TOPICS + _OPERATING_TOPICS
+
 assert len(_WEAK_TEXTS) == len(_STRONG_TEXTS) == len(_TOPICS)
+assert len(_TRACTION_TEXTS) == len(_TRACTION_TOPICS)
 
 #: A question that matches no topic still gets an answer of the right
 #: quality. Quality is the variable under test; subject is not, so the
@@ -341,19 +636,31 @@ FALLBACKS = {
     "strong": "Yes, and I can point at where -- I write these down as I go "
               "and review them on a set day rather than when I happen to "
               "remember.",
+    # Same shape as strong's, in the operator's voice. Still topic-neutral:
+    # it must not smuggle in evidence about a dimension the question did not
+    # raise, which is the whole reason the fallback is written this way.
+    "traction": "Yes, and I can show you where -- we write these down as we "
+                "go and go through them at the monthly rather than when "
+                "somebody happens to remember.",
 }
 
 ANSWER_BANK = {
     "weak": tuple(zip(_TOPICS, _WEAK_TEXTS)),
     "strong": tuple(zip(_TOPICS, _STRONG_TEXTS)),
+    # The only persona with the operating topics. weak and strong keep exactly
+    # the fifteen they have always had, so every earlier run is still
+    # comparable with every later one.
+    "traction": tuple(zip(_TRACTION_TOPICS, _TRACTION_TEXTS)),
 }
 
 #: The texts alone, in topic order -- the index-based fallback when no
 #: question text is available, and what anything importing these expects.
 WEAK_ANSWERS = _WEAK_TEXTS
 STRONG_ANSWERS = _STRONG_TEXTS
+TRACTION_ANSWERS = _TRACTION_TEXTS
 
-PERSONAS = {"weak": WEAK_ANSWERS, "strong": STRONG_ANSWERS}
+PERSONAS = {"weak": WEAK_ANSWERS, "strong": STRONG_ANSWERS,
+            "traction": TRACTION_ANSWERS}
 
 
 #: A defining term is worth two, a supporting term one, and two points are
@@ -1079,7 +1386,11 @@ def main(argv=None) -> int:
                         "six dimensions done properly, still at the same stage. "
                         "Run both against the same founder and compare the bands: "
                         "if they come out the same, the scorer is not reading the "
-                        "answers, whatever the band says.")
+                        "answers, whatever the band says. 'traction' is strong's "
+                        "rigour two stages on -- customers, staff and money -- "
+                        "and is the one to use above Prototype/MVP, where strong "
+                        "has nothing on-topic to say about delegation, cash or "
+                        "what is written down.")
     p.add_argument("--json-out", metavar="FILE", help="write the full transcript as JSON")
     args = p.parse_args(argv)
 

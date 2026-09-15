@@ -167,14 +167,30 @@ def test_clear_journey_stamps_survives_a_schema_without_those_columns():
 # --- personas ----------------------------------------------------------
 
 
-def test_both_personas_cover_the_same_topics_in_the_same_order():
+def test_weak_and_strong_cover_the_same_topics_in_the_same_order():
     """The comparison is only meaningful if the sets differ in quality and
-    not in what they are about -- so slot N is the same subject in both."""
+    not in what they are about -- so slot N is the same subject in both.
+
+    This is the QUALITY pair, and only they have to match slot for slot.
+    `traction` is the same quality at a later stage and carries fourteen
+    extra topics an Ideation founder is never asked about; comparing it
+    against these two is a stage comparison, not a quality one. See
+    tests/test_traction_persona.py.
+    """
     assert len(WEAK_ANSWERS) == len(STRONG_ANSWERS) == len(ANSWER_BANK["weak"])
-    assert set(PERSONAS) == {"weak", "strong"}
+    assert {"weak", "strong"} <= set(PERSONAS)
     weak_topics = [t for t, _ in ANSWER_BANK["weak"]]
     strong_topics = [t for t, _ in ANSWER_BANK["strong"]]
     assert weak_topics == strong_topics
+
+
+def test_adding_a_persona_never_reorders_the_quality_pair():
+    """The slots weak and strong match on are positional; an append that
+    shifted them would silently re-point every earlier run's answers."""
+    from scripts.e2e_journey_check import _TOPICS
+
+    assert [t for t, _ in ANSWER_BANK["weak"]] == list(_TOPICS)
+    assert [t for t, _ in ANSWER_BANK["strong"]] == list(_TOPICS)
 
 
 def test_weak_is_the_default_so_existing_runs_are_unchanged():
