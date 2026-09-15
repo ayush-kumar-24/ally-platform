@@ -732,3 +732,62 @@ def test_stop_reason_survives_an_unknown_routing_state():
 
 def test_stop_reason_says_so_when_there_is_no_session():
     assert "not found" in stop_reason(None)
+
+
+# --- when the stored score and the state disagree ----------------------
+#
+# A completed live run printed:
+#
+#   stopped after 12 answers -- routing_state 'generate_report' at
+#   confidence 80   (>80 = confident enough to report, stop asking)
+#
+# which reads as 80 being greater than 80. Both numbers are real:
+# questioning stopped at 82, then the report pipeline recomputed confidence
+# with answer_consistency available -- a factor that has no data until the
+# answers exist -- and wrote 80 back to the session. The line now says so
+# rather than presenting a contradiction as a derivation.
+
+
+def test_a_score_below_its_states_band_is_explained():
+    line = stop_reason((12, "generate_report", 80.0))
+    assert "recompute" in line
+    assert "DURING questioning" in line
+
+
+def test_a_score_inside_its_band_needs_no_explanation():
+    line = stop_reason((12, "generate_report", 82.0))
+    assert "recompute" not in line
+    assert ">80" in line
+
+
+@pytest.mark.parametrize("state,confidence", [
+    ("continue", 45.0),
+    ("validate", 70.0),
+    ("validate", 80.0),
+    ("generate_report", 100.0),
+])
+def test_scores_inside_their_bands_stay_quiet(state, confidence):
+    assert "recompute" not in stop_reason((5, state, confidence))
+
+
+@pytest.mark.parametrize("state,confidence", [
+    ("continue", 75.0),
+    ("validate", 20.0),
+    ("generate_report", 30.0),
+])
+def test_scores_outside_their_bands_are_flagged(state, confidence):
+    assert "recompute" in stop_reason((5, state, confidence))
+
+
+def test_distress_support_is_never_called_inconsistent():
+    """It is not reached by a confidence threshold, so no score contradicts it."""
+    for confidence in (0.0, 50.0, 100.0):
+        assert "recompute" not in stop_reason((5, "distress_support", confidence))
+
+
+def test_an_unknown_state_is_never_called_inconsistent():
+    assert "recompute" not in stop_reason((5, "something_new", 50.0))
+
+
+def test_a_null_confidence_is_not_compared():
+    assert "recompute" not in stop_reason((5, "generate_report", None))

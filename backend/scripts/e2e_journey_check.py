@@ -486,8 +486,43 @@ def stop_reason(row) -> str:
     meaning = _ROUTING_MEANING.get(state or "", "")
     conf = "?" if confidence is None else f"{float(confidence):.0f}"
     tail = f"   ({meaning})" if meaning else ""
+
+    # The stored score is not always the score that set the state. A live run
+    # printed "routing_state 'generate_report' at confidence 80 (>80 = ...)",
+    # which reads as 80 being greater than 80. What happened: questioning
+    # stopped at 82, and the report pipeline then recomputed confidence with
+    # answer_consistency available (a factor there is no data for until the
+    # answers are in) and wrote 80 back. The state is the one that ended the
+    # session; the number is the one left behind afterwards.
+    if state and confidence is not None and not _satisfies(state, float(confidence)):
+        tail += ("\n                          ^ the state was set on a score "
+                 "measured DURING questioning; this number is the report "
+                 "pipeline's later recompute, so the two need not agree")
+
     return (f"  stopped after           {answered} answers -- "
             f"routing_state {state!r} at confidence {conf}{tail}")
+
+
+#: The band each routing_state is reached in, per the sessions.routing_state
+#: column comment. Used only to notice when a stored score falls outside it.
+_ROUTING_BANDS = {
+    "continue": (0.0, 60.0),
+    "validate": (60.0, 80.0),
+    "generate_report": (80.0, 100.0),
+}
+
+
+def _satisfies(state: str, confidence: float) -> bool:
+    """Is `confidence` inside the band that `state` is reached in?
+
+    Unknown states (distress_support, anything added later) are never reported
+    as inconsistent -- they are not reached by a threshold at all.
+    """
+    band = _ROUTING_BANDS.get(state)
+    if band is None:
+        return True
+    low, high = band
+    return low < confidence <= high if low else confidence <= high
 
 
 def _answer_for(n: int, persona: str = "weak", question_text: str | None = None) -> str:
