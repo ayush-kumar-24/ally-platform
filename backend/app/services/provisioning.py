@@ -1,14 +1,4 @@
-"""Founder provisioning -- create the founder row that backs a new login.
-
-Called at /auth/session. Idempotent: if a founder already exists for the
-identity it is returned unchanged; otherwise, for a real logged-in user, a row
-is created via the create_founder_on_signup database function (which also writes
-the initial consent record).
-
-Dev-mode identities are never provisioned -- they have no auth.users row, and
-founders.user_id is a FK to auth.users, so the insert would fail. Dev therefore
-stays read-only, which is what its tests expect.
-"""
+"""Founder provisioning -- create or resolve the founder behind a login."""
 
 from uuid import UUID
 
@@ -16,7 +6,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import DatabaseError
 from sqlalchemy.orm import Session
 
-from app.core.auth.base import AuthUser
+from app.core.auth.base import AuthError, AuthUser
 from app.core.config import settings
 from app.core.logger import logger
 from app.db.session import set_founder_rls_context
@@ -29,7 +19,7 @@ from app.services.waitlist_notifications import send_direct_signup_overflow_emai
 
 
 def _display_name(identity: AuthUser) -> str:
-    """Best-effort human name from the IdP token, falling back to the email."""
+    """Best-effort human name from the IdP token, falling back to email."""
     claims = identity.claims or {}
     meta = claims.get("user_metadata") or {}
     name = meta.get("full_name") or meta.get("name") or claims.get("name")
@@ -40,77 +30,179 @@ def _display_name(identity: AuthUser) -> str:
     return "Founder"
 
 
-def ensure_founder(identity: AuthUser, db: Session, ip_address: str = "0.0.0.0") -> Founder | None:
-    """Return the founder for this identity, creating one on first real login.
+def _cognito_email_verified(identity: AuthUser) -> bool:
+    value = (identity.claims or {}).get("email_verified")
+    return value is True or (
+        isinstance(value, str) and value.strip().lower() == "true"
+    )
 
-    Returns None when there is no founder and none can be created (provisioning
-    disabled, or a dev identity).
 
-    Use `ensure_founder_with_status` when you need to know whether the row was
-    CREATED by this call or merely found -- this signature cannot express the
-    difference, which is what made /auth/session report `provisioned: true` for
-    founders that had existed for days.
-    """
-    founder, _created = ensure_founder_with_status(identity, db, ip_address=ip_address)
+def _link_existing_cognito_founder(
+    identity: AuthUser,
+    db: Session,
+) -> Founder | None:
+    """Perform the one-time Cognito -> existing Ally founder identity link."""
+
+    cognito_sub = str(identity.id).strip()
+    email = (identity.email or "").strip()
+
+    email_verified = _cognito_email_verified(identity)
+
+    try:
+        # These values are transaction-local. The SECURITY DEFINER linker
+        # independently verifies that its arguments match this authenticated
+        # Cognito context before it can inspect/link any founder.
+        db.execute(
+            text(
+                "SELECT set_config("
+                "'app.current_cognito_sub', :value, true)"
+            ),
+            {"value": cognito_sub},
+        )
+        db.execute(
+            text(
+                "SELECT set_config("
+                "'app.current_cognito_email', :value, true)"
+            ),
+            {"value": email},
+        )
+        db.execute(
+            text(
+                "SELECT set_config("
+                "'app.current_cognito_email_verified', :value, true)"
+            ),
+            {"value": "true" if email_verified else "false"},
+        )
+
+        row = (
+            db.execute(
+                text(
+                    "SELECT founder_id, user_id, linked "
+                    "FROM public.link_cognito_founder(:sub, :email)"
+                ),
+                {"sub": cognito_sub, "email": email},
+            )
+            .mappings()
+            .first()
+        )
+
+        # Clears the transaction-local Cognito security context.
+        db.commit()
+
+    except DatabaseError as exc:
+        db.rollback()
+        logger.warning(
+            "Cognito founder identity linking failed",
+            extra={"cognito_sub": cognito_sub},
+            exc_info=exc,
+        )
+        raise AuthError("Unable to link Cognito identity") from exc
+
+    # No matching historical founder: this is a brand-new Cognito user.
+    if row is None:
+        return None
+
+    try:
+        canonical_uuid = UUID(str(row["user_id"]))
+    except (ValueError, TypeError) as exc:
+        raise AuthError("Invalid linked founder identity") from exc
+
+    # From this point onward the request uses the existing Ally user UUID,
+    # not the Cognito sub, so all historical founder-scoped data remains visible.
+    set_founder_rls_context(db, str(canonical_uuid))
+
+    founder = founder_repository.get_by_user_id(db, canonical_uuid)
+    if founder is None:
+        logger.error(
+            "Cognito linker returned a founder that could not be loaded",
+            extra={
+                "founder_id": row["founder_id"],
+                "canonical_user_id": str(canonical_uuid),
+            },
+        )
+        raise AuthError("Unable to load linked founder")
+
+    return founder
+
+
+def ensure_founder(
+    identity: AuthUser,
+    db: Session,
+    ip_address: str = "0.0.0.0",
+) -> Founder | None:
+    founder, _created = ensure_founder_with_status(
+        identity,
+        db,
+        ip_address=ip_address,
+    )
     return founder
 
 
 def ensure_founder_with_status(
-    identity: AuthUser, db: Session, ip_address: str = "0.0.0.0"
+    identity: AuthUser,
+    db: Session,
+    ip_address: str = "0.0.0.0",
 ) -> tuple[Founder | None, bool]:
-    """As `ensure_founder`, plus whether this call actually created the row.
+    """Resolve or create the canonical Ally founder for this identity."""
 
-    Returns (founder, created). `created` is True ONLY on the insert -- an
-    identity whose founder already existed comes back (founder, False), and a
-    dev identity comes back (founder_or_None, False) because dev never
-    provisions.
-    """
     try:
         user_uuid = UUID(str(identity.id))
     except (ValueError, TypeError):
-        return None, False  # non-uuid subject (dev tokens) -- nothing to provision
+        return None, False
 
+    # Existing Cognito users must be resolved BEFORE normal founder RLS is set,
+    # because their Cognito sub differs from their historical Supabase user_id.
+    if identity.provider == "cognito":
+        existing = _link_existing_cognito_founder(identity, db)
+        if existing is not None:
+            return existing, False
+
+    # Supabase users use their existing subject directly. Brand-new Cognito
+    # users also use their Cognito sub as their canonical Ally user UUID.
     set_founder_rls_context(db, str(user_uuid))
 
     existing = founder_repository.get_by_user_id(db, user_uuid)
     if existing is not None:
+        if identity.provider == "cognito":
+            current_sub = getattr(existing, "cognito_sub", None)
+
+            if current_sub is not None and current_sub != str(identity.id):
+                raise AuthError("Founder is linked to another Cognito identity")
+
+            if current_sub is None:
+                existing.cognito_sub = str(identity.id)
+                try:
+                    db.commit()
+                except DatabaseError as exc:
+                    db.rollback()
+                    logger.warning(
+                        "Failed to complete Cognito identity mapping",
+                        extra={"founder_id": existing.founder_id},
+                        exc_info=exc,
+                    )
+                    raise AuthError("Unable to link Cognito identity") from exc
+
         return existing, False
 
     if not settings.ENABLE_FOUNDER_PROVISIONING or identity.provider == "dev":
         return None, False
 
-    # The grant amount comes from the catalog, never from the stored procedure:
-    # a number baked into a function body would drift from catalog.py silently,
-    # and nothing could test that it had. Every founder starts on Free, so this
-    # is Free's one-time grant.
     signup_credits = PLANS[PlanTier.FREE].signup_credits
 
     try:
-        # Live-reproduced on production: migration 7c4f0f1a9d2e ("secure founder
-        # provisioning for rls") added a security boundary to
-        # create_founder_on_signup requiring the caller to assert, via this
-        # session-scoped setting, which user it has ALREADY authenticated --
-        # closing a real hole (anyone with ally_app's DB credentials could
-        # otherwise provision a founder row for an arbitrary auth.users id).
-        # That migration shipped without the matching backend change, so
-        # every single provisioning call failed closed with "missing
-        # authenticated user context" -- no new signup, Google or email/OTP,
-        # could ever get a founder row. Safe to assert here specifically:
-        # `identity` has already been through full JWT verification (signature,
-        # expiry, claims) by this point, so user_uuid is not user-suppliable,
-        # it's the backend's own already-established trust -- exactly what the
-        # migration's security boundary asks for.
-        #
-        # set_config(..., is_local=true), not a plain SET: this connection is
-        # pooled, so a plain SET would leak this value to whatever unrelated
-        # request reuses the connection next. is_local=true scopes it to this
-        # transaction only, clearing automatically at the commit right below.
         db.execute(
-            text("SELECT set_config('app.current_founder_uuid', :u, true)"),
+            text(
+                "SELECT set_config("
+                "'app.current_founder_uuid', :u, true)"
+            ),
             {"u": str(user_uuid)},
         )
+
         founder_id = db.execute(
-            text("SELECT create_founder_on_signup(:u, :n, :e, :p, :t, :i, :b, :c)"),
+            text(
+                "SELECT create_founder_on_signup("
+                ":u, :n, :e, :p, :t, :i, :b, :c)"
+            ),
             {
                 "u": str(user_uuid),
                 "n": _display_name(identity),
@@ -122,19 +214,33 @@ def ensure_founder_with_status(
                 "c": signup_credits,
             },
         ).scalar()
+
+        # Brand-new Cognito users have no historical Supabase UUID.
+        # Their Cognito sub therefore becomes both user_id and cognito_sub.
+        if identity.provider == "cognito":
+            db.execute(
+                text(
+                    "UPDATE public.founders "
+                    "SET cognito_sub = :sub "
+                    "WHERE founder_id = :founder_id "
+                    "AND user_id = :user_id "
+                    "AND cognito_sub IS NULL"
+                ),
+                {
+                    "sub": str(identity.id),
+                    "founder_id": founder_id,
+                    "user_id": str(user_uuid),
+                },
+            )
+
         db.commit()
+
     except DatabaseError as exc:
-        # e.g. the token's subject has no auth.users row. A real Supabase token
-        # always does; this guards against bad/test tokens. Login still succeeds
-        # (unprovisioned) rather than 500-ing.
         db.rollback()
-        # exc_info=True: the previous version of this log line carried only the
-        # founder_id, not SQLERRM -- the actual reason a provisioning failure
-        # happened was never in the application logs at all, only reachable by
-        # cross-referencing raw RDS/Postgres logs after the fact.
         logger.warning(
             "Founder provisioning failed",
-            extra={"founder_id": str(user_uuid)}, exc_info=exc,
+            extra={"founder_id": str(user_uuid)},
+            exc_info=exc,
         )
         return None, False
 
@@ -231,6 +337,13 @@ def ensure_founder_or_waitlist(
         user_uuid = UUID(str(identity.id))
     except (ValueError, TypeError):
         return None, False, False  # dev token; nothing to gate
+
+    # Returning Cognito users must be resolved before the new-user capacity
+    # gate. Their Cognito sub differs from their historical Ally user_id.
+    if identity.provider == "cognito":
+        existing = _link_existing_cognito_founder(identity, db)
+        if existing is not None:
+            return existing, False, False
 
     set_founder_rls_context(db, str(user_uuid))
 

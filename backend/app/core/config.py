@@ -29,7 +29,14 @@ class Settings(BaseSettings):
     # --- Auth ---
     # "dev"      = temporary local stand-in for testing, never used in production.
     # "supabase" = verify the JWT the frontend gets from Supabase Auth.
+    # "cognito"  = verify the Cognito ID token used to establish an Ally session.
     AUTH_PROVIDER: str = "dev"
+
+    # Amazon Cognito user-pool identity provider.
+    # These identifiers are not secrets and may be overridden by environment.
+    COGNITO_REGION: str = "ap-south-1"
+    COGNITO_USER_POOL_ID: str = "ap-south-1_QideRXCEN"
+    COGNITO_CLIENT_ID: str = "31ql28tvmbl66c6lun5fkdn2it"
 
     # Only needed when AUTH_PROVIDER="supabase".
     #

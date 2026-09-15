@@ -1,6 +1,7 @@
 from functools import lru_cache
 
 from app.core.auth.base import AuthProvider
+from app.core.auth.cognito_provider import CognitoAuthProvider
 from app.core.auth.dev_provider import DevAuthProvider
 from app.core.auth.supabase_provider import SupabaseAuthProvider
 from app.core.config import settings
@@ -27,4 +28,14 @@ def get_auth_provider() -> AuthProvider:
             supabase_url=settings.SUPABASE_URL,
         )
 
-    raise RuntimeError(f"Unknown AUTH_PROVIDER {provider!r} (expected 'dev' or 'supabase')")
+    if provider == "cognito":
+        return CognitoAuthProvider(
+            region=settings.COGNITO_REGION,
+            user_pool_id=settings.COGNITO_USER_POOL_ID,
+            client_id=settings.COGNITO_CLIENT_ID,
+        )
+
+    raise RuntimeError(
+        f"Unknown AUTH_PROVIDER {provider!r} "
+        "(expected 'dev', 'supabase' or 'cognito')"
+    )
