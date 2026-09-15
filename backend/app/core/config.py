@@ -516,6 +516,57 @@ class Settings(BaseSettings):
     def support_alert_emails(self) -> list[str]:
         return [e.strip() for e in self.SUPPORT_ALERT_EMAILS.split(",") if e.strip()]
 
+    #: The team's own accounts, which always hold every feature.
+    #:
+    #: These are the people who build and test Ally. They sign in with ordinary
+    #: accounts on whatever tier those accounts happen to carry, which meant a
+    #: developer testing Vision, voice chat or email reminders hit the same
+    #: paywall a Starter founder would -- and a feature nobody on the team can
+    #: reach is a feature nobody on the team is testing.
+    #:
+    #: Listed by EMAIL rather than founder_id on purpose: ids differ between
+    #: environments and are assigned at signup, so an id list would be wrong in
+    #: staging and stale the moment someone re-registers. Email is what the
+    #: person actually is.
+    #:
+    #: Matching is case-insensitive and whitespace-tolerant (see the property
+    #: below) -- "Info@GoXL.in " and "info@goxl.in" are one person, and a list
+    #: this long is edited by hand.
+    #:
+    #: This grants the PRO feature set, which is every feature there is. It does
+    #: NOT lift the daily token ceiling (8,000 on Pro) or the one-per-account
+    #: diagnosis cap; those are separate limits with separate reasons, and the
+    #: admin panel already has a diagnosis reset for the second.
+    TEAM_FULL_ACCESS_EMAILS: str = (
+        "14aarush9@gmail.com,"
+        "aniketkumarshawtech@gmail.com,"
+        "aaryakapoor14@gmail.com,"
+        "aarya.goxl@gmail.com,"
+        "ayushray2403@gmail.com,"
+        "ayushkumar20060324@gmail.com,"
+        "ayushgoxl@gmail.com,"
+        "ayush2403kumar@gmail.com,"
+        "d.viraj2@gmail.com,"
+        "goxloffice@gmail.com,"
+        "goxlmarketing@gmail.com,"
+        "goxl.work@gmail.com,"
+        "godblesspower7@gmail.com,"
+        "pranjalsavantsavant@gmail.com,"
+        "pranjalmaheshsavant@gmail.com,"
+        "info@goxl.in,"
+        "sumitgoxlofficial@gmail.com,"
+        "sumitsuman4411@gmail.com"
+    )
+
+    @property
+    def team_full_access_emails(self) -> frozenset[str]:
+        """Normalised for comparison: lowercased, stripped, blanks dropped."""
+        return frozenset(
+            e.strip().lower()
+            for e in self.TEAM_FULL_ACCESS_EMAILS.split(",")
+            if e.strip()
+        )
+
     # --- CORS ---
     # Comma-separated. PRODUCTION MUST INCLUDE THE MARKETING SITE as well as
     # the app: the landing page's help widget calls /support/public/ask from
