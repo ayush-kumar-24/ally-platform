@@ -30,6 +30,7 @@
 import { useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { KNOWLEDGE_SECTIONS } from '../data/knowledge';
+import COVERS from '../data/covers.json';
 
 function ResourceCard({ item }) {
   /* An entry with a link opens it; one without is still worth showing. Not
@@ -123,6 +124,22 @@ function TitleTile({ item }) {
     </span>
   );
 
+  /* The cover, if we have one for this id. See data/covers.json and the
+     script that fills it.
+
+     HOT-LINKED, NOT HOSTED. Cover art is copyrighted; Open Library publishes
+     these for third parties to display, which is what makes pointing at their
+     CDN the ordinary posture and copying 128 covers into our own bucket a
+     different one. This file already refuses to reproduce anything from
+     INSIDE the books for the same family of reasons.
+
+     ANY FAILURE FALLS BACK TO THE TILE AS IT IS TODAY. Coverage will never be
+     complete -- several of these are Indian editions nobody has scanned -- so
+     a missing entry renders nothing at all, and an entry whose image 404s or
+     is blocked hides itself onError. A broken-image glyph in a reading list
+     looks like a bug; no picture just looks like a card. */
+  const cover = COVERS[item.id];
+
   return (
     <a
       className="wt-tile"
@@ -137,8 +154,28 @@ function TitleTile({ item }) {
       </span>
 
       <span className="wt-pop">
-        <span className="wt-name">{item.title}</span>
-        {meta}
+        {/* Title and cover together on one row: a portrait cover above a short
+            panel would push "Look it up" off the bottom on the tiles that
+            carry `care` as well. Width and height are fixed so the panel does
+            not jump when the image lands. */}
+        <span className={`wt-pop-head${cover ? ' has-cover' : ''}`}>
+          {cover && (
+            <img
+              className="wt-cover"
+              src={cover}
+              alt=""
+              width="56"
+              height="84"
+              loading="lazy"
+              referrerPolicy="no-referrer"
+              onError={(e) => { e.currentTarget.style.display = 'none'; }}
+            />
+          )}
+          <span className="wt-pop-title">
+            <span className="wt-name">{item.title}</span>
+            {meta}
+          </span>
+        </span>
 
         {item.why && <span className="wt-why">{item.why}</span>}
 
