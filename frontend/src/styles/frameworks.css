@@ -340,6 +340,33 @@ a.fw-card-link:focus-visible {
   pointer-events: none;
   transition: opacity .16s ease, visibility 0s linear .16s;
 }
+/* Title and cover on one row inside the panel.
+
+   The head is a plain block when there is no cover, so a tile without one is
+   byte-for-byte the layout it had before covers existed -- which is most of
+   them until the lookup has been run, and permanently for the editions nobody
+   has scanned. */
+.wt-pop-head { display: block; }
+.wt-pop-head.has-cover {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.wt-pop-title { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+
+/* Fixed box, so the panel does not jump when a lazily-loaded cover lands, and
+   object-fit rather than a stretch: these come back in whatever aspect ratio
+   the scan had, and a squashed cover looks worse than none. */
+.wt-cover {
+  width: 56px;
+  height: 84px;
+  flex-shrink: 0;
+  object-fit: cover;
+  border-radius: 5px;
+  background: rgba(16, 24, 20, .06);
+  box-shadow: 0 1px 3px rgba(6, 20, 13, .25);
+}
+
 .wt-tile:hover .wt-pop,
 .wt-tile:focus-within .wt-pop {
   opacity: 1;
