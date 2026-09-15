@@ -525,13 +525,13 @@ export default function Dashboard() {
             <button className="compass-loop-node" type="button" onClick={() => navigate('/app/vision')}><b>03 · You</b>My vision</button>
             <button className="compass-loop-node" type="button" onClick={() => navigate('/app/goals')}><b>04 · You</b>My goals</button>
             <button className="compass-loop-node" type="button" onClick={() => navigate('/app/business-dna')}><b>05 · Signals</b>My current reality</button>
-            <button className="compass-loop-node is-ai" type="button" onClick={() => navigate('/app/founder-dna')}><b>06 · Ally</b>Founder + Business DNA</button>
-            <button className="compass-loop-node is-ai" type="button" onClick={() => navigate('/app/founder-dna-journey')}><b>07 · Ally</b>Adaptive diagnosis</button>
-            <button className="compass-loop-node is-ai" type="button" onClick={() => navigate('/app/ally-chat')}><b>08 · Ally</b>Talk to Ally</button>
+            <button className="compass-loop-node" type="button" onClick={() => navigate('/app/founder-dna')}><b>06 · Ally</b>Founder + Business DNA</button>
+            <button className="compass-loop-node" type="button" onClick={() => navigate('/app/founder-dna-journey')}><b>07 · Ally</b>Adaptive diagnosis</button>
+            <button className="compass-loop-node" type="button" onClick={() => navigate('/app/ally-chat')}><b>08 · Ally</b>Talk to Ally</button>
             <button className="compass-loop-node" type="button" onClick={() => navigate('/app/next-steps')}><b>09 · You</b>Next steps</button>
             <button className="compass-loop-node" type="button" onClick={() => navigate('/app/plan')}><b>10 · You</b>Execution</button>
             <button className="compass-loop-node" type="button" onClick={() => navigate('/app/achievements')}><IconAward /><b>11 · You</b>Achievement</button>
-            <button className="compass-loop-node is-you" type="button" onClick={() => navigate('/app/journey')}><b>12 · Back to 01</b>My journey evolves</button>
+            <button className="compass-loop-node" type="button" onClick={() => navigate('/app/journey')}><b>12 · Back to 01</b>My journey evolves</button>
           </div>
         </section>
 
