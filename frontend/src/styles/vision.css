@@ -187,6 +187,16 @@
 .vt-image-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
 .vt-image-remove { color: #b91c1c; }
 
+/* A picture chosen before the vision exists server-side. Says plainly that it
+   is not saved yet -- a preview that looks identical to a stored image would
+   let a founder close the modal believing it was kept. */
+.vt-image-pending {
+  margin: 0;
+  font-family: var(--body);
+  font-size: 12.5px;
+  color: var(--muted-2, #6c7a70);
+}
+
 .vt-image-error {
   margin: 0;
   font-family: var(--body);

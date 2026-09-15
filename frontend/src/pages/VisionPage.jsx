@@ -46,9 +46,10 @@ function TerritoryCard({ territory, data, onEdit, onTalk, onToggle, busy }) {
         ) : (
           <>
             {/* Above the sentence, not below it: the picture is what the
-                founder is aiming at and the words are the caption. Only ever
-                on a written vision -- there is no image without a statement
-                to hang it on. */}
+                founder is aiming at and the words are the caption. A card is
+                only rendered here once there IS a statement, so this never
+                shows a picture with nothing under it -- which is also why the
+                editor uploads a chosen file only after the words are saved. */}
             {data.imageUrl && (
               <div className="vt-image">
                 <img src={data.imageUrl} alt="" loading="lazy" />
@@ -93,17 +94,53 @@ function TerritoryEditor({ territory, data, onSave, onUploadImage, onRemoveImage
   const [saving, setSaving] = useState(false);
   const [busyImage, setBusyImage] = useState(false);
   const [imageError, setImageError] = useState(null);
+  /* A picture chosen BEFORE this territory exists server-side. The upload
+     endpoint refuses to hang an image on a vision nobody has written -- and
+     rightly: creating an empty statement row to hold one would put a blank
+     card on the founder's page. So the file waits here and goes up the moment
+     Save has created the row, in the same press.
+
+     This used to be a disabled button reading "Save this vision first, then
+     add a picture" -- honest about the constraint, but it made writing a
+     vision with a picture two trips through the modal. Words and picture are
+     now one form: fill in either, both, or neither. */
+  const [pendingFile, setPendingFile] = useState(null);
+  const [pendingPreview, setPendingPreview] = useState(null);
   const fileRef = useRef(null);
 
-  // The endpoint refuses to hang a picture on a vision that does not exist, so
-  // a founder writing this territory for the first time has nothing to attach
-  // to yet. Said plainly rather than by a control that 404s when pressed.
+  // Whether there is a saved statement to attach an upload to RIGHT NOW --
+  // the server's rule, not a rule about what the founder may fill in.
   const written = Boolean(data.statement.trim());
+
+  /* Object URLs are held by the browser until revoked, so picking three
+     pictures in one sitting would leak all three.
+
+     Revoking lives HERE and nowhere else, keyed on the URL itself: the cleanup
+     runs both when the value is replaced and when the modal unmounts, which is
+     every case. Revoking inside the setState updater instead -- the obvious
+     place -- would put a side effect in a function React is free to call
+     twice, and in StrictMode it does, creating two URLs and storing one. */
+  useEffect(() => () => { if (pendingPreview) URL.revokeObjectURL(pendingPreview); },
+            [pendingPreview]);
+
+  const clearPending = () => {
+    setPendingPreview(null);
+    setPendingFile(null);
+  };
 
   const pick = async (file) => {
     setImageError(null);
     const problem = imageProblem(file);
     if (problem) { setImageError(problem); return; }
+
+    if (!written) {
+      // Nothing to attach to yet. Hold it, show it, upload it on Save.
+      setPendingPreview(URL.createObjectURL(file));
+      setPendingFile(file);
+      if (fileRef.current) fileRef.current.value = '';
+      return;
+    }
+
     setBusyImage(true);
     try {
       await onUploadImage(file);
@@ -117,6 +154,8 @@ function TerritoryEditor({ territory, data, onSave, onUploadImage, onRemoveImage
       if (fileRef.current) fileRef.current.value = '';
     }
   };
+
+  const shownImage = data.imageUrl || pendingPreview;
 
   return (
     <Modal open onClose={onClose} title={territory.label}>
@@ -149,35 +188,39 @@ function TerritoryEditor({ territory, data, onSave, onUploadImage, onRemoveImage
             unfinished without one. */}
         <div className="vt-image-field">
           <span className="vt-field-label">Picture (optional)</span>
-          {data.imageUrl ? (
+          {shownImage ? (
             <div className="vt-image-preview">
-              <img src={data.imageUrl} alt="" />
+              <img src={shownImage} alt="" />
               <div className="vt-image-buttons">
                 <button type="button" className="btn btn-ghost btn-sm"
-                        onClick={() => fileRef.current?.click()} disabled={busyImage}>
+                        onClick={() => fileRef.current?.click()} disabled={busyImage || saving}>
                   {busyImage ? 'Uploading…' : 'Replace'}
                 </button>
                 <button type="button" className="btn btn-ghost btn-sm vt-image-remove"
                         onClick={async () => {
                           setImageError(null);
+                          // A pending pick has never been uploaded, so there is
+                          // nothing on the server to remove -- just drop it.
+                          if (pendingFile) { clearPending(); return; }
                           setBusyImage(true);
                           try { await onRemoveImage(); }
                           catch { setImageError("Couldn't remove that. Try again."); }
                           finally { setBusyImage(false); }
                         }}
-                        disabled={busyImage}>
+                        disabled={busyImage || saving}>
                   Remove
                 </button>
               </div>
+              {pendingFile && (
+                <p className="vt-image-pending">Saved with your vision when you press Save.</p>
+              )}
             </div>
           ) : (
             <button type="button" className="vt-image-drop"
                     onClick={() => fileRef.current?.click()}
-                    disabled={!written || busyImage}>
+                    disabled={busyImage || saving}>
               <IconPlus />
-              {!written
-                ? 'Save this vision first, then add a picture'
-                : busyImage ? 'Uploading…' : 'Add a picture'}
+              {busyImage ? 'Uploading…' : 'Add a picture'}
             </button>
           )}
           <input
@@ -200,6 +243,22 @@ function TerritoryEditor({ territory, data, onSave, onUploadImage, onRemoveImage
               setSaving(true);
               try {
                 await onSave({ statement: statement.trim(), tag1: tag1.trim(), tag2: tag2.trim() });
+                // The row exists now, so a picture chosen before it did has
+                // somewhere to go. Second, not combined: the words are the
+                // vision, and they must not be lost to a failed upload.
+                if (pendingFile) {
+                  try {
+                    await onUploadImage(pendingFile);
+                    clearPending();
+                  } catch {
+                    // Deliberately NOT a toast that disappears: the words are
+                    // safely saved and only the picture failed, so the modal
+                    // stays open saying exactly that, with the file still
+                    // chosen so Save retries just the upload.
+                    setImageError("Your vision is saved, but the picture didn't upload. Press Save to try again.");
+                    return;
+                  }
+                }
                 onClose();
               } catch {
                 // Save failed -- onSave() already surfaced a toast. Leave the
