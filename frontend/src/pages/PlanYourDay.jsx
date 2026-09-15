@@ -6,7 +6,7 @@ import PlanGate from '../components/PlanGate';
 import { FEATURES } from '../services/plans';
 import { addTask, deleteTask, listTasks, setTaskStatus, updateTask } from '../services/planning';
 import { ApiError } from '../services/api';
-import { greetingNow } from '../utils/helpers';
+import { displayTitle, greetingNow } from '../utils/helpers';
 import MonthCalendar from '../components/MonthCalendar';
 import { todayKey } from '../utils/dateKeys';
 import CalendarConnection from '../components/CalendarConnection';
@@ -87,17 +87,6 @@ const sortByPriority = (tasks) =>
 function completedAtLabel(task) {
   if (!task.completed_at) return '';
   return new Date(task.completed_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-}
-
-/** "i need to review the website" -> "I need to review the website". Titles
- * are stored exactly as typed (no forced casing at the API layer, so a
- * founder's own capitalization choices are never silently overwritten) --
- * this only affects how they're displayed, sitting next to the all-caps
- * priority badge which otherwise makes an un-capitalized title look broken
- * rather than just informal. */
-function displayTitle(title) {
-  if (!title) return title;
-  return title.charAt(0).toUpperCase() + title.slice(1);
 }
 
 /** UTC calendar day, matching the convention dueLabel() above already uses
