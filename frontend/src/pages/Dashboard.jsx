@@ -11,7 +11,7 @@ import { getLatestReport, getRecommendations } from '../services/reports';
 import { DnaLoading } from '../components/DnaState';
 import FeedbackPrompt from '../components/FeedbackPrompt';
 import { FEEDBACK } from '../services/feedback';
-import { greetingNow } from '../utils/helpers';
+import { displayTitle, greetingNow } from '../utils/helpers';
 import {
   IconArrowRight,
   IconAward,
@@ -453,7 +453,7 @@ export default function Dashboard() {
           </div>
           {latestConversation ? (
             <article className="compass-convo">
-              <div className="cc-title">{latestConversation.title || 'Untitled conversation'}</div>
+              <div className="cc-title">{displayTitle(latestConversation.title) || 'Untitled conversation'}</div>
               <div className="cc-meta">
                 {relativeDay(latestConversation.last_message_at || latestConversation.created_at)}
                 {latestConversation.message_count != null
