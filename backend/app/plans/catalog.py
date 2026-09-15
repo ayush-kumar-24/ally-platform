@@ -280,9 +280,23 @@ class Plan:
 #: Nearly the whole product, and deliberately so: Vision, recommendations and the
 #: knowledge base were ungated before paid tiers existed, so gating them now would
 #: take away what our own testers are currently using. It stops short of voice
-#: chat and Know My Energy (paid on purpose since before this change) and of the
-#: two Rs 999 perks that are scarce rather than merely paid -- an inbox we send
-#: to, and a place ahead of paying founders in the call queue.
+#: chat and Know My Energy (paid on purpose since before this change) and of
+#: PRIORITY_CALL -- the one Rs 999 perk that is scarce rather than merely paid,
+#: because a place ahead of paying founders in the call queue is taken from
+#: someone.
+#:
+#: EMAIL_NOTIFICATIONS is here for the testing phase and has to leave with the
+#: rest of this set. The team builds and tests on Free accounts, and a reminder
+#: feature cannot be tested by people who never receive one -- the founder-facing
+#: half of Plan Your Day's reminders IS the email. It was previously withheld on
+#: the grounds that an inbox we send to costs us something real; during testing
+#: the inbox is our own, and the alternative is shipping an email path nobody on
+#: the team has ever seen arrive.
+#:
+#: This turns on EVERY email the notification system can send for Free founders,
+#: not only task reminders -- notification_emails.py reads the same feature. At
+#: PUBLIC_LAUNCH the whole set is replaced by _FREE_AT_LAUNCH (empty), so this
+#: reverts on the launch toggle rather than needing to be remembered.
 #:
 #: Parenthesised deliberately: set `-` binds tighter than `|`, so without these
 #: brackets the subtraction applies only to the frozenset beside it and
@@ -291,6 +305,7 @@ _FREE_TESTING = (_BASE | _WORKSPACE | frozenset({
     Feature.VISION,
     Feature.RECOMMENDATIONS,
     Feature.KNOWLEDGE_CHAT,
+    Feature.EMAIL_NOTIFICATIONS,
 })) - frozenset({Feature.VOICE_CHAT})
 
 #: What Free carries AT PUBLIC LAUNCH: nothing.
@@ -324,13 +339,14 @@ PLANS: dict[PlanTier, Plan] = {
         daily_token_limit=8_000,    # ~32 chat messages/day; testing-phase value, see docstring
         planning_daily_token_limit=7_700,   # 7 planning actions/day at 1,100 each
         free_calls_per_month=0,
-        # Free out-grants Rs 499 on three features, and only for the testing
+        # Free out-grants Rs 499 on four features, and only for the testing
         # phase: Vision, recommendations and the knowledge base were ungated
         # before paid tiers existed, so gating them here would take away what
-        # our own testers are currently using. It stops short of voice chat and
-        # Know My Energy (paid on purpose since before this change) and of the
-        # two Rs 999 perks that are scarce rather than merely paid -- an inbox
-        # we send to, and a place ahead of paying founders in the call queue.
+        # our own testers are currently using, and email notifications are how
+        # the team sees the reminder path actually arrive. It stops short of
+        # voice chat and Know My Energy (paid on purpose since before this
+        # change) and of PRIORITY_CALL, the one Rs 999 perk that is scarce
+        # rather than merely paid.
         # Resize this to `_BASE` at public launch, the same moment the credit
         # ladder in the module docstring has to be restored.
         # Parenthesised deliberately: set `-` binds tighter than `|`, so without
