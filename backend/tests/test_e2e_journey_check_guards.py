@@ -343,6 +343,13 @@ def test_every_topic_is_reachable_by_at_least_one_real_question():
         "When you face a big unknown, how do you decide?",
         "When did someone last give you difficult feedback?",
         "In one sentence, why does this problem deserve your next few years?",
+        "Does doing this really well mean being first, the best, or being "
+        "trusted?",
+        "If a stranger asked you to explain this idea in one breath, what "
+        "would you say?",
+        "When did you personally ran into this problem yourself?",
+        "What tool are you currently using to build this?",
+        "What eats the most time without actually moving this forward?",
     ]:
         answer, matched = match_answer(q, "strong")
         assert matched, q
@@ -492,3 +499,83 @@ def test_band_summary_handles_an_unscored_label():
 
 def test_band_summary_handles_no_answers_at_all():
     assert band_summary([], set()) == ["  answer bands            none"]
+
+
+# --- the gaps that produced the last false findings ---------------------
+#
+# In the strong run, RC-001 and RC-003 "Lack of Customer Discovery" came
+# back as ranks 1 and 2, both top findings, against a persona whose answer
+# was "forty-one conversations with people I had never met". Both traced
+# to the two Idea & Validation questions getting the generic reply: a
+# two-question category with two fallbacks reads as 100% risk.
+
+
+TOPIC = {name: i for i, name in enumerate([
+    "customers", "time/plan", "market", "product", "pricing", "team", "risk",
+    "decisions", "feedback", "purpose", "success", "pitch", "own_problem",
+    "tooling", "wasted"])}
+
+
+def _topic_of(question, persona="strong"):
+    answer, matched = match_answer(question, persona)
+    if not matched:
+        return "FALLBACK"
+    return [a for _, a in ANSWER_BANK[persona]].index(answer)
+
+
+@pytest.mark.parametrize("question,topic", [
+    # the two that made RC-001 and RC-003 top findings
+    ("If a stranger asked you to explain this idea in one breath, what "
+     "would you say -- no rehearsing, just the honest first version.", "pitch"),
+    ("Think of the last time you personally ran into this problem "
+     "yourself. Describe exactly what happened.", "own_problem"),
+    # the forced choice on what success means
+    ("When you picture doing this really well, what does 'well' actually "
+     "mean to you -- being first, being the best, or being trusted?", "success"),
+    # what it is being built WITH, three phrasings
+    ("What tool, if any, are you currently using to build this -- even "
+     "something simple like a no-code app or spreadsheet?", "tooling"),
+    ("What's the simplest version of this you could put in front of "
+     "someone today using only free or no-code tools?", "tooling"),
+    ("Is there a specific reason you haven't used an existing tool or "
+     "template to speed up building the first version?", "tooling"),
+    # time WASTED, which is not how time is planned -- RC-974's two answers
+    ("What's the one activity that eats the most time without actually "
+     "moving this idea forward?", "wasted"),
+    ("What's something you spent hours on this week that, looking back, "
+     "didn't need that much time?", "wasted"),
+    # a risk question that never says "risk"
+    ("Have you ever sat down and specifically listed out everything that "
+     "could seriously hurt this business?", "risk"),
+])
+def test_questions_that_used_to_fall_back_now_match(question, topic):
+    assert _topic_of(question) == TOPIC[topic]
+
+
+@pytest.mark.parametrize("persona", ["weak", "strong"])
+def test_every_new_topic_has_an_answer_in_both_personas(persona):
+    for name in ("success", "pitch", "own_problem", "tooling", "wasted"):
+        answer = ANSWER_BANK[persona][TOPIC[name]][1]
+        assert len(answer) > 80, f"{persona}/{name} is too thin to score"
+
+
+def test_planning_and_wasted_time_stay_separate():
+    """The planning answer describes protected Mondays and was correctly
+    marked down on 'what eats the most time' -- it never names a waster.
+    Two Founder Psychology answers, and RC-974 behind them."""
+    planning = _topic_of("When was the last time you sat down specifically "
+                         "to plan, not just to work?")
+    wasted = _topic_of("What's the one activity that eats the most time "
+                       "without actually moving this idea forward?")
+    assert planning == TOPIC["time/plan"]
+    assert wasted == TOPIC["wasted"]
+    assert planning != wasted
+
+
+def test_the_pitch_question_does_not_take_the_customer_answer():
+    """'stranger' appears in both; only one of them is asking about people
+    the founder has spoken to."""
+    assert _topic_of("If a stranger asked you to explain this idea in one "
+                     "breath, what would you say?") == TOPIC["pitch"]
+    assert _topic_of("How many people outside your personal network have "
+                     "you spoken to this month?") == TOPIC["customers"]

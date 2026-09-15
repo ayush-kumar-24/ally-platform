@@ -143,13 +143,13 @@ TEST_DOMAIN = "ally-e2e.local"
 #: on its own is coincidence.
 _TOPICS = (
     # customers, validation, who actually pays
-    (("customer", "spoken to", "talked to", "interview", "personal network",
-      "validat", "pays for this", "anyone else told", "problem is real",
-      "actually uses it"),
-     ("talk to", "audience", "demand", "stranger")),
+    (("customer", "spoken to", "talked to", "talking to someone",
+      "interview", "personal network", "validat", "pays for this",
+      "anyone else told", "problem is real", "actually uses it"),
+     ("talk to", "audience", "demand")),
     # time, planning, priorities, focus
-    (("plan", "priorit", "schedul", "deep work", "eats the most", "sat down",
-      "spent hours", "your time", "specific time", "every hour",
+    (("plan", "priorit", "schedul", "deep work",
+      "your time", "specific time", "every hour", "spend more time",
       "actual hours", "hours went into", "avoiding right now",
       "decided not to do", "left over",
       # "what did you actually do today that moves you toward the life you
@@ -178,7 +178,8 @@ _TOPICS = (
       "decide together"),
      ("hire", "role")),
     # risk
-    (("risk", "could fail", "downside", "worst case", "thought about risk"),
+    (("risk", "could fail", "downside", "worst case", "thought about risk",
+      "seriously hurt", "listed out everything"),
      ("go wrong", "unsettle", "fail")),
     # decisions under uncertainty, stress
     (("decision", "decide fast", "big unknown", "uncertainty",
@@ -194,6 +195,29 @@ _TOPICS = (
      # "five years" is a date, not a subject. As a defining term it pulled a
      # Business Planning question about what you did TODAY into purpose.
      ("matters", "picture", "five years")),
+    # --- added after a run where each of these fell through to the generic
+    # --- answer and was scored as though the founder had dodged the question
+    # what "doing it well" means
+    (("being trusted", "being the best", "really well"),
+     ("mean to you", "recognised")),
+    # explaining the idea -- the pitch
+    (("one breath", "explain this idea", "explain it to", "elevator"),
+     ("stranger", "rehearsing")),
+    # the founder's own encounter with the problem
+    (("ran into this problem", "personally ran into", "had it yourself",
+      "your own experience", "experienced it yourself"),
+     ("yourself",)),
+    # what it is being built WITH
+    (("what tool", "no-code", "existing tool", "or template",
+      "currently using to build", "any tools", "tools that could help"),
+     ("spreadsheet", "from scratch")),
+    # time WASTED, which is not the same question as how time is planned:
+    # the planning answer describes protected Mondays and was correctly
+    # marked down on "what eats the most time", because it never names a
+    # time-waster. Two Founder Psychology answers, and RC-974 behind them.
+    (("eats the most", "spent hours", "without actually moving",
+      "need that much time", "didn't need"),
+     ("waste", "looking back")),
 )
 
 #: WEAK. A founder who has not done the work: no market sizing, no pricing
@@ -225,6 +249,17 @@ _WEAK_TEXTS = (
     "reason it did not apply. I have not gone back to it since.",
     "Honestly I have not put it into words. I know it matters to me but if "
     "you asked me to say why in one sentence I would struggle.",
+    "Being the one people have heard of, I suppose. I have not thought past "
+    "that -- what doing it well looks like on an ordinary Tuesday I could "
+    "not tell you.",
+    "I always ramble when someone asks. It comes out different every time "
+    "and I usually take two minutes to get anywhere near the point.",
+    "Not recently, no. It is more something I noticed other people "
+    "complaining about than something I have run into myself.",
+    "Everything from scratch, because I never looked at what already "
+    "exists. It did not occur to me to check before I started building.",
+    "Support, and fiddling with things nobody asked for. If I am honest "
+    "that is most of the week, and I could not tell you what it bought me.",
 )
 
 #: STRONG. The same topics, in the same order, answered by a founder who HAS
@@ -275,6 +310,23 @@ _STRONG_TEXTS = (
     "Because I watched people give up on something they needed for want of "
     "anyone willing to explain it, and I can say that in one sentence because "
     "I have had to say it to forty-one strangers.",
+    "Trusted. Not first and not the biggest -- if ten of the forty-one I "
+    "spoke to would recommend this to someone in their position without me "
+    "asking, that is doing it well. First and biggest are not things I can "
+    "control at this stage. That one I can.",
+    "Firms this size lose a day a week to a process they all do the same "
+    "bad way, and we do it for them in an hour. I have said that sentence "
+    "forty-one times and cut something out of it every time somebody looked "
+    "confused halfway through.",
+    "Last March, in my old job -- I lost most of a week to it and rebuilt "
+    "the same spreadsheet three times. That is where this started, and it "
+    "is exactly why I went looking for whether anyone else had that week.",
+    "A no-code form, a spreadsheet, and about two hundred lines of glue. I "
+    "checked what already existed first: three tools do eighty per cent of "
+    "it, so I am only building the part none of them do.",
+    "Polishing copy nobody reads. I caught it three weeks ago when the "
+    "analytics said the page it sits on gets nine visits a week, and it is "
+    "capped at an hour on Fridays now.",
 )
 
 assert len(_WEAK_TEXTS) == len(_STRONG_TEXTS) == len(_TOPICS)
