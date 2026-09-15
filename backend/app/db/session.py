@@ -85,6 +85,13 @@ def runtime_database_url(url: str, allow_session_pooler: bool = False) -> tuple[
 
 _url, _note = runtime_database_url(
     settings.DATABASE_URL, settings.DB_SESSION_POOLER_OK)
+
+#: The URL the app's own engine actually runs on, which is NOT always
+#: settings.DATABASE_URL. Anything reasoning about the live connection -- the
+#: pool-exhaustion check at boot, say -- must read this one, or it describes a
+#: connection nobody is using. Migrations keep settings.DATABASE_URL.
+DATABASE_URL_IN_USE = _url
+
 if _note:
     logger.warning("database_url_moved_to_transaction_pooler", extra={"detail": _note})
 

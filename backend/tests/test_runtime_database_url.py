@@ -92,3 +92,46 @@ def test_migrations_still_use_database_url_as_written():
     source = (BACKEND_DIR / "alembic" / "env.py").read_text(encoding="utf-8")
     assert 'config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)' in source
     assert "runtime_database_url" not in source
+
+
+# --- the boot check must describe the connection that exists ------------
+
+
+def test_the_engine_exposes_the_url_it_actually_runs_on():
+    from app.db import session as mod
+
+    assert mod.DATABASE_URL_IN_USE == mod._url
+
+
+def test_the_pool_warning_reads_the_url_in_use_not_the_raw_setting():
+    """A live run logged, at ERROR:
+
+        db_pool_may_exhaust_session_mode_pooler ... "the real fix -- point
+        DATABASE_URL at the transaction-mode pooler on port 6543"
+
+    one line after it had already been moved to 6543. The check was reading
+    settings.DATABASE_URL, which still said 5432, so it warned about a
+    session-mode hazard for a process that was not in session mode and
+    prescribed the thing that had just happened. An ERROR that is wrong is
+    worse than no ERROR: it is what teaches people to skip the log.
+    """
+    from app.core.paths import BACKEND_DIR
+
+    source = (BACKEND_DIR / "app" / "main.py").read_text(encoding="utf-8")
+    check = source.split("_SESSION_MODE_POOLER_LIMIT = 15", 1)[1].split("logger.error", 1)[0]
+    assert "DATABASE_URL_IN_USE" in check
+    assert "settings.DATABASE_URL" not in check
+
+
+def test_a_pooler_url_on_5432_does_not_warn_because_it_is_moved():
+    """The two pieces together: the move happens, so the hazard does not."""
+    moved, note = runtime_database_url(f"{POOLER}:5432/postgres")
+    assert note
+    assert ":6543" in moved, "the boot check keys off exactly this substring"
+
+
+def test_session_mode_kept_on_purpose_still_warns():
+    """Opting out keeps the URL on 5432 -- and the warning is then correct."""
+    kept, _ = runtime_database_url(f"{POOLER}:5432/postgres",
+                                   allow_session_pooler=True)
+    assert ":6543" not in kept

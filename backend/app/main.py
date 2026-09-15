@@ -51,6 +51,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.core.config import settings
 from app.core.logger import configure_logging, logger
 from app.core.cors import setup_cors
+from app.db.session import DATABASE_URL_IN_USE
 from app.middleware.request_logging import RequestLoggingMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware
 from app.middleware.error_handler import (
@@ -161,9 +162,14 @@ if settings.is_production:
 # Checked at startup because the failure is otherwise invisible until traffic
 # arrives, and then presents as unrelated 500s across whichever endpoints
 # happened to need a connection rather than as a configuration problem.
+#
+# Read DATABASE_URL_IN_USE, not settings.DATABASE_URL: a pooler URL on 5432 is
+# moved to 6543 for this engine, and checking the raw setting reported a
+# session-mode hazard for a process that had already left session mode -- an
+# ERROR line whose remedy was "do the thing that just happened".
 _SESSION_MODE_POOLER_LIMIT = 15
 _per_process = settings.DB_POOL_SIZE + settings.DB_POOL_MAX_OVERFLOW
-if ":6543" not in (settings.DATABASE_URL or "") and _per_process * 2 > _SESSION_MODE_POOLER_LIMIT:
+if ":6543" not in (DATABASE_URL_IN_USE or "") and _per_process * 2 > _SESSION_MODE_POOLER_LIMIT:
     logger.error(
         "db_pool_may_exhaust_session_mode_pooler",
         extra={
