@@ -327,7 +327,7 @@ def mailed(client, monkeypatch):
 
     sent = []
     monkeypatch.setattr(task_reminders, "send_task_scheduled",
-                        lambda *a: sent.append(a) or True)
+                        lambda *a, **kw: sent.append(a) or True)
     monkeypatch.setattr(container_mod.container, "entitlement_service",
                         lambda db: SimpleNamespace(has_feature=lambda tier, f: tier == "pro"),
                         raising=False)

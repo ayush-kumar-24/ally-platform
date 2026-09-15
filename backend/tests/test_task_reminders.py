@@ -486,7 +486,7 @@ def confirm(monkeypatch):
     """notify_task_scheduled with the plan lookup stubbed and mail captured."""
     sent = []
     monkeypatch.setattr(task_reminders, "send_task_scheduled",
-                        lambda *a: sent.append(a) or True)
+                        lambda *a, **kw: sent.append(a) or True)
 
     def run(founder, task, *, allowed=True, tz="Asia/Kolkata"):
         from app.core import container as container_mod
