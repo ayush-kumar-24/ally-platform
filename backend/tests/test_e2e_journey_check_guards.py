@@ -579,3 +579,81 @@ def test_the_pitch_question_does_not_take_the_customer_answer():
                      "breath, what would you say?") == TOPIC["pitch"]
     assert _topic_of("How many people outside your personal network have "
                      "you spoken to this month?") == TOPIC["customers"]
+
+
+# --- reprompts and the counts ------------------------------------------
+#
+# A run printed:
+#
+#     Diagnosis: 12 question(s) answered (14 matched on topic,
+#                -2 fell back to the generic answer)
+#
+# Two reprompts. `matched_count` was incremented when the answer was POSTED,
+# but a rejected answer pops its question back off `out` -- so the counter
+# kept two matches for questions that were no longer there, and the
+# subtraction went negative. The counts are now derived from the questions
+# that survived, which cannot disagree with each other.
+
+
+
+def test_a_reprompt_does_not_leave_a_phantom_match(capsys):
+    """The exact defect: one accepted answer, one rejected-then-dropped."""
+    on_topic = {"question_id": 1, "question_text": ANALYTICS_Q}
+    out = []
+    client = _Client(
+        {"question": on_topic},
+        [{"accepted": False},                      # rejected -> popped
+         {"is_complete": True, "next_question": None}],
+    )
+    _walk(client, "/start", "/answer", "question_id", "X", out, "strong")
+    printed = capsys.readouterr().out
+    assert len(out) == 1
+    assert "1 question(s) answered" in printed
+    assert "1 matched on topic" in printed
+    assert "fell back" not in printed, printed
+    assert "-" not in printed.split("answered", 1)[1]
+
+
+def test_counts_never_go_negative_however_many_reprompts(capsys):
+    """Three reprompts is the limit; the arithmetic must survive all of them."""
+    on_topic = {"question_id": 1, "question_text": ANALYTICS_Q}
+    out = []
+    client = _Client(
+        {"question": on_topic},
+        [{"accepted": False}, {"accepted": False}, {"accepted": False},
+         {"is_complete": True, "next_question": None}],
+    )
+    assert _walk(client, "/start", "/answer", "question_id", "X", out,
+                 "strong") is True
+    printed = capsys.readouterr().out
+    assert "1 question(s) answered (1 matched on topic)" in printed
+
+
+def test_answered_and_matched_always_reconcile(capsys):
+    """answered = matched + fell_back, whatever the mix."""
+    out = []
+    client = _Client(
+        {"question": {"question_id": 1, "question_text": ANALYTICS_Q}},
+        [{"accepted": False},
+         {"next_question": {"question_id": 2,
+                            "question_text": "What colour is the sky?"}},
+         {"is_complete": True, "next_question": None}],
+    )
+    _walk(client, "/start", "/answer", "question_id", "X", out, "strong")
+    printed = capsys.readouterr().out
+    assert "2 question(s) answered (1 matched on topic, 1 fell back" in printed
+
+
+def test_walk_counts_only_its_own_questions(capsys):
+    """`out` accumulates across phases in the real run; a walk must report
+    what IT served, not everything collected so far."""
+    out = [{"question_id": 99, "question_text": "from an earlier phase",
+            "_fell_back": True}]
+    client = _Client(
+        {"question": {"question_id": 1, "question_text": ANALYTICS_Q}},
+        [{"is_complete": True, "next_question": None}],
+    )
+    _walk(client, "/start", "/answer", "question_id", "X", out, "strong")
+    printed = capsys.readouterr().out
+    assert "1 question(s) answered (1 matched on topic)" in printed
+    assert len(out) == 2

@@ -686,7 +686,9 @@ def _walk(client, start_path, answer_path, id_field, label, out, persona="weak")
         print(f"  FAIL {start_path} -> {r.status_code} {r.text[:200]}")
         return False
     q = (r.json() or {}).get("question")
-    matched_count = 0
+    # Only the questions this walk appends are its own: the counts below are
+    # taken from this slice, never from `len(out)`.
+    start_len = len(out)
     if q is None:
         # A null question means "this phase is already complete for this
         # founder" -- and that is a FAILURE here, not a pass. This check
@@ -707,13 +709,10 @@ def _walk(client, start_path, answer_path, id_field, label, out, persona="weak")
     reprompts = 0
     while q:
         out.append(q)
-        n = len(out)
         answer, matched = match_answer(q.get("question_text", ""), persona)
         # Recorded on the question itself so the summary can separate bands
         # earned by the persona from bands earned by the generic answer.
         q["_fell_back"] = not matched
-        if matched:
-            matched_count += 1
         body = {id_field: q[id_field], "answer_text": answer}
         a = client.post(answer_path, json=body)
         if a.status_code not in (200, 201):
@@ -735,15 +734,24 @@ def _walk(client, start_path, answer_path, id_field, label, out, persona="weak")
             if not q:
                 break
         q = data.get("next_question")
-    if not out:
+    answered = out[start_len:]
+    if not answered:
         print(f"  FAIL {label}: 0 questions answered")
         return False
     # How many questions got an answer actually about them. A phase that
     # mostly fell back is measuring the fallback line, not the persona, and
     # its bands should be read that way.
-    fell_back = len(out) - matched_count
+    #
+    # Counted from the surviving questions, not from a running total. A
+    # running counter incremented at answer time double-counts a question
+    # whose answer was rejected and re-asked: the reprompt branch pops the
+    # question off `out` but could not un-increment the counter, so
+    # `len(out) - matched_count` went NEGATIVE ("-2 fell back to the generic
+    # answer") on any run with reprompts.
+    matched_count = sum(1 for q in answered if not q.get("_fell_back"))
+    fell_back = len(answered) - matched_count
     detail = f", {fell_back} fell back to the generic answer" if fell_back else ""
-    print(f"  {label}: {len(out)} question(s) answered "
+    print(f"  {label}: {len(answered)} question(s) answered "
           f"({matched_count} matched on topic{detail})")
     return True
 
