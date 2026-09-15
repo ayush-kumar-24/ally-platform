@@ -14,9 +14,19 @@ by-hand fix for specific founder_ids -- not a general repair script, and it
 touches nothing else on the row.
 
 Values are plausible and stage-appropriate, not the founder's real answers --
-there is no way to know those from here. Writing anything is a real decision
-on a real account, so this refuses to run without --confirm-writes and prints
-exactly what it is about to change before it changes it.
+there is no way to know those from here. current_revenue follows the founder's
+stage: "pre_revenue" at Ideation, "1L_5L" at Early Traction, "25L_1Cr" at
+Growth, because a Growth-stage founder billing under a lakh is a contradiction
+the diagnosis would then be asked to account for.
+
+ONLY EMPTY FIELDS ARE WRITTEN. A column that already holds something is listed
+and skipped; nothing a founder actually answered is ever overwritten. It used
+to refuse outright if ANY of the five had a value, which made it useless for
+exactly the accounts it was written for -- every seeded founder past Ideation
+has invisible_gaps set and the other four empty, so it declined all of them.
+
+Writing anything is a real decision on a real account, so this refuses to run
+without --confirm-writes and prints exactly what it is about to change first.
 
     python -m scripts.fill_missing_onboarding --database-url "..." --founder-id 7575 --confirm-writes
 """
@@ -60,6 +70,21 @@ FIELDS = {
     ),
 }
 
+# current_revenue by stage, because "under_1L" on a Growth/Scaling founder is
+# not a plausible value -- it is a contradiction the diagnosis would then be
+# asked to explain. Bands are the ones founders_current_revenue_check allows.
+# Anything not listed keeps the default above.
+REVENUE_BY_STAGE_ORDER = {
+    1: "pre_revenue",     # Ideation
+    2: "pre_revenue",     # Validation
+    3: "under_1L",        # Prototype / MVP
+    4: "1L_5L",           # Early Traction
+    5: "25L_1Cr",         # Growth / Scaling
+    6: "above_1Cr",       # Expansion
+    7: "above_1Cr",       # Maturity
+    8: "above_1Cr",       # Exit
+}
+
 
 def run(args) -> int:
     os.environ["DATABASE_URL"] = args.database_url
@@ -87,39 +112,57 @@ def run(args) -> int:
         for col, val in current.items():
             print(f"  {col}: {val!r}")
 
+        # FILL THE EMPTY ONES, LEAVE THE REST. This used to refuse outright
+        # when ANY of the five already had a value, which made it unusable for
+        # the founders that need it most: every seeded account past Ideation
+        # has invisible_gaps set and the other four empty, so the script that
+        # exists to unblock them declined all of them. The guarantee that
+        # matters -- never overwrite a value a founder gave -- is kept by
+        # filtering, not by refusing.
         already_set = {c: v for c, v in current.items() if v not in (None, [], {}, "")}
+        to_write = {c: v for c, v in FIELDS.items() if c not in already_set}
+
         if already_set:
-            print(f"\n  REFUSING: {list(already_set)} already has a value on "
-                  "this founder. This script only fills genuinely empty "
-                  "fields -- it will not overwrite anything.")
+            print(f"\n  leaving alone (already has a value): {list(already_set)}")
+        if not to_write:
+            print("\n  nothing to do: every field this script fills is already "
+                  "set. If the profile is still rejected, the missing field is "
+                  "one this script does not touch -- run the journey check to "
+                  "see which.")
             return 1
 
+        # Stage decides the revenue band, when that is one of the empty ones.
+        stage_order = db.execute(sa.text(
+            "select stage_order from founder_stages where stage_id = :s"),
+            {"s": founder.stage_id}).scalar()
+        if "current_revenue" in to_write and stage_order in REVENUE_BY_STAGE_ORDER:
+            to_write["current_revenue"] = REVENUE_BY_STAGE_ORDER[stage_order]
+            print(f"\n  stage_order {stage_order} -> current_revenue "
+                  f"{to_write['current_revenue']!r}")
+
         print("\nwill write:")
-        for col, val in FIELDS.items():
+        for col, val in to_write.items():
             print(f"  {col} = {val!r}")
 
         if not args.confirm_writes:
             print("\nDry run. Re-run with --confirm-writes to apply.")
             return 0
 
+        # Built from `to_write`, so a column that was already populated never
+        # appears in the statement at all.
+        jsonb_columns = {"founder_reality_signals", "business_reality_signals",
+                         "invisible_gaps"}
+        assignments, params = [], {"fid": args.founder_id}
+        for i, (col, val) in enumerate(to_write.items()):
+            key = f"v{i}"
+            cast = f"cast(:{key} as jsonb)" if col in jsonb_columns else f":{key}"
+            assignments.append(f"{col} = {cast}")
+            params[key] = _json(val) if col in jsonb_columns else val
+
         db.execute(
-            sa.text("""
-                update founders set
-                  founder_reality_signals = cast(:fr as jsonb),
-                  business_reality_signals = cast(:br as jsonb),
-                  invisible_gaps = cast(:ig as jsonb),
-                  current_revenue = :rev,
-                  product_description = :pd
-                where founder_id = :fid
-            """),
-            {
-                "fr": _json(FIELDS["founder_reality_signals"]),
-                "br": _json(FIELDS["business_reality_signals"]),
-                "ig": _json(FIELDS["invisible_gaps"]),
-                "rev": FIELDS["current_revenue"],
-                "pd": FIELDS["product_description"],
-                "fid": args.founder_id,
-            },
+            sa.text(f"update founders set {', '.join(assignments)} "
+                    "where founder_id = :fid"),
+            params,
         )
         db.commit()
 
