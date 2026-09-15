@@ -28,6 +28,7 @@ from scripts.e2e_journey_check import (
     _walk,
     band_summary,
     match_answer,
+    stop_reason,
 )
 
 
@@ -475,8 +476,7 @@ def test_band_summary_splits_generic_from_on_topic():
 
 def test_band_summary_stays_quiet_when_nothing_fell_back():
     lines = band_summary([(1, "green"), (2, "green")], set())
-    assert len(lines) == 1
-    assert "generic" not in lines[0]
+    assert not [l for l in lines if "generic" in l or "on topic" in l]
 
 
 def test_band_summary_still_flags_flat_amber():
@@ -657,3 +657,78 @@ def test_walk_counts_only_its_own_questions(capsys):
     printed = capsys.readouterr().out
     assert "1 question(s) answered (1 matched on topic)" in printed
     assert len(out) == 2
+
+
+# --- comparing two runs that answered different numbers of questions ---
+#
+# The strong run finished at 12 answers, the weak one at 14. That is the
+# engine ending the session once confidence clears the routing threshold,
+# not the harness dropping two questions -- but "10 green" against "8 green"
+# with no denominator reads like the former. Both the share line and
+# stop_reason() exist so the two runs can be put side by side.
+
+
+def test_band_lines_carry_a_denominator():
+    lines = band_summary([(1, "green")] * 10 + [(2, "red"), (3, "amber")], set())
+    share = [l for l in lines if "share of" in l]
+    assert share, lines
+    assert "12" in share[0]
+    assert "green 83%" in share[0]
+
+
+def test_shares_make_different_question_counts_comparable():
+    """8 of 14 and 10 of 12 are not the same run, and must not read as one."""
+    weak = band_summary([(i, "green") for i in range(8)]
+                        + [(i, "red") for i in range(8, 14)], set())
+    strong = band_summary([(i, "green") for i in range(10)]
+                          + [(i, "red") for i in range(10, 12)], set())
+    assert "green 57%" in "".join(weak)
+    assert "green 83%" in "".join(strong)
+
+
+def test_no_share_line_when_nothing_was_answered():
+    assert not [l for l in band_summary([], set()) if "share of" in l]
+
+
+def test_stop_reason_names_the_confidence_that_ended_the_session():
+    line = stop_reason((12, "generate_report", 82.0))
+    assert "12 answers" in line
+    assert "82" in line
+    assert "generate_report" in line
+    assert ">80" in line, "the threshold is what explains the early stop"
+
+
+def test_stop_reason_covers_every_routing_state_the_database_allows():
+    """Read off the sessions_routing_state_check constraint, so a new state
+    added to the schema turns this red instead of printing a bare value."""
+    import re
+
+    from app.core.paths import BACKEND_DIR
+    from scripts.e2e_journey_check import _ROUTING_MEANING
+
+    schema = (BACKEND_DIR / "app" / "models" / "schema.py").read_text(
+        encoding="utf-8")
+    clause = re.search(r"name='sessions_routing_state_check'", schema)
+    assert clause, "the constraint moved; this test needs updating"
+    line = schema[:clause.start()].rsplit("CheckConstraint", 1)[1]
+    states = set(re.findall(r"'(\w+)'::character varying", line))
+    assert states, line
+    assert states <= set(_ROUTING_MEANING), (
+        f"routing states with no explanation in the harness: "
+        f"{states - set(_ROUTING_MEANING)}")
+    for state in states:
+        assert _ROUTING_MEANING[state] in stop_reason((5, state, 40))
+
+
+def test_stop_reason_survives_a_null_confidence():
+    """A session row exists before the engine has scored anything."""
+    assert "?" in stop_reason((1, "continue", None))
+
+
+def test_stop_reason_survives_an_unknown_routing_state():
+    line = stop_reason((3, "something_new", 50))
+    assert "something_new" in line
+
+
+def test_stop_reason_says_so_when_there_is_no_session():
+    assert "not found" in stop_reason(None)

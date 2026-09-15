@@ -33,6 +33,13 @@ class Settings(BaseSettings):
     # fixed pool of long-lived ones.
     DB_POOL_SIZE: int = 2
     DB_POOL_MAX_OVERFLOW: int = 3
+    # Keep session mode even when DATABASE_URL points at the Supabase pooler on
+    # 5432. Off, because session mode is what dropped three of ten end-to-end
+    # runs mid-request: app/db/session.py moves a pooler URL to 6543 for the
+    # runtime engine and says so in the log. Migrations are never moved --
+    # alembic reads DATABASE_URL as written, which is what Supabase wants for
+    # DDL. Set this true only to run the app itself on session mode deliberately.
+    DB_SESSION_POOLER_OK: bool = False
 
     # --- Auth ---
     # "dev"      = temporary local stand-in for testing, never used in production.

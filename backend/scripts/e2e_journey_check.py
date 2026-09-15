@@ -439,12 +439,55 @@ def band_summary(rows, fallback_qids) -> list[str]:
                      "   <- the script had no answer for these; read them"
                      " as harness noise, not as the founder")
 
+    # SHARES, because the two personas do not answer the same number of
+    # questions and raw counts across runs do not compare. The engine stops
+    # when it has enough, so a strong run can finish at 12 answers where a
+    # weak one needs 14: "10 green" and "8 green" say nothing until they are
+    # 83% and 57%. See stop_reason() for why a run ended where it did.
+    total = sum(answered.values())
+    if total:
+        shares = ", ".join(f"{k} {v * 100 // total}%" for k, v in answered.items())
+        lines.append(f"    share of {total:<14} {shares}")
+
     # About SCORING being off, not about this script's answers: one band for
     # everything is the signature of answers reaching the pipeline unscored.
     if len(answered) == 1 and "amber" in answered:
         lines.append("    ^ every answer identical -- this is the unscored "
                      "fallback, not a real classification")
     return lines
+
+
+#: routing_state thresholds, from the column comment on sessions.routing_state.
+_ROUTING_MEANING = {
+    "continue": "<60 = keep asking",
+    "validate": "60-80 = confirm the hypothesis with the founder",
+    "generate_report": ">80 = confident enough to report, stop asking",
+    "distress_support": "distress path, questioning suspended",
+}
+
+
+def stop_reason(row) -> str:
+    """One line saying why the diagnosis stopped where it did.
+
+    Two personas answering different numbers of questions looks like a bug in
+    this script and is not one: the engine ends the session as soon as
+    `overall_confidence_score` clears the `routing_state` threshold, so a
+    persona that answers clearly gets asked less. A strong run ended at 12
+    answers on confidence 82 while the weak run took all 14. Without this
+    line the next reader compares 12 against 14 and concludes the harness
+    dropped two questions.
+
+    `row` is (questions_answered_count, routing_state, overall_confidence_score);
+    None when no session was found.
+    """
+    if row is None:
+        return "  session                 not found"
+    answered, state, confidence = row[0], row[1], row[2]
+    meaning = _ROUTING_MEANING.get(state or "", "")
+    conf = "?" if confidence is None else f"{float(confidence):.0f}"
+    tail = f"   ({meaning})" if meaning else ""
+    return (f"  stopped after           {answered} answers -- "
+            f"routing_state {state!r} at confidence {conf}{tail}")
 
 
 def _answer_for(n: int, persona: str = "weak", question_text: str | None = None) -> str:
@@ -893,6 +936,11 @@ def run(args) -> int:
     print(f"  answer persona          {args.persona}")
     for line in band_summary(rows, fallback_qids):
         print(line)
+    with SessionLocal() as db:
+        print(stop_reason(db.execute(sa.text(
+            "select questions_answered_count, routing_state, "
+            "overall_confidence_score from sessions where founder_id=:f "
+            "order by session_id desc limit 1"), {"f": fid}).first()))
 
     if report:
         bd = report[1] or {}
