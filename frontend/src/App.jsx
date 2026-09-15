@@ -1,10 +1,11 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+﻿import { lazy, Suspense, useEffect, useState } from 'react';
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { useApp } from './context/AppContext';
 import { clearTokens, getAccessToken, onAuthFailure, resumeSession } from './services/api';
 import { startDevSession } from './services/auth';
 import { setPresenceHint } from './services/presenceHint';
-import { supabaseConfigured, WAITLIST_URL } from './services/supabaseConfig';
+import { WAITLIST_URL } from './services/supabaseConfig';
+import { authConfigured } from './services/authMode';
 import { loadChunk } from './utils/loadChunk';
 import ErrorBoundary from './components/ErrorBoundary';
 import LaunchGate from './components/LaunchGate';
@@ -65,7 +66,7 @@ const Feedback = lazy(() => loadChunk(() => import('./pages/Feedback')));
 const TermsOfService = lazy(() => loadChunk(() => import('./pages/TermsOfService')));
 const PrivacyPolicy = lazy(() => loadChunk(() => import('./pages/PrivacyPolicy')));
 
-// Admin Panel — internal only. Access is decided by the backend (/admin/me);
+// Admin Panel â€” internal only. Access is decided by the backend (/admin/me);
 // AdminLayout renders an access error for anyone the server does not recognise.
 const AdminLayout = lazy(() => loadChunk(() => import('./pages/admin/AdminLayout')));
 const AdminDashboard = lazy(() => loadChunk(() => import('./pages/admin/AdminDashboard')));
@@ -190,7 +191,7 @@ export default function App() {
          that, so without this a founder gets dumped back at login mid-journey
          and loses their place. Never runs in production, where Supabase is
          configured and a real sign-in is genuinely required. */
-      if (!supabaseConfigured) {
+      if (!authConfigured) {
         try {
           if (await startDevSession()) return;
         } catch { /* fall through to the real sign-out below */ }
@@ -226,10 +227,10 @@ export default function App() {
       <LaunchGate>
       <Suspense fallback={<RouteFallback />}>
         <Routes>
-          {/* ── Root: dashboard or sign-in, never a page of its own ── */}
+          {/* â”€â”€ Root: dashboard or sign-in, never a page of its own â”€â”€ */}
           <Route path="/" element={<HomeGate />} />
 
-          {/* ── Legal pages ── */}
+          {/* â”€â”€ Legal pages â”€â”€ */}
           <Route path="/terms" element={
             <ErrorBoundary label="Terms of Service" fallbackPath="/">
               <TermsOfService />
@@ -241,7 +242,7 @@ export default function App() {
             </ErrorBoundary>
           } />
 
-          {/* ── Guided onboarding ── */}
+          {/* â”€â”€ Guided onboarding â”€â”€ */}
           <Route path="/guided" element={
             <ErrorBoundary label="Guided Onboarding" fallbackPath="/">
               <GuidedLayout />
@@ -266,7 +267,7 @@ export default function App() {
             <Route path="*" element={<Navigate to="/guided/login" replace />} />
           </Route>
 
-          {/* ── Main platform ── */}
+          {/* â”€â”€ Main platform â”€â”€ */}
           <Route path="/app" element={
             <ErrorBoundary label="Platform" fallbackPath="/app">
               <RequireAuth>
@@ -312,7 +313,7 @@ export default function App() {
             <Route path="help" element={<HelpSupport />} />
           </Route>
 
-          {/* ── Admin Panel (internal) ── */}
+          {/* â”€â”€ Admin Panel (internal) â”€â”€ */}
           <Route path="/admin" element={
             <ErrorBoundary label="Admin" fallbackPath="/admin">
               <AdminLayout />
@@ -344,3 +345,4 @@ export default function App() {
     </>
   );
 }
+
