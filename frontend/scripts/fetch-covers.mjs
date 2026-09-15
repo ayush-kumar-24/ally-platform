@@ -23,7 +23,7 @@
  * tile it shows today, so a partial run is a perfectly shippable state.
  */
 
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
@@ -32,6 +32,7 @@ const OUT = resolve(HERE, '../src/data/covers.json');
 
 const SEARCH = 'https://openlibrary.org/search.json';
 const COVER = (id) => `https://covers.openlibrary.org/b/id/${id}-M.jpg`;
+const LOCAL_DIR = resolve(HERE, '../public/covers');
 
 // Open Library asks for a contactable agent on automated reads.
 const HEADERS = { 'User-Agent': 'GoXL-Ally/1.0 (info@goxl.in)' };
@@ -40,18 +41,88 @@ const HEADERS = { 'User-Agent': 'GoXL-Ally/1.0 (info@goxl.in)' };
 const GAP_MS = 250;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-async function coverFor({ title, by }) {
-  const params = new URLSearchParams({ title, limit: '3', fields: 'cover_i,title,author_name' });
-  if (by) params.set('author', by);
+const norm = (s) => (s || '')
+  .toLowerCase()
+  .replace(/[^a-z0-9 ]+/g, ' ')
+  .replace(/\s+/g, ' ')
+  .trim();
 
-  const res = await fetch(`${SEARCH}?${params}`, { headers: HEADERS });
+/* `by` is written for a READER, not for a search index: "A.P.J. Abdul Kalam
+   with Arun Tiwari", "Clayton Christensen and others", "Brad Feld & Jason
+   Mendelson", "Saurabh Mukherjea, Rakshit Ranjan & Pranab Uniyal". Passed
+   whole to Open Library's author filter, every one of those matches nothing --
+   which is why the first run missed Wings of Fire and Competing Against Luck,
+   books the catalogue certainly holds. Only the first name is used. */
+const firstAuthor = (by) =>
+  (by || '').split(/\s+(?:with|and others|and|&)\s+|,/i)[0].trim();
+
+/* Open Library indexes "Mindset", not "Mindset: The New Psychology of
+   Success". Dropping the subtitle is the single biggest recovery in the
+   cascade below. */
+const mainTitle = (title) => title.split(/[:—–]/)[0].trim();
+
+/* A LOOSER SEARCH CAN RETURN THE WRONG BOOK, and a wrong cover is worse than
+   none -- nobody reports a missing picture, everybody notices Principles
+   showing someone else's jacket. So every candidate is checked before it is
+   accepted: the titles must actually correspond, and where we know an author,
+   one of their name-parts must appear in the record's authors. */
+function plausible(doc, { title, author }) {
+  const want = norm(mainTitle(title));
+  const got = norm(doc.title);
+  if (!got || !want) return false;
+  const titleOk = got === want || got.startsWith(want) || want.startsWith(got);
+  if (!titleOk) return false;
+
+  if (!author) return true;
+  const names = norm((doc.author_name || []).join(' '));
+  // Parts of 4+ characters only: "A.P.J." and "de" match everything.
+  const parts = norm(author).split(' ').filter((w) => w.length >= 4);
+  return parts.length === 0 || parts.some((w) => names.includes(w));
+}
+
+async function query(params) {
+  const res = await fetch(`${SEARCH}?${new URLSearchParams(params)}`, { headers: HEADERS });
   if (!res.ok) throw new Error(`search ${res.status}`);
   const { docs = [] } = await res.json();
+  return docs;
+}
 
-  // First result that actually HAS a cover. A doc without cover_i is an
-  // edition nobody scanned; taking it would write a dead URL.
-  const hit = docs.find((d) => d.cover_i);
-  return hit ? COVER(hit.cover_i) : null;
+async function coverFor({ title, by }) {
+  const author = firstAuthor(by);
+  const fields = 'cover_i,title,author_name';
+
+  /* Narrowest first, so the confident answer wins and the loose fallbacks are
+     only reached for the records that need them. limit=20, not 3: a book with
+     hundreds of editions can easily have twenty unscanned ones at the front,
+     which is the other half of why the first run missed so many. */
+  const attempts = [
+    { title, author, limit: '20', fields },
+    { title: mainTitle(title), author, limit: '20', fields },
+    { title: mainTitle(title), limit: '20', fields },
+    { q: `${mainTitle(title)} ${author}`.trim(), limit: '20', fields },
+  ];
+
+  for (const params of attempts) {
+    if (params.author === '') delete params.author;
+    const docs = await query(params);
+    const hit = docs.find((d) => d.cover_i && plausible(d, { title, author }));
+    if (hit) return COVER(hit.cover_i);
+    await sleep(GAP_MS);
+  }
+  return null;
+}
+
+/* A cover dropped into public/covers/<id>.<ext> wins over any lookup.
+
+   That is the escape hatch for the handful the catalogue genuinely does not
+   have -- several of these are Indian editions nobody has scanned. Drop the
+   file in, re-run, and it is picked up; no edit to this script or to the data. */
+const LOCAL_EXTS = ['jpg', 'jpeg', 'png', 'webp'];
+function localCover(id) {
+  for (const ext of LOCAL_EXTS) {
+    if (existsSync(resolve(LOCAL_DIR, `${id}.${ext}`))) return `/covers/${id}.${ext}`;
+  }
+  return null;
 }
 
 const refresh = process.argv.includes('--refresh');
@@ -73,6 +144,15 @@ const items = BOOKS;
 let found = 0, missed = 0, skipped = 0;
 
 for (const item of items) {
+  // Checked before the skip: a cover dropped in by hand should replace a
+  // lookup result on the next run without anyone having to pass --refresh.
+  const local = localCover(item.id);
+  if (local) {
+    if (existing[item.id] !== local) { existing[item.id] = local; found += 1; }
+    else { skipped += 1; }
+    writeFileSync(OUT, `${JSON.stringify(existing, null, 2)}\n`);
+    continue;
+  }
   if (existing[item.id]) { skipped += 1; continue; }
   try {
     const url = await coverFor(item);
