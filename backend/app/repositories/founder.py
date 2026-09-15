@@ -39,8 +39,16 @@ class FounderRepository(BaseRepository[Founder]):
         return obj
 
     def get_by_user_id(self, db: Session, user_id) -> Founder | None:
-        """Look up a founder by the Supabase auth uid carried in the token."""
+        """Look up a founder by the canonical Ally user UUID."""
         return self.get_by(db, user_id=user_id)
+
+    def get_by_cognito_sub(self, db: Session, cognito_sub: str) -> Founder | None:
+        """Look up a founder already linked to an Amazon Cognito identity."""
+        return self.get_by(db, cognito_sub=cognito_sub)
+
+    def get_by_email(self, db: Session, email: str) -> Founder | None:
+        """Look up a founder by email during one-time Cognito migration linking."""
+        return self.get_by(db, email=email)
 
     def resolve_stage_id(self, db: Session, stage: str) -> int | None:
         """Turn a stage name/label ('Validation', 'Stage 0->1', or '2') into a
