@@ -69,8 +69,12 @@ deliberately. Only pooler hosts are touched: on a direct Supabase endpoint, an
 RDS instance or a local postgres, 5432 is the only port there is.
 
 psycopg3 prepares statements by default and a transaction pooler cannot carry
-them across borrowed connections, so `prepare_threshold=0` is set automatically
-whenever the URL names 6543. Alembic is deliberately left on whatever `.env`
+them across the connections it hands out, so preparation is disabled
+(`prepare_threshold=None`) automatically whenever the URL names 6543. Note the
+value: psycopg reads `0` as *prepare everything on first execution*, and only
+`None` turns preparation off. Getting that backwards fails as
+`InvalidSqlStatementName: prepared statement "_pg3_N" does not exist`, part-way
+through a session rather than at connect time. Alembic is deliberately left on whatever `.env`
 says, because session mode is what Supabase wants for DDL.
 
 ### The setting pair that empties reports

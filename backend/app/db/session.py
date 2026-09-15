@@ -96,12 +96,31 @@ if _note:
     logger.warning("database_url_moved_to_transaction_pooler", extra={"detail": _note})
 
 # psycopg3 prepares statements by default and a transaction-mode pooler cannot
-# keep them across borrowed connections, so prepare_threshold=0 is set for that
-# port. Detected from the URL rather than configured, because a port and a flag
-# that must agree, set in two places, will eventually disagree.
+# keep them across the connections it hands out, so preparation is DISABLED for
+# that port. Detected from the URL rather than configured, because a port and a
+# flag that must agree, set in two places, will eventually disagree.
+#
+# THE VALUE IS None, NOT 0. This read `prepare_threshold=0` and 0 is not "off",
+# it is "prepare every statement on its FIRST execution" -- the most aggressive
+# setting there is, the exact opposite of what the line above it claimed. From
+# psycopg's own docs:
+#
+#     If it is set to 0, every query is prepared the first time it is executed.
+#     If it is set to None, prepared statements are disabled on the connection.
+#
+# So moving to 6543 with 0 was moving onto a transaction pooler with preparation
+# turned up to maximum, and a live diagnosis died on
+#
+#     psycopg.errors.InvalidSqlStatementName: prepared statement "_pg3_312"
+#     does not exist
+#
+# mid-session: the statement was prepared on one pooled backend and executed on
+# another that had never seen it. Measured both ways against a real Postgres --
+# threshold 0 leaves _pg3_0, _pg3_1 in pg_prepared_statements after three
+# executions; None leaves none.
 _connect_args: dict = {}
 if f":{_TRANSACTION_POOLER_PORT}/" in _url:
-    _connect_args["prepare_threshold"] = 0
+    _connect_args["prepare_threshold"] = None
 
 engine = create_engine(
     _url,

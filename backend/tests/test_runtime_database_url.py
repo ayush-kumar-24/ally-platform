@@ -75,11 +75,45 @@ def test_an_unparseable_url_is_returned_untouched():
 
 def test_the_engine_disables_prepared_statements_after_the_move():
     """The move is only safe because psycopg3's prepared statements are off;
-    a transaction pooler cannot carry them across borrowed connections."""
+    a transaction pooler cannot carry them across the connections it hands out.
+
+    None, not 0. psycopg reads 0 as "prepare every statement on its first
+    execution" -- see the pair of tests below, which measure it.
+    """
     from app.db import session as mod
 
-    assert mod._connect_args.get("prepare_threshold") == 0 or (
-        f":{mod._TRANSACTION_POOLER_PORT}/" not in mod._url)
+    if f":{mod._TRANSACTION_POOLER_PORT}/" not in mod._url:
+        pytest.skip("not on the transaction pooler")
+    assert "prepare_threshold" in mod._connect_args
+    assert mod._connect_args["prepare_threshold"] is None
+
+
+def test_zero_is_not_off_and_the_source_does_not_claim_it_is():
+    """A live diagnosis died mid-session on
+
+        psycopg.errors.InvalidSqlStatementName:
+        prepared statement "_pg3_312" does not exist
+
+    because this said 0 while its comment said "disabled". 0 is the most
+    aggressive setting psycopg has. Moving to the transaction pooler with 0
+    set was moving onto the one pooler that cannot survive it.
+    """
+    from app.core.paths import BACKEND_DIR
+
+    source = (BACKEND_DIR / "app" / "db" / "session.py").read_text(encoding="utf-8")
+    assert "prepare_threshold\"] = 0" not in source
+    assert "prepare_threshold\"] = None" in source
+
+
+def test_psycopg_still_reads_zero_as_prepare_immediately():
+    """Pins the semantics this depends on, straight from psycopg. If a future
+    release redefines 0 as "off", this test says so instead of the fix quietly
+    becoming unnecessary -- or, worse, someone re-reading 0 as harmless."""
+    import psycopg
+
+    doc = psycopg.Connection.prepare_threshold.__doc__ or ""
+    assert "set to 0, every query is prepared" in doc
+    assert "None`, prepared statements are disabled" in doc.replace("`!", "`")
 
 
 def test_migrations_still_use_database_url_as_written():
@@ -135,3 +169,40 @@ def test_session_mode_kept_on_purpose_still_warns():
     kept, _ = runtime_database_url(f"{POOLER}:5432/postgres",
                                    allow_session_pooler=True)
     assert ":6543" not in kept
+
+
+def test_the_two_settings_measured_against_a_real_server():
+    """Not a reading of the docs -- a measurement. threshold 0 leaves named
+    statements behind on the server; None leaves none. The names psycopg
+    generates are `_pg3_N`, which is what the live failure was called.
+
+    Skipped when DATABASE_URL is not a reachable Postgres.
+    """
+    psycopg = pytest.importorskip("psycopg")
+
+    from sqlalchemy.engine.url import make_url
+
+    from app.core.config import settings
+
+    url = make_url(settings.DATABASE_URL)
+    if not url.drivername.startswith("postgresql"):
+        pytest.skip("not a postgres DATABASE_URL")
+    dsn = url.set(drivername="postgresql").render_as_string(hide_password=False)
+
+    try:
+        left_behind = {}
+        for value in (0, None):
+            with psycopg.connect(dsn, prepare_threshold=value,
+                                 connect_timeout=5) as conn:
+                cur = conn.cursor()
+                for _ in range(3):
+                    cur.execute("select 1 where %s = 1", (1,))
+                left_behind[value] = conn.execute(
+                    "select count(*) from pg_prepared_statements").fetchone()[0]
+    except psycopg.OperationalError as exc:
+        pytest.skip(f"no reachable postgres: {exc}")
+
+    assert left_behind[0] > 0, (
+        "prepare_threshold=0 was expected to prepare statements -- if this "
+        "stops being true, the fix it justifies can be revisited")
+    assert left_behind[None] == 0, "None must leave nothing prepared"
