@@ -64,7 +64,6 @@ before.
 from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta, timezone
-from html import escape
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy.orm import Session
@@ -78,6 +77,8 @@ from app.planning.models import (
     ReminderChannel,
     Task,
 )
+from app.emails.layout import render
+from app.emails.quotes import quote_for
 from app.notifications.writer import notify
 from app.planning.service import PlanningService
 from app.plans.catalog import Feature
@@ -173,7 +174,14 @@ def sync_for_task(service: PlanningService, task: Task, *,
 
 # --- the email --------------------------------------------------------------
 
-def _when_phrase(remind_at: datetime, due_at: datetime, tz: str) -> str:
+def _when_parts(remind_at: datetime, due_at: datetime, tz: str) -> tuple[str, str]:
+    """("in 5 minutes", "Tuesday, 15 September at 03:39 PM").
+
+    Two halves rather than one string because the email uses them in two
+    places: the urgency goes in the kicker at the top, the moment goes in the
+    panel beside the task. _when_phrase still joins them for anything that
+    wants the old single sentence.
+    """
     minutes = max(0, round((due_at - remind_at).total_seconds() / 60))
     local = due_at.astimezone(_zone(tz))
     if minutes >= 60 and minutes % 60 == 0:
@@ -183,38 +191,48 @@ def _when_phrase(remind_at: datetime, due_at: datetime, tz: str) -> str:
         lead = f"in {minutes} minutes"
     else:
         lead = "now"
-    return f"{lead} -- {local.strftime('%A, %d %B at %I:%M %p')}"
+    return lead, local.strftime("%A, %d %B at %I:%M %p")
+
+
+def _when_phrase(remind_at: datetime, due_at: datetime, tz: str) -> str:
+    lead, moment = _when_parts(remind_at, due_at, tz)
+    return f"{lead} -- {moment}"
 
 
 def send_task_reminder(to: str, name: str, title: str, when: str,
-                       note: str = "") -> bool:
-    """One reminder email for one task."""
-    subject = f"Reminder: {title}"
-    note_text = f"\nYour note: {note}\n" if note else ""
-    text = (
-        f"Hi {name},\n\n"
-        f"\"{title}\" is due {when}.\n"
-        f"{note_text}\n"
-        f"Open Plan Your Day: {_PLAN_URL}\n\n"
-        "If it is done, tick it off and this is the last you will hear about it.\n\n"
-        "The GoXL Team\n\n"
-        "--\n"
-        "To stop these, turn off task reminder emails in Profile > Notifications."
+                       note: str = "", *, founder_id: int | None = None,
+                       lead: str = "", moment: str = "",
+                       local_now: datetime | None = None) -> bool:
+    """One reminder email for one task.
+
+    `lead` and `moment` are the two halves of `when` (see _when_parts). They
+    are optional so a caller that only has the joined phrase still works: the
+    kicker then falls back to the whole thing, which is wordier but never
+    wrong. `local_now` is the founder's own clock, and only the quote uses it.
+    """
+    subject = f"{title} is due {lead or when}"
+    kicker = "Due now" if lead == "now" else f"Due {lead}" if lead else "Due soon"
+    rendered = render(
+        kicker=kicker,
+        tone="due",
+        heading="Starting soon." if lead != "now" else "It is time.",
+        lede=f"Hi {name} -- this is the nudge you asked for.",
+        panel_label=moment or when,
+        panel_value=title,
+        panel_sub=f"Your note: {note}" if note else "",
+        cta_label="Open Plan Your Day",
+        cta_url=_PLAN_URL,
+        body_line="If it is done, tick it off and this is the last you will hear about it.",
+        # avoid_kinds: the confirmation for this same task, on this same day,
+        # already used a line. Recomputing it here is only possible because
+        # selection is deterministic -- these two emails are sent hours apart
+        # by different processes and share nothing else.
+        quote=quote_for(founder_id=founder_id,
+                        moment=local_now or datetime.now(timezone.utc),
+                        kind="task_reminder", avoid_kinds=("task_scheduled",)),
+        footer_note="To stop these, turn off task reminder emails in Profile > Notifications.",
     )
-    # escape(): the title is whatever the founder typed. An ampersand in a task
-    # name should not break the markup of their own reminder.
-    safe_note = (f"<p><em>Your note: {escape(note)}</em></p>" if note else "")
-    html = (
-        f"<p>Hi {escape(name)},</p>"
-        f"<p><strong>{escape(title)}</strong> is due {escape(when)}.</p>"
-        f"{safe_note}"
-        f'<p><a href="{_PLAN_URL}">Open Plan Your Day</a></p>'
-        f"<p>If it is done, tick it off and this is the last you will hear about it.</p>"
-        f"<p>The GoXL Team</p>"
-        f'<p style="color:#6b7280;font-size:12px">To stop these, turn off task '
-        f"reminder emails in Profile &gt; Notifications.</p>"
-    )
-    return send_email(to, subject, text, html)
+    return send_email(to, subject, rendered.text, rendered.html)
 
 
 # --- the confirmation, sent the moment a task is scheduled -------------------
@@ -249,7 +267,9 @@ def lead_phrase(minutes: int) -> str:
 
 
 def send_task_scheduled(to: str, name: str, title: str, when: str,
-                        lead: str = "30 minutes before") -> bool:
+                        lead: str = "30 minutes before", *,
+                        founder_id: int | None = None,
+                        local_now: datetime | None = None) -> bool:
     """Confirm one newly scheduled task. Returns False if it did not go out.
 
     The promise it makes has to be one the system keeps. It used to say the
@@ -261,28 +281,25 @@ def send_task_scheduled(to: str, name: str, title: str, when: str,
     No note field, unlike send_task_reminder: a note belongs to a Reminder, not
     to a Task, so there is never one to show here.
     """
-    subject = f"Scheduled: {title}"
-    text = (
-        f"Hi {name},\n\n"
-        f"\"{title}\" is on your plan for {when}.\n\n"
-        f"Open Plan Your Day: {_PLAN_URL}\n\n"
-        f"I will email you again {lead}.\n\n"
-        "The GoXL Team\n\n"
-        "--\n"
-        "To stop these, turn off task emails in Profile > Notifications."
+    first = (name or "there").split()[0]
+    subject = f"{title} is on your plan for {when}"
+    rendered = render(
+        kicker="Scheduled",
+        tone="calm",
+        heading=f"That is on your plan, {first}.",
+        lede="You set this one yourself. Ally will nudge you before it is due.",
+        panel_label=when,
+        panel_value=title,
+        panel_sub=f"Reminder set for {lead}.",
+        cta_label="Open Plan Your Day",
+        cta_url=_PLAN_URL,
+        body_line="Change the time or the reminder whenever you like -- it is your day.",
+        quote=quote_for(founder_id=founder_id,
+                        moment=local_now or datetime.now(timezone.utc),
+                        kind="task_scheduled"),
+        footer_note="To stop these, turn off task emails in Profile > Notifications.",
     )
-    # escape(): the title is whatever the founder typed. An ampersand in a task
-    # name should not break the markup of their own email.
-    html = (
-        f"<p>Hi {escape(name)},</p>"
-        f"<p><strong>{escape(title)}</strong> is on your plan for {escape(when)}.</p>"
-        f'<p><a href="{_PLAN_URL}">Open Plan Your Day</a></p>'
-        f"<p>I will email you again {escape(lead)}.</p>"
-        f"<p>The GoXL Team</p>"
-        f'<p style="color:#6b7280;font-size:12px">To stop these, turn off task '
-        f"emails in Profile &gt; Notifications.</p>"
-    )
-    return send_email(to, subject, text, html)
+    return send_email(to, subject, rendered.text, rendered.html)
 
 
 def notify_task_scheduled(db: Session, founder: Founder, task: Task, *,
@@ -329,13 +346,18 @@ def notify_task_scheduled(db: Session, founder: Founder, task: Task, *,
     title = task.title
     when = _due_phrase(task.due_date, task.due_time, timezone_name)
     lead = lead_phrase(lead_minutes_for(task))
+    # Captured now, with the rest: the quote is picked from the founder's own
+    # clock, and by the time _send runs the request session is gone.
+    founder_id = founder.founder_id
+    local_now = datetime.now(_zone(timezone_name))
 
     def _send() -> None:
         # Captured as plain strings on purpose: this runs after the response,
         # by which point the request's database session is closed and neither
         # `founder` nor `task` can be safely touched.
         try:
-            if not send_task_scheduled(to, name, title, when, lead):
+            if not send_task_scheduled(to, name, title, when, lead,
+                                       founder_id=founder_id, local_now=local_now):
                 logger.warning("task email not delivered",
                                extra={"founder_id": founder.founder_id,
                                       "path": f"task={title!r}"})
@@ -503,7 +525,8 @@ def _deliver_one(db: Session, service: PlanningService, entitlements,
     # turned off the EMAIL, and the bell has its own switch (`in_app_all`,
     # honoured inside notify()) for turning off the rest.
     tz = getattr(founder, "timezone", None) or settings.DISCOVERY_TIMEZONE
-    when = _when_phrase(reminder.remind_at, due_at, tz)
+    lead, moment = _when_parts(reminder.remind_at, due_at, tz)
+    when = f"{lead} -- {moment}"
 
     by_email = (entitlements.has_feature(founder.plan_type, Feature.EMAIL_NOTIFICATIONS)
                 and _wants_task_reminders(founder))
@@ -521,6 +544,8 @@ def _deliver_one(db: Session, service: PlanningService, entitlements,
         return
 
     send_task_reminder(founder.email, founder.full_name or "there",
-                       task.title, when, reminder.note)
+                       task.title, when, reminder.note,
+                       founder_id=founder.founder_id, lead=lead, moment=moment,
+                       local_now=now.astimezone(_zone(tz)))
     counts["sent"] += 1
     service.mark_reminder_sent(reminder.reminder_id)

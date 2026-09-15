@@ -567,6 +567,23 @@ class Settings(BaseSettings):
             if e.strip()
         )
 
+    #: The Ally mark shown in the header band of every email.
+    #:
+    #: A HOSTED URL, not an attachment and not a data: URI -- Gmail blocks data
+    #: URIs outright, and a CID attachment would force every sender to build a
+    #: multipart/related message. The mark already ships to S3 with the frontend
+    #: (frontend/public/ally-logo-mark-on-dark.png), so this needs nothing new
+    #: deployed to be reachable.
+    #:
+    #: Hardcoded to app.goxlally.ai rather than derived from the app-URL setting
+    #: above, for the reason documented there: production has that pointed at the
+    #: marketing site, which would make this a broken image in every inbox.
+    #:
+    #: An unreachable value is not fatal. Clients block images by default anyway,
+    #: so the header is designed to read correctly without it -- the alt text is
+    #: the word "Ally" on the green band.
+    EMAIL_LOGO_URL: str = "https://app.goxlally.ai/ally-logo-mark-on-dark.png"
+
     # --- CORS ---
     # Comma-separated. PRODUCTION MUST INCLUDE THE MARKETING SITE as well as
     # the app: the landing page's help widget calls /support/public/ask from
