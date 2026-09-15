@@ -477,12 +477,13 @@ def stop_reason(row) -> str:
     line the next reader compares 12 against 14 and concludes the harness
     dropped two questions.
 
-    `row` is (questions_answered_count, routing_state, overall_confidence_score);
-    None when no session was found.
+    `row` is (questions_answered_count, routing_state, overall_confidence_score,
+    question_budget); None when no session was found. The budget may be None.
     """
     if row is None:
         return "  session                 not found"
     answered, state, confidence = row[0], row[1], row[2]
+    budget = row[3] if len(row) > 3 else None
     meaning = _ROUTING_MEANING.get(state or "", "")
     conf = "?" if confidence is None else f"{float(confidence):.0f}"
     tail = f"   ({meaning})" if meaning else ""
@@ -498,6 +499,20 @@ def stop_reason(row) -> str:
         tail += ("\n                          ^ the state was set on a score "
                  "measured DURING questioning; this number is the report "
                  "pipeline's later recompute, so the two need not agree")
+
+    # THE BUDGET CAN BE WHAT STOPPED IT, and then the routing_state is just
+    # whatever the session happened to be in when the questions ran out. The
+    # Early Traction run ended at its 30-question budget on confidence 78 in
+    # state 'validate'; the report pipeline then recomputed to 83 and flipped
+    # the state, so this line read "routing_state 'generate_report' at
+    # confidence 83" and credited the stop to a threshold that questioning
+    # never actually crossed.
+    if budget is not None and answered >= budget:
+        return (f"  stopped after           {answered} answers -- the stage's "
+                f"{budget}-question budget ran out, not confidence\n"
+                f"                          (session now reads routing_state "
+                f"{state!r} at confidence {conf}; more questions were "
+                "available and were not asked)")
 
     return (f"  stopped after           {answered} answers -- "
             f"routing_state {state!r} at confidence {conf}{tail}")
@@ -973,9 +988,13 @@ def run(args) -> int:
         print(line)
     with SessionLocal() as db:
         print(stop_reason(db.execute(sa.text(
-            "select questions_answered_count, routing_state, "
-            "overall_confidence_score from sessions where founder_id=:f "
-            "order by session_id desc limit 1"), {"f": fid}).first()))
+            "select s.questions_answered_count, s.routing_state, "
+            "       s.overall_confidence_score, st.question_budget "
+            "  from sessions s "
+            "  join founders f on f.founder_id = s.founder_id "
+            "  left join founder_stages st on st.stage_id = f.stage_id "
+            " where s.founder_id = :f "
+            " order by s.session_id desc limit 1"), {"f": fid}).first()))
 
     if report:
         bd = report[1] or {}

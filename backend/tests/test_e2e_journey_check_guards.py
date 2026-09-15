@@ -791,3 +791,52 @@ def test_an_unknown_state_is_never_called_inconsistent():
 
 def test_a_null_confidence_is_not_compared():
     assert "recompute" not in stop_reason((5, "generate_report", None))
+
+
+# --- the budget, not the threshold ------------------------------------
+#
+# The Early Traction run answered 30 and printed
+#
+#   stopped after 30 answers -- routing_state 'generate_report' at
+#   confidence 83   (>80 = confident enough to report, stop asking)
+#
+# crediting the stop to a threshold questioning never crossed. It ended on
+# confidence 78 in state 'validate', having exhausted the stage's
+# 30-question budget; the report pipeline recomputed to 83 afterwards and
+# flipped the state. Two different reasons a session can end, and only one
+# of them means the engine had heard enough.
+
+
+def test_hitting_the_budget_is_reported_as_the_budget():
+    line = stop_reason((30, "generate_report", 83.0, 30))
+    assert "30-question budget ran out" in line
+    assert "not confidence" in line
+
+
+def test_the_budget_line_still_shows_the_state_and_score():
+    """Both numbers stay visible -- they are just no longer the explanation."""
+    line = stop_reason((30, "generate_report", 83.0, 30))
+    assert "'generate_report'" in line
+    assert "83" in line
+
+
+def test_the_budget_line_says_questions_were_left_unasked():
+    assert "were not asked" in stop_reason((30, "validate", 78.0, 30))
+
+
+def test_stopping_under_budget_is_still_reported_as_confidence():
+    """The Ideation run: 12 of a 14-question budget, ended by the threshold."""
+    line = stop_reason((12, "generate_report", 82.0, 14))
+    assert "budget ran out" not in line
+    assert "routing_state 'generate_report' at confidence 82" in line
+
+
+def test_a_missing_budget_falls_back_to_the_confidence_line():
+    """Older callers pass a 3-tuple; the stage may have no budget recorded."""
+    assert "budget ran out" not in stop_reason((12, "generate_report", 82.0))
+    assert "budget ran out" not in stop_reason((12, "generate_report", 82.0, None))
+
+
+def test_answering_past_the_budget_still_counts_as_the_budget():
+    """Reprompts and off-by-ones must not make this miss."""
+    assert "budget ran out" in stop_reason((31, "validate", 78.0, 30))
