@@ -80,6 +80,25 @@ def _auth_users_table():
 
 
 @pytest.fixture(autouse=True)
+def _empty_rate_limit_buckets():
+    """Start every test with the rate limiter empty.
+
+    It is a module-level singleton keyed by client IP, and every TestClient in
+    the process presents the same IP -- so the whole suite shares one bucket.
+    /auth/session allows ten requests a minute, the suite makes far more than
+    ten, and every test after that got a 429 in place of whatever it asserted.
+    Twelve tests across four files failed that way and not one of them was
+    about rate limiting; which twelve depended on collection order, which is
+    the worst property a failure can have.
+    """
+    from app.middleware.rate_limit import _limiter
+
+    _limiter.reset()
+    yield
+    _limiter.reset()
+
+
+@pytest.fixture(autouse=True)
 def _no_real_google_calendar(monkeypatch):
     """Force calendar stub mode in every test so bookings never hit real Google.
 

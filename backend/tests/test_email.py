@@ -90,6 +90,13 @@ def test_send_due_reminders_respects_prefs_and_flags(smtp, monkeypatch):
     session = Session(bind=conn, join_transaction_mode="create_savepoint")
     conn.execute(text("insert into auth.users (id, email) values (:i, :e)"),
                  {"i": str(uid), "e": f"t{uid.hex[:8]}@x.com"})
+    # The security boundary migration 7c4f0f1a9d2e added: the function
+    # refuses unless the caller has already asserted which user it
+    # authenticated. app/services/provisioning.py does this before every real
+    # call; these fixtures never did, and every one of them errored out with
+    # "missing authenticated user context" before reaching a single assertion.
+    conn.execute(text("select set_config('app.current_founder_uuid', :u, true)"),
+                 {"u": str(uid)})
     fid = conn.execute(text("select create_founder_on_signup(:u,:n,:e,:p,:t,:i,:b)"),
                        dict(u=str(uid), n="Rem Test", e=f"t{uid.hex[:8]}@x.com",
                             p="v1", t="v1", i="127.0.0.1", b="test")).scalar()
