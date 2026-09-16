@@ -164,8 +164,8 @@ function TitleTile({ item }) {
               className="wt-cover"
               src={cover}
               alt=""
-              width="56"
-              height="84"
+              width="84"
+              height="126"
               loading="lazy"
               referrerPolicy="no-referrer"
               onError={(e) => { e.currentTarget.style.display = 'none'; }}
