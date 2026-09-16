@@ -16,6 +16,27 @@
   background: var(--color-ivory-2, #fbf7f2);
 }
 .fw-card h3 { margin: 0 0 8px; font-family: var(--font-display); font-size: 19px; color: var(--color-forest, #1B4332); }
+
+/* The title row. Without artwork it is the heading and nothing else, so the
+   default (block) leaves every card in the other sections exactly as it was;
+   with artwork it becomes a two-column row and the heading's own bottom
+   margin moves onto the row, so a one-line and a two-line title sit at the
+   same height beside the image. */
+.fw-card-head.has-art { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 8px; }
+.fw-card-head.has-art h3 { margin: 0; min-width: 0; }
+
+/* Fixed box, so the card does not jump when a lazily-loaded image lands, and
+   object-fit rather than a stretch -- podcast art is square by convention but
+   nothing enforces it, and a squashed logo looks worse than none. */
+.fw-art {
+  width: 56px;
+  height: 56px;
+  flex-shrink: 0;
+  object-fit: cover;
+  border-radius: 10px;
+  background: rgba(16, 24, 20, .06);
+  box-shadow: 0 1px 3px rgba(6, 20, 13, .18);
+}
 .fw-tagline { margin: 0 0 18px; font-size: 13.5px; line-height: 1.55; color: var(--color-muted-2, #6c7a70); min-height: 40px; }
 
 .fw-meta { border-top: 1px dashed var(--color-bd-2, #d8cfc2); padding-top: 12px; margin-top: auto; display: flex; flex-direction: column; gap: 6px; }

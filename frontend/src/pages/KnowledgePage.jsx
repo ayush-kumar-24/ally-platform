@@ -41,9 +41,42 @@ function ResourceCard({ item }) {
     ? { href: item.url, target: '_blank', rel: 'noopener noreferrer' }
     : {};
 
+  /* The show's artwork, if we have it for this id. See data/covers.json and
+     scripts/fetch-podcast-art.mjs.
+
+     HOT-LINKED, NOT HOSTED, on exactly the same footing as the book covers
+     below: Apple publishes these URLs for third parties to display, so
+     pointing at their CDN is the ordinary posture and copying the art into
+     our own bucket would be a different one.
+
+     ANY FAILURE FALLS BACK TO THE CARD AS IT IS TODAY. A missing entry
+     renders nothing, and an entry whose image 404s or is blocked hides itself
+     onError -- a broken-image glyph looks like a bug, no picture just looks
+     like a card. Resources in the other sections have no ids in this file, so
+     they are untouched. */
+  const art = COVERS[item.id];
+
   return (
     <Wrapper className={`fw-card${item.url ? ' fw-card-link' : ''}`} {...linkProps}>
-      <h3>{item.title}</h3>
+      {/* Artwork and title on one row. Square and small, because it is the
+          SHOW's cover on an EPISODE's card -- a full-width banner would claim
+          the picture is of this episode, and thirty cards all carrying the
+          same ten images would read as a wall of logos. */}
+      <div className={`fw-card-head${art ? ' has-art' : ''}`}>
+        {art && (
+          <img
+            className="fw-art"
+            src={art}
+            alt=""
+            width="56"
+            height="56"
+            loading="lazy"
+            referrerPolicy="no-referrer"
+            onError={(e) => { e.currentTarget.style.display = 'none'; }}
+          />
+        )}
+        <h3>{item.title}</h3>
+      </div>
       {item.why && <p className="fw-tagline">{item.why}</p>}
 
       {(item.by || item.when || item.length || item.forWhen) && (
