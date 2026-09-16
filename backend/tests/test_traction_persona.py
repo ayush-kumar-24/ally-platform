@@ -20,6 +20,7 @@ from scripts.e2e_journey_check import (
     PERSONAS,
     _OPERATING_TOPICS,
     _TOPICS,
+    _TRACTION_CP_TEXTS,
     _TRACTION_TEXTS,
     _TRACTION_TOPICS,
     match_answer,
@@ -166,9 +167,23 @@ def test_the_nine_that_were_generic_are_specifically_fixed():
 
 
 def test_weak_and_strong_keep_exactly_the_fifteen_shared_topics():
-    """Appending must not have moved anything the earlier runs matched on."""
-    assert [t for t, _ in ANSWER_BANK["weak"]] == list(_TOPICS)
-    assert [t for t, _ in ANSWER_BANK["strong"]] == list(_TOPICS)
+    """Appending must not have moved anything the earlier runs matched on.
+
+    weak and strong now carry the Current Problem topics too -- that phase
+    exists at every stage, not just Early Traction, and all three personas
+    were falling back on three of its four questions. What matters for
+    comparability is not that the bank is fifteen long, but that the FIRST
+    fifteen are untouched and still in order: a question that matched slot 4
+    in an earlier run still matches slot 4 now.
+    """
+    from scripts.e2e_journey_check import _CURRENT_PROBLEM_TOPICS
+
+    for persona in ("weak", "strong"):
+        topics = [t for t, _ in ANSWER_BANK[persona]]
+        assert topics[:15] == list(_TOPICS), (
+            f"{persona}'s original topics moved -- every earlier run's "
+            f"routing is now unreproducible")
+        assert topics[15:] == list(_CURRENT_PROBLEM_TOPICS)
     assert len(_TOPICS) == 15
 
 
@@ -181,7 +196,7 @@ def test_traction_is_the_shared_fifteen_then_the_operating_topics():
 def test_the_persona_is_selectable():
     assert "traction" in PERSONAS
     assert "traction" in FALLBACKS
-    assert PERSONAS["traction"] is _TRACTION_TEXTS
+    assert PERSONAS["traction"] == _TRACTION_TEXTS + _TRACTION_CP_TEXTS
 
 
 def test_every_traction_answer_is_reachable():

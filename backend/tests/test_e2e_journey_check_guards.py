@@ -187,10 +187,14 @@ def test_weak_and_strong_cover_the_same_topics_in_the_same_order():
 def test_adding_a_persona_never_reorders_the_quality_pair():
     """The slots weak and strong match on are positional; an append that
     shifted them would silently re-point every earlier run's answers."""
-    from scripts.e2e_journey_check import _TOPICS
+    from scripts.e2e_journey_check import _CURRENT_PROBLEM_TOPICS, _TOPICS
 
-    assert [t for t, _ in ANSWER_BANK["weak"]] == list(_TOPICS)
-    assert [t for t, _ in ANSWER_BANK["strong"]] == list(_TOPICS)
+    # The Current Problem topics are appended after these, so slot N for
+    # N < 15 still means what it meant in every earlier run.
+    for persona in ("weak", "strong"):
+        topics = [t for t, _ in ANSWER_BANK[persona]]
+        assert topics[:len(_TOPICS)] == list(_TOPICS)
+        assert topics[len(_TOPICS):] == list(_CURRENT_PROBLEM_TOPICS)
 
 
 def test_weak_is_the_default_so_existing_runs_are_unchanged():
@@ -367,6 +371,24 @@ def test_every_topic_is_reachable_by_at_least_one_real_question():
         "When did you personally ran into this problem yourself?",
         "What tool are you currently using to build this?",
         "What eats the most time without actually moving this forward?",
+        # The Current Problem phase. Its four questions per stage group are
+        # asked of every founder, and until these topics existed three of
+        # every four fell through to the generic answer.
+        "Now the part that matters most. In your own words, what is the "
+        "single biggest thing standing between you and actually starting?",
+        "What is the one thing that would need to be true this week for you "
+        "to actually start?",
+        "What have you already tried to move this forward -- a call, a "
+        "sketch, a search -- and why did it stall out?",
+        "What's the one thing that, if it broke tomorrow, would stop the "
+        "business cold?",
+        "What have you been avoiding this week that you know you need to "
+        "deal with?",
+        "What metric have you been quietly avoiding looking at this month?",
+        "Where in the business does the same problem keep resurfacing, even "
+        "after you thought you'd already fixed it?",
+        "Tell me about the last time you made a call that a team lead should "
+        "have made instead. Why did it land on you?",
     ]:
         answer, matched = match_answer(q, "strong")
         assert matched, q

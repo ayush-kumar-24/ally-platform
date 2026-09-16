@@ -621,7 +621,191 @@ _TRACTION_TEXTS = (
     "means I picked the wrong number to care about.",
 )
 
+#: THE CURRENT PROBLEM TOPICS -- the third phase, which until now was almost
+#: entirely fallback.
+#:
+#: `current_problem_questions` holds twelve rows: four questions for each of
+#: the three stage groups. Every founder answers the four for their stage, and
+#: measured against the bank as it stood, exactly one of any four matched a
+#: topic. The other three took the generic fallback, so in every e2e run ever
+#: recorded, three quarters of this phase's evidence was a topic-neutral line
+#: that says nothing about the founder.
+#:
+#: Two of the twelve "matches" were worse than the fallbacks. Question 9 --
+#: "what is the single biggest problem in the company right now? Say it the
+#: way you'd say it to a co-founder, not the way you'd say it to a board" --
+#: scored 2 on the TEAM topic, on the word "co-founder" in the sentence
+#: telling the founder how to phrase their answer. It came back with an answer
+#: about who owns what. Question 12, which is about a decision that should
+#: have been made a level down, matched "team" on "team lead" and answered
+#: about team structure. A fallback is visibly a non-answer; a confident answer
+#: to the wrong question is not, and it lands in the report as evidence.
+#:
+#: Appended after the operating topics, and the same tie-breaking applies:
+#: `match_answer` keeps the FIRST topic on an equal score and these are last,
+#: so each one carries enough defining phrases to win outright rather than
+#: tie. Question 9 has to beat team's 2 and scores 6; question 12 the same.
+#: EVERY PHRASE HERE IS A FULL PHRASE, and the first draft of this block shows
+#: why. It used the bare terms "stall" and "matters most", which read as
+#: obviously on-topic and are nothing of the kind in a bank of 3,340
+#: questions: "when your standard follow-up stalls", "do you track why deals
+#: stall at a specific stage", "has the business started stalling because your
+#: attention is diverted into investor meetings" and "are multiple goals being
+#: pursued with no clear ranking of which matters most" all matched, and all
+#: four came back with an answer about an abandoned landing page or an
+#: unstarted business. Six false matches, bought in exchange for fixing two.
+#:
+#: The same goes for the supporting terms. "this week", "one thing", "metric"
+#: and "instead" each look harmless and each pairs with almost anything, and
+#: two supporting terms is a match on its own.
+_CURRENT_PROBLEM_TOPICS = (
+    # the headline problem -- the opening question at all three stages
+    #
+    # "part that matters most" and not "matters most": the questions open
+    # "Now the part that matters most." "one thing that matters most" is
+    # separate because question 386 asks exactly that and means it.
+    (("single biggest thing", "single biggest problem", "standing between you",
+      "part that matters most", "one thing that matters most",
+      "say it the way", "not the way you'd say it"),
+     ("own words", "polish it")),
+    # what would have to be true to start
+    (("would need to be true", "to actually start", "need to be true this"),
+     ()),
+    # what has already been tried, and where it stalled
+    #
+    # No "stall" here in any form -- the two defining phrases below already
+    # score 4 on the question this topic exists for, and every use of "stall"
+    # wide enough to also catch it caught four sales-pipeline questions with it.
+    (("already tried", "move this forward"),
+     ("a call, a sketch",)),
+    # the single thing whose failure stops everything
+    #
+    # Distinct from the operating founder-dependency topic, which is about
+    # work stopping in the FOUNDER's absence. This is about a dependency in
+    # the business: "if it broke tomorrow". No phrase is shared with it.
+    (("broke tomorrow", "stop the business cold", "if it broke"),
+     ("stop the business",)),
+    # what is being avoided
+    #
+    # The planning topic already owns "avoiding right now" -- that question
+    # asks what is being put off in a WEEK of work. This one asks what is
+    # being avoided full stop, and the phrases do not overlap.
+    (("avoiding this week", "know you need to deal with",
+      "been avoiding this"),
+     ("you know you need",)),
+    # the number being avoided
+    (("metric have you been", "quietly avoiding", "looking at this month"),
+     ()),
+    # the problem that keeps coming back after it was declared fixed
+    (("keep resurfacing", "same problem keep", "already fixed it",
+      "thought you'd already fixed"),
+     ("resurfacing", "even after")),
+    # decisions landing on the founder that belong a level down
+    (("team lead should have made", "should have made instead",
+      "land on you", "why did it land"),
+     ("made a call",)),
+)
+
 _TRACTION_TOPICS = _TOPICS + _OPERATING_TOPICS
+
+#: The Current Problem answers, one per topic above, per persona. Same
+#: discipline as everywhere else in this file: weak and strong differ in
+#: QUALITY and cover identical subjects, so a run that separates them is
+#: measuring the engine and not the topic list.
+_WEAK_CP_TEXTS = (
+    "Honestly? That I have not started. I think about it constantly and then "
+    "the day goes and I have done nothing that counts. I could not tell you "
+    "what the actual blocker is, which is probably the real answer.",
+    "I would need to stop feeling like I am going to get it wrong. I know "
+    "that is not a thing I can put in a calendar, but that is the truth of "
+    "it -- nothing concrete is stopping me.",
+    "I started a landing page about four months ago and never finished it. I "
+    "did not stop for a reason I could name. I just opened it less and less "
+    "and then stopped opening it.",
+    "Me, I suppose. There is nothing else to break -- it is all in my head "
+    "and a half-finished document. I have never thought about it in those "
+    "terms because there is nothing running to stop.",
+    "Emailing the three people who said they would try it. They said that "
+    "weeks ago and I have not replied, and now it feels too late to, which "
+    "makes it easier to keep not doing it.",
+    "I do not have one I am avoiding because I do not track anything. There "
+    "is no number anywhere. I know roughly what I have spent and I would "
+    "rather not add it up.",
+    "Deciding what this actually is. I settle it, feel fine for a week, then "
+    "it is open again and I am back to the same argument with myself. I have "
+    "had that argument probably five times now.",
+    "Everything lands on me -- there is no one else. I would not know how to "
+    "hand any of it over even if there were, because none of it is written "
+    "down anywhere outside my own head.",
+)
+
+_STRONG_CP_TEXTS = (
+    "Distribution. I have twelve interviews saying the problem is real and a "
+    "prototype two people use weekly, and I still have no repeatable way to "
+    "reach the next hundred. Everything so far came from my own network, so I "
+    "have proved the problem and not the channel.",
+    "One outbound channel tested end to end -- fifty contacts, a measured "
+    "reply rate, one booked call. It is booked in for Thursday and Friday "
+    "this week, and if the reply rate is under four percent I will treat the "
+    "channel as dead and try the next one.",
+    "I tried warm intros first: thirty-one asks, nine calls, four people who "
+    "said they would pay. It stalled because it does not scale past people "
+    "who already know me, and I let it run three weeks longer than the data "
+    "justified because the calls were pleasant.",
+    "The two weekly users. They are the entire evidence base, and if both "
+    "churned I would have no signal at all -- which is why I speak to each of "
+    "them fortnightly and log it, rather than assuming quiet means content.",
+    "Writing the pricing page. I have the willingness-to-pay data from nine "
+    "of the twelve interviews and I have been treating it as a design task "
+    "when it is actually a commitment I do not want to make yet. It is on "
+    "this week's list with a date against it.",
+    "Interview-to-trial conversion. Twelve conversations, two people using "
+    "it -- that is seventeen percent, and I have been telling myself the "
+    "sample is too small rather than that the pitch is not landing.",
+    "Scope. It comes back every time I talk to a new user with an adjacent "
+    "problem. I wrote down the one job it does in March and I reread that "
+    "line before I commit to anything now, which has cut it from weekly to "
+    "about monthly.",
+    "Right now, everything, and correctly -- there is one of me. What I do "
+    "have is a written note of which decisions I would hand over first when "
+    "there are two of us, and pricing is not one of them.",
+)
+
+_TRACTION_CP_TEXTS = (
+    "Churn. We are at six percent monthly on a hundred and forty accounts, "
+    "which quietly eats most of what sales brings in. Everything else -- "
+    "hiring, the roadmap, the raise -- is downstream of that number, and I "
+    "have known it for two quarters.",
+    "A named owner for retention who is not me. I have the role written up "
+    "and the budget signed off, and until someone holds it, it gets my "
+    "attention only in the weeks nothing else is on fire.",
+    "We ran a win-back campaign in June -- two hundred lapsed accounts, "
+    "eleven came back, three of those churned again. It stalled because we "
+    "were treating the symptom; nobody had asked the eleven why they left in "
+    "the first place, so we had nothing to fix.",
+    "The onboarding automation. One engineer built it, it touches billing and "
+    "provisioning, and if it broke tomorrow every new account would stall at "
+    "signup. It is the one system with no runbook, and that is on this "
+    "quarter's list to fix.",
+    "The conversation with the engineer who built that automation about "
+    "documenting it. He is stretched and I do not want to add to it, so I "
+    "have let it sit for six weeks -- which is exactly how a single point of "
+    "failure stays one.",
+    "Cohort retention past month three. We report monthly churn at the "
+    "all-hands because it looks survivable. The cohort curve is the honest "
+    "version and I look at it a good deal less often than I should.",
+    "Support load. We fix the top complaint, it goes quiet for a month, and "
+    "then a different flavour of the same confusion comes back. We have done "
+    "that three times now, which tells me we keep patching the surface "
+    "instead of the underlying model.",
+    "A refund decision last week that the support lead is entirely capable of "
+    "making. It reached me because the limit is written in my head and not in "
+    "the policy, so people escalate rather than guess. That is my fault, not "
+    "theirs, and it is a one-afternoon fix I keep deferring.",
+)
+
+assert len(_WEAK_CP_TEXTS) == len(_STRONG_CP_TEXTS) == len(_TRACTION_CP_TEXTS) \
+    == len(_CURRENT_PROBLEM_TOPICS)
 
 assert len(_WEAK_TEXTS) == len(_STRONG_TEXTS) == len(_TOPICS)
 assert len(_TRACTION_TEXTS) == len(_TRACTION_TOPICS)
@@ -644,20 +828,38 @@ FALLBACKS = {
                 "somebody happens to remember.",
 }
 
+#: Every persona also carries the Current Problem topics, appended last.
+#:
+#: Unlike the operating topics, these are NOT traction-only: all three stage
+#: groups have a Current Problem phase, so a weak or strong founder meets
+#: these questions too and was falling back on three of four of them. Adding
+#: them to weak and strong does not break comparability with earlier runs the
+#: way changing a topic would -- the first fifteen slots are untouched and
+#: still match what they always matched. What changes is that the phase which
+#: used to be measuring the fallback line now measures the persona.
 ANSWER_BANK = {
-    "weak": tuple(zip(_TOPICS, _WEAK_TEXTS)),
-    "strong": tuple(zip(_TOPICS, _STRONG_TEXTS)),
+    "weak": tuple(zip(_TOPICS + _CURRENT_PROBLEM_TOPICS,
+                      _WEAK_TEXTS + _WEAK_CP_TEXTS)),
+    "strong": tuple(zip(_TOPICS + _CURRENT_PROBLEM_TOPICS,
+                        _STRONG_TEXTS + _STRONG_CP_TEXTS)),
     # The only persona with the operating topics. weak and strong keep exactly
     # the fifteen they have always had, so every earlier run is still
     # comparable with every later one.
-    "traction": tuple(zip(_TRACTION_TOPICS, _TRACTION_TEXTS)),
+    "traction": tuple(zip(_TRACTION_TOPICS + _CURRENT_PROBLEM_TOPICS,
+                          _TRACTION_TEXTS + _TRACTION_CP_TEXTS)),
 }
 
 #: The texts alone, in topic order -- the index-based fallback when no
 #: question text is available, and what anything importing these expects.
-WEAK_ANSWERS = _WEAK_TEXTS
-STRONG_ANSWERS = _STRONG_TEXTS
-TRACTION_ANSWERS = _TRACTION_TEXTS
+#:
+#: These include the Current Problem texts, so that this list stays the same
+#: length and the same order as the persona's entry in ANSWER_BANK. A caller
+#: with no question text picks by `n % len(answers)`, and if these were the
+#: bare topic texts while the bank had eight more, that index would address a
+#: different set of answers than the one a question-bearing caller sees.
+WEAK_ANSWERS = _WEAK_TEXTS + _WEAK_CP_TEXTS
+STRONG_ANSWERS = _STRONG_TEXTS + _STRONG_CP_TEXTS
+TRACTION_ANSWERS = _TRACTION_TEXTS + _TRACTION_CP_TEXTS
 
 PERSONAS = {"weak": WEAK_ANSWERS, "strong": STRONG_ANSWERS,
             "traction": TRACTION_ANSWERS}
