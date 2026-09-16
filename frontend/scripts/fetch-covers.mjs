@@ -132,8 +132,10 @@ const existing = refresh ? {} : JSON.parse(readFileSync(OUT, 'utf8'));
 
    Open Library is a library catalogue: it has book covers and nothing else.
    The films, series and podcasts under "Things to watch" need a different
-   source (TMDB for the first two, which wants an API key), so pointing this
-   script at them would write 60-odd wrong answers rather than none.
+   source, so pointing this script at them would write 60-odd wrong answers
+   rather than none. Podcast artwork has its own script now
+   (fetch-podcast-art.mjs, which reads Apple's free search API); the films and
+   series still have none, because TMDB wants an API key.
 
    The rendering side is source-agnostic -- covers.json is a flat id -> URL
    map and the tile does not care who filled it -- so film posters can be

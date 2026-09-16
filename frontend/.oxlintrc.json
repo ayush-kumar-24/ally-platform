@@ -7,5 +7,11 @@
     "react/rules-of-hooks": "error",
     "react/only-export-components": ["warn", { "allowConstantExport": true }],
     "no-undef": "error"
-  }
+  },
+  "overrides": [
+    {
+      "files": ["scripts/**"],
+      "env": { "node": true, "es2024": true }
+    }
+  ]
 }
