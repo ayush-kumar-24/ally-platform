@@ -52,7 +52,7 @@ from collections.abc import Sequence
 
 from app.core.logger import logger
 from app.services.llm.base import LLMError, LLMMessage, LLMRequest, LLMRole
-from app.services.llm.text import run_sync
+from app.services.llm.text import loads_json, run_sync
 
 #: The doc's 3+3. Mirrors _ACTION_LINES_PER_SIDE in reports/generator.py, which
 #: caps what is rendered; this decides what is available to render.
@@ -159,7 +159,7 @@ class LLMActionPlanBalancer:
         response = run_sync(
             asyncio.wait_for(self.provider.generate(request), self.timeout_seconds)
         )
-        return json.loads(response.text)
+        return loads_json(response.text)
 
     def _merge(self, payload: dict, have_confirm: list[str], have_solve: list[str]):
         """Existing lines first and verbatim; generated ones only fill behind them.

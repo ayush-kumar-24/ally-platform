@@ -55,6 +55,22 @@ class _SlidingWindowLimiter:
             q.append(now)
             return True
 
+    def reset(self) -> None:
+        """Forget every bucket.
+
+        For tests. The limiter is a module-level singleton keyed by client IP,
+        and every TestClient in the process presents the same one -- so the
+        suite's own traffic accumulates in one bucket and whichever test
+        happens to run after the tenth POST to /auth/session gets a 429
+        instead of the 401 or 200 it asserts. Twelve tests across four files
+        failed that way, none of them about rate limiting.
+
+        The limiter is deliberately not reset anywhere in application code:
+        a bucket that can be cleared on request is not a rate limit.
+        """
+        with self._lock:
+            self._hits.clear()
+
 
 _limiter = _SlidingWindowLimiter()
 

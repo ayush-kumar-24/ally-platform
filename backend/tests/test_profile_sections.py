@@ -31,6 +31,13 @@ def founder_client():
     session = Session(bind=conn, join_transaction_mode="create_savepoint")
     conn.execute(text("insert into auth.users (id, email) values (:i, :e)"),
                  {"i": str(uid), "e": f"t{uid.hex[:8]}@x.com"})
+    # The security boundary migration 7c4f0f1a9d2e added: the function
+    # refuses unless the caller has already asserted which user it
+    # authenticated. app/services/provisioning.py does this before every real
+    # call; these fixtures never did, and every one of them errored out with
+    # "missing authenticated user context" before reaching a single assertion.
+    conn.execute(text("select set_config('app.current_founder_uuid', :u, true)"),
+                 {"u": str(uid)})
     fid = conn.execute(
         text("select create_founder_on_signup(:u,:n,:e,:p,:t,:i,:b)"),
         dict(u=str(uid), n="Sec Test", e=f"t{uid.hex[:8]}@x.com", p="v1", t="v1", i="127.0.0.1", b="test"),
@@ -74,9 +81,22 @@ def test_founder_section_rejects_retired_fields(founder_client):
         "adaptive_reflection": "reflecting",
     })
     assert r.status_code == 422
-    for field in ("founder_motivation", "support_preferences", "emotional_state",
-                  "decision_making_style", "adaptive_reflection"):
-        assert field in r.text
+
+    # One field at a time, because the error handler summarises a validation
+    # failure as its FIRST error -- send all five and the message names
+    # founder_motivation alone. That is a property of the handler, not of this
+    # section's contract, and the contract is what this test is about: every
+    # one of the five is rejected by name rather than silently dropped.
+    for field, value in (
+        ("founder_motivation", "to fix churn"),
+        ("support_preferences", ["sales", "hiring"]),
+        ("emotional_state", ["determined", "hopeful"]),
+        ("decision_making_style", "fast"),
+        ("adaptive_reflection", "reflecting"),
+    ):
+        one = client.patch(f"{BASE}/founder", json={field: value})
+        assert one.status_code == 422, f"{field} was accepted"
+        assert field in one.text, f"422 did not name {field}: {one.text}"
 
 
 def test_founder_section_rejects_foreign_field(founder_client):
@@ -129,15 +149,34 @@ def test_customer_segment_dedupes_and_trims(founder_client):
     assert r.json()["customer_segment"] == ["Businesses", "Students"]
 
 
-def test_challenges_uncapped(founder_client):
-    """The old onboarding capped this at 3; the 2026-08-17 redesign's biggest-
-    challenge question does not, so more than 3 must now go through cleanly."""
+#: Build Spec v2.4 Q10 is "Pick up to three", and `sections.py` enforces it.
+#:
+#: There was a `test_challenges_uncapped` here until today asserting the exact
+#: opposite, and it was never wrong out loud: its fixture errored on
+#: provisioning before reaching an assertion, so nobody saw it disagree with
+#: the code. The 2026-08-17 redesign did remove the cap -- and 0fc3d956 on
+#: 2026-09-11 put it back to conform to v2.4, which is the later decision and
+#: the one in force.
+
+
+def test_challenges_accepts_three(founder_client):
+    client, _ = founder_client
+    r = client.patch(f"{BASE}/business", json={
+        "current_challenges": ["Sales", "Hiring", "Cash flow"],
+    })
+    assert r.status_code == 200, r.text
+    assert r.json()["current_challenges"] == ["Sales", "Hiring", "Cash flow"]
+
+
+def test_challenges_rejects_a_fourth(founder_client):
+    """The UI bumps the oldest pick when a 4th is tapped, so a founder never
+    hits this -- it bounds a hand-rolled request instead."""
     client, _ = founder_client
     r = client.patch(f"{BASE}/business", json={
         "current_challenges": ["Sales", "Hiring", "Cash flow", "Scaling"],
     })
-    assert r.status_code == 200, r.text
-    assert r.json()["current_challenges"] == ["Sales", "Hiring", "Cash flow", "Scaling"]
+    assert r.status_code == 422, r.text
+    assert "current_challenges" in r.text
 
 
 def test_challenges_other_captures_free_text(founder_client):

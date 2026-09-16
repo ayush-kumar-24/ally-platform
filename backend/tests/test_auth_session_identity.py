@@ -30,7 +30,24 @@ REAL_UUID = "3a729982-5325-44aa-90cd-476b51acd739"
 
 
 class _Founder(SimpleNamespace):
-    pass
+    """A stand-in for the Founder row, with `user_id` defaulted.
+
+    The real row always has one, and since the Cognito migration (53e3b46)
+    /auth/session reads it: Ally's own JWT must carry the canonical
+    `founder.user_id` rather than the upstream provider subject, because a
+    migrated user's Cognito sub is new while their Supabase UUID is what all
+    their existing data hangs off.
+
+    A bare SimpleNamespace has only the attributes it is handed, so every test
+    here raised `AttributeError: '_Founder' object has no attribute 'user_id'`
+    the moment that line landed. It went unnoticed because these tests could
+    not run at all -- they errored during fixture setup, before reaching the
+    code under test, for reasons that had nothing to do with this.
+    """
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("user_id", REAL_UUID)
+        super().__init__(**kwargs)
 
 
 @pytest.fixture

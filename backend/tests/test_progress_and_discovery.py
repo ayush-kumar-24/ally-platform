@@ -12,7 +12,26 @@ from sqlalchemy.orm import Session
 from app.core.auth import AuthUser, get_current_founder
 from app.db.session import engine, get_db
 from app.main import app
+from app.core.config import settings
 from app.services.calendar import available_slots
+
+
+@pytest.fixture(autouse=True)
+def _discovery_calls_on(monkeypatch):
+    """DISCOVERY_CALLS_ENABLED defaults to False and no test set it.
+
+    The slots route returns an empty list when the flag is off -- deliberately,
+    so the page can render its own "coming soon" state instead of looking
+    broken -- and /book answers 503. Every booking test here asserts the
+    behaviour of the feature itself, so every one of them was asserting
+    against a switched-off feature: no slots, and a 503 where a 422 was
+    expected. Nobody saw it, because the fixture below errored on provisioning
+    before any of them reached an assertion.
+
+    The off state is the production default and now has a test of its own --
+    see test_slots_are_empty_when_the_feature_is_off.
+    """
+    monkeypatch.setattr(settings, "DISCOVERY_CALLS_ENABLED", True)
 
 
 @pytest.fixture
@@ -23,6 +42,13 @@ def founder_client():
     session = Session(bind=conn, join_transaction_mode="create_savepoint")
     conn.execute(text("insert into auth.users (id, email) values (:i, :e)"),
                  {"i": str(uid), "e": f"t{uid.hex[:8]}@x.com"})
+    # The security boundary migration 7c4f0f1a9d2e added: the function
+    # refuses unless the caller has already asserted which user it
+    # authenticated. app/services/provisioning.py does this before every real
+    # call; these fixtures never did, and every one of them errored out with
+    # "missing authenticated user context" before reaching a single assertion.
+    conn.execute(text("select set_config('app.current_founder_uuid', :u, true)"),
+                 {"u": str(uid)})
     conn.execute(
         text("select create_founder_on_signup(:u,:n,:e,:p,:t,:i,:b)"),
         dict(u=str(uid), n="Disc Test", e=f"t{uid.hex[:8]}@x.com", p="v1", t="v1", i="127.0.0.1", b="test"),
@@ -257,3 +283,16 @@ def test_claim_slot_refuses_a_slot_someone_already_has(monkeypatch):
     monkeypatch.setattr(routes, "_has_call_priority", lambda founder, db: False)
     with pytest.raises(routes.SlotTakenError):
         routes._claim_slot(_FakeDB(taken=True), _first_offered_slot(), object())
+
+
+def test_slots_are_empty_when_the_feature_is_off(founder_client, monkeypatch):
+    """The production default, which nothing covered.
+
+    Empty and 200, not an error: the page renders a "coming soon" state, and a
+    failed request there would look like a broken page rather than a feature
+    that has not launched.
+    """
+    monkeypatch.setattr(settings, "DISCOVERY_CALLS_ENABLED", False)
+    r = founder_client.get("/api/v1/discovery/slots?days=7")
+    assert r.status_code == 200
+    assert r.json()["slots"] == []

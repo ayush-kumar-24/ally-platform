@@ -17,6 +17,7 @@ only reorders and an out-of-scope question would still surface once the in-scope
 ones ran out -- exactly the budget tail an ideation founder reaches.
 """
 
+import contextlib
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -79,7 +80,10 @@ def _engine(candidates, *, pillar_map=_PILLAR_MAP, pillar_map_raises=False,
             raise RuntimeError("db down")
         return dict(dimension_map or {})
 
+    fake_db = SimpleNamespace(begin_nested=lambda: contextlib.nullcontext())
+
     return QuestionSelectionEngine(SimpleNamespace(
+        db=fake_db,
         list_candidate_questions=lambda **kw: list(candidates),
         problem_to_pillar=problem_to_pillar,
         problem_to_dimension=problem_to_dimension,

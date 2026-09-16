@@ -132,10 +132,16 @@ def _dedupe(v: list | None) -> list | None:
 CleanStrList = Annotated[list[str], AfterValidator(_clean_str_list), Field(max_length=30)]
 Feelings = Annotated[list[Feeling], AfterValidator(_dedupe), Field(max_length=8)]
 
-# "What's your biggest challenge right now?" -- uncapped as of the 2026-08-17
-# onboarding redesign (the old onboarding spec capped it at 3; the new one
-# does not), so this now just aliases CleanStrList. current_challenges uses
-# CleanStrList directly rather than this name going forward.
+# "What's your biggest challenge right now?" -- this alias is now just
+# CleanStrList, and current_challenges uses CleanStrList directly rather than
+# this name going forward.
+#
+# The comment here used to say the field was uncapped, from the 2026-08-17
+# onboarding redesign. That is no longer true: 0fc3d956 (2026-09-11) capped it
+# at 3 in app/schemas/sections.py, which is the model PATCH /profile/business
+# actually validates against, to conform to Build Spec v2.4 Q10 ("Pick up to
+# three"). Two schemas disagreeing in comments is how a test came to assert
+# the opposite of what the code does.
 
 SocialUrl = Annotated[str, AfterValidator(_validate_social_url)]
 

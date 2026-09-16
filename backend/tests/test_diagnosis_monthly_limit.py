@@ -11,6 +11,7 @@ logic over a count and a plan, and standing up a real DiagnosisService would dra
 in a database session, the question engine and the advisor to test none of them.
 """
 
+import contextlib
 from types import SimpleNamespace
 
 import pytest
@@ -33,6 +34,7 @@ class FakeRepo:
 def _service(count: int = 0, raises: Exception | None = None) -> DiagnosisService:
     service = object.__new__(DiagnosisService)
     service.repository = FakeRepo(count, raises)
+    service.db = SimpleNamespace(begin_nested=lambda: contextlib.nullcontext())
     return service
 
 

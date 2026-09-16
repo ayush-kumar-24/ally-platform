@@ -82,6 +82,27 @@ def require_reports(
     _require(founder, db, Feature.REPORTS)
 
 
+def require_recommendations(
+    founder: Founder = Depends(get_founder_record),
+    db: Session = Depends(get_db),
+) -> None:
+    """Ally's recommendations -- the Rs 999 tier's "Ally starts initiating".
+
+    THE CATALOG ALREADY SAID THIS AND NOTHING ENFORCED IT. Feature.RECOMMENDATIONS
+    has been in _ADVISOR since the tiers were written, and Free carries it only
+    through `_FREE_TESTING`, which `_FREE_AT_LAUNCH` drops -- so the catalog
+    describes a boundary that appears at public launch. Until now no code path
+    checked the flag, so flipping PUBLIC_LAUNCH would have withheld Vision and
+    the knowledge base and quietly kept serving recommendations to Free.
+
+    The founder still gets the diagnosis, the report and their next three
+    priorities on every tier. What this gates is Ally's recommendation ON those
+    priorities -- the difference between being shown what is wrong and being
+    told what to do about it.
+    """
+    _require(founder, db, Feature.RECOMMENDATIONS)
+
+
 def require_goals(
     founder: Founder = Depends(get_founder_record),
     db: Session = Depends(get_db),

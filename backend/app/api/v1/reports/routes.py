@@ -15,7 +15,11 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_founder_record
-from app.api.v1.entitlement_gates import require_reports
+from dataclasses import replace
+
+from app.api.v1.entitlement_gates import require_recommendations, require_reports
+from app.core.container import container
+from app.plans.catalog import Feature
 from app.api.v1.reports.document import build_report_document
 from app.api.v1.reports.dna_summaries import ensure_dna_summaries
 from app.api.v1.reports.generator import ReportNarrative, ReportNarrativeGenerator
@@ -185,6 +189,42 @@ def _build_narrative(db: Session, report: FounderReport):
     return narrative
 
 
+#: Sections carrying Ally's recommendations rather than the founder's own
+#: findings. The diagnosis, the report and the founder's next three priorities
+#: are on every tier; being TOLD WHAT TO DO about them is Feature.RECOMMENDATIONS.
+_RECOMMENDATION_SECTIONS = frozenset({"priority_actions"})
+
+
+def _visible_to(narrative, founder: Founder, db: Session):
+    """The narrative minus any section this founder's plan does not include.
+
+    Applied at every founder-facing door rather than only the endpoint named
+    after the feature. `/reports/{id}` returns every section inline and
+    `/reports/{id}/document` renders them into the HTML the PDF is made of, so
+    gating only `/reports/{id}/recommendations` would leave the same prose
+    readable through two other routes -- the exact "other door" failure
+    require_reports' own docstring describes.
+
+    Withheld at READ, not at generation. The reasoning pipeline still writes
+    recommendations into the report, so an upgrade reveals what was always
+    there instead of requiring the report to be rebuilt -- and a founder who
+    upgrades, reads, then lapses does not see the section vanish from a report
+    they were shown. Generation cost is unchanged by design: this is an
+    entitlement boundary, not a cost control.
+    """
+    if container.entitlement_service(db).has_feature(
+            founder.plan_type, Feature.RECOMMENDATIONS):
+        return narrative
+    return replace(
+        narrative,
+        sections=tuple(s for s in narrative.sections
+                       if s.key not in _RECOMMENDATION_SECTIONS),
+        unpopulated_sections=tuple(
+            dict.fromkeys((*narrative.unpopulated_sections,
+                           *_RECOMMENDATION_SECTIONS))),
+    )
+
+
 def _section(narrative, key: str) -> SectionOut | None:
     for s in narrative.sections:
         if s.key == key:
@@ -309,7 +349,7 @@ def full_report(
     db: Session = Depends(get_db),
 ) -> ReportView:
     report = _owned_report(db, founder, report_id)
-    n = _build_narrative(db, report)
+    n = _visible_to(_build_narrative(db, report), founder, db)
     return ReportView(
         report_id=report.report_id, variant=n.variant.value,
         tone_persona=n.tone_persona, generated_at=report.generated_at,
@@ -351,9 +391,13 @@ def insights(report_id: int, founder: Founder = Depends(get_founder_record),
     )
 
 
-@router.get("/{report_id}/recommendations", response_model=SectionSlice)
+@router.get("/{report_id}/recommendations", response_model=SectionSlice,
+            dependencies=[Depends(require_recommendations)])
 def recommendations(report_id: int, founder: Founder = Depends(get_founder_record),
                           db: Session = Depends(get_db)) -> SectionSlice:
+    """Ally's recommendations. A 402 here is clearer than an empty section --
+    this endpoint exists for nothing else, so withholding its only content
+    would return a success that means failure."""
     n = _build_narrative(db, _owned_report(db, founder, report_id))
     return SectionSlice(report_id=report_id, section=_section(n, "priority_actions"))
 
@@ -377,7 +421,7 @@ def report_document(
     assembly, and a stale document is worse than a cheap one.
     """
     report = _owned_report(db, founder, report_id)
-    narrative = _build_narrative(db, report)
+    narrative = _visible_to(_build_narrative(db, report), founder, db)
     return HTMLResponse(build_report_document(
         narrative,
         report.insights,

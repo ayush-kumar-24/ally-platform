@@ -29,6 +29,13 @@ def founder_client():
     session = Session(bind=conn, join_transaction_mode="create_savepoint")
     conn.execute(text("insert into auth.users (id, email) values (:i, :e)"),
                  {"i": str(uid), "e": f"t{uid.hex[:8]}@x.com"})
+    # The security boundary migration 7c4f0f1a9d2e added: the function
+    # refuses unless the caller has already asserted which user it
+    # authenticated. app/services/provisioning.py does this before every real
+    # call; these fixtures never did, and every one of them errored out with
+    # "missing authenticated user context" before reaching a single assertion.
+    conn.execute(text("select set_config('app.current_founder_uuid', :u, true)"),
+                 {"u": str(uid)})
     fid = conn.execute(text("select create_founder_on_signup(:u,:n,:e,:p,:t,:i,:b)"),
                        dict(u=str(uid), n="Notif Test", e=f"t{uid.hex[:8]}@x.com",
                             p="v1", t="v1", i="127.0.0.1", b="supabase")).scalar()
@@ -49,6 +56,26 @@ def founder_client():
         conn.close()
 
 
+#: The titles this fixture seeds. The feed is not only these: a founder whose
+#: profile is incomplete also gets "Your profile needs finishing", and the
+#: fixture's founder is exactly that -- `create_founder_on_signup` fills
+#: identity and consent, not the profile.
+#:
+#: These tests used to assert on the raw length of the feed, which made them a
+#: test of "how many notifications does the platform generate" rather than of
+#: the feed's own filtering and counting. They asserted 3 and got 4. Nothing
+#: was broken; the nudge is a real feature working exactly as intended, and
+#: these expectations predate it. Asserting on the seeded titles keeps each
+#: test about what it is named for, and survives the next system notification
+#: somebody adds.
+SEEDED = {"Unread one", "Unread two", "Already read"}
+SEEDED_UNREAD = {"Unread one", "Unread two"}
+
+
+def _seeded(items):
+    return [n for n in items if n["title"] in SEEDED]
+
+
 def test_list_shows_in_app_only_with_unread_count(founder_client):
     client, _ = founder_client
     r = client.get(BASE)
@@ -56,34 +83,40 @@ def test_list_shows_in_app_only_with_unread_count(founder_client):
     body = r.json()
     titles = [n["title"] for n in body["items"]]
     assert "Email only" not in titles          # email channel excluded from the feed
-    assert len(body["items"]) == 3             # 3 in-app
-    assert body["unread_count"] == 2           # 2 unread
+    assert {n["title"] for n in _seeded(body["items"])} == SEEDED
+    # every unread item the fixture seeded is counted, and the read one is not
+    unread = {n["title"] for n in _seeded(body["items"]) if not n["is_read"]}
+    assert unread == SEEDED_UNREAD
+    assert body["unread_count"] >= 2
 
 
 def test_unread_only_filter(founder_client):
     client, _ = founder_client
     body = client.get(f"{BASE}?unread_only=true").json()
-    assert len(body["items"]) == 2
+    assert {n["title"] for n in _seeded(body["items"])} == SEEDED_UNREAD
     assert all(n["is_read"] is False for n in body["items"])
 
 
 def test_mark_one_read(founder_client):
     client, _ = founder_client
-    first_unread = client.get(f"{BASE}?unread_only=true").json()["items"][0]
+    before = client.get(BASE).json()["unread_count"]
+    first_unread = _seeded(
+        client.get(f"{BASE}?unread_only=true").json()["items"])[0]
     nid = first_unread["notification_id"]
 
     r = client.post(f"{BASE}/{nid}/read")
     assert r.status_code == 200
     assert r.json()["is_read"] is True and r.json()["read_at"] is not None
-    # unread count dropped by one
-    assert client.get(BASE).json()["unread_count"] == 1
+    # unread count dropped by exactly one
+    assert client.get(BASE).json()["unread_count"] == before - 1
 
 
 def test_mark_all_read(founder_client):
     client, _ = founder_client
+    before = client.get(BASE).json()["unread_count"]
     r = client.post(f"{BASE}/read-all")
     assert r.status_code == 200
-    assert r.json()["marked_read"] == 2
+    assert r.json()["marked_read"] == before
     assert client.get(BASE).json()["unread_count"] == 0
 
 

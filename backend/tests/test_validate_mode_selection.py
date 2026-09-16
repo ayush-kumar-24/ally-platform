@@ -10,6 +10,7 @@ The bias only REORDERS. Every question stays reachable, so a session that runs
 out of targeted questions continues normally instead of ending early.
 """
 
+import contextlib
 from types import SimpleNamespace
 
 from app.api.v1.diagnosis.engine import QuestionSelectionEngine
@@ -28,7 +29,10 @@ def _engine(detected=frozenset(), raises=False):
         if raises:
             raise RuntimeError("db down")
         return set(detected)
-    return QuestionSelectionEngine(SimpleNamespace(get_detected_root_cause_ids=get_ids))
+    fake_db = SimpleNamespace(begin_nested=lambda: contextlib.nullcontext())
+    return QuestionSelectionEngine(
+        SimpleNamespace(db=fake_db, get_detected_root_cause_ids=get_ids)
+    )
 
 
 def _session(routing):
