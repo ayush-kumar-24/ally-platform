@@ -1,70 +1,141 @@
-# Deploying the backend to AWS App Runner
+# Deploying the backend to AWS
 
-For a ~200–300 user beta. Frontend stays on Vercel (already live at
-goxlally.ai) — this covers the backend only. See `../DEPLOY.md` for how the
+For a ~200-300 user beta. Frontend stays on Vercel (already live at
+goxlally.ai) -- this covers the backend only. See `../DEPLOY.md` for how the
 two connect.
 
-## Why App Runner, not Lambda
+**This document described App Runner and Supabase until 2026-09-16. Neither is
+what runs.** The backend runs on **ECS Fargate** and the database is **RDS**.
+The corrections are marked below where they matter; the authority for anything
+about the deploy itself is `.github/workflows/backend-deploy.yml`, which is the
+thing that actually does it.
 
-This API holds a SQLAlchemy connection pool against Supabase's pooler, which
-allows **15 client connections in session mode, shared by everything that
-talks to it**. Lambda's serverless model opens a fresh pool on every cold
-start; under real concurrent traffic that exhausts the pooler almost
-immediately. App Runner runs a small number of long-lived instances instead,
-each holding one stable pool — the same shape as running it on a normal
-server, just managed.
+## What actually runs
 
-## Why the Dockerfile changed the pool size
+| | |
+|---|---|
+| Compute | ECS Fargate — cluster `ally-backend-cluster`, service `ally-backend-service` |
+| Region | `ap-south-1` |
+| Image | ECR repo `ally-backend`, tagged with the deploy SHA |
+| Database | **RDS Postgres.** Not Supabase. |
+| Public entry | `https://api.goxlally.ai`, TLS terminated ahead of the task |
+| Deploy | `.github/workflows/backend-deploy.yml` (OIDC, no long-lived keys) |
+| Migrations | a **separate one-off ECS task**, before the service is updated |
 
-`app/db/session.py` now reads `DB_POOL_SIZE` / `DB_POOL_MAX_OVERFLOW` from
-config (default 2 + 3 = 5 per process) instead of the higher numbers used
-earlier in development. That earlier setting (5 + 10 = 15 in one process
-alone) caused a real outage with just two local processes running — at
-App Runner's default of up to 2 instances, 5 per instance keeps the total at
-10, leaving headroom for `alembic upgrade head` and anything else that
-connects alongside the API.
+Supabase still exists and is kept seeded as a second copy of the reference
+data. It is not what production reads.
 
-**Do this too, before real traffic arrives:** switch `DATABASE_URL` to
-Supabase's **transaction-mode pooler** (port 6543, not 5432). It's built for
-many concurrent short-lived connections rather than a fixed pool of long-lived
-ones, and is the actual fix — the pool-size tuning above is a safety margin on
-top of it, not a replacement for it.
+## Migrations do NOT run when a task starts
 
-## 1. Push the image to ECR
+This document previously said "the Dockerfile runs it on every start, so this
+happens automatically". It does not, and the Dockerfile says so in a comment:
+
+> Database migrations are NOT run automatically when each ECS task starts.
+> The CI/CD deployment workflow will run Alembic once before updating ECS.
+> This avoids multiple ECS tasks trying to migrate the database concurrently.
+
+The container's `CMD` is uvicorn and nothing else. `backend-deploy.yml`
+registers `ally_backend_migration_task` — a task definition identical to the
+runtime one except that `DATABASE_URL` points at a privileged Secrets Manager
+entry — runs it once, and only then updates the service. A migration that has
+not been merged and deployed has not run.
+
+`backend-deploy-preflight.yml` does a read-only Alembic state check against
+production first, so a deploy whose migrations would not apply fails before it
+touches anything.
+
+## Connections: RDS, not a pooler
+
+The old text here reasoned about Supabase's session pooler allowing **15
+connections for the whole project**, and told you to move `DATABASE_URL` to
+port 6543. Both are Supabase concepts and neither applies to RDS. Ignore any
+6543 advice you find in older notes.
+
+What carries over is the pool sizing, for a different reason. `app/db/session.py`
+reads `DB_POOL_SIZE` / `DB_POOL_MAX_OVERFLOW` (default 2 + 3 = 5 per process),
+so each Fargate task holds at most five connections. RDS's ceiling is
+`max_connections`, which scales with instance class, and every task, every
+one-off migration task and every developer's psql draws on the same number.
+Five per task leaves room; raising it is a decision to make against the
+instance's actual `max_connections`, not by feel.
+
+```sql
+-- what the instance actually allows, and what is in use right now
+show max_connections;
+select count(*) from pg_stat_activity;
+```
+
+Three behaviours worth knowing, all in `app/db/session.py`:
+
+* **The Supabase pooler rewrite does not touch RDS.** A `*.pooler.supabase.com`
+  host on port 5432 is moved to 6543 automatically; any other host, RDS
+  included, is left exactly as written. An RDS endpoint on 5432 is correct and
+  nothing will rewrite it.
+* **Prepared statements stay ON.** `prepare_threshold` is disabled only for
+  port 6543, where a transaction pooler cannot carry them. Against RDS they are
+  a straight win and are left alone.
+* **`pool_timeout=10`** means connection starvation surfaces as an error
+  somebody can act on rather than a request hanging for thirty seconds.
+
+If connection count ever becomes the constraint, the RDS answer is **RDS
+Proxy**, not a smaller pool.
+
+### Confirm these — they are not in the repository
+
+The workflow pins the cluster, region, subnets and security group. These are
+not recorded anywhere and someone should write them down here:
+
+- [ ] RDS instance class, and the `max_connections` that follows from it
+- [ ] Whether the instance is publicly accessible or reached inside the VPC
+      (the ECS tasks run with `assignPublicIp=ENABLED`)
+- [ ] Whether RDS Proxy is in front of it
+- [ ] Whether automated backups / point-in-time recovery are on, and the
+      retention window. `data/reference/` protects the *content*; founder
+      answers and reports exist only in this database and backups are the only
+      thing protecting them.
+
+## 1. Building and shipping the image
+
+`backend-deploy.yml` does this on every merge: builds `backend/Dockerfile`,
+tags it with the deploy SHA, pushes to the `ally-backend` ECR repo in
+`ap-south-1`, and registers a new task definition from it. The manual commands
+below are for a first-time setup or a break-glass deploy only -- the workflow
+is the normal path, and it tags by SHA rather than `latest` so a rollback has
+something to roll back to.
 
 ```bash
-aws ecr create-repository --repository-name ally-backend --region ap-south-1
-
 aws ecr get-login-password --region ap-south-1 \
   | docker login --username AWS --password-stdin <account-id>.dkr.ecr.ap-south-1.amazonaws.com
 
 cd backend
 docker build -t ally-backend .
-docker tag ally-backend:latest <account-id>.dkr.ecr.ap-south-1.amazonaws.com/ally-backend:latest
-docker push <account-id>.dkr.ecr.ap-south-1.amazonaws.com/ally-backend:latest
+docker tag ally-backend:latest <account-id>.dkr.ecr.ap-south-1.amazonaws.com/ally-backend:<sha>
+docker push <account-id>.dkr.ecr.ap-south-1.amazonaws.com/ally-backend:<sha>
 ```
 
-Pick a region close to your beta users; `ap-south-1` (Mumbai) if they're
-mostly in India, matching `DISCOVERY_TIMEZONE=Asia/Kolkata` in the app's own
-defaults.
+`ap-south-1` (Mumbai) matches the beta's users and the app's own
+`DISCOVERY_TIMEZONE=Asia/Kolkata` default.
 
-## 2. Create the App Runner service
+## 2. The ECS service
 
-Console → App Runner → Create service → **Container registry** → pick the ECR
-image just pushed.
+**Not App Runner.** The service is `ally-backend-service` on cluster
+`ally-backend-cluster`, Fargate, with `awsvpcConfiguration` pinned in the
+workflow (two subnets, one security group, `assignPublicIp=ENABLED`).
 
 | Setting | Value |
 |---|---|
-| Port | `8000` |
-| CPU / Memory | 1 vCPU / 2 GB |
-| Min / Max instances | 1 / 2 |
-| Health check path | `/api/v1/health` (checks DB connectivity; returns 503 when the database is unreachable so App Runner actually stops routing to a broken instance — `/` always returns 200 and does not check anything, do not point the health check there) |
+| Container port | `8000` |
+| Health check path | `/api/v1/health` — checks database connectivity and returns 503 when it is unreachable, so a broken task stops receiving traffic. `/` always returns 200 and checks nothing; pointing the health check there means a task with a dead database keeps serving. |
+| Rollout | the workflow waits for the service to stabilise, then health-checks `https://api.goxlally.ai/api/v1/health`, and rolls back to the previous task definition if that fails |
 
-Auto deployments: on, so a new image push redeploys automatically.
+Changing CPU, memory, desired count or networking means editing the task
+definition and the workflow, not clicking in a console -- otherwise the next
+deploy overwrites it.
 
 ## 3. Environment variables
 
-Store secrets in **Secrets Manager** and reference them from App Runner rather
+Store secrets in **Secrets Manager** and reference them from the ECS task
+definition rather
 than pasting real values into the console — anyone with read access to the
 service configuration can otherwise see them in plain text.
 
@@ -74,9 +145,10 @@ Values that must differ from `backend/.env.example`'s development defaults:
 |---|---|---|
 | `ENVIRONMENT` | `production` | `factory.py` refuses `AUTH_PROVIDER=dev` unless this is set |
 | `AUTH_PROVIDER` | `supabase` | dev auth accepts any bearer as a founder id |
-| `SUPABASE_JWT_SECRET` | Supabase → Settings → API → JWT Secret | verifies the token the browser presents |
+| `SUPABASE_URL` | `https://<project-ref>.supabase.co` | **The database move did not change the identity provider.** Supabase Auth and Supabase Postgres are separate services; the app reads RDS and still verifies logins against Supabase. This is the setting that matters: user tokens are ES256 and are verified against the JWKS at `{SUPABASE_URL}/auth/v1/.well-known/jwks.json`. |
+| `SUPABASE_JWT_SECRET` | Supabase → Settings → API → JWT Secret | The LEGACY shared HS256 secret, kept as a fallback. A project on asymmetric signing never uses it for logins — verifying the anon key against it proves the secret is right and proves nothing about user tokens. |
 | `SECRET_KEY` | `python -c "import secrets; print(secrets.token_urlsafe(48))"` | signs this app's own tokens |
-| `DATABASE_URL` | the **6543** transaction-pooler URI, not 5432 | see above |
+| `DATABASE_URL` | the RDS endpoint, `postgresql+psycopg://...@<rds-endpoint>:5432/<db>` | **Not a Supabase pooler URI.** 5432 is correct here and nothing rewrites it — the 6543 move in `app/db/session.py` fires only for `*.pooler.supabase.com`. Held in Secrets Manager; the migration task uses a separate, more privileged entry. |
 | `CORS_ORIGINS` | `https://goxlally.ai,https://www.goxlally.ai` | belt-and-suspenders: the Vercel rewrite keeps normal browser traffic same-origin so this shouldn't matter day to day, but anything that calls the API directly (not through the rewrite) needs these two allowed |
 | `ANTHROPIC_API_KEY` | | diagnosis reasoning + the founder's first impression |
 | `OPENAI_API_KEY` | | chat + voice transcription |
@@ -153,28 +225,32 @@ downloads their report.
 The response carries `X-PDF-Renderer: gotenberg | reportlab-fallback` precisely
 so this is checkable. Check it.
 
-### App Runner cannot run this as a sidecar
+### On ECS it CAN be a sidecar — which App Runner could not
 
-App Runner is one image per service -- there is no second container to put
-Gotenberg in, and the `backend/Dockerfile` deliberately does not ship Chromium
-(it would roughly triple the image and put a browser in the API's blast radius).
-So Gotenberg has to be somewhere else, and `GOTENBERG_URL` has to point at it.
+This section used to say "App Runner is one image per service, so Gotenberg has
+to be somewhere else". On **ECS that restriction is gone**: a task definition
+holds multiple containers, they share a network namespace, and a sidecar is
+reachable at `localhost` — which is exactly what `GOTENBERG_URL` already
+defaults to.
 
-Two options, in order of preference:
+`backend/Dockerfile` deliberately does not ship Chromium (it would roughly
+triple the image and put a browser inside the API's blast radius), so Gotenberg
+stays a separate container either way. The question is only where it runs.
 
-1. **A second App Runner service** from the public `gotenberg/gotenberg:8`
-   image, port `3000`, reachable from the API. Simplest to stand up and it
-   redeploys like everything else here.
-2. **ECS Fargate / EC2** behind a private load balancer, if you would rather
-   keep it entirely off the public internet from day one.
+1. **A sidecar in the same task definition** (preferred now). Add a second
+   container from `gotenberg/gotenberg:8` on port `3000` and set
+   `GOTENBERG_URL=http://localhost:3000`, which is the default — so the
+   setting that is most often wrong becomes the setting you do not touch. It
+   is not publicly reachable, it scales with the API, and it cannot drift out
+   of sync with it.
+2. **A separate service behind a private load balancer**, if you would rather
+   scale or restart it independently.
 
-Either way it must **not** be publicly reachable without protection: Gotenberg
-converts arbitrary HTML that is POSTed to it, so an open instance is a free
-rendering service and an SSRF surface. Put it behind a VPC connector, or at
-minimum an ingress rule that only admits the API service.
+Either way it must **not** be publicly reachable: Gotenberg converts arbitrary
+HTML that is POSTed to it, so an open instance is a free rendering service and
+an SSRF surface. A sidecar is private by construction; a standalone service
+needs an ingress rule admitting only the API's security group.
 
-| Setting | Value |
-|---|---|
 | Image | `gotenberg/gotenberg:8` |
 | Port | `3000` |
 | CPU / Memory | 1 vCPU / **2 GB** |
@@ -190,7 +266,7 @@ Once both services are up, export a real report and read the header -- the
 status code tells you nothing:
 
 ```bash
-curl -sD - -o /dev/null -X POST   https://<app-runner-domain>/api/v1/reports/<id>/export   -H "Authorization: Bearer <token>" | grep -i x-pdf-renderer
+curl -sD - -o /dev/null -X POST   https://api.goxlally.ai/api/v1/reports/<id>/export   -H "Authorization: Bearer <token>" | grep -i x-pdf-renderer
 ```
 
 `x-pdf-renderer: gotenberg` is correct. `reportlab-fallback` means founders are
@@ -203,37 +279,75 @@ else in the system reports this: the founder gets a file, the request succeeds,
 Sentry sees nothing. The only other symptom is a founder mentioning their report
 "looks like a text file", which is not a monitoring strategy.
 
-## 4. Point Vercel at it
+## 4. Vercel
 
-Edit `frontend/vercel.json`, replace `REPLACE-ME.awsapprunner.com` with the
-service's actual domain (Console → your service → **Default domain**), commit,
-push. Vercel redeploys on push and the rewrite takes over immediately — no
-DNS change needed, since the browser only ever talks to `www.goxlally.ai`.
+Already done and committed. `frontend/vercel.json` rewrites
+`/api/:path*` to `https://api.goxlally.ai/api/:path*`, so the browser only ever
+talks to `www.goxlally.ai` and the calls are same-origin. The older instruction
+here — replace `REPLACE-ME.awsapprunner.com` with the service's default domain —
+describes a placeholder that no longer exists in the file.
 
-## 5. Custom API domain (optional)
+What still needs checking after a domain or load-balancer change: that both
+rewrite destinations in `vercel.json` still resolve, including the
+share-token one (`/r/:token` → the public report view), which is the route
+people outside the product hit.
 
-App Runner → Custom domains → add e.g. `api.goxlally.ai`, then add the CNAME
-it gives you at Hostinger (same DNS panel as before — do not touch the MX or
-`_domainkey` records there, that's email). Not required if you're using the
-Vercel rewrite from step 4; useful mainly if something needs to call the API
-directly rather than through the frontend's proxy.
+## 5. The API domain
+
+`api.goxlally.ai` is live and is where the ECS service is reached; TLS
+terminates in front of the task, not in it — which is why the container runs
+uvicorn with `--proxy-headers`, and why a trailing-slash redirect once came
+back pointing at `http://origin-api.goxlally.ai` (the Dockerfile records that
+incident).
+
+The old text here told you to add a custom domain through the App Runner
+console. That is not how this is wired, and nobody should follow it. **Whoever
+set up the current DNS and certificate should write the real arrangement
+down here** — which record points where, where the certificate lives, and what
+has to change if the service moves.
 
 ## Before you call it done
 
-- [ ] `alembic upgrade head` has run against the production database (the
-      Dockerfile runs it on every start, so this happens automatically once
-      the service is live — confirm it in the App Runner logs on first deploy)
-- [ ] `DATABASE_URL` points at the 6543 transaction pooler, not 5432
-- [ ] `GET https://<app-runner-domain>/` returns `{"status": "running", ...}`
-- [ ] `GET https://<app-runner-domain>/api/v1/health` returns `{"status": "healthy", "database": "connected"}` (503 + `"degraded"` if the DB is unreachable — confirm the App Runner health check is actually pointed here, not at `/`)
-- [ ] `SENTRY_DSN` is set and a manually-triggered test error shows up in Sentry
+- [ ] The **migration task** ran and succeeded in this deploy's workflow run.
+      It is a separate one-off ECS task, not something a starting container
+      does — a green service does not mean the migrations applied
+- [ ] `backend-deploy-preflight.yml` passed its read-only Alembic state check
+- [ ] `DATABASE_URL` is the **RDS endpoint on 5432**. Any 6543 pooler URI here
+      is left over from Supabase and points at the wrong database
+- [ ] `GET https://api.goxlally.ai/` returns `{"status": "running", ...}`
+- [ ] `GET https://api.goxlally.ai/api/v1/health` returns
+      `{"status": "healthy", "database": "connected"}` — 503 + `"degraded"`
+      when the database is unreachable. Confirm the load balancer's health
+      check points here and not at `/`, which checks nothing
+- [ ] `SENTRY_DSN` is set and a manually-triggered test error reaches Sentry
 - [ ] A report export returns `X-PDF-Renderer: gotenberg`, **not**
-      `reportlab-fallback` (see §3a — the fallback is a 200 with a real
-      PDF attached, so this cannot be confirmed by the download succeeding)
+      `reportlab-fallback` (see §3a — the fallback is a 200 with a real PDF
+      attached, so a successful download does not confirm this)
 - [ ] The Gotenberg service is not reachable from the public internet
-- [ ] `frontend/vercel.json`'s rewrite destination matches the real App Runner
-      domain, committed and pushed
+- [ ] `frontend/vercel.json`'s rewrite destination matches `api.goxlally.ai`,
+      committed and pushed
 - [ ] Full journey works end to end through `www.goxlally.ai`: sign in →
       onboarding → diagnosis → report → tour → dashboard
-- [ ] CloudWatch Logs show no repeated `EMAXCONNSESSION` — if they do, the pool
-      is still too large for the pooler mode in use
+- [ ] `select count(*) from pg_stat_activity` is comfortably under the
+      instance's `max_connections` with all tasks running. The old
+      `EMAXCONNSESSION` check on this list was a Supabase pooler error and
+      cannot occur on RDS — this is its replacement
+- [ ] RDS automated backups are on, with a retention window someone has
+      actually chosen. `data/reference/` can rebuild the product's content;
+      nothing but backups can rebuild a founder's answers
+
+## Rebuilding the database from nothing
+
+`docs/RESTORE.md`. Tested end to end: empty Postgres, five steps, every
+reference table back at production's row count and the reasoning engine
+booting on the result.
+
+Two things it depends on staying true:
+
+* `data/reference/` is a snapshot, not a live mirror. Re-run
+  `python -m scripts.dump_reference_data --database-url "$DATABASE_URL" --write`
+  whenever the question bank, root causes, weights or scoring rules change,
+  and commit the diff. `--check` exits non-zero when the committed dump and
+  the database disagree, which is a cheap thing for CI to run.
+* The snapshot was generated from the Supabase copy. If Supabase and RDS ever
+  diverge, `--check` against RDS is what will say so.
