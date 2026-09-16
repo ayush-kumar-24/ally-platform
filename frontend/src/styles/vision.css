@@ -187,6 +187,16 @@
 .vt-image-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
 .vt-image-remove { color: #b91c1c; }
 
+/* A picture chosen before the vision exists server-side. Says plainly that it
+   is not saved yet -- a preview that looks identical to a stored image would
+   let a founder close the modal believing it was kept. */
+.vt-image-pending {
+  margin: 0;
+  font-family: var(--body);
+  font-size: 12.5px;
+  color: var(--muted-2, #6c7a70);
+}
+
 .vt-image-error {
   margin: 0;
   font-family: var(--body);
@@ -301,3 +311,131 @@
 .vt-reach:disabled { cursor: not-allowed; opacity: .55; }
 .vt-card.is-reached { border-color: rgba(16,185,129,.45); }
 @media (prefers-reduced-motion: reduce) { .vt-reach { transition: none; } }
+
+/* ── Printing one vision ───────────────────────────────────────────────────
+
+   The sheet is in the page but invisible on screen, and on paper it is the
+   only thing there.
+
+   HIDING EVERYTHING ELSE WITH `visibility`, not `display:none`, and starting
+   from `*` rather than naming the app's wrappers. The shell, the sidebar and
+   the grid are somebody else's components; a rule that listed them would rot
+   the first time one is renamed. `visibility: hidden` inherits, so one
+   declaration hides the whole tree, and re-showing the sheet's own subtree is
+   enough to bring it back -- which `display: none` on an ancestor cannot do.
+
+   Scoped to body.vp-printing so a founder pressing Ctrl+P themselves still
+   gets the ordinary page rather than a blank one. */
+.vision-print-sheet { display: none; }
+
+@media print {
+  @page { size: A4 portrait; margin: 16mm; }
+
+  body.vp-printing * { visibility: hidden; }
+  body.vp-printing .vision-print-sheet,
+  body.vp-printing .vision-print-sheet * { visibility: visible; }
+
+  body.vp-printing .vision-print-sheet {
+    display: block;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    /* The founder's picture and the dark label bar are the point of this
+       page, so ink-saving recolour is exactly what must not happen. */
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Nothing here may split across a page: it is one vision, one sheet. */
+  .vision-print-sheet,
+  .vps-image,
+  .vps-statement { break-inside: avoid; page-break-inside: avoid; }
+}
+
+.vps-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 14px;
+  border-bottom: 2px solid #1B4332;
+}
+.vps-ic {
+  width: 34px; height: 34px;
+  border-radius: 9px;
+  display: grid; place-items: center;
+  background: #EFFAF4;
+  color: #1B4332;
+}
+.vps-ic svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+.vps-label {
+  font-family: var(--body);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .16em;
+  color: #1B4332;
+}
+
+.vps-image { margin: 22px 0 0; }
+.vps-image img {
+  width: 100%;
+  max-height: 150mm;
+  object-fit: cover;
+  border-radius: 10px;
+  display: block;
+}
+
+.vps-statement {
+  margin: 24px 0 0;
+  font-family: var(--display);
+  font-size: 22px;
+  line-height: 1.45;
+  font-weight: 600;
+  color: #16241c;
+}
+
+.vps-tags { display: flex; gap: 10px; flex-wrap: wrap; margin: 18px 0 0; }
+.vps-tag {
+  font-family: var(--body);
+  font-size: 12.5px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: #EFFAF4;
+  color: #1B4332;
+}
+.vps-tag.muted { background: #f2ede6; color: #6c7a70; }
+
+.vps-reached {
+  margin: 18px 0 0;
+  font-family: var(--body);
+  font-size: 13px;
+  color: #10B981;
+  font-weight: 600;
+}
+
+.vps-foot {
+  margin-top: 28px;
+  padding-top: 12px;
+  border-top: 1px solid #e7e0d6;
+  font-family: var(--body);
+  font-size: 11px;
+  letter-spacing: .08em;
+  color: #96a69c;
+}
+
+/* The card's print button, matching the reached toggle beside it. */
+.vt-print {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: var(--body);
+  font-size: 12.5px;
+  color: var(--muted-2, #6c7a70);
+  padding: 4px 6px;
+  border-radius: 7px;
+}
+.vt-print:hover { color: var(--forest, #1B4332); background: var(--ivory-3, #efe6d9); }
+.vt-print svg { width: 14px; height: 14px; flex-shrink: 0; }

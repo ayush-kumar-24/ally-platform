@@ -7,6 +7,7 @@ from app.core.auth import AuthUser, get_current_founder
 from app.db.session import get_db, set_founder_rls_context
 from app.middleware.error_handler import AppError
 from app.models import Founder
+from app.plans.team import ensure_team_plan
 from app.repositories import founder_repository
 from app.services.profile_progress import validate_profile
 
@@ -54,6 +55,14 @@ def get_founder_record(
     founder = founder_repository.get_by_user_id(db, user_uuid)
     if founder is None:
         raise FounderNotFoundError()
+
+    # The team's own accounts are held at Pro wherever they are read (see
+    # plans/team.py). Here rather than in each gate: this is the one place
+    # every founder-touching route resolves its founder, so a tier corrected
+    # here is correct for all of them -- and for the next route added, which
+    # is the part a per-gate override gets wrong. Never raises; a failure
+    # leaves the founder exactly the access they already had.
+    ensure_team_plan(db, founder)
 
     return founder
 

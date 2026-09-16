@@ -2369,7 +2369,7 @@ body.lp-done #landing-page { display:none; }
 .dash-action-btn:not(:disabled):active, .j-btn-lg:not(:disabled):active,
 .cookie-btn:not(:disabled):active, .adm-btn:not(:disabled):active,
 .hp-action-btn:not(:disabled):active,
-.bl-top-tab:active, .bl-method-tab:active, .pl-tab:active {
+.bl-top-tab:active, .bl-method-tab:active {
   transform: scale(.975);
 }
 @media (prefers-reduced-motion: reduce) {
@@ -2378,12 +2378,8 @@ body.lp-done #landing-page { display:none; }
   .dash-action-btn:not(:disabled):active, .j-btn-lg:not(:disabled):active,
   .cookie-btn:not(:disabled):active, .adm-btn:not(:disabled):active,
   .hp-action-btn:not(:disabled):active,
-  .bl-top-tab:active, .bl-method-tab:active, .pl-tab:active { transform: none; }
+  .bl-top-tab:active, .bl-method-tab:active { transform: none; }
 }
-
-/* .pl-tab became a real <button> (it was a click-only <div>); reset the UA
-   button styling so it keeps the card appearance it had as a div. */
-.pl-tab { font: inherit; text-align: left; color: inherit; width: 100%; }
 
 /* ---- Live mic meter (takes the text field's place while recording) -----
    Real amplitude from the AnalyserNode in services/voice.js, not a canned

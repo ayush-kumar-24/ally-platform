@@ -5,6 +5,7 @@ import { DnaError, DnaLoading, DnaNoReport, DnaNoSection } from '../components/D
 import { IconArrowRight, IconChat } from '../utils/icons';
 import { accentFor, iconFor } from '../utils/dnaVisuals';
 import ClampedText from '../components/ClampedText';
+import ClampedList from '../components/ClampedList';
 
 const TABS = [
   { key: 'operate', label: 'How you operate' },
@@ -73,6 +74,13 @@ function FounderDNAView({ section, report }) {
   // internal keys are inside the nested object so they never leak here, and
   // excludes origin/vision/_origin_text/_vision_text explicitly since those
   // get their own dedicated cards instead of the generic grid.
+  /* The card previews, keyed by dimension code. Written once per report by the
+     backend and cached on it (reports/dna_summaries.py), so opening this page
+     costs no model call. Absent for a report generated before they shipped and
+     for any dimension the model could not summarise -- the card then shows the
+     answers themselves. */
+  const summaries = facts._summaries || {};
+
   const operateFacts = factList(facts).filter(
     (f) => !['Archetype', 'Origin', 'Vision', ' origin text', ' vision text']
       .some((k) => f.label.toLowerCase() === k.toLowerCase().trim())
@@ -141,9 +149,18 @@ function FounderDNAView({ section, report }) {
                   </div>
                   {/* These are the founder's own answers, verbatim and of wildly
                       uneven length -- two words in one dimension, three hundred
-                      in the next. Clamped so the grid stays readable, with the
-                      whole answer one click away; nothing is cut in storage. */}
-                  <ClampedText text={f.value} lines={4} />
+                      in the next.
+
+                      ONE BULLET PER ANSWER, not one paragraph per dimension. A
+                      dimension holds up to three separate answers, and joining
+                      them into a single run of prose lost the boundary the
+                      founder wrote: "Gather everything first, The most recent
+                      one was deciding which language..." is two answers wearing
+                      one comma. Each bullet is clamped to two lines so the card
+                      is scannable at rest and every answer is still visible;
+                      "Read more" opens them in full. Nothing is summarised,
+                      rewritten or cut -- not here and not in storage. */}
+                  <ClampedList items={f.items} summary={summaries[f.key]} lines={2} />
                 </div>
               ))}
             </div>

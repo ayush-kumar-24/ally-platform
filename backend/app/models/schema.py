@@ -309,7 +309,7 @@ class ScoringRules(Base):
 class StageDiagnosisLogic(Base):
     __tablename__ = 'stage_diagnosis_logic'
     __table_args__ = (
-        CheckConstraint("stage_group::text = ANY (ARRAY['Stage 0'::character varying, 'Stage 0→1'::character varying, 'Stage 1→10+'::character varying]::text[])", name='stage_diagnosis_logic_stage_group_check'),
+        CheckConstraint("stage_group::text = ANY (ARRAY['Stage 0'::character varying, 'Stage 0Ã¢â€ â€™1'::character varying, 'Stage 1Ã¢â€ â€™10+'::character varying]::text[])", name='stage_diagnosis_logic_stage_group_check'),
         PrimaryKeyConstraint('logic_id', name='stage_diagnosis_logic_pkey'),
         Index('idx_stage_diagnosis_logic_group', 'stage_group'),
     )
@@ -341,6 +341,7 @@ class Founders(Base):
         PrimaryKeyConstraint('founder_id', name='founders_pkey'),
         UniqueConstraint('email', name='founders_email_key'),
         UniqueConstraint('user_id', name='founders_user_id_key'),
+        UniqueConstraint('cognito_sub', name='uq_founders_cognito_sub'),
         Index('idx_founders_email', 'email'),
         Index('idx_founders_industry', 'industry'),
         Index('idx_founders_stage_id', 'stage_id'),
@@ -349,6 +350,7 @@ class Founders(Base):
 
     founder_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    cognito_sub: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     full_name: Mapped[str] = mapped_column(String(200), nullable=False)
     email: Mapped[str] = mapped_column(String(200), nullable=False)
     plan_type: Mapped[str] = mapped_column(String(20), nullable=False, server_default=text("'free'::character varying"))
@@ -574,7 +576,7 @@ class RagChunks(Base):
 class VisualQuestionBank(Base):
     __tablename__ = 'visual_question_bank'
     __table_args__ = (
-        CheckConstraint("primary_stage_group::text = ANY (ARRAY['Stage 0'::character varying, 'Stage 0→1'::character varying, 'Stage 1→10+'::character varying]::text[])", name='visual_question_bank_primary_stage_group_check'),
+        CheckConstraint("primary_stage_group::text = ANY (ARRAY['Stage 0'::character varying, 'Stage 0Ã¢â€ â€™1'::character varying, 'Stage 1Ã¢â€ â€™10+'::character varying]::text[])", name='visual_question_bank_primary_stage_group_check'),
         PrimaryKeyConstraint('visual_question_id', name='visual_question_bank_pkey'),
         UniqueConstraint('visual_question_code', name='visual_question_bank_visual_question_code_key'),
     )
@@ -608,7 +610,7 @@ class FounderDnaQuestions(Base):
     __tablename__ = 'founder_dna_questions'
     __table_args__ = (
         CheckConstraint("dimension_code = ANY (ARRAY['purpose_mission'::character varying, 'core_values'::character varying, 'mindset_excellence'::character varying, 'energy_patterns'::character varying, 'decision_style'::character varying, 'focus_attention'::character varying, 'archetype'::character varying, 'core_motivation'::character varying, 'origin'::character varying, 'vision'::character varying, 'strengths_blind_spots'::character varying, 'stress_response'::character varying, 'communication_preference'::character varying, 'emotional_intelligence'::character varying]::text[])", name='founder_dna_questions_dimension_code_check'),
-        CheckConstraint("stage_group = ANY (ARRAY['Stage 0'::character varying, 'Stage 0→1'::character varying, 'Stage 1→10+'::character varying]::text[])", name='founder_dna_questions_stage_group_check'),
+        CheckConstraint("stage_group = ANY (ARRAY['Stage 0'::character varying, 'Stage 0Ã¢â€ â€™1'::character varying, 'Stage 1Ã¢â€ â€™10+'::character varying]::text[])", name='founder_dna_questions_stage_group_check'),
         CheckConstraint("format = ANY (ARRAY['narrative'::character varying, 'scenario'::character varying, 'forced_choice'::character varying]::text[])", name='founder_dna_questions_format_check'),
         PrimaryKeyConstraint('founder_dna_question_id', name='founder_dna_questions_pkey'),
         Index('idx_founder_dna_questions_dimension_stage', 'dimension_code', 'stage_group'),
@@ -673,7 +675,7 @@ class CurrentProblemQuestions(Base):
 
     __tablename__ = 'current_problem_questions'
     __table_args__ = (
-        CheckConstraint("stage_group = ANY (ARRAY['Stage 0'::character varying, 'Stage 0→1'::character varying, 'Stage 1→10+'::character varying]::text[])", name='current_problem_questions_stage_group_check'),
+        CheckConstraint("stage_group = ANY (ARRAY['Stage 0'::character varying, 'Stage 0Ã¢â€ â€™1'::character varying, 'Stage 1Ã¢â€ â€™10+'::character varying]::text[])", name='current_problem_questions_stage_group_check'),
         PrimaryKeyConstraint('current_problem_question_id', name='current_problem_questions_pkey'),
         Index('idx_current_problem_questions_stage', 'stage_group', 'arc_position'),
         Index('uq_current_problem_one_symptom_per_stage', 'stage_group', unique=True,
@@ -1096,7 +1098,7 @@ class RootCauses(Base):
     __table_args__ = (
         CheckConstraint('confidence_weight >= 0.0 AND confidence_weight <= 1.0', name='root_causes_confidence_weight_check'),
         CheckConstraint("layer::text = ANY (ARRAY['internal'::character varying, 'external'::character varying]::text[])", name='root_causes_layer_check'),
-        CheckConstraint("primary_stage_group::text = ANY (ARRAY['Stage 0'::character varying, 'Stage 0→1'::character varying, 'Stage 1→10+'::character varying]::text[])", name='root_causes_primary_stage_group_check'),
+        CheckConstraint("primary_stage_group::text = ANY (ARRAY['Stage 0'::character varying, 'Stage 0Ã¢â€ â€™1'::character varying, 'Stage 1Ã¢â€ â€™10+'::character varying]::text[])", name='root_causes_primary_stage_group_check'),
         CheckConstraint("root_cause_category::text = ANY (ARRAY['Psychological'::character varying, 'Knowledge'::character varying, 'Behavioural'::character varying, 'Strategic'::character varying, 'Operational'::character varying]::text[])", name='root_causes_root_cause_category_check'),
         ForeignKeyConstraint(['problem_id'], ['problems.problem_id'], name='root_causes_problem_id_fkey'),
         PrimaryKeyConstraint('root_cause_id', name='root_causes_pkey'),
@@ -1345,7 +1347,7 @@ class Questions(Base):
     __tablename__ = 'questions'
     __table_args__ = (
         CheckConstraint('difficulty_level >= 1 AND difficulty_level <= 5', name='questions_difficulty_level_check'),
-        CheckConstraint("primary_stage_group::text = ANY (ARRAY['Stage 0'::character varying, 'Stage 0→1'::character varying, 'Stage 1→10+'::character varying]::text[])", name='questions_primary_stage_group_check'),
+        CheckConstraint("primary_stage_group::text = ANY (ARRAY['Stage 0'::character varying, 'Stage 0â†’1'::character varying, 'Stage 1â†’10+'::character varying]::text[])", name='questions_primary_stage_group_check'),
         # The constraint above bounds the VALUE of a tag but never requires
         # one: a SQL CHECK passes when its expression is NULL. This one
         # requires it. Added NOT VALID by migration b7e4f2a91c58, so it binds

@@ -44,7 +44,14 @@ class Settings(BaseSettings):
     # --- Auth ---
     # "dev"      = temporary local stand-in for testing, never used in production.
     # "supabase" = verify the JWT the frontend gets from Supabase Auth.
+    # "cognito"  = verify the Cognito ID token used to establish an Ally session.
     AUTH_PROVIDER: str = "dev"
+
+    # Amazon Cognito user-pool identity provider.
+    # These identifiers are not secrets and may be overridden by environment.
+    COGNITO_REGION: str = "ap-south-1"
+    COGNITO_USER_POOL_ID: str = "ap-south-1_QideRXCEN"
+    COGNITO_CLIENT_ID: str = "31ql28tvmbl66c6lun5fkdn2it"
 
     # Only needed when AUTH_PROVIDER="supabase".
     #
@@ -198,6 +205,18 @@ class Settings(BaseSettings):
     # match, which its own docstring calls a heuristic. The LLM chooses from the
     # same seeded catalogue and falls back to the lexical engine on any failure.
     ARCHETYPE_LLM: bool = False
+
+    # Short bullet previews of the founder's own Founder DNA answers, shown on
+    # the cards with the whole answer behind "Read more". Off => the cards show
+    # the answers themselves, which is today's behaviour and is a wall of prose
+    # for any founder who wrote at length.
+    #
+    # Worth a flag because it is the only LLM call on a page that otherwise just
+    # reads stored text. It is cheap -- ONE call per report, not per view, and
+    # not per dimension: the result is cached on the report (see
+    # reports/dna_summaries.py), so a founder who opens the page fifty times
+    # pays for it once. It fails to the un-summarised cards on any error.
+    FOUNDER_DNA_SUMMARY_LLM: bool = False
 
     # Infer the founder's lifecycle stage from their diagnosis answers when
     # founders.stage_id is NULL. Off => the stage stays unknown, which is
@@ -523,6 +542,74 @@ class Settings(BaseSettings):
     @property
     def support_alert_emails(self) -> list[str]:
         return [e.strip() for e in self.SUPPORT_ALERT_EMAILS.split(",") if e.strip()]
+
+    #: The team's own accounts, which always hold every feature.
+    #:
+    #: These are the people who build and test Ally. They sign in with ordinary
+    #: accounts on whatever tier those accounts happen to carry, which meant a
+    #: developer testing Vision, voice chat or email reminders hit the same
+    #: paywall a Starter founder would -- and a feature nobody on the team can
+    #: reach is a feature nobody on the team is testing.
+    #:
+    #: Listed by EMAIL rather than founder_id on purpose: ids differ between
+    #: environments and are assigned at signup, so an id list would be wrong in
+    #: staging and stale the moment someone re-registers. Email is what the
+    #: person actually is.
+    #:
+    #: Matching is case-insensitive and whitespace-tolerant (see the property
+    #: below) -- "Info@GoXL.in " and "info@goxl.in" are one person, and a list
+    #: this long is edited by hand.
+    #:
+    #: This grants the PRO feature set, which is every feature there is. It does
+    #: NOT lift the daily token ceiling (8,000 on Pro) or the one-per-account
+    #: diagnosis cap; those are separate limits with separate reasons, and the
+    #: admin panel already has a diagnosis reset for the second.
+    TEAM_FULL_ACCESS_EMAILS: str = (
+        "14aarush9@gmail.com,"
+        "aniketkumarshawtech@gmail.com,"
+        "aaryakapoor14@gmail.com,"
+        "aarya.goxl@gmail.com,"
+        "ayushray2403@gmail.com,"
+        "ayushkumar20060324@gmail.com,"
+        "ayushgoxl@gmail.com,"
+        "ayush2403kumar@gmail.com,"
+        "d.viraj2@gmail.com,"
+        "goxloffice@gmail.com,"
+        "goxlmarketing@gmail.com,"
+        "goxl.work@gmail.com,"
+        "godblesspower7@gmail.com,"
+        "pranjalsavantsavant@gmail.com,"
+        "pranjalmaheshsavant@gmail.com,"
+        "info@goxl.in,"
+        "sumitgoxlofficial@gmail.com,"
+        "sumitsuman4411@gmail.com"
+    )
+
+    @property
+    def team_full_access_emails(self) -> frozenset[str]:
+        """Normalised for comparison: lowercased, stripped, blanks dropped."""
+        return frozenset(
+            e.strip().lower()
+            for e in self.TEAM_FULL_ACCESS_EMAILS.split(",")
+            if e.strip()
+        )
+
+    #: The Ally mark shown in the header band of every email.
+    #:
+    #: A HOSTED URL, not an attachment and not a data: URI -- Gmail blocks data
+    #: URIs outright, and a CID attachment would force every sender to build a
+    #: multipart/related message. The mark already ships to S3 with the frontend
+    #: (frontend/public/ally-logo-mark-on-dark.png), so this needs nothing new
+    #: deployed to be reachable.
+    #:
+    #: Hardcoded to app.goxlally.ai rather than derived from the app-URL setting
+    #: above, for the reason documented there: production has that pointed at the
+    #: marketing site, which would make this a broken image in every inbox.
+    #:
+    #: An unreachable value is not fatal. Clients block images by default anyway,
+    #: so the header is designed to read correctly without it -- the alt text is
+    #: the word "Ally" on the green band.
+    EMAIL_LOGO_URL: str = "https://app.goxlally.ai/ally-logo-mark-on-dark.png"
 
     # --- CORS ---
     # Comma-separated. PRODUCTION MUST INCLUDE THE MARKETING SITE as well as

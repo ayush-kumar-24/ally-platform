@@ -66,6 +66,35 @@ export function formatRelativeTime(d) {
   return formatDate(d);
 }
 
+/**
+ * "hie" -> "Hie". "explain me this doc" -> "Explain me this doc".
+ *
+ * Titles a founder typed are stored EXACTLY as typed -- no forced casing at
+ * the API layer, so nobody's own capitalisation is ever silently overwritten
+ * and the value they edit in a rename box is the value they saved. This is a
+ * display concern only.
+ *
+ * It matters most in lists. A column of left-aligned rows all starting
+ * lowercase ("hie", "heo", "hello there") reads as broken rather than
+ * informal, and in Ally Chat's history those titles are taken from the
+ * founder's first message, which is exactly the text least likely to have
+ * been capitalised.
+ *
+ * Only the first character, deliberately: title-casing every word would
+ * mangle names, acronyms and the founder's own emphasis ("explain MY DNA" is
+ * not "Explain My Dna"). Non-letters are left alone -- a title starting with
+ * a digit or an emoji is returned unchanged rather than mysteriously
+ * reformatted.
+ *
+ * Was a private copy in PlanYourDay.jsx; Ally Chat's history, the Compass
+ * card and the chat header all needed the same thing, which is what made it
+ * shared rather than a fourth copy.
+ */
+export function displayTitle(title) {
+  if (!title) return title;
+  return title.charAt(0).toUpperCase() + title.slice(1);
+}
+
 export function clamp(v, min, max) {
   return Math.min(Math.max(v, min), max);
 }

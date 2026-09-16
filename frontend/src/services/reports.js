@@ -183,8 +183,25 @@ export function factList(facts) {
                           v !== null && v !== undefined && v !== '' &&
                           !(Array.isArray(v) && v.length === 0))
     .map(([key, value]) => ({
+      /* The raw key, so a caller can look this fact up in a sibling map that is
+         keyed by dimension code -- `_summaries` is keyed "core_values", and the
+         label is "Core values", which is not the same string. */
+      key,
       label: key.replace(/_/g, ' ').replace(/^./, c => c.toUpperCase()),
       value: readable(value),
+      /* THE SAME FACT, WITH ITS SEPARATE ANSWERS STILL SEPARATE.
+         Most Founder DNA dimensions arrive as a LIST -- up to three of the
+         founder's own answers to that dimension (see
+         reasoning/engines/founder_dna_extras.py, which caps each at three).
+         `value` flattens them with ", ", which is right for a one-line
+         summary and wrong for a card: two unrelated narrative answers joined
+         by a comma read as one run-on sentence ("Gather everything first, The
+         most recent one was deciding which language..."), and the boundary
+         the founder actually wrote is gone.
+         `items` keeps that boundary so a caller can render one bullet per
+         answer. A single-string fact is a one-item list, so callers do not
+         need to branch. */
+      items: (Array.isArray(value) ? value : [value]).map(readable).filter(Boolean),
     }))
     .filter(f => f.value !== '');
 }

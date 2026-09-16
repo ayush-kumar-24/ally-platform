@@ -385,6 +385,18 @@ class ReportNarrativeGenerator:
                 slots["communication_preference"] = facts["communication_preference"] = list(p.communication_preference)
             for dimension_code, answers in p.phase2_dimensions.items():
                 slots[dimension_code] = facts[dimension_code] = list(answers)
+            # The card previews, under ONE underscore-prefixed key rather than
+            # one key per dimension: factList() on the frontend turns every
+            # non-underscore key into a card of its own, so "core_values" and
+            # "core_values_summary" would render as two dimensions, one of them
+            # a summary of the other.
+            summaries = {
+                code: list(bullets)
+                for code, bullets in p.dimension_summaries.items()
+                if code in facts and bullets
+            }
+            if summaries:
+                facts["_summaries"] = summaries
             return slots, facts
 
         if key == "psychological_note":

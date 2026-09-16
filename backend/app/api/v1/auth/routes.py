@@ -162,6 +162,19 @@ def start_session(
     ip = request.client.host if request.client else "0.0.0.0"
     founder, created, waitlisted = ensure_founder_or_waitlist(identity, db, ip_address=ip)
 
+    # Ally's own JWT must use the canonical founder user_id, not necessarily
+    # the upstream provider subject. For migrated Cognito users the Cognito
+    # sub is new, while founder.user_id intentionally remains the historical
+    # Supabase UUID so all existing Ally data stays attached.
+    session_identity = identity
+    if founder is not None:
+        session_identity = AuthUser(
+            id=str(founder.user_id),
+            email=founder.email or identity.email,
+            provider=identity.provider,
+            claims=identity.claims,
+        )
+
     # Record the device and, if we have not seen it before, tell the founder.
     # `login_notifications` was a setting with no consumer -- default on, and no
     # sign-in email ever sent -- which is why help answer 253 currently says an
@@ -169,7 +182,7 @@ def start_session(
     # answer's replacement true. Never raises; a sign-in must not depend on it.
     note_sign_in(db, founder, ip=ip, user_agent=request.headers.get("user-agent"))
 
-    pair, refresh_token = _token_pair(identity)
+    pair, refresh_token = _token_pair(session_identity)
     _set_refresh_cookie(response, refresh_token)
     return SessionResponse(
         **pair.model_dump(),
@@ -179,7 +192,7 @@ def start_session(
         # the row this call had just loaded. The frontend happened to survive
         # that by re-fetching /profile; anything trusting this response did not.
         founder=IdentityOut(
-            id=identity.id,
+            id=session_identity.id,
             email=(founder.email if founder is not None else None) or identity.email,
             provider=identity.provider,
         ),

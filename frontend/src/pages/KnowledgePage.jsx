@@ -30,6 +30,7 @@
 import { useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { KNOWLEDGE_SECTIONS } from '../data/knowledge';
+import COVERS from '../data/covers.json';
 
 function ResourceCard({ item }) {
   /* An entry with a link opens it; one without is still worth showing. Not
@@ -40,9 +41,42 @@ function ResourceCard({ item }) {
     ? { href: item.url, target: '_blank', rel: 'noopener noreferrer' }
     : {};
 
+  /* The show's artwork, if we have it for this id. See data/covers.json and
+     scripts/fetch-podcast-art.mjs.
+
+     HOT-LINKED, NOT HOSTED, on exactly the same footing as the book covers
+     below: Apple publishes these URLs for third parties to display, so
+     pointing at their CDN is the ordinary posture and copying the art into
+     our own bucket would be a different one.
+
+     ANY FAILURE FALLS BACK TO THE CARD AS IT IS TODAY. A missing entry
+     renders nothing, and an entry whose image 404s or is blocked hides itself
+     onError -- a broken-image glyph looks like a bug, no picture just looks
+     like a card. Resources in the other sections have no ids in this file, so
+     they are untouched. */
+  const art = COVERS[item.id];
+
   return (
     <Wrapper className={`fw-card${item.url ? ' fw-card-link' : ''}`} {...linkProps}>
-      <h3>{item.title}</h3>
+      {/* Artwork and title on one row. Square and small, because it is the
+          SHOW's cover on an EPISODE's card -- a full-width banner would claim
+          the picture is of this episode, and thirty cards all carrying the
+          same ten images would read as a wall of logos. */}
+      <div className={`fw-card-head${art ? ' has-art' : ''}`}>
+        {art && (
+          <img
+            className="fw-art"
+            src={art}
+            alt=""
+            width="56"
+            height="56"
+            loading="lazy"
+            referrerPolicy="no-referrer"
+            onError={(e) => { e.currentTarget.style.display = 'none'; }}
+          />
+        )}
+        <h3>{item.title}</h3>
+      </div>
       {item.why && <p className="fw-tagline">{item.why}</p>}
 
       {(item.by || item.when || item.length || item.forWhen) && (
@@ -123,6 +157,22 @@ function TitleTile({ item }) {
     </span>
   );
 
+  /* The cover, if we have one for this id. See data/covers.json and the
+     script that fills it.
+
+     HOT-LINKED, NOT HOSTED. Cover art is copyrighted; Open Library publishes
+     these for third parties to display, which is what makes pointing at their
+     CDN the ordinary posture and copying 128 covers into our own bucket a
+     different one. This file already refuses to reproduce anything from
+     INSIDE the books for the same family of reasons.
+
+     ANY FAILURE FALLS BACK TO THE TILE AS IT IS TODAY. Coverage will never be
+     complete -- several of these are Indian editions nobody has scanned -- so
+     a missing entry renders nothing at all, and an entry whose image 404s or
+     is blocked hides itself onError. A broken-image glyph in a reading list
+     looks like a bug; no picture just looks like a card. */
+  const cover = COVERS[item.id];
+
   return (
     <a
       className="wt-tile"
@@ -137,8 +187,28 @@ function TitleTile({ item }) {
       </span>
 
       <span className="wt-pop">
-        <span className="wt-name">{item.title}</span>
-        {meta}
+        {/* Title and cover together on one row: a portrait cover above a short
+            panel would push "Look it up" off the bottom on the tiles that
+            carry `care` as well. Width and height are fixed so the panel does
+            not jump when the image lands. */}
+        <span className={`wt-pop-head${cover ? ' has-cover' : ''}`}>
+          {cover && (
+            <img
+              className="wt-cover"
+              src={cover}
+              alt=""
+              width="84"
+              height="126"
+              loading="lazy"
+              referrerPolicy="no-referrer"
+              onError={(e) => { e.currentTarget.style.display = 'none'; }}
+            />
+          )}
+          <span className="wt-pop-title">
+            <span className="wt-name">{item.title}</span>
+            {meta}
+          </span>
+        </span>
 
         {item.why && <span className="wt-why">{item.why}</span>}
 

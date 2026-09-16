@@ -25,7 +25,7 @@ import { post, ApiError } from '../services/api';
 // define its own with a 17:00 afternoon cutoff while everywhere else used 18:00,
 // so between 5 and 6pm the dashboard said "Good afternoon" and this said
 // "Good evening" -- the exact bug greetingNow's docstring was written to end.
-import { greetingNow } from '../utils/helpers';
+import { displayTitle, greetingNow } from '../utils/helpers';
 import { useVoiceInput } from '../hooks/useVoiceInput';
 import useAutoScroll from '../hooks/useAutoScroll';
 import VoiceBars from '../components/VoiceBars';
@@ -396,7 +396,7 @@ export default function AllyChat() {
     // Deliberately a confirm: this is the one destructive action in the chat,
     // it takes a thread out of the founder's history for good, and there is no
     // undo anywhere in this UI to fall back on.
-    if (!window.confirm(`Delete "${conv.title || 'this conversation'}"? This can't be undone.`)) return;
+    if (!window.confirm(`Delete "${displayTitle(conv.title) || 'this conversation'}"? This can't be undone.`)) return;
     const id = conv.conversation_id;
     const snapshot = conversations;
     setConversations(prev => prev.filter(c => c.conversation_id !== id));
@@ -875,7 +875,13 @@ export default function AllyChat() {
                     <div className="ai-body">
                       {/* createConversation() with no title leaves this null, which
                           rendered a blank row you could click but not identify. */}
-                      <div className="ai-t">{conv.title || 'Untitled conversation'}</div>
+                      {/* displayTitle, not the raw value: these titles come
+                          from the founder's first message, which is the text
+                          least likely to have been capitalised -- a column of
+                          rows all starting lowercase reads as broken rather
+                          than informal. Display only; the rename box below
+                          still edits exactly what was stored. */}
+                      <div className="ai-t">{displayTitle(conv.title) || 'Untitled conversation'}</div>
                       <div className="ai-w">{conv.message_count ?? 0} msgs</div>
                     </div>
                     {/* A dot, not the number. The count is one per assistant
@@ -889,7 +895,7 @@ export default function AllyChat() {
                   <button
                     className="ac-more"
                     type="button"
-                    aria-label={`Options for ${conv.title || 'this conversation'}`}
+                    aria-label={`Options for ${displayTitle(conv.title) || 'this conversation'}`}
                     aria-expanded={menuFor === conv.conversation_id}
                     onClick={() => setMenuFor(m => (m === conv.conversation_id ? null : conv.conversation_id))}
                   >
@@ -928,7 +934,7 @@ export default function AllyChat() {
             <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg>
           </button>
           <div className="ac-ttl">
-            <div className="t">{isEmpty ? 'New conversation' : (conversations.find(c => c.conversation_id === activeConv)?.title || 'Conversation')}</div>
+            <div className="t">{isEmpty ? 'New conversation' : (displayTitle(conversations.find(c => c.conversation_id === activeConv)?.title) || 'Conversation')}</div>
             <div className="s">General consultation · always on</div>
           </div>
           <button className="ac-barnew" type="button" aria-label="Start a new conversation" onClick={startNew}>

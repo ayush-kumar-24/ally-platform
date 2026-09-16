@@ -96,17 +96,36 @@
 .compass-step .cst-body{flex:1;min-width:0}
 .compass-step .cst-body p{font-size:14px;color:var(--ink);margin:0 0 12px;line-height:1.55}
 
-/* Loop diagram */
+/* Loop diagram
+
+   ONE COLOUR FOR TWELVE NODES. They used to come in three: white for the
+   founder's own steps, mint for Ally's, forest for the twelfth. Read as a
+   grid it looked like three kinds of thing, when all twelve are the same
+   kind -- one step of one loop, each a link to the page that owns it. The
+   light green is the mint the Ally steps already used (#EFFAF4), so this
+   standardises on a shade already in the product rather than introducing
+   one.
+
+   What distinguishes a node now is hover, and it distinguishes the one the
+   founder is actually pointing at rather than a category they cannot act
+   on. :focus-visible carries the same treatment -- these are real buttons
+   and a keyboard user lands on them, so a hover-only state would leave
+   them with no idea where they are. */
 .compass-loop{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
 .compass-loop-node{
-  text-align:left;padding:14px 14px 14px 16px;border-radius:10px;background:#fff;border:1px solid var(--bd);
+  text-align:left;padding:14px 14px 14px 16px;border-radius:10px;
+  background:#EFFAF4;border:1px solid rgba(16,185,129,.28);
   font-size:12.5px;color:var(--ink);transition:.2s var(--ease)
 }
 .compass-loop-node b{display:block;font-family:var(--body);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted-2);margin-bottom:5px}
-.compass-loop-node.is-you{background:var(--forest);border-color:var(--forest);color:var(--on-dark)}
-.compass-loop-node.is-you b{color:var(--on-dark-muted)}
-.compass-loop-node.is-ai{background:#EFFAF4;border-color:rgba(16,185,129,.28)}
-.compass-loop-node:hover{transform:translateY(-2px);box-shadow:0 1px 2px rgba(15,42,32,.04),0 14px 34px -22px rgba(15,42,32,.4)}
+.compass-loop-node:hover,.compass-loop-node:focus-visible{
+  background:var(--forest);border-color:var(--forest);color:var(--on-dark);
+  transform:translateY(-2px);
+  box-shadow:0 1px 2px rgba(15,42,32,.04),0 14px 34px -22px rgba(15,42,32,.4)
+}
+/* The eyebrow ("06 · Ally") has its own muted colour, so it does not follow
+   the parent's to on-dark and would sit at 2.46:1 on forest without this. */
+.compass-loop-node:hover b,.compass-loop-node:focus-visible b{color:var(--on-dark-muted)}
 @media(max-width:900px){.compass-loop{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:560px){.compass-loop{grid-template-columns:1fr}}
 

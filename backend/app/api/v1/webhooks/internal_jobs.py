@@ -277,12 +277,32 @@ def send_task_reminders(
     runs in stub mode until then, logging instead of sending. The response
     reports `email_configured` so a scheduler's logs make that obvious rather
     than showing a cheerful zero.
+
+    THE SAME COUNTS ARE ALSO LOGGED, not just returned. EventBridge Scheduler
+    does not record a target's response body anywhere, so returning these
+    numbers told the scheduler nothing it could alarm on -- a run that sent
+    nothing and a run that dropped forty reminders as stale both looked like
+    one successful invocation. The log line below is what CloudWatch metric
+    filters read, and the two alarms that matter hang off it:
+
+      * `stale` above zero for any sustained period -- reminders are coming
+        due faster than this endpoint is called, i.e. the schedule is not
+        keeping up and founders are getting silence.
+      * `email_configured` false -- EMAIL_HOST is unset on the backend, so no
+        email can go out however often this runs.
+
+    JSONFormatter promotes every `extra` key to a top-level field (see
+    core/logger.py), so each count lands as its own filterable JSON field
+    rather than inside a formatted string. Keys must therefore stay clear of
+    the reserved LogRecord attribute names -- `sent`, `stale` and the rest are,
+    and logging would raise on a collision rather than fail quietly.
     """
 
     from app.services.task_reminders import send_due_reminders
 
-    result = send_due_reminders(db)
-    return {**result, "email_configured": settings.email_enabled}
+    result = {**send_due_reminders(db), "email_configured": settings.email_enabled}
+    logger.info("task reminder job complete", extra=result)
+    return result
 
 
 @router.post(

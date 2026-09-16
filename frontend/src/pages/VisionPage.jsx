@@ -7,7 +7,7 @@ import {
 } from '../services/vision';
 import { DnaError, DnaLoading } from '../components/DnaState';
 import Modal from '../components/Modal';
-import { IconAnchor, IconAward, IconChat, IconCheck, IconClock, IconDollar, IconEdit, IconPlus, IconTrendingUp, IconUsers } from '../utils/icons';
+import { IconAnchor, IconAward, IconChat, IconCheck, IconClock, IconDollar, IconEdit, IconPlus, IconPrinter, IconTrendingUp, IconUsers } from '../utils/icons';
 
 // Purely decorative -- which icon marks which territory. Not a stand-in for
 // data (there is none until the founder writes their own vision), just a
@@ -23,7 +23,7 @@ const TERRITORY_ICON = {
 
 const EMPTY_TERRITORY = { statement: '', tag1: '', tag2: '' };
 
-function TerritoryCard({ territory, data, onEdit, onTalk, onToggle, busy }) {
+function TerritoryCard({ territory, data, onEdit, onTalk, onToggle, onPrint, busy }) {
   const isEmpty = !data.statement.trim();
   const done = Boolean(data.completedAt);
   const Icon = TERRITORY_ICON[territory.key];
@@ -46,9 +46,10 @@ function TerritoryCard({ territory, data, onEdit, onTalk, onToggle, busy }) {
         ) : (
           <>
             {/* Above the sentence, not below it: the picture is what the
-                founder is aiming at and the words are the caption. Only ever
-                on a written vision -- there is no image without a statement
-                to hang it on. */}
+                founder is aiming at and the words are the caption. A card is
+                only rendered here once there IS a statement, so this never
+                shows a picture with nothing under it -- which is also why the
+                editor uploads a chosen file only after the words are saved. */}
             {data.imageUrl && (
               <div className="vt-image">
                 <img src={data.imageUrl} alt="" loading="lazy" />
@@ -81,6 +82,15 @@ function TerritoryCard({ territory, data, onEdit, onTalk, onToggle, busy }) {
             <IconCheck /> {done ? 'Reached' : 'Mark reached'}
           </button>
         )}
+        {/* Same rule as "Mark reached" above: only on a written vision. There
+            is nothing to print of a placeholder, and offering it would produce
+            a sheet with the prompt question on it and no answer. */}
+        {!isEmpty && (
+          <button type="button" className="vt-print" onClick={() => onPrint(territory, data)}
+                  title="Print this vision">
+            <IconPrinter /> Print
+          </button>
+        )}
       </div>
     </div>
   );
@@ -93,17 +103,53 @@ function TerritoryEditor({ territory, data, onSave, onUploadImage, onRemoveImage
   const [saving, setSaving] = useState(false);
   const [busyImage, setBusyImage] = useState(false);
   const [imageError, setImageError] = useState(null);
+  /* A picture chosen BEFORE this territory exists server-side. The upload
+     endpoint refuses to hang an image on a vision nobody has written -- and
+     rightly: creating an empty statement row to hold one would put a blank
+     card on the founder's page. So the file waits here and goes up the moment
+     Save has created the row, in the same press.
+
+     This used to be a disabled button reading "Save this vision first, then
+     add a picture" -- honest about the constraint, but it made writing a
+     vision with a picture two trips through the modal. Words and picture are
+     now one form: fill in either, both, or neither. */
+  const [pendingFile, setPendingFile] = useState(null);
+  const [pendingPreview, setPendingPreview] = useState(null);
   const fileRef = useRef(null);
 
-  // The endpoint refuses to hang a picture on a vision that does not exist, so
-  // a founder writing this territory for the first time has nothing to attach
-  // to yet. Said plainly rather than by a control that 404s when pressed.
+  // Whether there is a saved statement to attach an upload to RIGHT NOW --
+  // the server's rule, not a rule about what the founder may fill in.
   const written = Boolean(data.statement.trim());
+
+  /* Object URLs are held by the browser until revoked, so picking three
+     pictures in one sitting would leak all three.
+
+     Revoking lives HERE and nowhere else, keyed on the URL itself: the cleanup
+     runs both when the value is replaced and when the modal unmounts, which is
+     every case. Revoking inside the setState updater instead -- the obvious
+     place -- would put a side effect in a function React is free to call
+     twice, and in StrictMode it does, creating two URLs and storing one. */
+  useEffect(() => () => { if (pendingPreview) URL.revokeObjectURL(pendingPreview); },
+            [pendingPreview]);
+
+  const clearPending = () => {
+    setPendingPreview(null);
+    setPendingFile(null);
+  };
 
   const pick = async (file) => {
     setImageError(null);
     const problem = imageProblem(file);
     if (problem) { setImageError(problem); return; }
+
+    if (!written) {
+      // Nothing to attach to yet. Hold it, show it, upload it on Save.
+      setPendingPreview(URL.createObjectURL(file));
+      setPendingFile(file);
+      if (fileRef.current) fileRef.current.value = '';
+      return;
+    }
+
     setBusyImage(true);
     try {
       await onUploadImage(file);
@@ -117,6 +163,8 @@ function TerritoryEditor({ territory, data, onSave, onUploadImage, onRemoveImage
       if (fileRef.current) fileRef.current.value = '';
     }
   };
+
+  const shownImage = data.imageUrl || pendingPreview;
 
   return (
     <Modal open onClose={onClose} title={territory.label}>
@@ -149,35 +197,39 @@ function TerritoryEditor({ territory, data, onSave, onUploadImage, onRemoveImage
             unfinished without one. */}
         <div className="vt-image-field">
           <span className="vt-field-label">Picture (optional)</span>
-          {data.imageUrl ? (
+          {shownImage ? (
             <div className="vt-image-preview">
-              <img src={data.imageUrl} alt="" />
+              <img src={shownImage} alt="" />
               <div className="vt-image-buttons">
                 <button type="button" className="btn btn-ghost btn-sm"
-                        onClick={() => fileRef.current?.click()} disabled={busyImage}>
+                        onClick={() => fileRef.current?.click()} disabled={busyImage || saving}>
                   {busyImage ? 'Uploading…' : 'Replace'}
                 </button>
                 <button type="button" className="btn btn-ghost btn-sm vt-image-remove"
                         onClick={async () => {
                           setImageError(null);
+                          // A pending pick has never been uploaded, so there is
+                          // nothing on the server to remove -- just drop it.
+                          if (pendingFile) { clearPending(); return; }
                           setBusyImage(true);
                           try { await onRemoveImage(); }
                           catch { setImageError("Couldn't remove that. Try again."); }
                           finally { setBusyImage(false); }
                         }}
-                        disabled={busyImage}>
+                        disabled={busyImage || saving}>
                   Remove
                 </button>
               </div>
+              {pendingFile && (
+                <p className="vt-image-pending">Saved with your vision when you press Save.</p>
+              )}
             </div>
           ) : (
             <button type="button" className="vt-image-drop"
                     onClick={() => fileRef.current?.click()}
-                    disabled={!written || busyImage}>
+                    disabled={busyImage || saving}>
               <IconPlus />
-              {!written
-                ? 'Save this vision first, then add a picture'
-                : busyImage ? 'Uploading…' : 'Add a picture'}
+              {busyImage ? 'Uploading…' : 'Add a picture'}
             </button>
           )}
           <input
@@ -200,6 +252,22 @@ function TerritoryEditor({ territory, data, onSave, onUploadImage, onRemoveImage
               setSaving(true);
               try {
                 await onSave({ statement: statement.trim(), tag1: tag1.trim(), tag2: tag2.trim() });
+                // The row exists now, so a picture chosen before it did has
+                // somewhere to go. Second, not combined: the words are the
+                // vision, and they must not be lost to a failed upload.
+                if (pendingFile) {
+                  try {
+                    await onUploadImage(pendingFile);
+                    clearPending();
+                  } catch {
+                    // Deliberately NOT a toast that disappears: the words are
+                    // safely saved and only the picture failed, so the modal
+                    // stays open saying exactly that, with the file still
+                    // chosen so Save retries just the upload.
+                    setImageError("Your vision is saved, but the picture didn't upload. Press Save to try again.");
+                    return;
+                  }
+                }
                 onClose();
               } catch {
                 // Save failed -- onSave() already surfaced a toast. Leave the
@@ -217,12 +285,54 @@ function TerritoryEditor({ territory, data, onSave, onUploadImage, onRemoveImage
   );
 }
 
+/* What actually goes on the paper.
+
+   NOT the card. The card is a tile in a six-up grid with an edit affordance,
+   a "talk to Ally" button and a reached toggle -- controls that mean nothing
+   printed. A founder printing one vision wants the thing itself, big: the
+   picture, the sentence, and what they said would prove it.
+
+   Rendered into the page (hidden on screen by the stylesheet) rather than
+   opened in a new window: a popup would be blocked as often as not, and would
+   lose the app's fonts and stylesheet with it. */
+function VisionPrintSheet({ territory, data }) {
+  const Icon = TERRITORY_ICON[territory.key];
+  const reached = data.completedAt
+    ? new Date(data.completedAt).toLocaleDateString(undefined,
+        { day: 'numeric', month: 'long', year: 'numeric' })
+    : null;
+  return (
+    <div className="vision-print-sheet" aria-hidden="true">
+      <div className="vps-head">
+        <span className="vps-ic"><Icon /></span>
+        <span className="vps-label">{territory.label.toUpperCase()}</span>
+      </div>
+      {data.imageUrl && (
+        <div className="vps-image"><img src={data.imageUrl} alt="" /></div>
+      )}
+      <p className="vps-statement">{data.statement}</p>
+      {(data.tag1 || data.tag2) && (
+        <div className="vps-tags">
+          {data.tag1 && <span className="vps-tag">{data.tag1}</span>}
+          {data.tag2 && <span className="vps-tag muted">{data.tag2}</span>}
+        </div>
+      )}
+      {reached && <p className="vps-reached">Reached on {reached}</p>}
+      <div className="vps-foot">My Vision Board &middot; Ally by GoXL</div>
+    </div>
+  );
+}
+
 export default function VisionPage() {
   const navigate = useNavigate();
   const { showToast, setHasVision } = useApp();
   const [state, setState] = useState({ status: 'loading', vision: null, error: null });
   const [editingKey, setEditingKey] = useState(null);
   const [reaching, setReaching] = useState(null);
+  /* The one vision currently being printed, or null. Held in state rather
+     than built imperatively so the sheet is ordinary React that the app's own
+     stylesheet reaches. */
+  const [printing, setPrinting] = useState(null);
 
   const load = () => {
     setState((s) => ({ ...s, status: 'loading', error: null }));
@@ -241,6 +351,69 @@ export default function VisionPage() {
     setState((s) => ({ ...s, vision: { ...s.vision, territories: { ...s.vision.territories, [key]: saved } } }));
     return saved;
   };
+
+  const printVision = (territory, data) => setPrinting({ territory, data });
+
+  /* WAIT FOR THE PICTURE BEFORE OPENING THE DIALOG.
+
+     window.print() captures the page as it stands at that instant. The card's
+     <img> is loading="lazy" and the print sheet's copy is freshly mounted, so
+     firing immediately prints a vision with a blank space where the founder's
+     picture should be -- which is the one thing they opened this to get.
+
+     decode() resolves when the image is actually painted, not merely fetched.
+     It is raced against a timeout because a picture that will not load must
+     still produce a printout of the words rather than hanging on a dialog
+     that never opens. */
+  useEffect(() => {
+    if (!printing) return undefined;
+
+    let cancelled = false;
+    const done = () => {
+      document.body.classList.remove('vp-printing');
+      setPrinting(null);
+    };
+
+    /* Cleared on `afterprint`, NOT on the line after window.print().
+
+       print() blocks until the dialog closes in Chrome and Safari, so clearing
+       straight after it looks right there -- but Firefox's print preview
+       returns immediately, and clearing then unmounts the sheet while the
+       preview is still capturing it, printing a blank page.
+
+       A long fallback covers the browsers that never fire afterprint at all.
+       Leaving the flag set costs nothing on screen: every rule that hides the
+       page lives inside @media print, so body.vp-printing is inert until
+       something actually prints. */
+    window.addEventListener('afterprint', done, { once: true });
+    const fallback = setTimeout(done, 60000);
+
+    const open = () => {
+      if (cancelled) return;
+      document.body.classList.add('vp-printing');
+      // A frame so the class is applied and the sheet laid out before capture.
+      requestAnimationFrame(() => { if (!cancelled) window.print(); });
+    };
+
+    const teardown = () => {
+      cancelled = true;
+      clearTimeout(fallback);
+      window.removeEventListener('afterprint', done);
+      document.body.classList.remove('vp-printing');
+    };
+
+    const url = printing.data.imageUrl;
+    if (!url) { open(); return teardown; }
+
+    const img = new Image();
+    img.src = url;
+    Promise.race([
+      img.decode().catch(() => {}),
+      new Promise((resolve) => setTimeout(resolve, 3000)),
+    ]).then(open);
+
+    return teardown;
+  }, [printing]);
 
   const saveOneTerritory = async (key, value) => {
     try {
@@ -363,6 +536,10 @@ export default function VisionPage() {
         </div>
       </header>
 
+      {printing && (
+        <VisionPrintSheet territory={printing.territory} data={printing.data} />
+      )}
+
       <div className="vt-grid">
         {TERRITORIES.map((t) => (
           <TerritoryCard
@@ -372,6 +549,7 @@ export default function VisionPage() {
             onEdit={setEditingKey}
             onTalk={talkAboutTerritory}
             onToggle={toggleReached}
+            onPrint={printVision}
             busy={reaching === t.key}
           />
         ))}

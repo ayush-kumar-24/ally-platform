@@ -150,6 +150,13 @@ class ReportPayload:
     # 7th dimension later needs no change here, matching the same
     # no-rigid-schema choice already made for that engine.
     phase2_dimensions: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    #: `{dimension_code: (bullet, ...)}` -- a short preview of the founder's own
+    #: answers for that dimension, cached on the report by
+    #: reports/dna_summaries.py. Empty for a report nobody has opened since the
+    #: previews shipped, and for every dimension the model could not summarise;
+    #: the card falls back to the answers themselves, so absence is a plainer
+    #: page rather than a broken one.
+    dimension_summaries: dict[str, tuple[str, ...]] = field(default_factory=dict)
 
     # --- Current Problem (app/api/v1/current_problem/) ---
     # The founder's own words for what they think is wrong, captured BEFORE
@@ -299,6 +306,13 @@ def build_report_payload(db: Session, report) -> ReportPayload:
         for code, values in fd.items()
         if code in _PHASE2_DIMENSION_CODES and values
     }
+    _summaries = fd.get("_summaries")
+    dimension_summaries = {
+        code: tuple(str(b) for b in bullets if isinstance(b, str) and b.strip())
+        for code, bullets in (_summaries or {}).items()
+        if isinstance(bullets, list) and bullets
+    } if isinstance(_summaries, dict) else {}
+    dimension_summaries = {c: b for c, b in dimension_summaries.items() if b}
 
     # --- top root causes (detected_root_causes + labels) ---
     rows = db.execute(
@@ -364,6 +378,7 @@ def build_report_payload(db: Session, report) -> ReportPayload:
         strengths_blind_spots=strengths_blind_spots, stress_response=stress_response,
         communication_preference=communication_preference,
         phase2_dimensions=phase2_dimensions,
+        dimension_summaries=dimension_summaries,
         stated_symptom=stated_symptom, symptom_probes=symptom_probes,
         top_root_causes=top_root_causes,
         confirm_actions=_actions(report.confirm_actions),

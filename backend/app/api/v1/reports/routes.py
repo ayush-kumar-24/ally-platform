@@ -21,6 +21,7 @@ from app.api.v1.entitlement_gates import require_recommendations, require_report
 from app.core.container import container
 from app.plans.catalog import Feature
 from app.api.v1.reports.document import build_report_document
+from app.api.v1.reports.dna_summaries import ensure_dna_summaries
 from app.api.v1.reports.generator import ReportNarrative, ReportNarrativeGenerator
 from app.api.v1.reports.payload import build_report_payload
 from app.api.v1.reports.pdf_delivery import (
@@ -363,7 +364,12 @@ def full_report(
 @router.get("/{report_id}/founder-dna", response_model=SectionSlice)
 def founder_dna(report_id: int, founder: Founder = Depends(get_founder_record),
                       db: Session = Depends(get_db)) -> SectionSlice:
-    n = _build_narrative(db, _owned_report(db, founder, report_id))
+    report = _owned_report(db, founder, report_id)
+    # Fills a cache on the report the first time it is read, so the cards can
+    # preview each dimension in a few bullets instead of a wall of prose. Never
+    # raises and never changes what the founder said -- see dna_summaries.py.
+    ensure_dna_summaries(db, report)
+    n = _build_narrative(db, report)
     return SectionSlice(report_id=report_id, section=_section(n, "founder_dna"))
 
 

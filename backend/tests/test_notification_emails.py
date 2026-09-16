@@ -97,10 +97,14 @@ def test_the_same_notification_is_never_emailed_twice(run):
     assert len(run.sent) == 1
 
 
-def test_a_free_founder_gets_no_email(run):
-    """Pro-only: Feature.EMAIL_NOTIFICATIONS is in the advisor bundle."""
+def test_a_founder_whose_plan_lacks_the_feature_gets_no_email(run):
+    """The gate is Feature.EMAIL_NOTIFICATIONS, whatever tier carries it.
+
+    Was named for Free, which held while email was Pro-only; Free carries the
+    feature during the testing phase now, so the plan is faked rather than
+    named -- what is under test is the gate, not which tier is behind it."""
     row = Row()
-    counts = run.go([row], _founder(plan_type="free"), allowed=False)
+    counts = run.go([row], _founder(plan_type="basic"), allowed=False)
     assert counts["skipped_plan"] == 1 and run.sent == []
     # Still stamped: an unstamped row is re-examined on every run forever.
     assert row.sent_at is not None

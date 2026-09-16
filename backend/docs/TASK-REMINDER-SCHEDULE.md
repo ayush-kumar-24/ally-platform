@@ -110,6 +110,39 @@ Check these three things:
 **Alarm on:** any non-200 response, or `stale` above 0 for a sustained period.
 A 401 means the secret does not match. A 5xx means the API is unhealthy.
 
+### Alarming on the counts, not just the status code
+
+EventBridge Scheduler does not store a target's response body anywhere, so the
+JSON above is not something a CloudWatch alarm can reach. The same counts are
+therefore **logged** as well as returned. Every completed run emits one INFO
+line to the backend's log group:
+
+```json
+{"timestamp": "2026-09-15T09:55:37.113125+00:00", "level": "INFO",
+ "logger": "app", "message": "task reminder job complete",
+ "sent": 3, "in_app": 1, "skipped_pref": 0, "stale": 2,
+ "orphaned": 0, "failed": 0, "email_configured": true}
+```
+
+Each count is its own top-level JSON field, so metric filters read them
+directly — no parsing of a message string:
+
+| Alarm | Metric filter pattern | Fires when |
+|---|---|---|
+| Schedule not keeping up | `{ $.message = "task reminder job complete" && $.stale > 0 }` | sustained > 0 |
+| Email not configured | `{ $.message = "task reminder job complete" && $.email_configured IS FALSE }` | any datapoint |
+| Sends erroring | `{ $.message = "task reminder job complete" && $.failed > 0 }` | sustained > 0 |
+
+A run that sends nothing is the normal case and logs all zeroes, so the
+absence of this line is itself meaningful: it means the schedule is not firing
+at all. An alarm on `SampleCount < 1` over ~15 minutes catches that, and is the
+one thing none of the filters above can tell you.
+
+This line is covered by `tests/test_internal_jobs_task_reminder_logging.py`,
+including that the counts render as top-level JSON fields — a refactor that
+logged them inside a formatted message would keep every test green except that
+one, while silently breaking all three filters.
+
 ---
 
 ## What is already in place, and what this replaces
