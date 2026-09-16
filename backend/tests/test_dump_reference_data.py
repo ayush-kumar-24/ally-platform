@@ -148,6 +148,65 @@ def test_rows_are_ordered_by_primary_key():
     assert "indisprimary" in source
 
 
+def test_columns_are_ordered_canonically_not_physically():
+    """The column order in a dumped INSERT must be a function of the DATA, not
+    of how the target database happens to have been built.
+
+    `ordinal_position` is an accident of history: a column added by `alter
+    table` lands at the end, so a database built by replaying this repo's
+    migrations orders its columns differently from one where the same column
+    was added earlier by hand. Dumping in that order made `--check` report
+    eleven of twenty-three tables as drifted -- founder_stages, questions,
+    root_causes and the rest -- when every one was a pure permutation with not
+    a byte of data changed.
+
+    A drift check that fires when nothing has drifted gets ignored, and then it
+    is not a drift check. So: sort by name, and never by position.
+    """
+    source = _source()
+    assert "order by column_name" in source, (
+        "_columns must sort by name so two databases holding the same rows "
+        "dump the same bytes"
+    )
+    assert "order by ordinal_position" not in source, (
+        "ordinal_position is physical column order -- it differs between a "
+        "migration-built database and a hand-altered one and is not drift"
+    )
+
+
+def test_the_primary_key_leads_the_column_order():
+    """Canonical, and still readable: the key first, then the rest by name.
+
+    Every reference table has a single-column key, so this is exactly as
+    reproducible as pure alphabetical order while keeping each row's identity
+    at the front of the line -- which both a human reading a diff and
+    `test_the_pre_gate_questions_match_the_full_file`'s `values ('<id>'` parse
+    depend on.
+    """
+    source = _source()
+    assert "lead + [c for c in cols if c not in lead]" in source
+
+
+def test_every_dumped_file_leads_with_its_primary_key():
+    """The property the two tests above describe, asserted against the bytes
+    actually committed rather than against the source that wrote them."""
+    import re
+
+    for table, _ in REFERENCE_TABLES:
+        matches = list(REFERENCE_DIR.glob(f"[0-9][0-9]_{table}.sql"))
+        assert matches, f"no dump file for {table}"
+        first = next(
+            line for line in matches[0].read_text().splitlines()
+            if line.startswith("insert into")
+        )
+        cols = re.search(r'insert into "[^"]+" \(([^)]*)\)', first).group(1)
+        cols = [c.strip().strip('"') for c in cols.split(",")]
+        rest = cols[1:]
+        assert rest == sorted(rest), (
+            f"{table}: columns after the key are not in name order: {rest}"
+        )
+
+
 def test_the_embedding_column_never_reaches_the_sql():
     """It is excluded from the column list, so it is not in the INSERT at all
     -- not written as null, not written as a vector."""

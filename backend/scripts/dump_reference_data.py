@@ -119,12 +119,40 @@ _overlap = set(_names) & _FOUNDER_DATA
 assert not _overlap, f"founder data in the reference dump: {sorted(_overlap)}"
 
 
-def _columns(conn, sa, table: str) -> list[str]:
+def _columns(conn, sa, table: str, keys: list[str] | None = None) -> list[str]:
+    """The dumped columns in a CANONICAL order -- deliberately not the table's
+    own: primary key first, then the rest alphabetically.
+
+    Physical column order is an accident of history, not part of the data. A
+    column added by `alter table` lands at the end, so a database built by
+    replaying this repo's migrations orders its columns differently from one
+    where the same column was added years earlier by hand. Both hold identical
+    rows; only `ordinal_position` disagrees.
+
+    Ordering by position made `--check` report that difference as drift. Eleven
+    of twenty-three tables failed that way -- founder_stages, questions,
+    root_causes and the rest -- every one of them a pure permutation with not a
+    byte of data changed. A drift check that fires on eleven tables when
+    nothing has drifted is worse than no check at all: the first thing anyone
+    does with it is stop believing it.
+
+    A name-sorted order gives the same column list for any database holding the
+    same table, so the file becomes a function of the DATA alone.
+
+    The primary key is lifted to the front of that order rather than left to
+    fall wherever its name sorts. Every reference table here has a
+    single-column key, so "the key, then the rest by name" is just as
+    reproducible as pure alphabetical -- and it keeps each row's identity as
+    the first thing on the line, for both the human skimming a diff and the
+    `values ('<id>'` parse that the pre-gate consistency test does.
+    """
     rows = conn.execute(sa.text(
         "select column_name from information_schema.columns "
-        "where table_schema='public' and table_name=:t order by ordinal_position"
+        "where table_schema='public' and table_name=:t order by column_name"
     ), {"t": table}).scalars().all()
-    return [c for c in rows if c not in _SKIPPED_COLUMNS]
+    cols = [c for c in rows if c not in _SKIPPED_COLUMNS]
+    lead = [k for k in (keys or []) if k in cols]
+    return lead + [c for c in cols if c not in lead]
 
 
 def _key_columns(conn, sa, table: str) -> list[str]:
@@ -155,7 +183,10 @@ def insert_sql(conn, sa, table: str, cols: list[str], keys: list[str]) -> list[s
     type table.
 
     One formatter also means any two connections produce byte-identical output,
-    so `--check` compares data rather than whose Python wrote it.
+    so `--check` compares data rather than whose Python wrote it. `_columns`
+    carries the other half of that promise: the column ORDER is alphabetical,
+    so two databases holding the same rows dump the same bytes even when their
+    physical column order differs.
     """
     quoted = ", ".join(f'quote_nullable("{c}")' for c in cols)
     collist = ", ".join(f'"{c}"' for c in cols)
@@ -169,8 +200,9 @@ def insert_sql(conn, sa, table: str, cols: list[str], keys: list[str]) -> list[s
 
 
 def dump_table(conn, sa, table: str, note: str) -> tuple[str, int]:
-    cols = _columns(conn, sa, table)
-    keys = _key_columns(conn, sa, table) or cols[:1]
+    keys = _key_columns(conn, sa, table)
+    cols = _columns(conn, sa, table, keys)
+    keys = keys or cols[:1]
     statements = insert_sql(conn, sa, table, cols, keys)
     skipped = "embedding" in _columns_raw(conn, sa, table)
 

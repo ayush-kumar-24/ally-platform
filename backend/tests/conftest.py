@@ -1,8 +1,11 @@
 """Shared test fixtures.
 
-These tests are hermetic: they exercise the auth token machinery, which is pure
-identity/crypto and touches no tables. Provisioning is off, so /auth/session
-never writes. Nothing here mutates the database.
+The auth-token tests are hermetic: they exercise pure identity/crypto and touch
+no tables. Provisioning is off, so /auth/session never writes.
+
+Much of the rest of the suite does use the database, and expects `auth.users`
+to be there -- see `_auth_users_table`, which makes that expectation something
+a plain Postgres can satisfy rather than something only Supabase can.
 """
 
 import sys
@@ -24,6 +27,56 @@ from jose import jwt
 from app.core.auth import factory
 from app.core.config import settings
 from app.main import app
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _auth_users_table():
+    """Make sure `auth.users` exists, because forty test files insert into it
+    and not one of them creates it.
+
+    Supabase ships that table as part of GoTrue, so the suite has quietly
+    depended on being pointed at a Supabase database since it was written.
+    Point it at a Postgres built by replaying `alembic/versions/` -- which is
+    what RESTORE.md produces, and what anyone gets who follows the README --
+    and ninety-one tests ERROR on `relation "auth.users" does not exist`
+    before a single assertion runs. They are not failures; they never got far
+    enough to fail. That is the worst shape for a test to be in, because a
+    hundred-odd errors in the output is indistinguishable from a broken branch.
+
+    So: create it if it is missing, and leave it completely alone if it is
+    not. On Supabase this does nothing at all -- GoTrue's real table is
+    already there and is far richer than this one. Elsewhere it creates the
+    five columns the tests actually use, which is the whole of what they touch.
+
+    This is a TEST fixture and not a migration on purpose. `auth` is GoTrue's
+    schema; the application does not own it and must never ship a migration
+    that pretends to.
+    """
+    from sqlalchemy import text
+
+    from app.db.session import engine
+
+    if settings.ENVIRONMENT == "production":
+        # This fixture writes DDL. Nothing should ever run it at a database
+        # serving real founders, and refusing is cheaper than regretting.
+        pytest.exit("refusing to run the test suite against ENVIRONMENT=production")
+
+    with engine.begin() as conn:
+        exists = conn.execute(text(
+            "select to_regclass('auth.users') is not null"
+        )).scalar()
+        if exists:
+            return
+        conn.execute(text("create schema if not exists auth"))
+        conn.execute(text("""
+            create table if not exists auth.users (
+                id uuid primary key,
+                instance_id uuid,
+                aud varchar(255),
+                role varchar(255),
+                email varchar(255)
+            )
+        """))
 
 
 @pytest.fixture(autouse=True)

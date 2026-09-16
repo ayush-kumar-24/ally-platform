@@ -45,3 +45,9 @@ ally-platform-*.json
 .agents/
 .claude/skills/
 skills-lock.json
+
+# Written beside the reference dump by scripts/dump_reference_data.py --write.
+# Untracked on purpose: it carries a generated_at timestamp, so committing it
+# would produce a diff on every dump even when not one row has changed -- the
+# exact noise the dump is written to avoid.
+backend/data/reference/manifest.json
