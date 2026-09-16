@@ -40,6 +40,7 @@ import { dirname, resolve } from 'node:path';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const OUT = resolve(HERE, '../src/data/covers.json');
 const LOCAL_DIR = resolve(HERE, '../public/covers');
+const SHOW_DIR = resolve(LOCAL_DIR, 'shows');
 
 const SEARCH = 'https://itunes.apple.com/search';
 
@@ -128,15 +129,34 @@ async function artworkFor({ term, must }) {
   return hit ? hit.artworkUrl600 || hit.artworkUrl100 : null;
 }
 
-/* An image dropped into public/covers/<id>.<ext> wins over any lookup -- the
-   same escape hatch the book covers have, for a show Apple does not carry. */
+/* An image dropped in by hand wins over any lookup -- the same escape hatch
+   the book covers have, for a show Apple does not carry.
+
+   TWO PLACES, because a podcast has two natural ones. An image at
+   public/covers/<episode-id>.<ext> is for one episode; one at
+   public/covers/shows/<show-slug>.<ext> is for every episode of that show,
+   which is what you actually want when the whole feed is missing -- YC Root
+   Access is not on Apple at all, and its episodes should not each need their
+   own copy of the same picture. The episode wins where both exist. */
 const LOCAL_EXTS = ['jpg', 'jpeg', 'png', 'webp'];
-function localCover(id) {
+
+function localAt(dir, name, urlPrefix) {
   for (const ext of LOCAL_EXTS) {
-    if (existsSync(resolve(LOCAL_DIR, `${id}.${ext}`))) return `/covers/${id}.${ext}`;
+    if (existsSync(resolve(dir, `${name}.${ext}`))) return `${urlPrefix}/${name}.${ext}`;
   }
   return null;
 }
+
+const localCover = (id) => localAt(LOCAL_DIR, id, '/covers');
+
+/* The filename for a show. "YC Root Access" -> "yc-root-access", so the folder
+   is readable and nobody has to guess at capitalisation or spaces. */
+export const showSlug = (show) => (show || '')
+  .toLowerCase()
+  .replace(/[^a-z0-9]+/g, '-')
+  .replace(/^-+|-+$/g, '');
+
+const localShowCover = (show) => localAt(SHOW_DIR, showSlug(show), '/covers/shows');
 
 // Importable for the unit test without firing thirty requests at Apple.
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
@@ -157,9 +177,20 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       writeFileSync(OUT, `${JSON.stringify(existing, null, 2)}\n`);
       continue;
     }
+    /* Checked before the skip, like the episode-level one: an image dropped in
+       by hand should replace a lookup result on the next ordinary run, without
+       anyone having to remember --refresh. */
+    const show = showFrom(item.by);
+    const byHand = localShowCover(show);
+    if (byHand) {
+      if (existing[item.id] !== byHand) { existing[item.id] = byHand; found += 1; }
+      else { skipped += 1; }
+      writeFileSync(OUT, `${JSON.stringify(existing, null, 2)}\n`);
+      continue;
+    }
+
     if (existing[item.id]) { skipped += 1; continue; }
 
-    const show = showFrom(item.by);
     const spec = SHOWS[show];
     if (!spec) {
       missed += 1;

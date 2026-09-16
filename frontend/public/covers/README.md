@@ -13,6 +13,9 @@ podcast Apple does not carry.
 3. Re-run the lookup — `node scripts/fetch-covers.mjs` for a book,
    `node scripts/fetch-podcast-art.mjs` for a podcast episode.
 
+For a podcast whose whole feed is missing, put one image in `shows/` instead
+of one per episode — see the README in there.
+
 Both scripts check this folder **before** the catalogue, so a file dropped in
 here wins over anything Open Library returns — and it is picked up on an
 ordinary run, without `--refresh`. It then writes `/covers/<id>.jpg` into
