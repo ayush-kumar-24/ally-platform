@@ -191,6 +191,18 @@ class Settings(BaseSettings):
     # same seeded catalogue and falls back to the lexical engine on any failure.
     ARCHETYPE_LLM: bool = False
 
+    # Short bullet previews of the founder's own Founder DNA answers, shown on
+    # the cards with the whole answer behind "Read more". Off => the cards show
+    # the answers themselves, which is today's behaviour and is a wall of prose
+    # for any founder who wrote at length.
+    #
+    # Worth a flag because it is the only LLM call on a page that otherwise just
+    # reads stored text. It is cheap -- ONE call per report, not per view, and
+    # not per dimension: the result is cached on the report (see
+    # reports/dna_summaries.py), so a founder who opens the page fifty times
+    # pays for it once. It fails to the un-summarised cards on any error.
+    FOUNDER_DNA_SUMMARY_LLM: bool = False
+
     # Infer the founder's lifecycle stage from their diagnosis answers when
     # founders.stage_id is NULL. Off => the stage stays unknown, which is
     # today's behaviour and is NOT neutral: DefaultInterventionRelevance reads

@@ -671,6 +671,14 @@ def _facts_html(facts: Mapping[str, Any], skip: Sequence[str] = ()) -> str:
         # would otherwise fall through to the number formatting.
         if isinstance(value, bool):
             continue
+        # An underscore prefix already means "for the machinery, not the
+        # founder" everywhere else that reads facts -- the generator's own
+        # bookkeeping keys use it and the frontend's factList() skips them. The
+        # document is the third reader and used to be the one that printed
+        # them: `_summaries`, the card previews, would arrive here as a row
+        # labelled " Summaries" holding a dict of every dimension again.
+        if str(key).startswith("_"):
+            continue
         if key in skip or value in (None, "", [], {}):
             continue
         rendered = _fact_value(value)

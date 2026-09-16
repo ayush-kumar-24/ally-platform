@@ -371,6 +371,11 @@
   overflow: hidden;
 }
 
+/* The answers in full, once "Read more" is pressed: one paragraph each, spaced
+   so two long ones do not read as a single run of text. */
+.fd-answers { display: flex; flex-direction: column; gap: 12px; margin-top: 6px; }
+.fd-answers .fd-card-desc { margin: 0; }
+
 .fd-more {
   align-self: flex-start;
   margin-top: 8px;

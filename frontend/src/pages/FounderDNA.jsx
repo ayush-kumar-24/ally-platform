@@ -74,6 +74,13 @@ function FounderDNAView({ section, report }) {
   // internal keys are inside the nested object so they never leak here, and
   // excludes origin/vision/_origin_text/_vision_text explicitly since those
   // get their own dedicated cards instead of the generic grid.
+  /* The card previews, keyed by dimension code. Written once per report by the
+     backend and cached on it (reports/dna_summaries.py), so opening this page
+     costs no model call. Absent for a report generated before they shipped and
+     for any dimension the model could not summarise -- the card then shows the
+     answers themselves. */
+  const summaries = facts._summaries || {};
+
   const operateFacts = factList(facts).filter(
     (f) => !['Archetype', 'Origin', 'Vision', ' origin text', ' vision text']
       .some((k) => f.label.toLowerCase() === k.toLowerCase().trim())
@@ -153,7 +160,7 @@ function FounderDNAView({ section, report }) {
                       is scannable at rest and every answer is still visible;
                       "Read more" opens them in full. Nothing is summarised,
                       rewritten or cut -- not here and not in storage. */}
-                  <ClampedList items={f.items} lines={2} />
+                  <ClampedList items={f.items} summary={summaries[f.key]} lines={2} />
                 </div>
               ))}
             </div>

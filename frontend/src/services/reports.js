@@ -183,6 +183,10 @@ export function factList(facts) {
                           v !== null && v !== undefined && v !== '' &&
                           !(Array.isArray(v) && v.length === 0))
     .map(([key, value]) => ({
+      /* The raw key, so a caller can look this fact up in a sibling map that is
+         keyed by dimension code -- `_summaries` is keyed "core_values", and the
+         label is "Core values", which is not the same string. */
+      key,
       label: key.replace(/_/g, ' ').replace(/^./, c => c.toUpperCase()),
       value: readable(value),
       /* THE SAME FACT, WITH ITS SEPARATE ANSWERS STILL SEPARATE.
