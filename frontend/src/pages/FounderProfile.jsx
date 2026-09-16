@@ -1026,15 +1026,25 @@ export default function FounderProfile() {
                 founder who most needs the other half is the one who mistyped it
                 and is now reading their own wrong address. So this says where to
                 go, on the field itself, rather than leaving them to find the
-                Privacy Center on a hunch. */}
+                Privacy Center on a hunch.
+
+                ONLY WHILE EDITING, though. At rest this is a profile being
+                read, and a standing link asking "wrong address?" of everyone
+                who looks at their own page is noise -- the other fields say
+                nothing at rest either. Someone who wants to change something
+                has already pressed Edit, which is exactly when it is useful.
+                The request itself is unchanged: it still opens the same
+                privacy action and still reaches the admin panel. */}
             <div className="pr-val">{form.email || '—'}</div>
-            <button
-              type="button"
-              className="pr-inline-link"
-              onClick={() => openAction(PRIVACY_ACTIONS.find(a => a.type === 'email_change'))}
-            >
-              Wrong address? Request a change
-            </button>
+            {editing && (
+              <button
+                type="button"
+                className="pr-inline-link"
+                onClick={() => openAction(PRIVACY_ACTIONS.find(a => a.type === 'email_change'))}
+              >
+                Wrong address? Request a change
+              </button>
+            )}
           </div>
 
           {/* Phone and Location removed -- not needed here per product
