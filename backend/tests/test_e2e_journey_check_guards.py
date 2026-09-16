@@ -187,14 +187,19 @@ def test_weak_and_strong_cover_the_same_topics_in_the_same_order():
 def test_adding_a_persona_never_reorders_the_quality_pair():
     """The slots weak and strong match on are positional; an append that
     shifted them would silently re-point every earlier run's answers."""
-    from scripts.e2e_journey_check import _CURRENT_PROBLEM_TOPICS, _TOPICS
+    from scripts.e2e_journey_check import (
+        _CURRENT_PROBLEM_TOPICS,
+        _FOUNDER_TOPICS,
+        _TOPICS,
+    )
 
-    # The Current Problem topics are appended after these, so slot N for
-    # N < 15 still means what it meant in every earlier run.
+    # Everything since is appended after these, so slot N for N < 15 still
+    # means what it meant in every earlier run.
     for persona in ("weak", "strong"):
         topics = [t for t, _ in ANSWER_BANK[persona]]
         assert topics[:len(_TOPICS)] == list(_TOPICS)
-        assert topics[len(_TOPICS):] == list(_CURRENT_PROBLEM_TOPICS)
+        assert topics[len(_TOPICS):] == list(
+            _CURRENT_PROBLEM_TOPICS + _FOUNDER_TOPICS)
 
 
 def test_weak_is_the_default_so_existing_runs_are_unchanged():
@@ -280,11 +285,21 @@ def test_strong_analytics_answer_actually_describes_instrumentation():
 
 def test_terms_match_at_a_word_boundary():
     """'charge' sits inside 'recharges'. Substring matching sent an energy
-    question to the pricing answer."""
-    _, matched = match_answer(
+    question to the pricing answer.
+
+    That question now has a topic of its own -- Founder DNA asks it and the
+    bank had no slot for it -- so the assertion is no longer "this matches
+    nothing". It is the one that was always meant: whatever it matches, it is
+    not the pricing answer.
+    """
+    answer, matched = match_answer(
         "Which one actually recharges you -- working alone in a silent room, "
         "or a loud room full of people?", "strong")
-    assert matched is False
+    assert matched is True
+    pricing = dict((a, t) for t, a in ANSWER_BANK["strong"])[answer]
+    assert "pricing" not in pricing[0], (
+        "'charge' matched inside 'recharges' again")
+    assert "charge" not in answer.lower()
 
 
 def test_one_supporting_term_is_not_enough():
@@ -389,6 +404,27 @@ def test_every_topic_is_reachable_by_at_least_one_real_question():
         "after you thought you'd already fixed it?",
         "Tell me about the last time you made a call that a team lead should "
         "have made instead. Why did it land on you?",
+        # The founder dimensions. Nearly half of what a Stage 1->10+ founder
+        # is asked about themselves had no slot before these.
+        "Think about the last thing you built or finished that genuinely "
+        "satisfied you. What about it landed?",
+        "Two futures -- one: a single trophy on a pedestal, the thing you "
+        "made, recognised. Two: an unfinished bridge between two cliffs, "
+        "people you will never meet crossing it.",
+        "Think about the last time you finished a day genuinely energised "
+        "rather than drained. What had you been doing?",
+        "Tell me about the last time you seriously considered dropping this "
+        "idea. What actually made you stay with it?",
+        "What's the thing you're doing right now that isn't scalable, but "
+        "you're doing anyway -- and why?",
+        "Tell me about a time you walked away from something because it "
+        "crossed a line. What was the line?",
+        "Tell me about the last time perfectionism cost you real time here. "
+        "What were you polishing, and what did it delay?",
+        "If we fixed the problem overnight, how much would that change life "
+        "for your user?",
+        "Do you assume the way you personally experience this operational "
+        "gap reflects how urgent or common it actually is?",
     ]:
         answer, matched = match_answer(q, "strong")
         assert matched, q

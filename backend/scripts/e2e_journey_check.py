@@ -155,7 +155,11 @@ _TOPICS = (
     # customers, validation, who actually pays
     (("customer", "spoken to", "talked to", "talking to someone",
       "interview", "personal network", "validat", "pays for this",
-      "anyone else told", "problem is real", "actually uses it"),
+      "anyone else told", "problem is real", "actually uses it",
+      # "how many people have actually paid you, or clearly committed to pay
+      # you? Not interested -- committed." never uses the word "customer",
+      # and fell back on the one question this topic exists to answer.
+      "actually paid you", "committed to pay"),
      ("talk to", "audience", "demand")),
     # time, planning, priorities, focus
     (("plan", "priorit", "schedul", "deep work",
@@ -189,7 +193,16 @@ _TOPICS = (
     # scored red: every pricing term in this topic said "pricing", and that
     # question says "price".
     (("pricing", "what we charge", "charge for", "financial", "revenue",
-      "clean boundary", "money move", "behind your price", "your price"),
+      "clean boundary", "money move", "behind your price", "your price",
+      # and "how did you arrive at your current price?" is not "your price"
+      # either. This is the third phrasing of the same question to need its
+      # own entry, which is the cost of matching on substrings.
+      #
+      # "arrive at your" alone was the obvious way to write that and the
+      # wrong one: it also takes "how did you arrive at your sales
+      # projections" and "...your current or desired valuation", neither of
+      # which the pricing answer addresses.
+      "current price"),
      ("money", "cost", "price")),
     # team, roles, who decides
     (("team", "cofounder", "co-founder", "who owns", "the split",
@@ -203,7 +216,8 @@ _TOPICS = (
     (("decision", "decide fast", "big unknown", "uncertainty",
       "under pressure", "completely drained",
       # later-stage phrasings of the same two dimensions
-      "completely overwhelmed", "push through", "shut down", "got to you"),
+      "completely overwhelmed", "push through", "shut down", "got to you",
+      "wore you down"),
      ("decide", "unknown", "stress", "drained", "reach out")),
     # feedback, criticism, blind spots
     (("feedback", "criticis", "blind spot", "pointed out", "dismisses your",
@@ -218,7 +232,9 @@ _TOPICS = (
       # later-stage origin, motivation, vision and values phrasings
       "worth actually building", "what tipped it", "last win",
       "one number", "really working", "tempted you to compromise",
-      "you'd said mattered"),
+      "you'd said mattered",
+      # the later-stage origin question, which says none of the above
+      "started this in the first place", "necessary rather than optional"),
      # "five years" is a date, not a subject. As a defining term it pulled a
      # Business Planning question about what you did TODAY into purpose.
      ("matters", "picture", "five years")),
@@ -273,7 +289,15 @@ _TOPICS = (
 _OPERATING_TOPICS = (
     # delegation -- handing work over, and whether anyone was taught how
     (("delegat", "been taught", "how you want something", "just guess",
-      "hand off", "handing over", "taking over"),
+      "hand off", "handing over", "taking over",
+      # "hand off" as a phrase never appears in "when you hand something off",
+      # which is the exact question this topic is for. Nor does any term here
+      # appear in "how often do you catch yourself thinking it would just be
+      # faster if I did this myself" -- the purest delegation question in the
+      # bank, which scored zero against every topic.
+      "hand something off", "explain the outcome you want",
+      "faster if i did this myself", "just the task to complete",
+      "handed off by now", "still do yourself"),
      ("teach", "show them", "someone else")),
     # founder dependency -- the bus factor
     (("got sick", "only you know", "genuinely wait", "second-in-command",
@@ -290,7 +314,12 @@ _OPERATING_TOPICS = (
     (("written down", "step-by-step procedure", "written step-by-step",
       "live in your head", "lives in your head", "only in someone's head",
       "someone's head", "documented", "anything written",
-      "anything tracking", "due and when"),
+      "anything tracking", "due and when",
+      # "the last recurring task you did for the third time -- did you do it
+      # the same way, or figure it out fresh again" is this question asked
+      # without any of the words above. The answer here, about step-by-steps
+      # someone other than the author has followed, is the right one for it.
+      "recurring task", "the third time", "figure it out fresh"),
      ("process", "procedure", "notes", "in writing")),
     # role clarity -- who owns what, on paper
     (("expected of each person", "who owns what", "role clarity",
@@ -343,8 +372,49 @@ _OPERATING_TOPICS = (
     # this stage, and no earlier topic is about it: Ideation has no "before"
     # to compare against and nothing yet worth not saying.
     (("how you show up", "show up now", "before you started building",
-      "haven't told anyone", "not told anyone", "about running this"),
+      "haven't told anyone", "not told anyone", "about running this",
+      # "who were you as a leader in year one, and who are you now"
+      "as a leader in year one", "who are you now"),
      ("different", "versus before", "changed")),
+
+    # --- added after the first weak_traction run, where eleven of thirty
+    # --- diagnosis questions fell back. Five of those were near misses on
+    # --- topics above and were fixed there. These six had no slot at all:
+    # --- every one scored zero against every topic in the bank.
+
+    # the problem itself drifting -- not the customer (that is ICP drift
+    # below) and not the product
+    #
+    # Keyed on the DRIFT, not on "the problem you set out to solve" -- that
+    # phrase also opens "what's a piece of customer feedback you've dismissed
+    # because it didn't fit the problem you set out to solve", which is a
+    # question about dismissing feedback and was already being answered.
+    (("changed shape", "notice when it happened"),
+     ("drifted", "since you started building")),
+    # data protection, as a thing with a standard rather than a comfort level
+    (("data privacy", "privacy and security", "personally identifiable",
+      "comfort level with data"),
+     ("security", "actually needed")),
+    # the state of the pipeline, asked as a rating
+    #
+    # NOT a bare "sales pipeline": that also matches "what tools do you use to
+    # track your sales pipeline and deals", which is a tooling question, and
+    # took it away from the tooling answer that was handling it correctly.
+    (("pipeline is right now", "healthy your sales", "sales pipeline data",
+      "pipeline data"),
+     ("pipeline", "rate from 1 to 5")),
+    # sales collateral -- whether anything is reusable
+    (("template for proposals", "reusable template",
+      "every one get built", "proposals"),
+     ("template", "reusable")),
+    # oversight -- the founder as the only check on something legal
+    (("reviewing contracts", "adequate oversight", "sufficient, without",
+      "personally reviewing"),
+     ("contracts", "oversight")),
+    # publishing rhythm, as distinct from whether a campaign had a target
+    (("publish content", "actually publish", "how often do you publish",
+      "publishing"),
+     ("content", "on average")),
 )
 
 #: WEAK. A founder who has not done the work: no market sizing, no pricing
@@ -619,6 +689,31 @@ _TRACTION_TEXTS = (
     "really said out loud is that the month we became profitable I felt "
     "almost nothing, and I have been trying to work out since whether that "
     "means I picked the wrong number to care about.",
+    # --- the six subjects that had no slot until the first weak_traction run
+    "It has narrowed, and I noticed in January rather than at the time. We "
+    "started on 'compliance is hard' and what people actually pay for is one "
+    "filing they keep missing. I only caught it because the notes are tagged, "
+    "and reading six months of them in one sitting made it obvious.",
+    "We hold client financial data, so it is not about what I am comfortable "
+    "with. We encrypt at rest, nobody outside the two of us has production "
+    "access, and I had someone who does this properly review it in March. The "
+    "gap they found was our backup restore, which we had never tested.",
+    "Four, maybe. It is the weakest part of the business and I would not "
+    "dress it up -- I can see the deals but I cannot predict them, because "
+    "the accountant approval step has no timeline I control. Everything "
+    "before that step I can call within a week.",
+    "There is one, and it is three years of edits deep. Roughly eighty per "
+    "cent is the same every time; the rest is the filing types they need. "
+    "Before it existed each proposal took me an afternoon and two of them "
+    "contradicted each other on scope.",
+    "No -- I read them and I am not qualified to, which I know. Anything with "
+    "an indemnity or a data clause goes to an actual solicitor now, and that "
+    "rule came out of a renewal I signed last year with an auto-renew in it "
+    "that I had read and not registered.",
+    "Fortnightly, and I can say that because it is scheduled rather than "
+    "because it is how it feels. It used to be whenever I had something to "
+    "say, which meant nothing for five weeks and then three in a fortnight. "
+    "The fortnightly version brings in about twice as many trials.",
 )
 
 #: THE CURRENT PROBLEM TOPICS -- the third phase, which until now was almost
@@ -705,6 +800,225 @@ _CURRENT_PROBLEM_TOPICS = (
       "land on you", "why did it land"),
      ("made a call",)),
 )
+
+#: THE FOUNDER TOPICS -- the psychological dimensions Founder DNA asks about
+#: and no other phase does.
+#:
+#: Measured across the whole 67-question Founder DNA bank: Stage 0 matched
+#: 16 of 23, Stage 0->1 matched 19 of 22, and Stage 1->10+ matched 12 of 22.
+#: Nearly half of what a later-stage founder is asked about themselves was
+#: being answered with a topic-neutral line, and Founder DNA is 18 of the
+#: ~52 questions in a journey and the main input to Founder Readiness.
+#:
+#: The misses clustered in six dimensions -- core_motivation, energy_patterns,
+#: purpose_mission, core_values, focus_attention and mindset_excellence. Four
+#: other dimensions (origin, archetype, vision, stress_response) had single
+#: misses that were phrasings of questions already covered, and those were
+#: fixed by adding the phrase to the topic that already had the right answer,
+#: rather than by adding a topic here.
+#:
+#: These go to ALL FOUR personas: every founder is asked about themselves,
+#: whatever stage they are at.
+_FOUNDER_TOPICS = (
+    # what a good outcome felt like -- motivation, read off a real memory
+    (("genuinely satisfied you", "genuinely moved you", "what about it landed",
+      "last thing you built or finished", "last thing this business achieved"),
+     ("landed", "satisfied")),
+    # recognition against contribution, as a forced choice
+    #
+    # The two images ARE the question -- there is no abstract wording to key
+    # on, which is why the phrases here are the pictures themselves.
+    (("trophy on a pedestal", "unfinished bridge", "two cliffs",
+      "people you will never meet"),
+     ("recognised", "which one pulls you")),
+    # where energy comes from and where it goes -- including the long stretch
+    # of uninterrupted work, which is the same question asked positively
+    (("energised rather than drained", "left you wiped out", "genuinely in flow",
+      "recharges you", "desk lamp", "loud room",
+      "sat with one problem", "without switching to something else"),
+     ("energised", "flow", "recharge")),
+    # why you are still here, what "done" would mean, what should outlast you
+    #
+    # NOT "does it end": that also ends "does anything structured happen
+    # afterward, or does it end with the conversation", which is about
+    # performance reviews.
+    (("considered dropping this", "made you stay with it",
+      "being 'done'", "even mean to you",
+      "stepped away for a year", "still be true when you came back"),
+     ("done", "stay with it")),
+    # the thing done by hand on purpose
+    #
+    # Its own topic rather than part of the one above, because "why do you
+    # keep going" and "why are you still doing this by hand" want different
+    # answers, and the purpose answer does not address the second at all.
+    (("isn't scalable", "not scalable", "doing anyway"),
+     ("by hand", "and why")),
+    # the line that does not get crossed, tested against money
+    #
+    # NOT a bare "crossed a line": "the last time someone on your team crossed
+    # a line you care about" is a question about the team, and it was already
+    # being answered by the team topic.
+    (("walked away from something", "turned down money",
+      "weren't willing to trade", "what was the line"),
+     ("line", "walked away")),
+    # perfectionism, as a cost rather than a virtue
+    (("perfectionism", "were you polishing", "what it delayed"),
+     ("polishing", "cost you real time")),
+    # how much the problem actually costs the person who has it
+    (("fixed the problem overnight", "change life for your user",
+      "how much would that change"),
+     ("overnight", "for your user")),
+    # whether the founder's own experience of the problem generalises
+    #
+    # Distinct from the topic about first encountering the problem: that one
+    # asks where this came from, this one asks whether one person's version
+    # of it is everyone's. The bank has 27 "do you assume ..." questions and
+    # they span every dimension there is -- vendor pricing, culture, urgency,
+    # what a prospect will infer. They are NOT one subject and there is no
+    # topic here for the shape of the question, because an answer that fits
+    # all 27 would be a fallback wearing a topic's clothes. These two are one
+    # subject: my experience versus everyone else's.
+    (("you personally experience this", "your own daily experience",
+      "representative of how most", "how urgent or common"),
+     ("representative", "actually is")),
+)
+
+#: The founder-dimension answers, one per topic above, per persona. Same
+#: discipline: quality is the only variable within a stage pair.
+_WEAK_FOUNDER_TEXTS = (
+    "I honestly can't think of one recently. Ages ago I rebuilt a bike over a "
+    "winter and finishing it felt good, but nothing here has. I keep waiting "
+    "for something to feel like that and it hasn't yet.",
+    "The trophy, I think. I'd like people to know I did something. That's "
+    "probably not the answer I'm meant to give but it's the true one.",
+    "I can't remember the last day I finished energised. Most of them just "
+    "end. I've never paid attention to what makes the difference, so I "
+    "couldn't tell you what to do more of.",
+    "I think about dropping it most weeks. What stops me is not having a "
+    "better idea rather than believing in this one. I've never thought about "
+    "what finishing would even look like.",
+    "Most of it, I suppose. I do everything by hand because there's nobody "
+    "else and I've never looked at what could be automated. It's not a "
+    "decision, it's just how it is.",
+    "Nothing's really come up. Nobody's offered me money to do anything I'd "
+    "object to. I'd like to think I'd walk away but I've not been tested.",
+    "Constantly. I've rewritten the same page four times and it's still not "
+    "up. I couldn't tell you what I was improving on the last two goes.",
+    "A lot, I'd assume. It's a real problem -- I've felt it myself. I've not "
+    "asked anyone to put a size on it, so I couldn't tell you what it's "
+    "actually worth to them.",
+    "I suppose I do assume that, yes. It was bad enough for me that I "
+    "assumed it's bad for everyone. I've never checked whether other people "
+    "find it as annoying as I did.",
+)
+
+_STRONG_FOUNDER_TEXTS = (
+    "The first interview where someone finished my sentence describing the "
+    "problem. That's what landed -- not that they liked it, that they already "
+    "had the words. I've chased that reaction as a signal ever since and "
+    "nine of twelve gave it.",
+    "The bridge. I'd rather this worked and nobody knew my name than the "
+    "reverse, and I can tell that's true because the thing I reread when it's "
+    "going badly is the interview notes, not anything about me.",
+    "Tuesdays, alone, first four hours, phone in a drawer -- that's when "
+    "anything real gets written. I worked it out by keeping a note for a "
+    "fortnight of when I'd actually made progress, and it was the same slot "
+    "every time. The days that wipe me out are the ones broken into pieces.",
+    "Seriously, twice -- once after four interviews said the problem was real "
+    "and unimportant. What kept me was the next three, who'd built their own "
+    "spreadsheet for it. Done would mean someone other than me runs it and "
+    "the thing still works.",
+    "I write every onboarding email myself, one at a time. It does not scale "
+    "and I am doing it deliberately until about thirty of them, because the "
+    "replies are where I have learned what people actually expect -- two of "
+    "the twelve interview findings came out of those replies rather than the "
+    "interviews.",
+    "I turned down a consulting retainer in November that would have paid for "
+    "six months, because it was the same customers and it would have made me "
+    "their supplier rather than a peer. The line is that I don't sell them "
+    "the workaround I'm trying to replace.",
+    "The pricing page, for about three weeks. I was polishing the wording "
+    "because I didn't want to commit to a number, and it delayed the only "
+    "test that would have told me whether the number was right.",
+    "About a day a week of somebody's time, and I know that because nine of "
+    "the twelve interviews put a number on it unprompted. For four of them "
+    "it is also the thing that makes them dread the end of the month, which "
+    "is the part that does not show up as hours.",
+    "I assumed it and then tested it, because my version was the worst case "
+    "-- I had it monthly and most people have it quarterly. Three of the "
+    "twelve did not recognise it as a problem at all, and that is why the "
+    "pitch now opens with the deadline rather than with the admin.",
+)
+
+_TRACTION_FOUNDER_TEXTS = (
+    "The month our support person handled a week entirely without me and I "
+    "only found out afterwards. What landed was that it kept working when I "
+    "wasn't there -- more than any revenue number has.",
+    "The bridge, and it took running this to know that. Early on I'd have "
+    "said trophy. The thing I actually reread is the churn notes, which is "
+    "not where you look if it is about you.",
+    "Mornings before the team is on, twice a week, and I protect them because "
+    "I measured it -- almost everything I've written that mattered came out "
+    "of those. The weeks that wipe me out are the ones with four days of "
+    "back-to-back calls and nothing finished.",
+    "I nearly stopped eighteen months ago when we had nine customers and no "
+    "growth. What kept me was one of the nine telling me what they'd go back "
+    "to without us. Done would be it running profitably without me in it, "
+    "and I'd want the filing logic to still be right a year after I left.",
+    "I still do the first call with every customer above the middle tier. It "
+    "does not scale and I know it, and I keep it because the pricing "
+    "objections only show up there -- the last three tier changes all came "
+    "out of those calls. It goes when someone else can hear the objection "
+    "the same way.",
+    "We turned down a reseller deal last year worth about a third of revenue, "
+    "because they wanted us to white-label and stop talking to the end "
+    "customer. The customer conversations are the only reason we know "
+    "anything, so that was the line.",
+    "The onboarding rewrite, about two months. I kept refining flows nobody "
+    "had complained about while the import step -- which is where people "
+    "actually drop -- sat untouched. That one cost us a quarter.",
+    "A day a week back, and a penalty they stop paying -- about forty "
+    "thousand a year for a firm of that size. The one that matters more is "
+    "that the person who owns it stops being the one who gets blamed, which "
+    "is what nineteen referrals are actually about.",
+    "No, and checking is what moved the business. I built for my version, "
+    "which was a monthly filing at a firm of forty. The customers who stay "
+    "are ten-to-twenty-person firms with no finance lead, where it is "
+    "quarterly and nobody owns it -- a different problem, and I would not "
+    "have found it by consulting my own memory.",
+)
+
+_WEAK_TRACTION_FOUNDER_TEXTS = (
+    "Nothing recently, no. Things get done and then the next thing starts. I "
+    "suppose when we hit a hundred customers I felt something for an "
+    "afternoon, and then it was back to the inbox.",
+    "The trophy, probably. I'd like it to have been worth it and for people "
+    "to know that. I've not really thought about it.",
+    "I don't get days like that any more. It's all interruptions. I couldn't "
+    "tell you what a good week looks like because I'm not sure I've had one "
+    "this year, and I've never tried to work out why.",
+    "I think about stopping fairly often, usually when something breaks at "
+    "the weekend. I stay because there are people employed here now. I've no "
+    "idea what done would look like -- I've never thought that far.",
+    "Loads of it. I still do the invoices by hand every month and half the "
+    "support. It's not on purpose, I've just never stopped to sort it out, "
+    "and every month it's the same two days gone.",
+    "Not really. We took a deal last year I wasn't comfortable with because "
+    "we needed the revenue, and I've not thought much about where the line "
+    "is since. It hasn't come up in a way I couldn't ignore.",
+    "Yes, though I'd call it caring about it being right. I spent weeks on "
+    "the new pricing page and it's still not live. I couldn't tell you what "
+    "was wrong with the version from a month ago.",
+    "It'd help them a lot, I think. Nobody's ever put a number on it and I've "
+    "not asked. I know they keep paying, so it must be worth something.",
+    "Probably, yes. I built it for the version I had and I've never gone "
+    "back to check whether that's what our customers actually have. It "
+    "hasn't occurred to me that it might be a different problem.",
+)
+
+assert len(_WEAK_FOUNDER_TEXTS) == len(_STRONG_FOUNDER_TEXTS) \
+    == len(_TRACTION_FOUNDER_TEXTS) == len(_WEAK_TRACTION_FOUNDER_TEXTS) \
+    == len(_FOUNDER_TOPICS)
 
 _TRACTION_TOPICS = _TOPICS + _OPERATING_TOPICS
 
@@ -815,6 +1129,26 @@ _WEAK_TRACTION_TEXTS = (
     "I'm more tired and shorter with people than I was. I haven't really "
     "stopped to think about what's changed. The thing I don't say is that I'm "
     "not sure I'd do it again, and I've never said that to anyone.",
+    # --- the same six subjects
+    "Probably, yes. It doesn't feel like what I described at the start but I "
+    "couldn't tell you when that changed or what it is now. Nobody sat down "
+    "and decided it -- it just drifted, and the website still describes the "
+    "original version.",
+    "We're fine, I think. It's the same as I'd do with my own stuff and "
+    "nobody's ever complained. I've not had anyone look at it and I don't "
+    "really know what we'd be expected to have.",
+    "Two out of five, if I'm honest. I don't have a pipeline as such -- there "
+    "are some conversations going on and I couldn't tell you how many or "
+    "where any of them are. They either happen or they don't.",
+    "Every one gets written fresh. I've got old ones in my email I copy from "
+    "when I remember, and they've drifted apart, so I've definitely told two "
+    "people different things about what's included.",
+    "I read them all myself. I'm not a lawyer and I know that's not really "
+    "enough, but getting someone to look at every one costs money and it "
+    "hasn't caused a problem yet that I'm aware of.",
+    "Whenever I get to it, which is not often. There'll be a burst and then "
+    "nothing for two months. I know that's not how it's supposed to work but "
+    "it's always the thing that gets dropped when the week fills up.",
 )
 
 #: Current Problem, at Early Traction, weakly answered. Same eight subjects
@@ -984,20 +1318,25 @@ FALLBACKS = {
 #: still match what they always matched. What changes is that the phase which
 #: used to be measuring the fallback line now measures the persona.
 ANSWER_BANK = {
-    "weak": tuple(zip(_TOPICS + _CURRENT_PROBLEM_TOPICS,
-                      _WEAK_TEXTS + _WEAK_CP_TEXTS)),
-    "strong": tuple(zip(_TOPICS + _CURRENT_PROBLEM_TOPICS,
-                        _STRONG_TEXTS + _STRONG_CP_TEXTS)),
+    "weak": tuple(zip(_TOPICS + _CURRENT_PROBLEM_TOPICS + _FOUNDER_TOPICS,
+                      _WEAK_TEXTS + _WEAK_CP_TEXTS + _WEAK_FOUNDER_TEXTS)),
+    "strong": tuple(zip(_TOPICS + _CURRENT_PROBLEM_TOPICS + _FOUNDER_TOPICS,
+                        _STRONG_TEXTS + _STRONG_CP_TEXTS
+                        + _STRONG_FOUNDER_TEXTS)),
     # The only persona with the operating topics. weak and strong keep exactly
     # the fifteen they have always had, so every earlier run is still
     # comparable with every later one.
-    "traction": tuple(zip(_TRACTION_TOPICS + _CURRENT_PROBLEM_TOPICS,
-                          _TRACTION_TEXTS + _TRACTION_CP_TEXTS)),
+    "traction": tuple(zip(_TRACTION_TOPICS + _CURRENT_PROBLEM_TOPICS
+                          + _FOUNDER_TOPICS,
+                          _TRACTION_TEXTS + _TRACTION_CP_TEXTS
+                          + _TRACTION_FOUNDER_TEXTS)),
     # The quality pair at Early Traction. Identical topics to `traction`, slot
     # for slot, so a run that separates the two is measuring the engine and
     # not which subjects came up.
-    "weak_traction": tuple(zip(_TRACTION_TOPICS + _CURRENT_PROBLEM_TOPICS,
-                               _WEAK_TRACTION_TEXTS + _WEAK_TRACTION_CP_TEXTS)),
+    "weak_traction": tuple(zip(_TRACTION_TOPICS + _CURRENT_PROBLEM_TOPICS
+                               + _FOUNDER_TOPICS,
+                               _WEAK_TRACTION_TEXTS + _WEAK_TRACTION_CP_TEXTS
+                               + _WEAK_TRACTION_FOUNDER_TEXTS)),
 }
 
 #: The texts alone, in topic order -- the index-based fallback when no
@@ -1008,10 +1347,12 @@ ANSWER_BANK = {
 #: with no question text picks by `n % len(answers)`, and if these were the
 #: bare topic texts while the bank had eight more, that index would address a
 #: different set of answers than the one a question-bearing caller sees.
-WEAK_ANSWERS = _WEAK_TEXTS + _WEAK_CP_TEXTS
-STRONG_ANSWERS = _STRONG_TEXTS + _STRONG_CP_TEXTS
-TRACTION_ANSWERS = _TRACTION_TEXTS + _TRACTION_CP_TEXTS
-WEAK_TRACTION_ANSWERS = _WEAK_TRACTION_TEXTS + _WEAK_TRACTION_CP_TEXTS
+WEAK_ANSWERS = _WEAK_TEXTS + _WEAK_CP_TEXTS + _WEAK_FOUNDER_TEXTS
+STRONG_ANSWERS = _STRONG_TEXTS + _STRONG_CP_TEXTS + _STRONG_FOUNDER_TEXTS
+TRACTION_ANSWERS = (_TRACTION_TEXTS + _TRACTION_CP_TEXTS
+                    + _TRACTION_FOUNDER_TEXTS)
+WEAK_TRACTION_ANSWERS = (_WEAK_TRACTION_TEXTS + _WEAK_TRACTION_CP_TEXTS
+                         + _WEAK_TRACTION_FOUNDER_TEXTS)
 
 PERSONAS = {"weak": WEAK_ANSWERS, "strong": STRONG_ANSWERS,
             "traction": TRACTION_ANSWERS,
@@ -1343,15 +1684,44 @@ def _seed_founder(db, sa, stage_order: int) -> tuple[int, str]:
     Only works where founders.user_id carries no FK to auth.users -- see the
     module docstring. Raises IntegrityError with a clear message, rather than
     a bare traceback, when that FK exists and rejects the fabricated id.
+
+    FILLS THE PATH 2 FIELDS TOO, whatever stage is asked for. It did not, and
+    the effect was that `--stage 4` could not run a journey at all:
+
+        FAIL /api/v1/founder-dna/start -> 409 ProfileIncompleteError
+        Still needed: Monthly Revenue, What It Is, Business Reality
+
+    `app/services/profile_progress.py` requires four extra fields of any
+    founder past Ideation (PATH_2_REQUIRED), and this insert filled only the
+    always-required set plus Path 1's `goal_90_day`. So the founder it built
+    was Stage 0-shaped no matter what `--stage` said, and every gate past
+    Stage 0 refused it -- which is the gate working correctly on a founder the
+    test harness had built wrong.
+
+    `current_revenue` follows the stage, because "under_1L" on a Growth
+    founder is not a weak answer, it is a contradiction, and the diagnosis
+    would then be asked to explain a founder who cannot exist. The bands and
+    the reality signals are imported from `fill_missing_onboarding` rather
+    than copied, so the founder this builds and the founder that script
+    repairs are the same founder.
     """
+    from scripts.fill_missing_onboarding import (
+        BUSINESS_REALITY,
+        FIELDS,
+        REVENUE_BY_STAGE_ORDER,
+    )
+
     email = f"e2e+{int(time.time())}@{TEST_DOMAIN}"
+    revenue = REVENUE_BY_STAGE_ORDER.get(stage_order, FIELDS["current_revenue"])
     try:
         fid = db.execute(sa.text("""
             insert into founders (user_id, email, full_name, stage_id, profile_completed,
                                   experience_level, problem_statement, building_summary,
                                   business_name, industry, customer_segment,
                                   current_challenges, goal_90_day, vision_1_year,
-                                  founder_reality_signals, invisible_gaps)
+                                  founder_reality_signals, invisible_gaps,
+                                  current_revenue, product_description,
+                                  business_reality_signals)
             values (gen_random_uuid(), :e, 'E2E Test Founder', :s, true,
                     'one_company',
                     'Customers churn after the second month and I cannot tell why.',
@@ -1359,8 +1729,12 @@ def _seed_founder(db, sa, stage_order: int) -> tuple[int, str]:
                     'Acme Compliance', 'SaaS',
                     '["Business"]'::jsonb, '["Sales","Cash flow"]'::jsonb,
                     'Ten real customer interviews.', 'Series A raised.',
-                    '{"clear_next_step": true}'::jsonb, '["pricing"]'::jsonb)
-            returning founder_id"""), {"e": email, "s": stage_order}).scalar_one()
+                    '{"clear_next_step": true}'::jsonb, '["pricing"]'::jsonb,
+                    :rev, :prod, cast(:breality as jsonb))
+            returning founder_id"""),
+            {"e": email, "s": stage_order, "rev": revenue,
+             "prod": FIELDS["product_description"],
+             "breality": json.dumps(BUSINESS_REALITY)}).scalar_one()
     except Exception as exc:                                      # noqa: BLE001
         db.rollback()
         if "user_id" in str(exc) and ("fkey" in str(exc).lower() or "foreign key" in str(exc).lower()):
@@ -1574,6 +1948,26 @@ def run(args) -> int:
         return db.get(Founder, fid)
 
     app.dependency_overrides[get_founder_record] = _founder
+
+    # The per-founder rate limits, switched off for this run only.
+    #
+    # `/diagnosis/answer` allows 20 answers in 60 seconds. A stage-4 journey
+    # has a budget of 30 questions and stages 6 and 7 have 32, and this script
+    # answers at machine speed -- so the run died at question 21 with a 429,
+    # having proved nothing about the diagnosis engine and everything about
+    # the rate limiter, which is not what it is for.
+    #
+    # A real founder types answers and will not come close; this is a
+    # consequence of a test harness being faster than a person, not a defect
+    # in the limit. The router exposes these as module-level dependency
+    # objects specifically so they can be overridden by identity, which is
+    # why this works -- see the comment above them in
+    # app/api/v1/diagnosis/router.py.
+    from app.api.v1.diagnosis.router import answer_rate_limit, start_rate_limit
+
+    app.dependency_overrides[start_rate_limit] = lambda: None
+    app.dependency_overrides[answer_rate_limit] = lambda: None
+
     client = TestClient(app)
 
     dna, problem, diagnosis = [], [], []

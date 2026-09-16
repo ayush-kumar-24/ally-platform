@@ -62,8 +62,10 @@ def test_it_covers_exactly_the_same_topics_as_traction():
     """
     assert [t for t, _ in ANSWER_BANK[PERSONA]] == \
            [t for t, _ in ANSWER_BANK["traction"]]
-    assert [t for t, _ in ANSWER_BANK[PERSONA]] == \
-        list(_TRACTION_TOPICS + _CURRENT_PROBLEM_TOPICS)
+    from scripts.e2e_journey_check import _FOUNDER_TOPICS
+
+    assert [t for t, _ in ANSWER_BANK[PERSONA]] == list(
+        _TRACTION_TOPICS + _CURRENT_PROBLEM_TOPICS + _FOUNDER_TOPICS)
 
 
 def test_no_answer_is_shared_with_traction():
@@ -137,3 +139,96 @@ def test_every_current_problem_topic_has_a_weak_traction_answer():
     bank_topics = [t for t, _ in ANSWER_BANK[PERSONA]]
     for topic in _CURRENT_PROBLEM_TOPICS:
         assert topic in bank_topics
+
+
+#: The eleven diagnosis questions that fell back in the FIRST weak_traction
+#: run -- a third of the thirty asked. Five were near misses on topics that
+#: already existed and read as though they should have matched: "when you hand
+#: something off" never contains the phrase "hand off"; "how did you arrive at
+#: your current price" is not "your price"; "how many people have actually
+#: paid you" never says "customer". The other six had no slot at all and
+#: scored zero against every topic in the bank.
+#:
+#: A third of a diagnosis answered with a topic-neutral line is a third of the
+#: run measuring the harness instead of the engine, and the bands it produces
+#: cannot be read as being about the founder.
+QUESTIONS_THAT_ONCE_FELL_BACK = [
+    "Has the problem you set out to solve changed shape since you started "
+    "building \u2014 and did you notice when it happened?",
+    "How many people have actually paid you, or clearly committed to pay "
+    "you? Not interested \u2014 committed.",
+    "Do you assume your own comfort level with data privacy and security "
+    "reflects what's actually needed for the business?",
+    "Rate from 1 to 5 how healthy your sales pipeline is right now.",
+    "Walk me through how you handled the last recurring task you did for the "
+    "third time. Did you do it the same way, or figure it out fresh again?",
+    "How did you arrive at your current price?",
+    "How often do you actually publish content, on average?",
+    "When you hand something off, do you explain the outcome you want, or "
+    "just the task to complete?",
+    "Do you have a reusable template for proposals, or does every one get "
+    "built from scratch?",
+    "Do you assume you personally reviewing contracts is sufficient, without "
+    "checking if that's actually adequate oversight?",
+    'How often do you catch yourself thinking "it would just be faster if I '
+    'did this myself"?',
+]
+
+
+@pytest.mark.parametrize("persona", ["traction", "weak_traction"])
+@pytest.mark.parametrize("question", QUESTIONS_THAT_ONCE_FELL_BACK,
+                         ids=[q[:45] for q in QUESTIONS_THAT_ONCE_FELL_BACK])
+def test_the_questions_that_used_to_fall_back_now_match(question, persona):
+    answer, matched = match_answer(question, persona)
+    assert matched, f"still falls back:\n  {question}"
+
+
+@pytest.mark.parametrize("question", QUESTIONS_THAT_ONCE_FELL_BACK,
+                         ids=[q[:45] for q in QUESTIONS_THAT_ONCE_FELL_BACK])
+def test_both_stage_4_personas_route_them_to_the_same_slot(question):
+    """Same slot in both, or the pair stops being a quality comparison for
+    exactly the questions this file was written about."""
+    slots = []
+    for persona in ("traction", "weak_traction"):
+        answer, matched = match_answer(question, persona)
+        assert matched
+        slots.append([a for _, a in ANSWER_BANK[persona]].index(answer))
+    assert slots[0] == slots[1], (
+        f"traction -> slot {slots[0]}, weak_traction -> slot {slots[1]}")
+
+
+#: Phrases that looked like the obvious way to match the questions above and
+#: took other questions with them. Each was measured against the full 3,340
+#: -question bank, not guessed at.
+QUESTIONS_THE_BROAD_VERSIONS_STOLE = [
+    # "arrive at your"
+    "How did you arrive at your sales projections or goals?",
+    "How did you arrive at your current or desired valuation?",
+    # a bare "sales pipeline"
+    "What tools do you use to track your sales pipeline and deals?",
+    # "set out to solve"
+    "What's a piece of customer feedback you've dismissed recently because "
+    "it didn't fit the problem you set out to solve?",
+]
+
+
+@pytest.mark.parametrize("question", QUESTIONS_THE_BROAD_VERSIONS_STOLE,
+                         ids=[q[:45] for q in QUESTIONS_THE_BROAD_VERSIONS_STOLE])
+def test_the_new_topics_did_not_swallow_their_neighbours(question):
+    """These must NOT land on the six topics added for the eleven above.
+
+    Each of them was already handled -- or correctly falling back -- and a
+    broader phrase pulled it somewhere worse. Widening any of those six
+    phrases again will fail here rather than quietly in a report.
+    """
+    answer, matched = match_answer(question, "traction")
+    if not matched:
+        return
+    from scripts.e2e_journey_check import _FOUNDER_TOPICS
+
+    slot = [a for _, a in ANSWER_BANK["traction"]].index(answer)
+    newest = (len(ANSWER_BANK["traction"]) - len(_FOUNDER_TOPICS)
+              - len(_CURRENT_PROBLEM_TOPICS) - 6)
+    assert slot < newest or slot >= newest + 6, (
+        f"routed to one of the six newest topics (slot {slot}):\n"
+        f"  {answer[:90]}...")
