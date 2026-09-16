@@ -356,10 +356,17 @@ a.fw-card-link:focus-visible {
 
 /* Fixed box, so the panel does not jump when a lazily-loaded cover lands, and
    object-fit rather than a stretch: these come back in whatever aspect ratio
-   the scan had, and a squashed cover looks worse than none. */
+   the scan had, and a squashed cover looks worse than none.
+
+   84x126, up from 56x84. At 56 the cover read as an icon rather than a book.
+   The ceiling is the title beside it: the grid is minmax(232px, 1fr) and the
+   panel takes 18px of padding each side, so at a typical 300px tile the title
+   still gets ~186px, which holds "Business Sutra: A Very Indian Approach to
+   Management" in four lines. Much past this and the long titles start
+   shredding on the narrower columns. */
 .wt-cover {
-  width: 56px;
-  height: 84px;
+  width: 84px;
+  height: 126px;
   flex-shrink: 0;
   object-fit: cover;
   border-radius: 5px;
