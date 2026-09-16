@@ -53,6 +53,7 @@ def _auth_users_table():
     that pretends to.
     """
     from sqlalchemy import text
+    from sqlalchemy.exc import OperationalError
 
     from app.db.session import engine
 
@@ -61,6 +62,25 @@ def _auth_users_table():
         # serving real founders, and refusing is cheaper than regretting.
         pytest.exit("refusing to run the test suite against ENVIRONMENT=production")
 
+    try:
+        _ensure_auth_users(engine, text)
+    except OperationalError:
+        # No database reachable. That is not this fixture's problem to report.
+        #
+        # Being session-scoped and autouse, it runs before EVERY test, including
+        # the many that need no database at all -- tests/test_rls_context.py is
+        # pure MagicMock and passes in CI, which has no Postgres service. An
+        # unguarded connect here turned those four into ERRORs on the first CI
+        # run of this branch: a fixture nothing in that file asked for, failing
+        # for a reason that file does not care about.
+        #
+        # So: swallow it. A test that genuinely needs the database still fails,
+        # on its own connection and with its own message, exactly as it did
+        # before this fixture existed.
+        return
+
+
+def _ensure_auth_users(engine, text) -> None:
     with engine.begin() as conn:
         exists = conn.execute(text(
             "select to_regclass('auth.users') is not null"
