@@ -10,6 +10,21 @@ found a broken migration graph, six pieces of schema that existed only in the
 database, and a silent row-drop that would have cost the engine a rule it
 cannot start without. Those are fixed; what follows is the tested path.
 
+It has since been run a second time, from nothing, on a different machine,
+and taken further than a row count: four complete founder journeys were run
+against the result — two personas at Ideation and two at Early Traction —
+and each produced a report, the stage-4 pair assessing all six pillars. A
+database this procedure rebuilds is not merely populated; it runs the product.
+
+That second run also turned up something a table count cannot see. Every
+migration that creates an RLS policy for the `ally_app` role skips it, with a
+warning, when the role does not exist — and says in the warning that skipping
+is expected on Supabase but **not on RDS**, which is what production runs on.
+Restoring into a fresh database means creating that role first, or the
+founder-isolation policies on `founder_goals`, `achievements`, `vision` and
+`framework_usage` will not exist. See the `ally_app` section of
+`../DEPLOY_AWS.md`.
+
 ## What is where
 
 | | Lives in | Safe if the database is lost? |

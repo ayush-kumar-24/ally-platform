@@ -93,6 +93,57 @@ not recorded anywhere and someone should write them down here:
       retention window. `data/reference/` protects the *content*; founder
       answers and reports exist only in this database and backups are the only
       thing protecting them.
+- [ ] **Whether the `ally_app` role exists.** Check this one first; it is the
+      only item here that can have failed silently and permanently.
+
+### The `ally_app` role, and the policies that depend on it
+
+Eighteen migrations create RLS policies and function grants for a role named
+`ally_app`. Each one checks whether the role exists and, when it does not,
+logs a warning and **skips that step**:
+
+```
+WARNING [f7a3d5b1ef52]: role 'ally_app' does not exist on this database --
+SKIPPING the founder-isolation RLS policy for founder_goals. EXPECTED on
+Supabase (native RLS handles this instead ...). NOT expected on RDS.
+```
+
+That is the migrations' own wording, and the reason for it is that Supabase
+has its own RLS machinery while RDS does not: on RDS these policies *are* the
+founder-isolation boundary. Skipping is the right behaviour — creating a
+policy for a role that does not exist would deny all access to the table —
+but it is a warning in a log, not a failure, so a deploy where the role was
+missing succeeded and looked fine.
+
+Production is RDS. Run this against it:
+
+```sql
+select rolname from pg_roles where rolname = 'ally_app';
+
+-- and, for the tables whose policies are conditional on it:
+select tablename, policyname
+  from pg_policies
+ where schemaname = 'public'
+   and tablename in ('founder_goals', 'achievements', 'vision',
+                     'framework_usage')
+ order by tablename;
+```
+
+Two further steps skip on the same condition and are worth checking in the
+same pass: `8f6c2a1d9b7e` grants `ally_app` runtime access after the RLS
+hardening in `4aa14aee3a4e` switched RLS on across thirty tables, and
+`3c7e91b40d52` gives it unfiltered read of the two question banks. On RDS,
+without the role, the first of those is the difference between the
+application being able to read its own tables and not.
+
+If the role is absent, those policies were never created, and every table
+they cover is relying on application-level founder filtering alone. Create
+the role, then re-run the migrations that reference it — they are written to
+be idempotent, so a re-run creates what the first run skipped.
+
+This was found by replaying every migration against an empty Postgres, which
+is what `docs/RESTORE.md` does. It has not been checked against RDS, because
+this session had no credentials for it.
 
 ## 1. Building and shipping the image
 
