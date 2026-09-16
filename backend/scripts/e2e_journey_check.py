@@ -708,6 +708,147 @@ _CURRENT_PROBLEM_TOPICS = (
 
 _TRACTION_TOPICS = _TOPICS + _OPERATING_TOPICS
 
+#: THE WEAK COUNTERPART AT EARLY TRACTION -- the other half of a comparison
+#: that, until this existed, had only one side.
+#:
+#: `traction` proved COVERAGE at stage 4: report #96 was the first run to
+#: assess six pillars of six. It proved nothing about DISCRIMINATION there.
+#: weak and strong are a quality pair at Ideation and the engine separates
+#: them cleanly -- health 20 against 92, eight root causes against two. At
+#: Early Traction there was one persona, so a run could only ever come back
+#: "strong", and a stage-4 engine that scored every founder well would have
+#: looked exactly like the one we had.
+#:
+#: Same thirty subjects as `traction`, slot for slot, in the same order.
+#: Quality is the only variable: no numbers anybody measured, nothing written
+#: down, every system a memory, every problem noticed after it cost something.
+#: This founder is not failing -- they have customers and staff and revenue,
+#: which is the point. They are running a real business on recall and reaction.
+_WEAK_TRACTION_TEXTS = (
+    "Sixty-odd paying, I think -- I'd have to look. I hear from the same four "
+    "or five who email a lot and I assume the rest are fine. Most came in "
+    "through people I know, and I could not tell you which ones.",
+    "I don't really plan the week. Whatever came in overnight sets it, and by "
+    "Wednesday I've forgotten what I meant to do on Monday. The enterprise "
+    "pilot has been sitting there for a month because I keep not deciding.",
+    "It's a big market, that's about as far as I've got. There's a competitor "
+    "everyone mentions -- I've never sat down and looked at what they do, I "
+    "just hear the name when we lose one.",
+    "We ship a fair bit. I couldn't tell you who uses what, we never put "
+    "anything in to measure it. I know people drop off somewhere in setup "
+    "because they email me about it, not because I can see it.",
+    "Three tiers, and I picked the numbers because they felt about right when "
+    "we started. Nobody's really pushed back, which I take as a good sign. I "
+    "haven't changed them in a year and a half.",
+    "There are four of us. Nothing is written down about who does what -- we "
+    "just sort of know, and we work it out when it clashes. It has clashed a "
+    "few times and it usually ends with me deciding.",
+    "I haven't written any of that down. I know roughly what would hurt -- if "
+    "the main channel dried up we'd be in trouble -- but I've never sat and "
+    "listed it out, and I probably should.",
+    "Quickly, usually, and then I go back and forth on it for a week "
+    "afterwards. I don't write down why I decided something, so when it comes "
+    "up again I'm arguing the same thing from scratch.",
+    "Our support person said something a while back about me answering her "
+    "tickets. I said I'd stop. I mostly haven't, because it's faster if I "
+    "just do it, and I haven't asked her since whether it's still a problem.",
+    "Because it's a real problem and people pay for it. I had a version of it "
+    "myself. I don't have a sharper answer than that, which I notice when "
+    "somebody asks me directly.",
+    "Being the best at it, I suppose. Or the biggest. I haven't really "
+    "thought about it in those terms -- I'd like people to rate us, but I "
+    "don't know if they do because I've never asked.",
+    "It takes me a couple of goes. I start with the compliance thing and then "
+    "end up explaining the whole background, and I can usually see the point "
+    "where the other person stops following.",
+    "Sort of. I saw it happen at my old job rather than having it land on me "
+    "directly. I've never been the person filing, which people do sometimes "
+    "point out when I'm explaining it.",
+    "A mix of things we built and a spreadsheet that's still holding up more "
+    "than it should. I didn't really check what was out there first -- it was "
+    "quicker to build it than to go looking.",
+    "Support, mostly, and answering things at night. I only realised how much "
+    "when someone asked me this -- I've never actually looked at where the "
+    "week goes. It just feels full.",
+    "I hand things over and then they come back wrong, so I end up taking "
+    "them back. I don't really teach it -- I explain it once and hope. It's "
+    "quicker to do it myself, which I know is the wrong answer.",
+    "Most of it, honestly. If I were out for a week the filings wouldn't go, "
+    "because the rules for the odd cases are only in my head. I've been "
+    "meaning to write them down since roughly last summer.",
+    "Not really. There's a doc from when we started that's out of date. "
+    "Everything current lives in whoever did it last, which means when they're "
+    "away we guess, and we've got it wrong twice that I know about.",
+    "We've never written roles down. Everyone kind of does everything, which "
+    "was fine at two people. There was a thing in February where nobody fixed "
+    "some bad data for about a week because we all thought it wasn't ours.",
+    "It comes to me. There's no rule, it just does, and if I'm busy it sits "
+    "until I get to it. A refund argument sat for four days last month for "
+    "that reason.",
+    "They seem busy and things get done, so I assume it's fine. We don't have "
+    "targets for anyone. I'd probably notice if somebody stopped entirely, "
+    "and I'm not sure I'd notice anything short of that.",
+    "Yes, and far too long -- the better part of a year. I kept thinking it "
+    "would sort itself out and hiring again felt like more work than the "
+    "problem. I never said anything to them directly, which I regret.",
+    "People leave, some months more than others. I don't have the number. I "
+    "usually find out when the payment stops rather than before, and I've "
+    "never gone back and asked any of them why.",
+    "They find us somehow and then some of them buy. There's an accountant "
+    "involved somewhere near the end and that's often where it goes quiet, "
+    "but I haven't mapped it out or counted where they drop.",
+    "It depends who's asking. I've given different numbers to different "
+    "people for the same thing, and once I had to honour both. I keep meaning "
+    "to fix the page so I stop improvising.",
+    "When something makes me look -- usually a payment going out. I know "
+    "roughly where we are. Last month felt fine but I couldn't tell you "
+    "whether that was the business or one big invoice landing.",
+    "We've got customers and revenue's up, mostly. I'd show them that. I "
+    "don't have the retention or usage numbers to hand, so it would be the "
+    "growth line and me explaining why I believe in it.",
+    "We put things out and see what happens. The last one got some signups -- "
+    "I don't know how many turned into anything, because we didn't decide "
+    "beforehand what would count as it having worked.",
+    "We built it for bigger firms than the ones who actually stay, I think. "
+    "I've noticed the pattern but I've never gone and checked it properly, "
+    "and the website still says what it said at the start.",
+    "I'm more tired and shorter with people than I was. I haven't really "
+    "stopped to think about what's changed. The thing I don't say is that I'm "
+    "not sure I'd do it again, and I've never said that to anyone.",
+)
+
+#: Current Problem, at Early Traction, weakly answered. Same eight subjects
+#: as every other persona.
+_WEAK_TRACTION_CP_TEXTS = (
+    "Everything, a bit. Probably that it's all on me and there's no slack "
+    "anywhere -- if I stopped for a fortnight I don't know what would "
+    "happen. I couldn't name one thing above the others.",
+    "More hours, or another me. I know that's not a real answer. Nothing "
+    "specific is blocking it, I just never get to the things that aren't "
+    "already on fire.",
+    "We tried a campaign a few months ago and it didn't really go anywhere. I "
+    "couldn't tell you why it stopped -- we just stopped doing it and moved "
+    "on to whatever was next.",
+    "Me, probably. Or the setup process, which one person built and nobody "
+    "else understands. I've thought about it and then not done anything "
+    "about it, because it's been fine so far.",
+    "Writing down how the filing logic works. It's been on my list since the "
+    "summer. Every week there's something more urgent and it's the thing "
+    "that gets dropped.",
+    "I don't really look at numbers, so there isn't one I'm avoiding "
+    "specifically. I suppose if I checked how many people actually still use "
+    "it I might not like the answer.",
+    "Support. We fix whatever people are complaining about, it goes quiet, "
+    "and then it's back in a different form a month later. We've been round "
+    "that loop a few times now without ever asking why.",
+    "A refund decision last week that our support person could have made. It "
+    "came to me because there's no rule about it -- there's no rule about "
+    "most things, so everything comes to me.",
+)
+
+assert len(_WEAK_TRACTION_TEXTS) == len(_TRACTION_TEXTS)
+assert len(_WEAK_TRACTION_CP_TEXTS) == len(_CURRENT_PROBLEM_TOPICS)
+
 #: The Current Problem answers, one per topic above, per persona. Same
 #: discipline as everywhere else in this file: weak and strong differ in
 #: QUALITY and cover identical subjects, so a run that separates them is
@@ -826,6 +967,11 @@ FALLBACKS = {
     "traction": "Yes, and I can show you where -- we write these down as we "
                 "go and go through them at the monthly rather than when "
                 "somebody happens to remember.",
+    # weak's shape in the operator's voice, and topic-neutral for the same
+    # reason: it must not say anything about a dimension the question did not
+    # raise, or a fallback becomes evidence.
+    "weak_traction": "No, not really -- I keep meaning to and then something "
+                     "comes in and it goes to the bottom of the list again.",
 }
 
 #: Every persona also carries the Current Problem topics, appended last.
@@ -847,6 +993,11 @@ ANSWER_BANK = {
     # comparable with every later one.
     "traction": tuple(zip(_TRACTION_TOPICS + _CURRENT_PROBLEM_TOPICS,
                           _TRACTION_TEXTS + _TRACTION_CP_TEXTS)),
+    # The quality pair at Early Traction. Identical topics to `traction`, slot
+    # for slot, so a run that separates the two is measuring the engine and
+    # not which subjects came up.
+    "weak_traction": tuple(zip(_TRACTION_TOPICS + _CURRENT_PROBLEM_TOPICS,
+                               _WEAK_TRACTION_TEXTS + _WEAK_TRACTION_CP_TEXTS)),
 }
 
 #: The texts alone, in topic order -- the index-based fallback when no
@@ -860,9 +1011,11 @@ ANSWER_BANK = {
 WEAK_ANSWERS = _WEAK_TEXTS + _WEAK_CP_TEXTS
 STRONG_ANSWERS = _STRONG_TEXTS + _STRONG_CP_TEXTS
 TRACTION_ANSWERS = _TRACTION_TEXTS + _TRACTION_CP_TEXTS
+WEAK_TRACTION_ANSWERS = _WEAK_TRACTION_TEXTS + _WEAK_TRACTION_CP_TEXTS
 
 PERSONAS = {"weak": WEAK_ANSWERS, "strong": STRONG_ANSWERS,
-            "traction": TRACTION_ANSWERS}
+            "traction": TRACTION_ANSWERS,
+            "weak_traction": WEAK_TRACTION_ANSWERS}
 
 
 #: A defining term is worth two, a supporting term one, and two points are
@@ -1592,7 +1745,12 @@ def main(argv=None) -> int:
                         "rigour two stages on -- customers, staff and money -- "
                         "and is the one to use above Prototype/MVP, where strong "
                         "has nothing on-topic to say about delegation, cash or "
-                        "what is written down.")
+                        "what is written down. 'weak_traction' is traction's "
+                        "counterpart -- the same thirty-eight subjects answered "
+                        "by someone running a real business on memory and "
+                        "reaction. traction alone proved the engine COVERS "
+                        "stage 4; the pair is what proves it DISCRIMINATES "
+                        "there, the way weak/strong does at Ideation.")
     p.add_argument("--json-out", metavar="FILE", help="write the full transcript as JSON")
     args = p.parse_args(argv)
 
