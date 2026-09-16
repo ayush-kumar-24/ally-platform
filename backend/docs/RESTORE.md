@@ -3,12 +3,12 @@
 If the Supabase project is lost, this is the procedure. It is written to be
 followed by someone who did not build the system.
 
-**Read this first: as of today the procedure does not work, because step 3 has
-nothing to load.** `scripts/dump_reference_data.py` exists and is tested; the
-dump it produces has not been committed yet. Until it is, the live database is
-the only copy of the product's content and this document describes an intention
-rather than a capability. Generating it is one command — see *Producing the
-dump* below.
+**This procedure has been run end to end against an empty Postgres and it
+works.** Every table comes back at production's row count and the reasoning
+engine boots on the result. It was not obvious that it would: getting here
+found a broken migration graph, six pieces of schema that existed only in the
+database, and a silent row-drop that would have cost the engine a rule it
+cannot start without. Those are fixed; what follows is the tested path.
 
 ## What is where
 
@@ -24,21 +24,44 @@ question of database backups, not of this file.
 
 ## The rebuild
 
+The order matters and is not obvious. Migration `63340a6e5fdb` seeds questions
+2130+ and *asserts* that 1-2129 already exist, so some reference data has to be
+loaded in the middle of the migration run, not after it.
+
 ```bash
-# 1. Schema, up to but not including the seed gate.
-#    63340a6e5fdb asserts questions 1-2129 already exist, so it must not run yet.
+# 1. Schema up to but not including the seed gate.
 alembic upgrade c6a4e83f19d7
 
-# 2. Reference content, in filename order -- the numbers are the load order,
-#    parents before children, so foreign keys hold throughout.
-for f in data/reference/*.sql; do psql "$DATABASE_URL" -f "$f"; done
+# 2. The rows the seeding migrations need in order to run: questions 1-2129 and
+#    the foreign-key parents they point at. These files stop short of the ids
+#    the migrations seed themselves -- each one says which range and why.
+for f in data/reference/00*.sql; do
+  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "set session_replication_role=replica;" -f "$f"
+done
 
 # 3. The rest of the migrations, which seed questions 2130+ on top.
 alembic upgrade head
 
-# 4. Embeddings. Semantic retrieval returns nothing until this finishes.
+# 4. The full snapshot. DELETE FIRST: migrations seed some of these tables with
+#    DIFFERENT surrogate keys than production uses, and an insert-only load
+#    silently skips those rows. That is not hypothetical -- it dropped
+#    CAT_RISK_THRESHOLD, without which the reasoning engine will not start,
+#    because rule_id 1 was already taken by a different rule.
+for f in data/reference/[0-9][0-9]_*.sql; do
+  t=$(basename "$f" .sql | sed 's/^[0-9]*_//')
+  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+    -c "set session_replication_role=replica;" -c "delete from \"$t\";" -f "$f"
+done
+
+# 5. Embeddings. Semantic retrieval returns nothing until this finishes.
 python -m scripts.embedding_migration.02_regenerate_embeddings
 ```
+
+`session_replication_role = replica` disables foreign-key checks and triggers
+for the load, the same thing `pg_dump --disable-triggers` does. Without it the
+files have to be loaded in dependency order *and* a validation trigger on
+`scoring_rules` rejects the table halfway through, because it checks a sum that
+is only correct once every row is in.
 
 Then confirm it: `python -m scripts.verify_seed_data`, and run
 `python -m scripts.e2e_journey_check --database-url "..." --stage 1 --confirm-writes`
