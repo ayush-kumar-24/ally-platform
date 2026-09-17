@@ -37,6 +37,21 @@ _FONT_DIR = Path(__file__).resolve().parents[1] / "api" / "v1" / "reports" / "as
 #: grey-ish box.
 DEFAULT_LOGO = _ASSET_DIR / "ally-logo-mark.png"
 
+#: The GoXL Entrepreneurship wordmark, for the FOOTER, beside the legal entity
+#: that issues the document. Two marks, two jobs: the header says what the
+#: founder bought (GoXL Ally), the footer says who billed them for it.
+#:
+#: Lifted from the company's own existing invoice PDF, which is the only place
+#: it exists in a usable form. `frontend/public/goxl-logo.svg` was recovered
+#: from git history first and is NOT this: it is a 498-byte placeholder that
+#: sets the letters "GoXL" in Inter with a white-to-green gradient, so on white
+#: paper its left half fades out entirely. It was deliberately not used.
+#:
+#: Opaque white background rather than transparency -- it is composited onto
+#: the white footer, where white is invisible, and keying it out by hand would
+#: risk a halo around the letterforms for no gain.
+COMPANY_LOGO = _ASSET_DIR / "goxl-entrepreneurship-logo.png"
+
 
 @lru_cache(maxsize=4)
 def _data_uri(path: str, mime: str) -> str | None:
@@ -67,6 +82,19 @@ def logo_data_uri() -> str | None:
         mime = "image/svg+xml" if configured.lower().endswith(".svg") else "image/png"
         return _data_uri(configured, mime)
     return _data_uri(str(DEFAULT_LOGO), "image/png")
+
+
+def company_logo_data_uri() -> str | None:
+    """The issuing company's mark for the footer.
+
+    Optional in exactly the way the header mark is: unreadable means a footer
+    without it, never a founder who cannot get their receipt.
+    """
+    configured = (settings.INVOICE_COMPANY_LOGO_PATH or "").strip()
+    if configured:
+        mime = "image/svg+xml" if configured.lower().endswith(".svg") else "image/png"
+        return _data_uri(configured, mime)
+    return _data_uri(str(COMPANY_LOGO), "image/png")
 
 
 @lru_cache(maxsize=1)

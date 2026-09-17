@@ -657,6 +657,12 @@ class Settings(BaseSettings):
     # combined GoXL/Ally lockup, say -- with no code change. It is embedded
     # into the document, so it must be readable from the API container.
     INVOICE_LOGO_PATH: str = ""
+    # The ISSUING COMPANY's mark, shown in the footer beside the legal entity.
+    # Blank uses the bundled GoXL Entrepreneurship wordmark. Separate from
+    # INVOICE_LOGO_PATH above because the two marks answer different
+    # questions: the header one is what the founder bought, this one is who
+    # billed them for it.
+    INVOICE_COMPANY_LOGO_PATH: str = ""
     # The seller's GSTIN. EMPTY IS MEANINGFUL, and it is the default on
     # purpose: with no GSTIN configured the document is rendered as a PAYMENT
     # RECEIPT with no tax breakdown, because a tax invoice that shows a GST

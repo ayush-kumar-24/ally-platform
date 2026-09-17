@@ -335,12 +335,17 @@ def test_the_logo_and_fonts_travel_inside_the_document(no_gstin):
 
 
 def test_a_missing_logo_costs_a_logo_not_a_receipt(monkeypatch, no_gstin):
-    """The header is typography first; the mark is on top of it."""
+    """The header is typography first; the mark is on top of it.
+
+    Scoped to the HEADER: the footer carries the issuer's own mark, which is a
+    separate asset and is unaffected by this one being unreadable.
+    """
     from app.payments import invoice_html
 
     monkeypatch.setattr(invoice_html, "logo_data_uri", lambda: None)
     html = invoice_html.build_invoice_html(build())
-    assert "<img" not in html
+    head = html[:html.index('class="hero"')]
+    assert "<img" not in head
     assert "GoXL" in html and "999.00" in html   # the document still works
 
 
@@ -512,3 +517,35 @@ def test_lakhs_and_crores_not_millions(no_gstin):
     from app.payments.invoice_html import amount_in_words
     assert amount_in_words(Decimal("10500000")) == "One Crore Five Lakh Rupees Only"
     assert amount_in_words(Decimal("1")) == "One Rupee Only"
+
+
+# --- two marks, two jobs --------------------------------------------------
+
+def test_both_brand_marks_are_embedded_not_linked(no_gstin):
+    """The header mark (the product) and the footer mark (the issuer). Both
+    travel inside the document, because Gotenberg has no network."""
+    html = build_invoice_html(build())
+    assert html.count("data:image/png;base64,") == 2
+    assert "http://" not in html and "https://" not in html
+
+
+def test_the_issuers_mark_sits_with_the_issuer_in_the_footer(no_gstin):
+    """Not the header: the header says what the founder bought, and they
+    bought GoXL Ally, not the consulting business."""
+    html = build_invoice_html(build())
+    foot = html[html.index('class="foot"'):]
+    assert 'class="foot-mark"' in foot
+    assert "GoXL Consulting Solutions Pvt. Ltd." in foot
+    # And the header carries the product lockup, not the company mark.
+    head = html[:html.index('class="foot"')]
+    assert 'class="foot-mark"' not in head
+    assert "Ally" in head
+
+
+def test_a_missing_company_mark_costs_a_logo_not_a_receipt(monkeypatch, no_gstin):
+    from app.payments import invoice_html
+
+    monkeypatch.setattr(invoice_html, "company_logo_data_uri", lambda: None)
+    html = invoice_html.build_invoice_html(build())
+    assert 'class="foot-mark"' not in html
+    assert "GoXL Consulting Solutions Pvt. Ltd." in html   # the footer still works

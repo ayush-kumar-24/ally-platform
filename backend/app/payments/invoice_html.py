@@ -35,7 +35,11 @@ from decimal import Decimal
 from html import escape
 
 from app.payments.invoice import Invoice
-from app.payments.invoice_assets import font_face_css, logo_data_uri
+from app.payments.invoice_assets import (
+    company_logo_data_uri,
+    font_face_css,
+    logo_data_uri,
+)
 
 #: The product lockup, matching the one the app's sidebar renders (see
 #: PlatformLayout.jsx): the Ally mark, the product name with `Ally` in italic,
@@ -140,6 +144,10 @@ table.items .num{text-align:right;white-space:nowrap;font-variant-numeric:tabula
 
 /* --- footer --- */
 .foot{margin-top:30px;padding-top:13px;border-top:1px solid #E5DED2;}
+.foot-top{display:flex;align-items:flex-start;gap:14px;}
+.foot-mark{flex-shrink:0;width:96px;margin-top:1px;}
+.foot-mark img{width:100%;height:auto;display:block;}
+.foot-who{flex:1;min-width:0;}
 .foot-name{font-size:11px;font-weight:700;color:#16241C;}
 .foot-line{font-size:10px;color:#6B7A70;margin-top:2px;}
 .foot-note{font-size:9.5px;color:#8A968E;margin-top:9px;line-height:1.6;}
@@ -251,6 +259,15 @@ def build_invoice_html(invoice: Invoice) -> str:
     # that cannot be read costs a logo and not a receipt.
     logo = logo_data_uri()
     logo_img = f'<img src="{logo}" alt="">' if logo else ""
+
+    # The ISSUER's mark, in the footer beside the legal entity -- the header
+    # belongs to the product the founder actually bought. Optional the same
+    # way: no mark costs a logo, never the receipt.
+    company_logo = company_logo_data_uri()
+    company_mark = (
+        f'<div class="foot-mark"><img src="{company_logo}" alt=""></div>'
+        if company_logo else ""
+    )
 
     details = _kv([
         ("Invoice no.", invoice.number),
@@ -403,8 +420,13 @@ def build_invoice_html(invoice: Invoice) -> str:
     {escape(amount_in_words(invoice.gross_amount))}</div>
 
   <div class="foot">
-    <div class="foot-name">{escape(invoice.seller_name)}</div>
-    <div class="foot-line">{foot_line}</div>
+    <div class="foot-top">
+      {company_mark}
+      <div class="foot-who">
+        <div class="foot-name">{escape(invoice.seller_name)}</div>
+        <div class="foot-line">{foot_line}</div>
+      </div>
+    </div>
     <div class="foot-note">{escape(note)}</div>
     <div class="foot-thanks">Thank you for building with Ally.</div>
   </div>
