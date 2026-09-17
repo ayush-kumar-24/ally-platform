@@ -14,6 +14,7 @@ and inventing a trigger rule now would bake in behaviour the scoring engine
 would have to unpick later.
 """
 
+from app.api.v1.diagnosis.context_scope import context_tokens, gated_problem_codes
 from app.api.v1.diagnosis.repository import DiagnosisRepository
 from app.api.v1.diagnosis.stage_scope import resolve_scope
 from app.core.logger import logger
@@ -303,10 +304,15 @@ class QuestionSelectionEngine:
         return self._in_scope(candidates, founder)
 
     def _in_scope(self, candidates: list[Question], founder: Founder) -> list[Question]:
-        """Drop questions the founder's stage is not diagnosed on.
+        """Drop questions this founder should not be asked.
 
-        Two independent tests, both derived from the same Part 3 dimension set
-        (see `stage_scope`), and both applied:
+        CONTEXT runs first and is a different axis from the rest: it asks
+        whether the subject is part of the founder's situation at all, not
+        whether they are far enough along to have an answer. It applies at every
+        stage, including the ones that withhold nothing. See `context_scope`.
+
+        Then two independent tests, both derived from the same Part 3 dimension
+        set (see `stage_scope`), and both applied:
 
           PILLAR    which subjects may be raised at all, read through
                     problems.pillar_id.
@@ -339,8 +345,20 @@ class QuestionSelectionEngine:
         round-robin's degrade path: correctness of coverage must never be able to
         stop the assessment from finding a next question.
         """
+        if not candidates:
+            return candidates
+
+        # CONTEXT first, and OUTSIDE the stage-scope short-circuit below. It is
+        # a different axis and must survive `withholds_nothing`, which is true
+        # from Growth onward -- a scaling founder who is not raising is not too
+        # early for fundraising questions, the subject is simply not theirs.
+        # Rebinding `candidates` is deliberate: the stage-scope fallback further
+        # down returns this name, so a stage-scope data problem re-admits the
+        # stage filters and never re-admits a gated problem.
+        candidates = self._context_gated(candidates, founder)
+
         scope = resolve_scope(founder)
-        if scope is None or scope.withholds_nothing or not candidates:
+        if scope is None or scope.withholds_nothing:
             return candidates
 
         scoped = candidates
@@ -404,6 +422,75 @@ class QuestionSelectionEngine:
             },
         )
         return scoped
+
+    def _context_gated(
+        self, candidates: list[Question], founder: Founder
+    ) -> list[Question]:
+        """Drop questions whose problem presupposes something this founder
+        has not told us is true. See `context_scope`.
+
+        Degrades the same way the pillar and dimension tests do, and for the
+        same reason: an unavailable problem-code map disables THIS test only,
+        rather than the whole of scoping. Three separate ways to end up not
+        gating -- unknown context, unavailable map, or a gate that would empty
+        the set -- and all three admit the question rather than withholding it.
+
+        Never returns empty when it was given a non-empty set. Identical
+        invariant to `_in_scope`'s, restated here because this filter runs
+        before it and would otherwise hand it nothing to work with.
+        """
+        gated = gated_problem_codes(context_tokens(founder))
+        if not gated:
+            return candidates
+
+        problem_to_code = self._code_map_or_none()
+        if not problem_to_code:
+            return candidates
+
+        # `.get() not in gated`: a problem with no code recorded is UNKNOWN and
+        # is admitted. Same reading as the dimension test -- absence of a fact
+        # is never evidence for withholding.
+        kept = [q for q in candidates if problem_to_code.get(q.problem_id) not in gated]
+
+        if not kept:
+            logger.warning(
+                "Context gate matched no candidate question; leaving the set "
+                "ungated rather than ending the diagnosis",
+                extra={
+                    "stage": "context_scope",
+                    "gated_problems": sorted(gated),
+                    "candidates": len(candidates),
+                },
+            )
+            return candidates
+
+        if len(kept) != len(candidates):
+            logger.info(
+                "diagnosis gated on founder context",
+                extra={
+                    "stage": "context_scope",
+                    "gated_problems": sorted(gated),
+                    "withheld": len(candidates) - len(kept),
+                    "candidates": len(candidates),
+                },
+            )
+        return kept
+
+    def _code_map_or_none(self) -> dict[int, str] | None:
+        """problem_id -> problem_code, or None when the context gate cannot run.
+
+        Mirrors `_pillar_map_or_none`, including the nested transaction, so a
+        failed lookup cannot poison the session the caller is inside.
+        """
+        try:
+            with self.repository.db.begin_nested():
+                return self.repository.problem_to_code()
+        except Exception:                                  # noqa: BLE001
+            logger.warning(
+                "Problem-code map unavailable; selecting without the context gate",
+                extra={"stage": "context_scope"},
+            )
+            return None
 
     def _pillar_map_or_none(self, scope) -> dict[int, int] | None:
         """problem_id -> pillar_id, or None when the pillar test cannot run.
