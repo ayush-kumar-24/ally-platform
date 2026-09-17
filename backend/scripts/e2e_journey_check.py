@@ -2894,6 +2894,375 @@ PERSONAS["desi_bar"] = DESI_BAR_ANSWERS
 _ONBOARDING["desi_bar"] = _DESI_BAR_ONBOARDING
 
 
+# ---------------------------------------------------------------------------
+# `arya_parlour` -- a second real user case, at Early Traction.
+#
+# Arya runs a beauty parlour with two franchise units and wants to franchise
+# across India. Roughly Rs 1-1.5 lakh a month today; she wants Rs 10 lakh.
+#
+# Written the way she would actually talk -- warm, specific, occasionally
+# contradicting herself -- rather than in the clipped register of the older
+# personas. The interesting thing about this case is the distance between the
+# ambition and the operating reality: two units she can barely keep
+# consistent, no written process, and a founder still doing bridal makeup
+# herself on Saturdays.
+# ---------------------------------------------------------------------------
+_ARYA_TEXTS = (
+    # ---- _TOPICS (15) ---------------------------------------------------
+    # 0 customers spoken to / validation
+    "Every single day, but I should be honest about what kind of talking. I "
+    "chat with the women in my chair for two hours at a time, so I know my "
+    "Pune customers better than anyone. But franchise buyers? That is a "
+    "totally different customer and I have properly spoken to maybe four. "
+    "Both my current franchisees came to me -- one is my cousin's friend, the "
+    "other was a client for three years. I have never once gone out and found "
+    "someone who did not already know me.",
+    # 1 planning / time / priorities
+    "I plan the salon week properly -- bookings, staff shifts, stock, all of "
+    "it is tight. The expansion I do not plan at all. It happens on Sunday "
+    "night if I have energy left, which honestly is maybe two Sundays a "
+    "month. Last week I did about sixty-two hours and I would say four of "
+    "them were on the franchise idea. The rest was me behind the chair or "
+    "sorting out something at the Kothrud branch.",
+    # 2 market / competitors
+    "Locally I know exactly who I am up against -- there are two salons in "
+    "the same lane and I know their rate cards by heart. Nationally I have no "
+    "idea. Lakme Salon, Naturals, Green Trends, Jawed Habib -- these are the "
+    "names, and Naturals has something like seven hundred outlets. What I "
+    "have not done is sat down and worked out what makes someone pick my "
+    "franchise over Naturals when Naturals has the brand and the ad budget. I "
+    "keep saying personal touch, but that is not really an answer, is it.",
+    # 3 product / what you have built
+    "Two franchise units, both in Pune, both running about eighteen months. "
+    "Plus my own original parlour in Karve Nagar which is nine years old now. "
+    "What I have actually built is a good salon and a reputation. What I have "
+    "not built is a franchise system -- no manual, no training programme, no "
+    "brand guidelines. When the second franchisee opened I basically stood in "
+    "her salon for three weeks and showed her. That is not something I can do "
+    "forty times.",
+    # 4 pricing / revenue / money
+    "The salon does about one to one and a half lakh a month, and that is "
+    "mostly my own outlet -- bridal season pushes it up, monsoon it drops. "
+    "From the two franchises I take a small royalty, around eight thousand "
+    "each, and I will be honest, one of them has paid late four months "
+    "running and I have not pushed because she is family, more or less. So "
+    "the franchise side is not really revenue yet. I want to get to ten lakh "
+    "a month and when I say that number out loud I have not actually worked "
+    "out what has to be true for it. I think I have been assuming more "
+    "franchises equals more money without doing the sum.",
+    # 5 team / co-founder
+    "No co-founder. I have four girls at my own outlet -- two beauticians, "
+    "one who does hair, one at the desk. Been with me three to six years, "
+    "very loyal, I trust them with clients completely. But nobody there is "
+    "going to help me build a franchise business, and I have not hired anyone "
+    "for that because I do not know what that person even looks like. My "
+    "husband handles some of the accounts in the evening.",
+    # 6 risk
+    "Not written down anywhere, no. In my head -- a franchisee doing bad work "
+    "and someone posting about it, that frightens me the most. One bad Google "
+    "review with my name on it in a city I have never visited. Also money, "
+    "because if I take a franchise fee and the girl fails in eight months, "
+    "that is her savings. That would sit very badly with me.",
+    # 7 decision under uncertainty
+    "I decide fast, sometimes too fast. I signed the second franchise in "
+    "about ten days because she was keen and I was flattered. Looking back I "
+    "did not check whether she could actually run a business or just wanted "
+    "to. When I am exhausted I say yes to things I should sit on.",
+    # 8 feedback / criticism / blind spot
+    "My senior beautician, Sunita, told me something in March that I did not "
+    "want to hear. She said I talk about going all-India but I still do the "
+    "bridal bookings myself every Saturday, so when would I even have the "
+    "time. My first reaction was to explain why bridal is different and "
+    "high-margin, and then afterwards I thought, no, she is right and I was "
+    "just defending it. I do take feedback, but from my own people. I do not "
+    "go looking for it from outside.",
+    # 9 why / vision / origin
+    "I started in one room in my house because my marriage was not in a good "
+    "place and I needed my own money. Nine years later I employ four women, "
+    "and two more run their own places. That is the thing that actually moves "
+    "me -- not the salon, the fact that women who had nothing of their own "
+    "now have something. Five years from now I want fifty women running their "
+    "own outlet under my name and not needing to ask anyone for money.",
+    # 10 first / best / trusted
+    "Trusted, without question. In this line a woman is letting you touch her "
+    "face before her own wedding. If she does not trust you, nothing else "
+    "matters. I would rather be the one people recommend quietly than the one "
+    "with the biggest hoarding.",
+    # 11 explain it in one breath
+    "A beauty parlour franchise for small-town and neighbourhood India, run "
+    "by women who want their own business, where the training and the "
+    "standards actually come with it instead of just the board outside.",
+    # 12 personally ran into the problem
+    "I lived it. When I started nobody trained me properly -- I did a "
+    "six-month course that taught me almost nothing useful and then I learned "
+    "on real customers, which is a terrible way to learn. I burnt a client's "
+    "hair in my second month. I still remember her face. That is the gap I am "
+    "trying to fix for the next woman.",
+    # 13 tools
+    "WhatsApp for everything, which is the honest answer. Bookings in a "
+    "diary, a paper one. I tried a salon software last year for two months, "
+    "could not get the staff to use it, gave up. The franchise accounts are "
+    "in a notebook my husband keeps. So if you asked me today how much profit "
+    "the Kothrud branch made in July, I could not tell you without sitting "
+    "down for an hour.",
+    # 14 time that eats the most
+    "Doing treatments myself. I am good at it and clients ask for me by name, "
+    "so I keep doing it, and it takes thirty-plus hours of my week. Every one "
+    "of those hours is an hour not spent building the thing I say I want. I "
+    "know this. I have known it for about two years.",
+
+    # ---- _OPERATING_TOPICS (21) -----------------------------------------
+    # 0 delegation
+    "Badly. I will tell one of the girls to handle a client and then hover, "
+    "or I take over halfway because it is faster. With the franchisees it is "
+    "worse -- they call me and I just solve it on the phone instead of making "
+    "them work it out. I think I have trained everyone to depend on me.",
+    # 1 if you got sick / in your absence
+    "I had dengue two years ago and was out for eleven days. Revenue that "
+    "month dropped by nearly forty percent and two bridal bookings went to "
+    "the salon down the road. Sunita held the place together but she could "
+    "not do the bridal or the accounts or the ordering. So honestly, if I "
+    "disappeared the business would survive maybe three weeks.",
+    # 2 written down / SOPs
+    "Nothing is written down. Not one page. All of it is in my head or in my "
+    "hands. When I trained the second franchisee I stood there and showed "
+    "her, and when she forgets something she rings me. I know that is the "
+    "single biggest thing stopping me from opening a third, and yet I have "
+    "not written a word, and I cannot fully explain why.",
+    # 3 who owns what / role clarity
+    "In my own salon everyone knows their job, it runs smoothly. Between me "
+    "and the franchisees it is completely unclear. Who pays for the "
+    "advertisement? Who decides if she can add a new service? We have never "
+    "written it down, so every time something comes up we argue about it "
+    "fresh and I usually give in.",
+    # 4 decision rights / disagreements
+    "There is no proper way. Last month the Kothrud franchisee wanted to run "
+    "a 40% discount for Shravan. I said no, it damages the brand, she said it "
+    "is her salon and her rent. She ran it. I did not stop her because I have "
+    "no agreement that says I can. That was a bad week.",
+    # 5 how do you know the team is performing
+    "I can see it in my own salon -- I am standing there. For the franchises "
+    "I genuinely do not know. I see the royalty amount, which tells me a "
+    "little, and I hear things. I have never once looked at their actual "
+    "numbers, their repeat customer rate, anything. I would not even know "
+    "what to ask for.",
+    # 6 hiring / kept someone too long
+    "Yes. A girl at my outlet, about two years back -- lovely person, clients "
+    "did not warm to her, and I kept her nearly a year longer than I should "
+    "because letting her go felt cruel. It cost me. I am soft that way and it "
+    "is going to be a real problem when there are thirty outlets.",
+    # 7 churn / retention
+    "At my own place retention is excellent -- I have clients from year one, "
+    "some of them come every ten days. I would guess seventy percent of my "
+    "revenue is regulars. For the franchises I have no idea whether their "
+    "customers come back. Nobody is tracking it. That is probably the number "
+    "that would tell me most and I do not have it.",
+    # 8 buying journey
+    "For the salon, simple -- a friend tells them, or they walk past, or they "
+    "see us on Instagram. For a franchise I really could not describe it. "
+    "Both the ones I have came through relationship. If a woman in Nagpur "
+    "wanted to buy my franchise tomorrow, there is no place she could even "
+    "find out about it. No website, no enquiry form, nothing.",
+    # 9 pricing / quotes / discounts
+    "My salon rate card is fixed and printed, that is fine. The franchise "
+    "fee I have made up twice -- I charged the first one two lakh and the "
+    "second one one and a half, and the only reason was that the second "
+    "negotiated and I felt awkward. If someone asked me today what it costs "
+    "I would probably say a number based on how the conversation was going, "
+    "which is not a business.",
+    # 10 cash / profit / margin
+    "I know what comes in. I could not tell you my actual profit. Rent, four "
+    "salaries, products, electricity -- it all comes out of the same account "
+    "and my household expenses come out of it too, which I know is wrong. I "
+    "check the balance on my phone and if it looks alright I carry on. I have "
+    "never made a proper P&L, not in nine years.",
+    # 11 evidence of demand beyond your own belief
+    "Honestly? Mostly belief. What I could show is that two women took the "
+    "franchise and both are still running after eighteen months, and that my "
+    "own place has survived nine years including Covid. What I could not show "
+    "is anyone outside my circle wanting it -- no waiting list, no enquiries, "
+    "nothing on paper. If an investor asked me to prove demand for the "
+    "franchise I would struggle.",
+    # 12 marketing / campaigns
+    "Instagram, and only when I remember. I post a before-after when a bridal "
+    "looks nice, so maybe six or seven times a month, no plan behind it. I "
+    "have never run a campaign with a goal attached. I would not know what "
+    "success looked like other than getting some likes.",
+    # 13 who you designed it for vs who buys
+    "I thought my franchisee would be a young girl straight out of beauty "
+    "school wanting her own place. Both the actual ones are married women in "
+    "their thirties with some savings and family support who want something "
+    "of their own. That is a different person with different worries and I "
+    "have not changed anything about how I talk about it. I only really "
+    "noticed this while answering you now.",
+    # 14 who are you now as a leader
+    "In year one I was a beautician who owned a chair. Now I am supposed to "
+    "be someone other women depend on for their income, and I do not think I "
+    "have grown into that. I still feel like the girl doing facials in her "
+    "spare room. Nobody knows I feel that way.",
+    # 15 changed shape / when
+    "It changed when the first franchise opened, and I did not notice for "
+    "about six months. Before that every problem was mine to solve with my "
+    "own hands. After that, other people's money and other people's "
+    "reputations were riding on decisions I was making casually.",
+    # 16 data / privacy
+    "I have client phone numbers and their appointment history in a diary, "
+    "and photographs of women's faces before their weddings on my phone, "
+    "which I sometimes post. I ask them, usually verbally. Nothing is written "
+    "or signed. I had not really thought of it as a risk until this question.",
+    # 17 sales pipeline
+    "There is no pipeline. If you asked me how many people are currently "
+    "interested in taking a franchise, the answer is one, a lady from Nashik "
+    "who called in July, and I have not rung her back. That is the entire "
+    "pipeline of my all-India expansion.",
+    # 18 templates / proposals
+    "Nothing reusable. Both times I explained the franchise over tea and then "
+    "we made a simple agreement with a lawyer my husband knows. Different "
+    "terms both times. If a third person came I would start from scratch "
+    "again.",
+    # 19 contracts / oversight
+    "My husband's lawyer friend looked at both agreements, briefly. I read "
+    "them but I would not say I understood every clause. There is nothing in "
+    "there about quality standards or what happens if she stops paying, which "
+    "I only realised when the payments started coming late.",
+    # 20 publishing content
+    "Six or seven Instagram posts a month, no schedule, whenever a client "
+    "looks especially good. Nothing written, no blog, nothing about the "
+    "franchise at all. Somebody told me I should be making reels and I have "
+    "been meaning to for a year.",
+
+    # ---- _CURRENT_PROBLEM_TOPICS (8) ------------------------------------
+    # 0 single biggest thing
+    "I am the business. That is it. Everything runs through my hands and my "
+    "phone, and I keep saying I want fifty outlets while I am personally "
+    "doing someone's bridal makeup on a Saturday. I cannot be in Nagpur and "
+    "at that chair at the same time, and I have not let go of the chair.",
+    # 1 what would need to be true this week
+    "I would have to let Sunita do a full bridal on her own, start to finish, "
+    "without me in the room. That is genuinely it. If I could do that one "
+    "thing this week it would tell me more than any plan.",
+    # 2 already tried / why it stalled
+    "I started writing a training manual in January. I got four pages in -- "
+    "hygiene and how to greet a client -- and then bridal season hit and I "
+    "never went back. I also made a list of ten cities to target and did "
+    "nothing with it. Both times it was not that I gave up, it is that a "
+    "client walked in and the client always wins.",
+    # 3 what would stop it cold
+    "Me. If I could not work, the whole thing stops in about three weeks. "
+    "After that, honestly, my Karve Nagar landlord -- I am on a verbal "
+    "understanding there, nine years, no written lease. If he asked me to "
+    "leave I would have nothing to stand on.",
+    # 4 avoiding this week
+    "Ringing the Kothrud franchisee about the late royalty. Four months now. "
+    "Every week I decide I will call her and every week I do not, because she "
+    "is practically family and I hate the conversation. Meanwhile I am "
+    "teaching her that it does not matter.",
+    # 5 metric quietly avoiding
+    "My actual profit. And close behind it, what I earn per hour when I am "
+    "behind the chair versus what those hours would be worth building the "
+    "franchise. I have avoided both for about two years because I think I "
+    "know roughly what they say.",
+    # 6 problem that keeps resurfacing
+    "Quality at the franchise outlets. Every few months I hear something -- a "
+    "client complained, they used a cheaper product, the place was not clean. "
+    "I go, I have a talk, it improves for a month, then it slides back. I "
+    "keep treating it as a people problem when actually there is no standard "
+    "written anywhere for them to fall short of.",
+    # 7 decision that landed on you
+    "The Shravan discount one. That should have been settled by an agreement "
+    "signed eighteen months ago, not by the two of us arguing on the phone at "
+    "eleven at night. Almost everything lands on me like that because I never "
+    "set up anything to decide it in advance.",
+
+    # ---- _FOUNDER_TOPICS (9) --------------------------------------------
+    # 0 last thing that satisfied you
+    "The second franchisee's opening day. She cried, her husband was "
+    "photographing everything, her mother was there. I built that. Not the "
+    "salon -- that moment for her. Nothing in my own salon has felt like "
+    "that in years.",
+    # 1 trophy vs bridge
+    "The bridge, easily. I do not need my name on it. I want a woman in some "
+    "town I will never visit to be earning her own money because of something "
+    "I set up. That is the whole point of it for me.",
+    # 2 what recharges / flow
+    "Strangely, doing a really good bridal. Four hours, one face, total "
+    "silence in my head. That is my flow and it is also my trap, because it "
+    "is the thing I should be doing least. What drains me is the phone -- "
+    "franchisee calls, supplier calls, that leaves me finished.",
+    # 3 considered dropping it / what 'done' means
+    "Last November. Payments late, a complaint from Kothrud, and I thought, "
+    "why am I doing this, my own salon is fine and profitable and simple. "
+    "What stopped me was the opening day memory, honestly. 'Done' for me "
+    "would be a franchise opening in a city where I do not go, run properly, "
+    "without me on a single phone call.",
+    # 4 not scalable but doing anyway
+    "Personally training every franchisee, standing in their salon for three "
+    "weeks. And doing the bridals. Both are completely unscalable and both "
+    "are the parts I love, so I keep finding reasons why they are "
+    "necessary. They are not necessary. They are comfortable.",
+    # 5 walked away / the line
+    "A man approached me last year about putting my name on a chain of salons "
+    "he would run, good money upfront. I said no because he talked about the "
+    "staff like they were furniture. I will not put my name on a place where "
+    "the girls are treated badly. That is the line and I would hold it even "
+    "if it cost me the expansion.",
+    # 6 perfectionism
+    "The logo and the interiors. I spent nearly five months and a lot of "
+    "money getting the second franchise's interiors exactly like mine -- same "
+    "shade of paint, same mirrors. Five months. In that time I could have "
+    "written the manual that actually matters, and the customer would not "
+    "have noticed a different shade of paint.",
+    # 7 if fixed overnight, what changes for the user
+    "For the franchisee it changes everything -- she would have a real system "
+    "instead of my phone number. Right now what she has bought is access to "
+    "me, and I am one person with a full appointment book. For the end "
+    "customer, honestly, not much changes; she already gets a decent facial. "
+    "The person I am actually failing is the franchisee.",
+    # 8 is your own experience representative
+    "Probably not, and I have been assuming it is. I built everything around "
+    "what I needed nine years ago -- a woman with no money, no training, "
+    "starting from her house. My actual franchisees have savings, a husband "
+    "backing them, and a completely different fear, which is losing what they "
+    "already have. I have been designing for who I was, not for who they are.",
+)
+
+_ARYA_ONBOARDING = {
+    "business_name": "Arya Beauty Studio",
+    "problem_statement":
+        "Women who want to run their own beauty parlour get no real training "
+        "or system -- the big franchise chains sell a board and a rate card, "
+        "and independent salons learn on real customers and make expensive "
+        "mistakes.",
+    "building_summary":
+        "A beauty parlour franchise for neighbourhood and small-town India, "
+        "run by women, where the training and the standards come with the "
+        "brand rather than just the signage.",
+    "industry": "Beauty & Wellness",
+    "current_challenges": ["Operations", "Team"],
+    "goal_90_day":
+        "A written training manual and one franchise signed by someone I did "
+        "not already know.",
+    "vision_1_year":
+        "Ten outlets running to the same standard, and a month where I do not "
+        "personally do a single bridal.",
+    "product_description":
+        "A franchised beauty parlour -- hair, skin, bridal -- sold to women "
+        "who want their own business, with training, standards and supply "
+        "included.",
+}
+
+ARYA_ANSWERS = _ARYA_TEXTS
+ANSWER_BANK["arya_parlour"] = tuple(zip(
+    _TRACTION_TOPICS + _CURRENT_PROBLEM_TOPICS + _FOUNDER_TOPICS, _ARYA_TEXTS))
+# Topic-neutral, in her voice: it must not smuggle in evidence about a
+# dimension the question never raised.
+FALLBACKS["arya_parlour"] = ("No, I have not done that one, and I cannot even "
+                             "give you a good reason -- it just never reaches "
+                             "the top of the list.")
+PERSONAS["arya_parlour"] = ARYA_ANSWERS
+_ONBOARDING["arya_parlour"] = _ARYA_ONBOARDING
+
+
 if __name__ == "__main__":
     sys.exit(main())
 
