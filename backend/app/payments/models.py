@@ -57,6 +57,14 @@ class CheckoutSession:
     list_amount_paise: int | None = None
     discount_paise: int | None = None
     coupon_code: str | None = None
+    #: GST ADDED ON TOP, in paise, and the rate it was added at. Non-zero only
+    #: on a business purchase, where the catalog price is ex-GST. Zero on a
+    #: personal one, whose price already includes the tax -- so `amount_paise`
+    #: is what Razorpay charges either way, and a client ignoring these two
+    #: fields still shows and charges the right number. They exist so the
+    #: summary can show WHY the total moved when "business" was ticked.
+    gst_paise: int = 0
+    gst_percent: float | None = None
 
 
 class WebhookOutcome:

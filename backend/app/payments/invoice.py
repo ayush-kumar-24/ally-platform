@@ -149,6 +149,18 @@ class Invoice:
         return "Tax Invoice" if self.is_tax_invoice else "Payment Receipt"
 
 
+def seller_gstin() -> str | None:
+    """The configured seller GSTIN, or None when there isn't a usable one.
+
+    Public because CHECKOUT needs the same answer the document does: GST is
+    only added to a business price when a tax invoice will actually be issued
+    for it. Charging 18% on top while issuing a receipt that reads "no GST has
+    been charged" would be a direct contradiction between the money taken and
+    the document describing it.
+    """
+    return _valid_gstin(settings.INVOICE_SELLER_GSTIN)
+
+
 def _valid_gstin(raw: str | None) -> str | None:
     """The configured GSTIN, or None when there isn't a usable one.
 
@@ -262,7 +274,7 @@ def build_invoice(source, *, founder_name: str, founder_email: str,
         )
 
     gross = _money(source.amount_inr)
-    gstin = _valid_gstin(settings.INVOICE_SELLER_GSTIN)
+    gstin = seller_gstin()
     is_tax_invoice = gstin is not None
 
     seller_state = normalise_state(settings.INVOICE_SELLER_STATE)

@@ -928,3 +928,123 @@ class TestBusinessIdentity:
         assert self._check("27AALCG5562B1ZS", state=None).gstin == "27AALCG5562B1ZS"
         with pytest.raises(InvalidBusinessDetailsError):
             self._check("nonsense", state=None)
+
+
+# --- business pricing: GST on top -----------------------------------------
+
+class TestBusinessPricing:
+    """A personal buyer pays the catalog price; a business pays it plus GST.
+
+    Both are charged the same RATE on the same supply -- the difference is
+    whether the quoted number already contains the tax. The business pays more
+    at the till and reclaims the difference against its GSTIN, so the cost to
+    them is the same 999.
+    """
+
+    BIZ = None  # set in _checkout
+
+    @staticmethod
+    def _checkout(tier, purchase_type, *, coupon=None, state="Gujarat"):
+        from app.payments.models import BusinessIdentity, PurchaseType
+
+        repo = FakeRepository()
+        service = PaymentService(FakeGateway(), repo, FakeCredits(),
+                                 clock=lambda: NOW)
+        business = (BusinessIdentity("24AALCG5562B1ZS", "Blissnack Pvt Ltd", None)
+                    if purchase_type == PurchaseType.BUSINESS else None)
+        session = service.start_checkout(1, tier, coupon_code=coupon,
+                                         buyer_state=state,
+                                         purchase_type=purchase_type,
+                                         business=business)
+        return session, repo._payments[session.payment_id]
+
+    def test_a_personal_purchase_charges_exactly_the_catalog_price(self):
+        from app.payments.models import PurchaseType
+
+        session, _ = self._checkout(PlanTier.PRO, PurchaseType.PERSONAL)
+        assert session.amount_paise == 99900          # Rs 999.00
+        assert session.gst_paise == 0
+        assert session.gst_percent is None
+
+    def test_a_business_purchase_adds_gst_on_top(self):
+        from app.payments.models import PurchaseType
+
+        session, _ = self._checkout(PlanTier.PRO, PurchaseType.BUSINESS)
+        assert session.amount_paise == 117882         # Rs 1,178.82
+        assert session.gst_paise == 17982             # Rs 179.82
+        assert session.gst_percent == 18.0
+
+    @pytest.mark.parametrize("tier,personal,business", [
+        (PlanTier.BASIC, 19900, 23482),     # 199   -> 234.82
+        (PlanTier.STARTER, 49900, 58882),   # 499   -> 588.82
+        (PlanTier.PRO, 99900, 117882),      # 999   -> 1,178.82
+    ])
+    def test_every_paid_tier_prices_both_ways(self, tier, personal, business):
+        from app.payments.models import PurchaseType
+
+        assert self._checkout(tier, PurchaseType.PERSONAL)[0].amount_paise == personal
+        assert self._checkout(tier, PurchaseType.BUSINESS)[0].amount_paise == business
+
+    def test_the_charge_is_exact_to_the_paisa_never_a_float(self):
+        """`rupees * 118` is a whole number of paise, so nothing rounds."""
+        from decimal import Decimal
+
+        from app.payments.models import PurchaseType
+
+        session, row = self._checkout(PlanTier.PRO, PurchaseType.BUSINESS)
+        assert session.amount_paise == 999 * 118
+        assert row["amount_inr"] == Decimal("1178.82")
+
+    def test_the_invoice_recovers_the_catalog_price_from_what_was_charged(self):
+        """The whole scheme rests on this: add 18%, then back 18% out of the
+        gross, and you are exactly where you started. If this drifts, the
+        business is invoiced for a base that is not the price they agreed."""
+        from decimal import Decimal
+
+        from app.payments.invoice import compute_tax
+        from app.payments.models import PurchaseType
+
+        _, row = self._checkout(PlanTier.PRO, PurchaseType.BUSINESS)
+        tax = compute_tax(row["amount_inr"], percent=Decimal("18"), intra_state=True)
+        assert tax.taxable_value == Decimal("999.00")
+        assert tax.total_tax == Decimal("179.82")
+        assert tax.taxable_value + tax.total_tax == row["amount_inr"]
+
+    def test_a_coupon_discounts_before_gst_not_after(self):
+        """Tax is due on what was actually charged for the service, so the
+        discount comes off the base and GST applies to the remainder."""
+        from app.payments.models import BusinessIdentity, PurchaseType
+
+        service, _, _ = _service(gateway=FakeGateway())
+        service.coupons = _coupon_service()
+        price = PLANS[PlanTier.PRO].price_inr
+        net = price - price // 2          # what _coupon_service discounts by
+
+        session = service.start_checkout(
+            1, PlanTier.PRO, coupon_code="founder100", buyer_state="Gujarat",
+            purchase_type=PurchaseType.BUSINESS,
+            business=BusinessIdentity("24AALCG5562B1ZS", "Blissnack Pvt Ltd", None))
+
+        # GST on the DISCOUNTED base, not on the list price.
+        assert session.amount_paise == net * 118
+        assert session.gst_paise == net * 18
+        assert session.list_amount_paise == price * 100   # still pre-tax
+
+    def test_no_gst_is_added_when_no_tax_invoice_would_be_issued(self, monkeypatch):
+        """With no seller GSTIN the document is a receipt saying no GST was
+        charged. Adding 18% anyway would make the money and the paperwork
+        contradict each other."""
+        from app.core.config import settings
+        from app.payments.models import PurchaseType
+
+        monkeypatch.setattr(settings, "INVOICE_SELLER_GSTIN", "")
+        session, _ = self._checkout(PlanTier.PRO, PurchaseType.BUSINESS)
+        assert session.amount_paise == 99900
+        assert session.gst_paise == 0
+
+    def test_a_payment_with_no_purchase_type_is_priced_as_personal(self):
+        """An older client sends none. It must not silently start charging 18%
+        more than the price on the plan card."""
+        session, _ = self._checkout(PlanTier.PRO, None)
+        assert session.amount_paise == 99900
+        assert session.gst_paise == 0

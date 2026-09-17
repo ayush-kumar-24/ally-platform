@@ -366,6 +366,13 @@ def build_invoice_html(invoice: Invoice) -> str:
         "signature. It is a record of payment, not a tax invoice, and no GST "
         "has been charged or is claimable against it."
     )
+    # Stated for a business because it is the reason they gave us their GSTIN,
+    # and because it is true whether the tax was added on top of the price or
+    # found inside it -- so the sentence does not have to know which, and
+    # cannot misdescribe an older invoice if that ever changes.
+    if tax and invoice.is_business:
+        note += (" The GST charged is claimable as input credit against the "
+                 "GSTIN shown above.")
     if refunded:
         note += (" This payment was subsequently refunded; the document is retained "
                  "as the record of the original charge.")

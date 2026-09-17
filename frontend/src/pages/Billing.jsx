@@ -525,6 +525,12 @@ function CheckoutView({ plan, onBack, onPaid }) {
     ? `₹${rupeesFromPaise(order.list_amount_paise)}` : null;
   const discountLabel = order?.discount_paise
     ? `₹${rupeesFromPaise(order.discount_paise)}` : null;
+  /* GST added ON TOP, which happens only on a business purchase: the catalog
+     price is GST-inclusive for a person and ex-GST for a company. Shown as its
+     own line so the founder can see why the total moved when they ticked the
+     box, rather than watching a number silently grow by 18%. */
+  const gstLabel = order?.gst_paise
+    ? `₹${rupeesFromPaise(order.gst_paise)}` : null;
   const busy = payState !== 'idle';
   /* Only ever blocks when there is a list to choose from. If the states call
      failed there is nothing to pick, and a founder must not be held behind a
@@ -597,7 +603,7 @@ function CheckoutView({ plan, onBack, onPaid }) {
               />
               <span>
                 I&apos;m buying this for a business
-                <span className="bl-field-hint"> · adds your GSTIN to the invoice so you can claim input credit</span>
+                <span className="bl-field-hint"> · your GSTIN goes on the invoice and GST is added on top, so you can claim it back</span>
               </span>
             </label>
 
@@ -797,9 +803,23 @@ function CheckoutView({ plan, onBack, onPaid }) {
                 <span>&minus;{discountLabel}</span>
               </div>
             )}
+            {gstLabel && (
+              <div className="bl-os-line">
+                <span>GST @ {order.gst_percent}%</span>
+                <span>{gstLabel}</span>
+              </div>
+            )}
             <div className="bl-os-total">
               <span>Total payable</span>
               <span>{amountLabel ?? '—'}</span>
+            </div>
+            {/* Said explicitly in both directions. A business founder needs to
+                know the 18% is reclaimable; a personal one needs to know the
+                price they were quoted is the price they pay. */}
+            <div className="bl-os-taxnote">
+              {gstLabel
+                ? 'GST is added on top for business purchases, and is claimable as input credit against your GSTIN.'
+                : 'Inclusive of GST. The price shown is the price you pay.'}
             </div>
           </div>
 

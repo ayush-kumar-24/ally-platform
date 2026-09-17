@@ -109,13 +109,19 @@ class CheckoutResponse(BaseModel):
     list_amount_paise: int | None = None
     discount_paise: int | None = None
     coupon_code: str | None = None
+    # GST added on top, present only on a business purchase. `amount_paise` is
+    # always the full amount Razorpay will charge, so a client that ignores
+    # these still charges correctly.
+    gst_paise: int = 0
+    gst_percent: float | None = None
 
     @classmethod
     def from_domain(cls, s: CheckoutSession) -> "CheckoutResponse":
         return cls(payment_id=s.payment_id, order_id=s.order_id, amount_paise=s.amount_paise,
                    currency=s.currency, key_id=s.key_id,
                    list_amount_paise=s.list_amount_paise, discount_paise=s.discount_paise,
-                   coupon_code=s.coupon_code)
+                   coupon_code=s.coupon_code, gst_paise=s.gst_paise,
+                   gst_percent=s.gst_percent)
 
 
 def get_payment_service(db=Depends(get_db)):

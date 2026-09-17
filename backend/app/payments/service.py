@@ -25,9 +25,11 @@ from __future__ import annotations
 
 import json
 from calendar import monthrange
+from decimal import ROUND_HALF_UP, Decimal
 from datetime import datetime, timezone
 from typing import Any
 
+from app.core.config import settings
 from app.core.logger import logger
 from app.coupons.service import CouponService
 from app.credits.models import CreditOperation
@@ -43,7 +45,7 @@ from app.payments.errors import (
 )
 from app.payments.gateway import PaymentGateway, PaymentGatewayError
 from app.payments.gst_states import normalise_gstin, normalise_state, state_of_gstin
-from app.payments.invoice import Invoice, build_invoice
+from app.payments.invoice import Invoice, build_invoice, seller_gstin
 from app.payments.models import (
     BusinessIdentity,
     CheckoutSession,
@@ -247,8 +249,40 @@ class PaymentService:
             quote = self.coupons.quote(code=coupon_code, tier=tier, founder_id=founder_id)
             discount_inr = quote.discount_inr
 
-        charge_inr = list_amount_inr - discount_inr
-        amount_paise = charge_inr * 100
+        # THE PRE-TAX BASE, in whole rupees. Both kinds of buyer are priced from
+        # the same catalog number and the same coupon; what differs is whether
+        # GST sits inside that number or on top of it.
+        net_inr = list_amount_inr - discount_inr
+
+        #   personal -> the catalog price IS the price. Rs 999 charged, with
+        #               18% found inside it (Rs 846.61 + Rs 152.39).
+        #   business -> the catalog price is ex-GST. Rs 999 + Rs 179.82 = Rs
+        #               1,178.82 charged, and the company reclaims the 179.82.
+        #
+        # Worked in PAISE with integers, never in rupees with floats: at a whole
+        # -rupee base and a whole-percent rate, `net_inr * percent` is exactly
+        # the tax in paise, so the charge is exact and the invoice -- which
+        # derives the split back out of the gross it was charged -- recovers
+        # this same base to the paisa. A fractional GST rate would round here,
+        # and the document would still reconcile because it computes its tax as
+        # (gross - taxable) rather than independently.
+        #
+        # Gated on a usable seller GSTIN: with none configured the document is
+        # a plain receipt stating that no GST was charged, and adding 18% while
+        # issuing that would make the money and the paperwork contradict.
+        gst_paise = 0
+        gst_percent = Decimal(str(settings.INVOICE_GST_PERCENT))
+        charges_gst_on_top = (purchase_type == PurchaseType.BUSINESS
+                              and seller_gstin() is not None
+                              and gst_percent > 0)
+        if charges_gst_on_top:
+            gst_paise = int((Decimal(net_inr) * gst_percent).quantize(
+                Decimal("1"), rounding=ROUND_HALF_UP))
+
+        amount_paise = net_inr * 100 + gst_paise
+        # What the payment row records, and what every later reader treats as
+        # "the amount charged" -- including the invoice.
+        charge_inr = Decimal(amount_paise) / 100
         receipt = f"founder-{founder_id}-{tier.value}-{int(self._now().timestamp())}"
 
         try:
@@ -326,10 +360,16 @@ class PaymentService:
             logger.info("payments: coupon applied to checkout",
                         extra={"founder_id": founder_id, "tier": tier.value,
                                "coupon": coupon.code, "discount_inr": confirmed_discount,
-                               "charged_inr": charge_inr})
+                               "charged_inr": str(charge_inr),
+                               "gst_on_top_paise": gst_paise})
 
         return CheckoutSession(
             payment_id=payment_id, order_id=order.order_id, amount_paise=order.amount_paise,
+            # Broken out so the checkout summary can show the founder WHY the
+            # total moved when they ticked "business", rather than a number
+            # that silently grew by 18%.
+            gst_paise=gst_paise,
+            gst_percent=float(gst_percent) if charges_gst_on_top else None,
             currency=order.currency, key_id=self.gateway.key_id,
             list_amount_paise=list_amount_inr * 100 if discount_inr else None,
             discount_paise=discount_inr * 100 if discount_inr else None,

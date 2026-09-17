@@ -636,3 +636,15 @@ def test_a_business_name_cannot_inject_markup(with_gstin):
     html = build_invoice_html(invoice)
     assert "<script>alert(1)</script>" not in html
     assert "&lt;script&gt;" in html
+
+
+def test_a_business_invoice_says_the_gst_is_claimable(with_gstin):
+    """It is the reason they handed over their GSTIN in the first place."""
+    html = build_invoice_html(build(buyer_state="Gujarat", **BUSINESS))
+    assert "claimable as input credit" in html
+
+
+def test_a_personal_invoice_promises_no_input_credit(with_gstin):
+    """They have no GSTIN to claim it against."""
+    html = build_invoice_html(build(buyer_state="Gujarat", purchase_type="personal"))
+    assert "claimable as input credit" not in html

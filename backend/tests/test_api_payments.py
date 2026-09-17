@@ -109,12 +109,16 @@ def test_checkout_returns_the_session_the_frontend_needs(client):
     _use(service)
 
     body = client.http.post(f"{BASE}/checkout", json={"tier": "pro"}).json()
-    # The three coupon fields are null on an undiscounted order rather than
-    # absent, so the client reads one shape either way.
+    # The coupon and GST fields are null/zero on a plain personal order rather
+    # than absent, so the client reads one shape either way.
     assert body == {"payment_id": 1, "order_id": "order_abc", "amount_paise": 99900,
                     "currency": "INR", "key_id": "rzp_live_key",
                     "list_amount_paise": None, "discount_paise": None,
-                    "coupon_code": None}
+                    "coupon_code": None,
+                    # Zero, not null: nothing was added on top. `amount_paise`
+                    # is the full charge either way, so a client ignoring these
+                    # still charges correctly.
+                    "gst_paise": 0, "gst_percent": None}
 
 
 def test_checkout_rejects_an_unknown_tier(client):
