@@ -3263,6 +3263,371 @@ PERSONAS["arya_parlour"] = ARYA_ANSWERS
 _ONBOARDING["arya_parlour"] = _ARYA_ONBOARDING
 
 
+# ---------------------------------------------------------------------------
+# `vikram_logistics` -- a blind QA case at Growth / Scaling.
+#
+# Regional logistics, Rs 15 crore, 85 people, four cities, twelve B2B accounts,
+# department heads in place, expanding to ten cities in eighteen months.
+#
+# Written for a BLIND test: the founder does not know what is wrong with him and
+# does not say it. The evidence is present and the conclusion is not -- he says
+# he delegates and then describes reversing decisions in the same breath, calls
+# the margin slide a market problem, and treats the queue outside his office as
+# proof he is needed. An engine that only reads what he claims will call this a
+# healthy scaling business.
+# ---------------------------------------------------------------------------
+_VIKRAM_TEXTS = (
+    # ---- _TOPICS (15) ---------------------------------------------------
+    # 0 customers spoken to / validation
+    "Constantly. Twelve major accounts and I know all twelve promoters "
+    "personally -- I still do the quarterly review calls myself for the top "
+    "six. That relationship is genuinely why we win. When a client has a "
+    "problem at 11pm they call me, not the account manager, and it gets "
+    "sorted. I think that is our advantage, not a problem.",
+    # 1 planning / time / priorities
+    "Long days, and I would not call it planned. I am in by seven and the "
+    "first two hours are the only clean ones. After that it is whatever is in "
+    "front of me -- approvals mostly. If I look at last week honestly, the "
+    "expansion work happened in aeroplanes and on Sunday. The urgent stuff "
+    "eats the important stuff, which I know is a cliche, but it is true.",
+    # 2 market / competitors
+    "We know the regional players well. The nationals -- Delhivery, Safexpress "
+    "-- are above us on price because of scale, and the small local guys "
+    "undercut us on short hauls. We sit in the middle on service. Where I "
+    "would say I am less sure is what happens to that position in ten cities "
+    "instead of four. In our four we have relationships. In Indore or Nagpur "
+    "we would be a name nobody knows.",
+    # 3 product / what you have built
+    "Fifteen crore, eighty-five people, four cities, twelve major B2B "
+    "accounts. Three years ago we were a third of that. The operation itself "
+    "is solid -- our on-time numbers are good, the fleet is maintained, the "
+    "warehouse discipline is there. I am proud of it. I built it from two "
+    "trucks and a rented shed.",
+    # 4 pricing / revenue / money
+    "Rate cards per client, negotiated annually, with exceptions when a client "
+    "pushes. The exceptions come to me. Margins have been slipping the last "
+    "three or four quarters -- diesel, driver wages, and clients squeezing at "
+    "renewal. My read is it is market pressure. Though if I am honest I could "
+    "not tell you which of the twelve accounts is actually profitable at the "
+    "line level right now.",
+    # 5 team / co-founder
+    "No co-founder, it is my company. But I have department heads now -- "
+    "operations, fleet, sales, accounts, HR. Good people, most have been with "
+    "me four years plus. On paper the structure is there. They run their "
+    "functions and bring me what needs deciding.",
+    # 6 risk
+    "Yes, in my head, always. Client concentration worries me -- our top three "
+    "are a big chunk. Diesel. A serious accident. What I have not done is put "
+    "any of that on paper or in front of the team. I tend to carry it myself "
+    "rather than worry everybody.",
+    # 7 decision under uncertainty
+    "Fast. That is how we got here. I would rather make eight decisions "
+    "quickly and be wrong on two than sit on all eight for a month. In this "
+    "business speed genuinely wins -- if a client asks for something Friday "
+    "and you answer Monday, you have lost them. I have very little patience "
+    "for long deliberation.",
+    # 8 feedback / criticism / blind spot
+    "I ask for it. Not sure how much I get. My ops head is direct with me, "
+    "the others less so. Somebody said something a few months ago about "
+    "things waiting on me -- I took the point, we added a rule that anything "
+    "under fifty thousand does not need my sign-off. I do still look at most "
+    "of them, but that is me being thorough, not blocking anything.",
+    # 9 why / vision / origin
+    "I drove one of the two trucks myself for the first eight months. My "
+    "father had a transport business that went under when I was nineteen and "
+    "I watched what that did to him. So this is partly that -- building the "
+    "thing he could not hold on to. In five years I want to be the regional "
+    "player the nationals have to price against, across ten or twelve cities.",
+    # 10 first / best / trusted
+    "Trusted. In logistics the client is handing you their goods and their "
+    "promise to their own customer. You get that wrong twice and no rate card "
+    "saves you. We win on being the ones who pick up the phone.",
+    # 11 explain it in one breath
+    "Regional B2B logistics -- warehousing and line-haul across four cities "
+    "for manufacturers and distributors who need reliability more than they "
+    "need the lowest rate.",
+    # 12 personally ran into the problem
+    "My father's business. Watching goods sit because nobody would answer a "
+    "phone, and clients leaving one by one. That is why I answer the phone.",
+    # 13 tools
+    "We have a TMS for dispatch, Tally for accounts, and everything else is "
+    "Excel and WhatsApp. Each department head has their own sheet. There is "
+    "no single place I can open and see the business -- if I want the real "
+    "picture I ask four people and put it together myself. It takes about a "
+    "day and by then it has moved.",
+    # 14 time that eats the most
+    "Approvals and exceptions. A client wants a rate deviation, a branch wants "
+    "to hire a supervisor, somebody wants to waive a detention charge. Each "
+    "one is five minutes. There are forty of them a day. That is most of my "
+    "week and none of it is the ten-city plan.",
+
+    # ---- _OPERATING_TOPICS (21) -----------------------------------------
+    # 0 delegation
+    "I delegate a lot more than people think. The heads run their departments. "
+    "What I do is stay close -- I want to know what is being decided, and if I "
+    "see it going wrong I will step in, because it is faster than letting it "
+    "play out and fixing it later. That is not the same as not delegating.",
+    # 1 if you got sick / in your absence
+    "Two weeks would be hard. Not impossible -- the trucks would run, the "
+    "warehouse would run. But every exception and every approval would stack "
+    "up waiting for me. I went to Singapore for nine days in March and came "
+    "back to about sixty things in the queue. Some of them had gone cold.",
+    # 2 written down / SOPs
+    "Operations are documented -- loading, handover, damage claims, all of "
+    "that is in the manual and audited. What is not written down is how "
+    "decisions get made. Who can approve what, up to what value, without "
+    "asking. That lives with me and people have learned it by watching.",
+    # 3 who owns what / role clarity
+    "Clear at the function level -- ops is ops, fleet is fleet. Where it gets "
+    "murky is anything crossing two functions, or anything new. The expansion "
+    "is the obvious one. I have a plan with city targets and dates, but if you "
+    "asked me who owns Indore, the honest answer is me, for now.",
+    # 4 decision rights / disagreements
+    "It comes to me. That is the resolution mechanism. If sales and ops "
+    "disagree about whether to take a load at a certain rate, they both call "
+    "me and I decide in two minutes. It works. I suppose it means they do not "
+    "resolve much between themselves.",
+    # 5 how do you know the team is performing
+    "I can feel it. I am in the operation every day, I see who is on top of "
+    "their patch. On paper -- ops has their numbers, sales has theirs, but "
+    "they are different sheets in different formats and I have never put them "
+    "side by side. There is no single dashboard, no. It is on the list.",
+    # 6 hiring / kept someone too long
+    "Yes. A branch manager in Nashik, kept him about a year longer than I "
+    "should have because he had been with me since early days. Every senior "
+    "hire comes through me -- I meet every one of them before an offer goes "
+    "out, even at supervisor level, because culture is everything in this "
+    "business.",
+    # 7 churn / retention
+    "Very low, which is the thing I am proudest of. We have not lost a major "
+    "account in three years. One reduced volume when their own business "
+    "shrank. That is the relationship doing its work.",
+    # 8 buying journey
+    "Referral, mostly, or I know somebody. A manufacturer's logistics head "
+    "asks around, my name comes up, we meet, I quote. The sales team generates "
+    "leads but the big ones close with me in the room. Always have.",
+    # 9 pricing / quotes / discounts
+    "Annual rate card per client, and then exceptions all year. Fuel "
+    "surcharge, seasonal, a client who has had a bad quarter and asks for "
+    "relief. I approve those, case by case, on judgement. I would not say "
+    "there is a written rule for when we say yes.",
+    # 10 cash / profit / margin
+    "Cash is fine, we are profitable, we fund growth from operations. But the "
+    "margin is drifting down and I have not got to the bottom of it. Accounts "
+    "gives me a monthly P&L at company level. Per-client, per-lane "
+    "profitability -- we do not produce that. I have been meaning to ask for "
+    "it for about a year.",
+    # 11 evidence of demand beyond your own belief
+    "Three years of growth and twelve accounts that renew. For the ten-city "
+    "plan specifically -- less. Two existing clients have said they would "
+    "give us volume if we were in those cities, which is what started the "
+    "idea. I have not gone beyond that and tested it properly.",
+    # 12 marketing / campaigns
+    "Almost none. A website, some presence at industry events. In B2B "
+    "logistics at our size it is relationships and referrals. That has worked "
+    "for four cities. Whether it works for a city where nobody knows me is a "
+    "fair question.",
+    # 13 who you designed it for vs who buys
+    "Still the same -- mid-size manufacturers and distributors who care about "
+    "reliability. That has not shifted. If anything we have moved slightly "
+    "upmarket as clients grew with us.",
+    # 14 who are you now as a leader
+    "I do not think I have changed as much as the company has. I still "
+    "operate the way I did with twenty people -- close to everything, hands "
+    "on, quick. At eighty-five people that is more hours but it is the same "
+    "job as far as I am concerned. People tell me I should be more strategic. "
+    "I am not entirely sure what that would look like day to day.",
+    # 15 changed shape / when
+    "Somewhere around the third city, maybe two years ago. Before that I could "
+    "genuinely hold the whole thing in my head. Now I cannot, and I have not "
+    "really changed anything about how I work to account for that. I just work "
+    "longer.",
+    # 16 data / privacy
+    "We hold client shipment data and some commercial terms. It is on our TMS "
+    "and in spreadsheets. Access is informal -- the heads have what they need. "
+    "Not something we have formally reviewed.",
+    # 17 sales pipeline
+    "Sales keeps a sheet. I could not tell you today what is in it without "
+    "asking. For the ten-city expansion there is no pipeline -- there is a "
+    "plan with dates on it, which is not the same thing.",
+    # 18 templates / proposals
+    "Rate proposals are semi-standard, the ops annexure is reused. The "
+    "commercial terms I write or rewrite myself for anything significant, "
+    "because those are the ones that matter.",
+    # 19 contracts / oversight
+    "I read every contract above a certain size personally. We have a "
+    "retained lawyer for the drafting. I would not sign something I had not "
+    "read -- that is one I am not willing to hand over.",
+    # 20 publishing content
+    "Nothing. No blog, no LinkedIn presence to speak of. Not how this "
+    "industry buys, in my view.",
+
+    # ---- _CURRENT_PROBLEM_TOPICS (8) ------------------------------------
+    # 0 single biggest thing
+    "Speed. We are not moving fast enough on the expansion. The plan is "
+    "eighteen months for ten cities and we are six months in with one new "
+    "city half-opened. Every week that slips, somebody else takes that "
+    "ground. I need the organisation to move at the pace I am moving at.",
+    # 1 what would need to be true this week
+    "Somebody other than me would have to take Indore end to end -- site, "
+    "hiring, the first client -- and actually run with it. I keep meaning to "
+    "hand it to my ops head but he is already stretched and frankly I am "
+    "faster at it.",
+    # 2 already tried / why it stalled
+    "We set up a weekly expansion review about four months ago. It ran three "
+    "times and then died, because two of those weeks I was travelling and "
+    "without me in the room it did not really happen. I also put the fifty-"
+    "thousand approval rule in. Both were the right idea. Neither stuck.",
+    # 3 what would stop it cold
+    "Losing one of the top three accounts. Or me being out for a month. I "
+    "would like to say the second one is not true but I have just told you "
+    "what nine days looked like.",
+    # 4 avoiding this week
+    "The margin question. I know I need to sit down with accounts and take it "
+    "apart client by client, and I keep pushing it because it is a full day "
+    "and there is always something on fire. Also a conversation with my sales "
+    "head about his numbers that I have been putting off for a month.",
+    # 5 metric quietly avoiding
+    "Per-client profitability. I have a feeling two or three of the twelve are "
+    "barely making money after the exceptions I have approved over the year, "
+    "and I have not wanted to find out which ones, because then I have to go "
+    "and have that conversation with people I have known for a decade.",
+    # 6 problem that keeps resurfacing
+    "Decisions waiting. It comes up every few months -- somebody raises it, we "
+    "put a rule in, it improves for a while, then it is back. I keep treating "
+    "it as a bandwidth problem and hiring another person or adding another "
+    "rule, and it keeps coming back.",
+    # 7 decision that landed on you
+    "Last week a branch wanted to hire a second dispatch supervisor. That came "
+    "to me. Salary was well within what the branch manager should be able to "
+    "decide. It sat in my queue four days and he was chasing me about it. I do "
+    "not know why that one needed me, honestly, but everything does.",
+
+    # ---- _FOUNDER_TOPICS (9) --------------------------------------------
+    # 0 last thing that satisfied you
+    "Winning the Aurangabad account in February against a national player. "
+    "They chose us on service history. Eight years ago that client would not "
+    "have taken my call. That landed.",
+    # 1 trophy vs bridge
+    "Honestly? The trophy. I built this and I would like that to be visible. "
+    "My father's business went down and everyone in that town knew. I would "
+    "like them to know about this one too. I am aware that is ego.",
+    # 2 what recharges / flow
+    "Being in the operation. A difficult dispatch day where I am on the floor "
+    "solving things -- that is where I feel useful and the hours disappear. "
+    "What drains me is the queue. Forty small approvals in a day and I go home "
+    "having achieved nothing I can point at.",
+    # 3 considered dropping it / what 'done' means
+    "Never dropping it. There was a stretch after Covid where I wondered if we "
+    "would survive, but that is different. 'Done' would be ten cities running "
+    "properly without me in every decision. Saying it out loud, that is quite "
+    "far from where we are.",
+    # 4 not scalable but doing anyway
+    "Meeting every senior hire. Reading every significant contract. Taking the "
+    "quarterly calls with the top six clients myself. None of that scales to "
+    "ten cities and I know it. I do it because those are the things that "
+    "actually determine whether this works, and I am better at them.",
+    # 5 walked away / the line
+    "A client in 2019 wanted us to move goods with paperwork that was not "
+    "right. Good volume. I said no and we lost them. Never regretted it. That "
+    "is the line -- I will not do something I would have to hide.",
+    # 6 perfectionism
+    "Not perfectionism exactly. But I will redo somebody's work if it is not "
+    "how I would have done it, and I have been told that is demoralising. A "
+    "rate proposal came to me last month, it was fine, I rewrote it anyway "
+    "because I would have positioned it differently. Took me two hours.",
+    # 7 if fixed overnight, what changes for the user
+    "For the client, not much immediately -- service is already good. Over a "
+    "year it would matter a lot, because we would be in the cities they are "
+    "asking us to be in. The people it would change most are my own managers. "
+    "I am not sure they would all enjoy it, actually.",
+    # 8 is your own experience representative
+    "Probably more than I should assume. I have been in this business twenty "
+    "years and I do think I can read a situation faster than most of my team. "
+    "That is experience, not arrogance. But I take the point that I am "
+    "deciding a lot of things on my own instinct and not checking it.",
+)
+
+_VIKRAM_ONBOARDING = {
+    "business_name": "Vikram Logistics",
+    "problem_statement":
+        "Mid-size manufacturers and distributors need a regional logistics "
+        "partner who is reliable and reachable -- the nationals are cheaper "
+        "but impersonal, and the small operators are unreliable.",
+    "building_summary":
+        "Regional B2B logistics -- warehousing and line-haul across four "
+        "cities, expanding to ten in eighteen months.",
+    "industry": "Logistics",
+    "current_challenges": ["Operations", "Team"],
+    "goal_90_day":
+        "Two new cities open and taking volume, and a per-client "
+        "profitability view I trust.",
+    "vision_1_year":
+        "Ten cities running to the same standard, and an organisation that "
+        "does not wait for me to decide.",
+    "product_description":
+        "B2B line-haul and warehousing for manufacturers and distributors "
+        "across four cities, sold on reliability rather than lowest rate.",
+}
+
+VIKRAM_ANSWERS = _VIKRAM_TEXTS
+ANSWER_BANK["vikram_logistics"] = tuple(zip(
+    _TRACTION_TOPICS + _CURRENT_PROBLEM_TOPICS + _FOUNDER_TOPICS, _VIKRAM_TEXTS))
+# Topic-neutral, in his register: it must not smuggle in evidence about a
+# dimension the question never raised.
+FALLBACKS["vikram_logistics"] = ("No, not formally. It is one of those things "
+                                 "I have carried in my head rather than sat "
+                                 "down and done properly.")
+
+# Topics the 53 shared slots do not reach, that this case turns on. Added to
+# Vikram's bank only: a fallback on "how many managers can decide without
+# escalating" would have measured the persona's hole rather than the engine.
+_VIKRAM_EXTRA = (
+    ((("could make a real call", "without escalating", "without escalation",
+       "decide without escalating", "how many managers"),
+      ("escalat", "managers do you")),
+     "Without escalating? Two, maybe three of the five, and even they check "
+     "with me on anything unusual. The others bring me the decision. I have "
+     "told them repeatedly they do not need to. It has not changed much, and "
+     "I have stopped pushing it because the queue moves faster if I just "
+     "answer."),
+    ((("real day off", "without checking in", "day off without"),
+      ("day off", "checking in")),
+     "Properly, without looking at the phone? I could not tell you. Sundays I "
+     "am not in the office but I am answering things. The nine days in "
+     "Singapore in March was the longest and I worked through most of it."),
+    ((("licenses, permits", "licences, permits", "permits, or certifications",
+       "compliance fine"),
+      ("licens", "permit", "certification", "compliance")),
+     "Yes, all in place -- carrier permits, GST, the warehouse certifications, "
+     "and we are audited. Fleet compliance is one thing I do not take chances "
+     "with. My fleet head owns it and that one genuinely runs without me."),
+    ((("coach and develop", "develop your managers", "developed the skills"),
+      ("coach", "develop")),
+     "Not really, no. I promote people who are good operators and then expect "
+     "them to figure out the management part the way I did. I have never been "
+     "taught it either. Looking at it now, I have five heads and I could not "
+     "tell you when I last sat with one of them about their own development "
+     "rather than about a problem."),
+    ((("how many different opportunities", "actively pursuing"),
+      ("opportunities", "directions")),
+     "One, really -- the ten-city expansion. There is a cold-chain idea a "
+     "client keeps raising and I have not said no to it, but it is not being "
+     "worked on. So one and a half."),
+    ((("instinct on compliance", "own instinct on compliance"),
+      ("instinct", "compliance")),
+     "On compliance, no -- that is documented and audited, I do not freelance "
+     "there. On commercial calls, yes, I trust my instinct heavily. Twenty "
+     "years in this business and I am usually right, which is probably why I "
+     "keep making them myself."),
+)
+ANSWER_BANK["vikram_logistics"] = (
+    ANSWER_BANK["vikram_logistics"] + _VIKRAM_EXTRA)
+
+PERSONAS["vikram_logistics"] = VIKRAM_ANSWERS
+_ONBOARDING["vikram_logistics"] = _VIKRAM_ONBOARDING
+
+
 if __name__ == "__main__":
     sys.exit(main())
 
