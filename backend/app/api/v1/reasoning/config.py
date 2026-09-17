@@ -127,6 +127,12 @@ class RankingWeights:
     confirmation_status: Decimal
     stage_probability: Decimal
     industry_probability: Decimal
+    # Phase B. DEFAULTS TO ZERO, which makes the factor inert: the four existing
+    # weights still sum to the check value on their own, every stored config
+    # keeps validating, and ranking output is unchanged until someone sets this
+    # deliberately and takes the budget from another factor. Turning it on is a
+    # data change, not a deploy.
+    evidence_breadth: Decimal = Decimal("0")
     expected_sum: Decimal = Decimal("1")
 
     def validate(self) -> None:
@@ -135,11 +141,12 @@ class RankingWeights:
             + self.confirmation_status
             + self.stage_probability
             + self.industry_probability
+            + self.evidence_breadth
         )
         if abs(total - self.expected_sum) > _WEIGHT_SUM_TOLERANCE:
             raise ReasoningConfigError(
                 f"Ranking weights sum to {total}, expected {self.expected_sum} "
-                "(WEIGHT_FACTORS_SUM_CHECK). Adjust the scoring_rules so the four "
+                "(WEIGHT_FACTORS_SUM_CHECK). Adjust the scoring_rules so the "
                 "weight factors sum to exactly the check value."
             )
 
