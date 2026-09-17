@@ -260,11 +260,40 @@ class LLMAnswerClassifier(AnswerClassifier):
     ) -> LLMRequest:
         bands = context.config.question_scores
         system = (
-            "You classify a startup founder's answer to a diagnostic question as "
-            "Green, Amber or Red.\n"
-            f"- Green (score {bands.green}): concrete evidence, specificity, ownership.\n"
-            f"- Amber (score {bands.amber}): partial evidence, vague or incomplete.\n"
-            f"- Red (score {bands.red}): no real evidence, assumption or avoidance.\n"
+            "You classify a startup founder's answer to a diagnostic question.\n"
+            "First decide WHICH SEMANTIC STATE the answer is in. These are "
+            "distinct and must not be collapsed into one another:\n"
+            "  POSITIVE_EVIDENCE   -- the thing asked about is in good shape, and "
+            "the answer shows it with specifics.\n"
+            "  NEGATIVE_EVIDENCE   -- the thing asked about is weak, missing or "
+            "unmanaged.\n"
+            "  UNKNOWN/NOT_MEASURED -- the thing EXISTS for this business but the "
+            "founder does not track or know it.\n"
+            "  NOT_APPLICABLE      -- the thing asked about is not part of how "
+            "this business works at all.\n"
+            "  AMBIGUOUS           -- partial or mixed; some of it is there, some "
+            "is not.\n"
+            "Then map the state to a label:\n"
+            f"- Green (score {bands.green}): POSITIVE_EVIDENCE.\n"
+            f"- Amber (score {bands.amber}): AMBIGUOUS.\n"
+            f"- Red (score {bands.red}): NEGATIVE_EVIDENCE, or UNKNOWN/NOT_MEASURED "
+            "-- not knowing something your business depends on IS a real gap.\n"
+            "- not_applicable (no score): NOT_APPLICABLE only.\n"
+            "NOT_APPLICABLE IS NARROW. Use it ONLY when the subject genuinely does "
+            "not exist in this business model -- software-feature questions to a "
+            "logistics or salon business, user-onboarding questions to a company "
+            "with no app. It is NOT for something the founder simply has not built "
+            "yet, has not got round to, does not measure, or does not want to "
+            "answer: those are Red or Amber. When the founder answers the question "
+            "for their own equivalent (\"not a product business, but for route "
+            "decisions...\"), judge THAT answer normally -- it applies after all.\n"
+            "SPECIFICITY IS NOT HEALTH. An articulate, honest, self-aware account "
+            "of a problem is still a problem: judge WHAT THE ANSWER DESCRIBES "
+            "about the business, not how well it is expressed. \"I keep avoiding "
+            "customer conversations and tweak recipes instead\" is specific, "
+            "honest and owned -- and it is NEGATIVE_EVIDENCE, so it is Red. "
+            "Reserve Green for answers describing something that is actually "
+            "working.\n"
             "FOUNDER CONTEXT, when given, is who this founder is -- their stage, "
             "what they are building, their revenue and team. Judge the answer "
             "against THEIR situation, not a generic one: 'we have not measured "
@@ -272,7 +301,8 @@ class LLMAnswerClassifier(AnswerClassifier):
             "and the same sentence is concrete evidence from a solo founder and "
             "vague from one with a data team.\n"
             "Respond with a single JSON object and nothing else, with keys: "
-            '"score_label" (one of "green","amber","red"), "confidence" (0.0-1.0), '
+            '"score_label" (one of "green","amber","red","not_applicable"), '
+            '"confidence" (0.0-1.0), '
             '"explanation" (one sentence), "reasoning_steps" (array of short strings).'
         )
         user = self._user_prompt(answer, question, previous_conversation,
@@ -340,10 +370,13 @@ class LLMAnswerClassifier(AnswerClassifier):
             raise _ClassificationParseError(f"invalid score_label: {raw_label!r}")
 
         bands = context.config.question_scores
+        # NOT_APPLICABLE is unscored: None, never zero. Zero is Green's band and
+        # would enter the risk numerator as positive evidence.
         score = {
             ScoreLabel.GREEN: bands.green,
             ScoreLabel.AMBER: bands.amber,
             ScoreLabel.RED: bands.red,
+            ScoreLabel.NOT_APPLICABLE: None,
         }[label]
 
         steps_raw = data.get("reasoning_steps") or []
@@ -399,6 +432,13 @@ class LLMAnswerClassifier(AnswerClassifier):
             rationale=parsed.explanation or None,
             llm_classification=parsed,
         )
+
+
+#: Smoothing prior for the category-risk denominator. Kept equal to
+#: `StandardRootCauseEngine._RANKING_RISK_PRIOR` so the founder-facing and
+#: ranking-facing readings of category intensity agree on shape; see
+#: `compute_category_risks` for why smoothing is needed at all.
+CATEGORY_RISK_PRIOR = Decimal("2")
 
 
 class StandardDiagnosticEngine(DiagnosticEngine):
@@ -462,7 +502,12 @@ class StandardDiagnosticEngine(DiagnosticEngine):
         by_category: dict[str, list[AnswerClassification]] = defaultdict(list)
         for c in classifications:
             question = questions.get(c.question_id)
-            if question is not None:
+            # NOT_APPLICABLE is excluded from BOTH numerator and denominator: it
+            # is not evidence in either direction, so it must not raise risk and
+            # must not dilute it either. A category answered only "not
+            # applicable" produces no risk row at all, which is correct -- there
+            # is nothing to report on.
+            if question is not None and c.label.is_scored:
                 by_category[question.category].append(c)
 
         risks: list[CategoryRisk] = []
@@ -474,10 +519,29 @@ class StandardDiagnosticEngine(DiagnosticEngine):
             # explicit provider (Doc 12) overrides it when configured. (A full
             # question-bank denominator was trialled and rejected in validation --
             # it was so large that no category ever crossed the flag threshold.)
+            # SMOOTHED denominator: red_band * (asked + prior), not
+            # red_band * asked.
+            #
+            # The unsmoothed mean made risk a per-answer AVERAGE, so a category
+            # asked once and answered Red read 1.00 while a category asked seven
+            # times read 0.43 on more total evidence. Measured across three QA
+            # personas: Opportunity Evaluation hit 1.0000 on a single answer
+            # while Founder Psychology, carrying seven answers and the founder's
+            # actual bottleneck, read 0.4286. Because the adaptive advisor asks
+            # MORE questions where it suspects a problem, the scoring layer was
+            # systematically penalising the interviewing layer's best work.
+            #
+            # The prior is the same k=2 already shipped and tested in
+            # `_ranking_category_risk`; this brings the founder-facing value onto
+            # the formula the ranking path already uses, rather than inventing a
+            # second one. One Red now reads 0.33 rather than 1.00, and depth of
+            # investigation no longer deflates a category.
+            #
+            # An explicit provider still overrides it, unchanged.
             max_score = (
                 provider.max_score(category)
                 if provider is not None
-                else red_band * len(members)
+                else red_band * (len(members) + CATEGORY_RISK_PRIOR)
             )
             normalised = (
                 _q(min(_ONE, max(_ZERO, raw / max_score))) if max_score > 0 else _ZERO

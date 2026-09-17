@@ -47,6 +47,7 @@ class RuleCode(str, Enum):
     WEIGHT_CONFIRMATION_STATUS = "WEIGHT_CONFIRMATION_STATUS"
     WEIGHT_STAGE_PROBABILITY = "WEIGHT_STAGE_PROBABILITY"
     WEIGHT_INDUSTRY_PROBABILITY = "WEIGHT_INDUSTRY_PROBABILITY"
+    WEIGHT_EVIDENCE_BREADTH = "WEIGHT_EVIDENCE_BREADTH"
     WEIGHT_FACTORS_SUM_CHECK = "WEIGHT_FACTORS_SUM_CHECK"
 
     CAT_RISK_THRESHOLD = "CAT_RISK_THRESHOLD"
@@ -520,6 +521,11 @@ def build_reasoning_config(
         confirmation_status=_require(rule_values, RuleCode.WEIGHT_CONFIRMATION_STATUS),
         stage_probability=_require(rule_values, RuleCode.WEIGHT_STAGE_PROBABILITY),
         industry_probability=_require(rule_values, RuleCode.WEIGHT_INDUSTRY_PROBABILITY),
+        # Optional so a scoring_rules table predating this factor still boots:
+        # the default is zero, which reproduces the previous four-factor
+        # behaviour exactly.
+        evidence_breadth=_optional(
+            rule_values, RuleCode.WEIGHT_EVIDENCE_BREADTH, Decimal("0")),
         expected_sum=_require(rule_values, RuleCode.WEIGHT_FACTORS_SUM_CHECK),
     )
     ranking_weights.validate()

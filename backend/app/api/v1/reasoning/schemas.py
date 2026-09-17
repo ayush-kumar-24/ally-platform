@@ -26,7 +26,10 @@ class AnswerClassification:
     answer_id: int
     question_id: int
     label: ScoreLabel
-    score: Decimal
+    #: None when `label` is NOT_APPLICABLE -- that state is unscored on purpose,
+    #: because zero would read as Green (positive evidence). Every consumer must
+    #: filter on `label.is_scored` before touching this.
+    score: Decimal | None
     is_distress_flagged: bool
     # Branching linkage, carried from the Answer so the Root Cause Engine can
     # resolve the double-red confirmation pattern without re-querying.
@@ -50,7 +53,7 @@ class LLMClassification:
     """
 
     score_label: ScoreLabel
-    score: Decimal
+    score: Decimal | None        # None for NOT_APPLICABLE -- see ScoreLabel
     confidence: Decimal          # model's self-reported confidence, [0,1]
     explanation: str
     reasoning_steps: tuple[str, ...]

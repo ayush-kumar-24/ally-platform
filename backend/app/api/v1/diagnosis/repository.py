@@ -24,6 +24,8 @@ class DiagnosisRepository:
         self._problem_to_dimension: dict[int, str] | None = None
         #: Same, for problem_to_code().
         self._problem_to_code: dict[int, str] | None = None
+        #: Same, for root_cause_to_code().
+        self._root_cause_to_code: dict[int, str] | None = None
 
     # --- Sessions ---
 
@@ -318,6 +320,24 @@ class DiagnosisRepository:
                 problem_id: problem_code for problem_id, problem_code in rows
             }
         return self._problem_to_code
+
+    def root_cause_to_code(self) -> dict[int, str]:
+        """{root_cause_id: root_cause_code} for the whole catalogue.
+
+        Same shape and memoisation rationale as `problem_to_code`. Needed
+        because the context gate withholds a few root causes that sit under an
+        otherwise-unconditional problem (FND-005) -- see
+        `context_scope.ROOT_CAUSE_PRECONDITIONS`.
+        """
+        if self._root_cause_to_code is None:
+            rows = self.db.execute(
+                _text(
+                    "select root_cause_id, root_cause_code from root_causes "
+                    "where root_cause_code is not null"
+                )
+            ).all()
+            self._root_cause_to_code = {rid: code for rid, code in rows}
+        return self._root_cause_to_code
 
     def answered_count_per_pillar_category(
         self, session_id: int

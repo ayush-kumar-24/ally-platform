@@ -67,6 +67,36 @@ PROBLEM_PRECONDITIONS: dict[str, str] = {
     "FND-007": FUNDRAISING_INTENT,  # Burning Cash During a Fundraise
 }
 
+#: Root causes UNDER an otherwise-unconditional problem that still require the
+#: token. The one case is FND-005.
+#:
+#: FND-005 "Weak Pitch and Story" is deliberately absent from
+#: PROBLEM_PRECONDITIONS because its Stage 0->1 battery (Q281-Q286) was written
+#: for "someone smart but unfamiliar with it" and applies to every founder. Its
+#: Stage 1->10+ questions are the ORIGINAL investor-framed deck review, and
+#: ungating the problem left those reachable.
+#:
+#: Measured in QA: a B2B logistics founder with no fundraising intent, at
+#: Growth stage, was asked "Do you understand how investors actually evaluate
+#: opportunities and what specifically they look for?" (Q1786, RC-322). The
+#: advisor's own rationale recorded the misfit -- "None of the fundraising
+#: candidates fit this non-raising founder's operational delegation gap" -- and
+#: it had nothing better in the shortlist.
+#:
+#: These six are the cohort whose definitions do not survive de-investorising:
+#: RC-322 is "the founder does not understand how investors evaluate
+#: opportunities"; RC-318 is presentation quality; RC-317 is a deck so detailed
+#: the thesis is lost. Every one has ONLY Stage 1->10+ questions, so gating them
+#: cannot touch the universal Stage 0->1 battery.
+ROOT_CAUSE_PRECONDITIONS: dict[str, str] = {
+    "RC-313": FUNDRAISING_INTENT,  # Weak Market Sizing (investor-framed)
+    "RC-317": FUNDRAISING_INTENT,  # Information Overload (pitch deck)
+    "RC-318": FUNDRAISING_INTENT,  # Weak Design (pitch materials)
+    "RC-319": FUNDRAISING_INTENT,  # Missing Traction Metrics (deck)
+    "RC-321": FUNDRAISING_INTENT,  # Founder-Centric Thinking (deck vs investor)
+    "RC-322": FUNDRAISING_INTENT,  # Lack of Investor Perspective
+}
+
 #: The onboarding option that states fundraising intent.
 #:
 #: One named constant because the label has NO database backing: there is no
@@ -130,6 +160,20 @@ def context_tokens(founder: Any) -> frozenset[str] | None:
     if any(choice.casefold() == wanted for choice in picked):
         return frozenset({FUNDRAISING_INTENT})
     return frozenset()
+
+
+def gated_root_cause_codes(tokens: frozenset[str] | None) -> frozenset[str]:
+    """Root-cause codes to withhold given the founder's context, possibly empty.
+
+    Same fail-open contract as `gated_problem_codes`: an unknown context gates
+    nothing.
+    """
+    if tokens is None:
+        return frozenset()
+    return frozenset(
+        code for code, required in ROOT_CAUSE_PRECONDITIONS.items()
+        if required not in tokens
+    )
 
 
 def gated_problem_codes(tokens: frozenset[str] | None) -> frozenset[str]:

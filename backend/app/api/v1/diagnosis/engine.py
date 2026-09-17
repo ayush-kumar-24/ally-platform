@@ -14,7 +14,11 @@ and inventing a trigger rule now would bake in behaviour the scoring engine
 would have to unpick later.
 """
 
-from app.api.v1.diagnosis.context_scope import context_tokens, gated_problem_codes
+from app.api.v1.diagnosis.context_scope import (
+    context_tokens,
+    gated_problem_codes,
+    gated_root_cause_codes,
+)
 from app.api.v1.diagnosis.repository import DiagnosisRepository
 from app.api.v1.diagnosis.stage_scope import resolve_scope
 from app.core.logger import logger
@@ -439,18 +443,27 @@ class QuestionSelectionEngine:
         invariant to `_in_scope`'s, restated here because this filter runs
         before it and would otherwise hand it nothing to work with.
         """
-        gated = gated_problem_codes(context_tokens(founder))
-        if not gated:
+        tokens = context_tokens(founder)
+        gated = gated_problem_codes(tokens)
+        gated_causes = gated_root_cause_codes(tokens)
+        if not gated and not gated_causes:
             return candidates
 
         problem_to_code = self._code_map_or_none()
         if not problem_to_code:
             return candidates
+        # Root-cause codes are only needed for the narrower gate; an unavailable
+        # map disables that half and leaves the problem gate working.
+        cause_to_code = self._cause_code_map_or_none() if gated_causes else {}
 
-        # `.get() not in gated`: a problem with no code recorded is UNKNOWN and
-        # is admitted. Same reading as the dimension test -- absence of a fact
-        # is never evidence for withholding.
-        kept = [q for q in candidates if problem_to_code.get(q.problem_id) not in gated]
+        # `.get() not in gated`: a problem or cause with no code recorded is
+        # UNKNOWN and is admitted. Same reading as the dimension test -- absence
+        # of a fact is never evidence for withholding.
+        kept = [
+            q for q in candidates
+            if problem_to_code.get(q.problem_id) not in gated
+            and cause_to_code.get(getattr(q, "root_cause_id", None)) not in gated_causes
+        ]
 
         if not kept:
             logger.warning(
@@ -475,6 +488,22 @@ class QuestionSelectionEngine:
                 },
             )
         return kept
+
+    def _cause_code_map_or_none(self) -> dict[int, str]:
+        """root_cause_id -> root_cause_code, or {} when it cannot be read.
+
+        Empty rather than None: the caller uses it in a membership test, and an
+        empty map admits everything, which is the fail-open direction.
+        """
+        try:
+            with self.repository.db.begin_nested():
+                return self.repository.root_cause_to_code()
+        except Exception:                                  # noqa: BLE001
+            logger.warning(
+                "Root-cause code map unavailable; gating problems only",
+                extra={"stage": "context_scope"},
+            )
+            return {}
 
     def _code_map_or_none(self) -> dict[int, str] | None:
         """problem_id -> problem_code, or None when the context gate cannot run.

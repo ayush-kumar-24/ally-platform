@@ -92,11 +92,38 @@ class StageGroup(StrEnum):
 
 
 class ScoreLabel(StrEnum):
-    """answers_score_label_check -- the Green/Amber/Red band of a scored answer."""
+    """answers_score_label_check -- the band of a classified answer.
+
+    Green/Amber/Red are the SCORED bands: they carry a numeric score (0/1/2) and
+    participate in category risk and root-cause detection.
+
+    NOT_APPLICABLE is a fourth, UNSCORED state, added because the three-band
+    rubric had no way to express "this question does not apply to my business".
+    Measured in QA: a logistics founder answering "this isn't really a product
+    business" was classified Red -- the strongest negative signal available --
+    which drove Product to maximum category risk, produced three product root
+    causes, and surfaced "assign one person authority to say no to feature
+    requests" as his first recommended action.
+
+    NOT_APPLICABLE is deliberately NOT scored zero. Zero is Green, which is
+    positive evidence that the thing asked about is healthy; "the question does
+    not apply" is not evidence either way. It is excluded from the category-risk
+    numerator AND denominator, and never becomes root-cause evidence.
+
+    Stored answers carry score NULL for this label (both `answers.score` and
+    `answers.score_label` are nullable). Historical rows predate the label and
+    are unaffected -- nothing reads it that did not previously exist.
+    """
 
     GREEN = "green"
     AMBER = "amber"
     RED = "red"
+    NOT_APPLICABLE = "not_applicable"
+
+    @property
+    def is_scored(self) -> bool:
+        """Whether this label carries a numeric score and counts as evidence."""
+        return self is not ScoreLabel.NOT_APPLICABLE
 
 
 class FounderDnaDimension(StrEnum):
