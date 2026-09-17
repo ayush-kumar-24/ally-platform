@@ -165,9 +165,30 @@ class StandardRootCauseEngine(RootCauseEngine):
                 score_label=m.label,
                 score=m.score,
                 contribution=_q(m.score / max_negative),
+                # Everything the deterministic engine produces is direct by
+                # construction: it only ever sees an answer given to a question
+                # that questions.root_cause_id maps to this cause. Inferred and
+                # volunteered evidence have no producer yet -- the fields exist
+                # so those paths have somewhere to put their findings instead of
+                # being dropped, which is what happens today.
+                directness="direct",
+                dimension=self._dimension_of(m.question_id, questions),
+                volunteered=False,
             )
             for m in sorted(negative, key=lambda m: (-m.score, m.question_id))
         )
+
+        # Breadth, recorded but NOT yet used for ranking. detection_score above
+        # is a mean and divides this out; see the note on RootCauseDetection.
+        # Distinct dimensions rather than raw count, so one subject probed six
+        # times does not read as six independent signals.
+        dimensions = {
+            d for d in (self._dimension_of(m.question_id, questions)
+                        for m in negative)
+            if d
+        }
+        independent_signal_count = len(dimensions)
+        evidence_mass = _q(sum((m.score for m in negative), Decimal(0)))
 
         # detection_confidence: corroboration across ALL probes of this root
         # cause, Green included. A Green answer is evidence the cause is NOT
@@ -201,7 +222,20 @@ class StandardRootCauseEngine(RootCauseEngine):
             evidence=evidence,
             contributing_factors=contributing_factors,
             category_risk_score=risk_by_category.get(category),
+            independent_signal_count=independent_signal_count,
+            evidence_mass=evidence_mass,
         )
+
+    @staticmethod
+    def _dimension_of(question_id: int, questions) -> str | None:
+        """The diagnostic dimension a question belongs to -- its category.
+
+        Deliberately the same field `_dominant_category` uses, so "how many
+        dimensions" and "which category" cannot disagree about what a dimension
+        is.
+        """
+        question = questions.get(question_id)
+        return getattr(question, "category", None) if question is not None else None
 
     # --- Confirmation (double-red pattern) --------------------------------
 

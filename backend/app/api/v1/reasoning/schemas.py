@@ -93,6 +93,26 @@ class RootCauseEvidence:
     score: Decimal
     contribution: Decimal
     source: str = "question_mapping"
+    # --- Phase A: evidence quality -------------------------------------------
+    # Descriptive only. Nothing reads these for ranking yet; the ranking formula
+    # is unchanged. They exist so the ranking layer HAS something to weigh when
+    # it is changed, and so a reviewer can see why a finding was reached.
+    #
+    # `directness`: "direct" when the answer was given to a question mapped to
+    # this root cause, "inferred" when it reached this cause some other way.
+    # Only the deterministic FK mapping produces evidence today, so everything
+    # from it is direct by construction.
+    directness: str = "direct"
+    # The diagnostic dimension this evidence touches -- the question's category.
+    # Counting DISTINCT dimensions is what separates six answers about one thing
+    # from six answers about six things, which a mean over evidence cannot see.
+    dimension: str | None = None
+    # True when the founder raised this without being asked for it. Not yet
+    # produced by any code path: the deterministic engine only sees answers to
+    # questions it asked. The field exists so volunteered evidence has somewhere
+    # to live when extraction learns to spot it, rather than being silently
+    # dropped as it is today.
+    volunteered: bool = False
 
 
 @dataclass(frozen=True)
@@ -119,6 +139,25 @@ class RootCauseDetection:
     # deterministic detection. Semantic context never alters the deterministic
     # fields above -- it is purely additive supporting evidence.
     semantic_evidence: tuple[RetrievalEvidence, ...] = ()
+    # --- Phase A: breadth of evidence ----------------------------------------
+    # detection_score is a MEAN over negative evidence (root_cause.py), so it
+    # divides breadth out: one Red scores 2/(2*1) = 1.00 and six Ambers score
+    # 6/(2*6) = 0.50. That is why an isolated signal outranked six converging
+    # ones for both the Vikram and the Siddharth runs.
+    #
+    # These two record what the mean discards. NOTHING READS THEM FOR RANKING
+    # YET -- detection_score keeps its meaning and the four-factor formula is
+    # untouched. This is the measurement, not the fix.
+    #
+    # `independent_signal_count`: how many DISTINCT diagnostic dimensions the
+    # negative evidence spans. Six answers in one dimension are one signal
+    # repeated; that is the Desi Protein case, where friends-and-family
+    # validation shows up again and again and is still a single pattern.
+    independent_signal_count: int = 0
+    # `evidence_mass`: the un-normalised sum of the negative evidence scores.
+    # detection_score is this divided by its own maximum, which is exactly the
+    # step that loses the quantity.
+    evidence_mass: Decimal = Decimal("0")
 
 
 @dataclass(frozen=True)
