@@ -2658,5 +2658,242 @@ def main(argv=None) -> int:
     return run(args)
 
 
+# ---------------------------------------------------------------------------
+# `desi_bar` -- a real user case, not a test fixture.
+#
+# A founder at Ideation with a healthy protein bar and mithai-style sweet made
+# from desi ingredients, who wants the idea validated. Written to be an HONEST
+# founder rather than a strong or weak one: some real work done (kitchen
+# batches, friends and family fed, a rough costing), with the gaps a first-time
+# D2C food founder actually has -- no strangers interviewed, no FSSAI or
+# shelf-life work, price set by looking at a competitor's MRP.
+#
+# Appended at module scope so the tuples above stay as they were written. The
+# argparse `choices` read PERSONAS inside main(), so a persona registered here
+# is on the command line like any other.
+# ---------------------------------------------------------------------------
+_DESI_BAR_TEXTS = (
+    # -- _TOPICS, in order ------------------------------------------------
+    # 0 customers spoken to / validation
+    "Honestly, mostly people who already like me. I've fed samples to about "
+    "twenty-five people -- family, my society WhatsApp group, four colleagues "
+    "from my old job. Everyone said it was tasty. Two of them asked if they "
+    "could buy a box, and I gave it free instead, which I now think was a "
+    "mistake. Outside my own circle I have spoken to nobody. No shopkeeper, "
+    "no gym owner, no stranger. I know that number should worry me.",
+    # 1 planning / time / priorities
+    "I work on it after 9pm and on Sundays, because I still have my job. I "
+    "don't plan the week -- I do whatever feels most urgent that evening, "
+    "which is usually recipe tweaking because it's the part I enjoy. Last "
+    "week I spent maybe eleven hours on it and nine of those were in the "
+    "kitchen. The boring things -- costing, licence, finding a co-packer -- "
+    "keep sliding to next week.",
+    # 2 market / competitors
+    "The healthy snack shelf in India is crowded at the top -- Yoga Bar, "
+    "Max Protein, The Whole Truth. I've picked up their packs and read the "
+    "labels. But my read is that they're all Western-format bars with Indian "
+    "marketing. Nobody is properly doing a mithai format -- a besan or ragi "
+    "laddoo with real protein in it and no refined sugar. That's the gap I "
+    "think I'm in. I haven't sized it. I don't know how many people actually "
+    "buy healthy mithai versus just saying they would.",
+    # 3 product / prototype
+    "I have eleven recipe versions in a notebook and three I'm happy with -- "
+    "a ragi-peanut bar, a besan-jaggery laddoo, and a makhana-date one. All "
+    "made in my own kitchen, hand-rolled, no machine. They last maybe five "
+    "days before they go soft. I have not done any shelf-life testing, no lab "
+    "report, no nutrition panel that I'd be willing to print on a pack. So I "
+    "have a good recipe, not a product.",
+    # 4 pricing / revenue / money
+    "I put it at Rs 60 a bar because The Whole Truth is around Rs 70 and I "
+    "wanted to be a bit cheaper. That's the whole logic, and saying it out "
+    "loud it sounds thin. My ingredient cost per bar is roughly Rs 22 when I "
+    "buy almonds and dates retail, but that ignores my time, gas, packaging, "
+    "wastage and whatever a courier costs. I've never actually built the "
+    "sheet. I suspect at Rs 60 with delivery I lose money on every order.",
+    # 5 team / co-founder
+    "It's me alone. My wife helps with packing on weekends and my mother is "
+    "the one who taught me the besan recipe, but neither is a co-founder. I "
+    "know I'll need someone for operations because I'm not an ops person, "
+    "but I haven't started looking and I haven't thought about what equity "
+    "would be fair. Right now every single thing routes through me.",
+    # 6 risk
+    "Not in a written way, no. If I sit and think about it now: FSSAI "
+    "licence, which I don't have. Somebody falling ill from something I made "
+    "in a home kitchen. Jaggery and almond prices swinging. And the real one "
+    "-- that people say healthy and then buy the thing with sugar in it "
+    "anyway. That last one would end the business and I have done nothing to "
+    "check it.",
+    # 7 decision under uncertainty / pressure
+    "I gather too much. I'll read for three weeks before making a call that "
+    "could have been tested in two days with fifty rupees of ingredients. "
+    "When I'm drained I stop deciding altogether and go back to the kitchen, "
+    "because the kitchen always gives me an answer and the business questions "
+    "don't.",
+    # 8 feedback / criticism / blind spot
+    "My brother-in-law runs a small restaurant and he told me flatly that I "
+    "am building a recipe, not a business, and that I'm in love with the "
+    "product. It stung because he's right. My first reaction was to defend "
+    "the recipe, which rather proved his point. I want it straight, but I "
+    "notice I only ask people I expect to be kind.",
+    # 9 why / vision / origin
+    "My father is diabetic. Every Diwali he sits there while everyone else "
+    "eats mithai, and he either goes without or eats it anyway and feels "
+    "guilty. That's the thing I want to fix -- a sweet that belongs on the "
+    "same plate at a festival, made from ragi, jaggery, makhana, ghee, things "
+    "my grandmother already used, with protein that actually counts. In five "
+    "years I'd want a diabetic uncle at a wedding to be handed one of these "
+    "and not have to explain himself.",
+    # 10 being first / best / trusted
+    "Trusted. In food it's the only one that matters. If someone reads my "
+    "label and believes it without checking, I've won. Being first to market "
+    "with a ragi protein laddoo means nothing if the second person is more "
+    "honest about what's in it.",
+    # 11 explain the idea in one breath
+    "Indian sweets and protein bars made only from desi ingredients -- ragi, "
+    "jaggery, makhana, ghee, dates -- with no refined sugar and no protein "
+    "isolate, so people who've been told to stop eating mithai can eat mithai.",
+    # 12 personally ran into the problem
+    "Last Diwali, at my own house. My father picked up a kaju katli, looked "
+    "at it, and put it back down. Nobody said anything. That silence is the "
+    "whole reason I'm doing this. I've watched it happen at every festival "
+    "for about six years.",
+    # 13 tools / how they build
+    "A notebook and a kitchen weighing scale, honestly. I keep costs in a "
+    "WhatsApp note to myself, which is as bad as it sounds. I haven't set up "
+    "a spreadsheet, an Instagram page, or a way to take an order. If somebody "
+    "wanted to pay me today I'd have to send them a UPI QR from my phone.",
+    # 14 time that eats the most without moving anything
+    "Recipe iteration. I can lose a whole Sunday adjusting the jaggery-to-"
+    "ragi ratio by five grams, and at the end of it I've learned almost "
+    "nothing I could sell on. The version I had in March was probably good "
+    "enough to put in front of a shop, and it's September.",
+
+    # -- _CURRENT_PROBLEM_TOPICS ------------------------------------------
+    # 0 single biggest thing standing between you and starting
+    "I'm scared to charge money. That's it, really. The moment I take Rs 500 "
+    "from a stranger it stops being a nice thing I do on Sundays and becomes "
+    "something I can fail at publicly, in front of people who know me. So I "
+    "keep improving the recipe, because improving the recipe feels like "
+    "progress and never puts me in front of that moment.",
+    # 1 what would need to be true this week
+    "One person I'm not related to would have to pay me for a box and eat it "
+    "and tell me the truth about it. That's all. I don't need a licence or a "
+    "co-packer or a brand name for that to happen this week.",
+    # 2 what already tried, why it stalled
+    "I made a batch for my society's Ganesh Chaturthi event and handed it "
+    "out free. People ate them and were nice about it. I got zero real "
+    "information because free food is always nice. I also half-made an "
+    "Instagram page, posted twice, then stopped because I didn't have a "
+    "logo I liked. That's the pattern -- I stall on the cosmetic step.",
+    # 3 what would stop it cold if it broke
+    "Me. If I'm ill for two weeks there is no product, because it's my hands "
+    "in my kitchen. There's no recipe written down properly that somebody "
+    "else could follow, no supplier on record, nothing. It's all in my head "
+    "and my notebook.",
+    # 4 what you're avoiding this week
+    "The FSSAI registration. I've had the page open on my laptop for about "
+    "two months. I think I'm avoiding it because filling it in makes it "
+    "official, and then people will ask me how it's going.",
+    # 5 metric you've been quietly avoiding
+    "Cost per unit, fully loaded. I know roughly what the ingredients cost "
+    "and I've deliberately not added up gas, packaging, my hours and "
+    "wastage, because I'm fairly sure the number tells me Rs 60 doesn't work "
+    "and then I'd have to change either the price or the recipe.",
+    # 6 problem that keeps resurfacing
+    "Shelf life. Every couple of months I decide it's fine because people eat "
+    "them within two days anyway, and then I remember that a shop won't touch "
+    "something that softens in five days. I keep deciding it's solved and it "
+    "keeps coming back because I've never actually tested it.",
+    # 7 decision that landed on you
+    "Everything lands on me -- there's nobody else. But the one that "
+    "shouldn't have taken a month was choosing the packaging. That's a "
+    "reversible, fifty-rupee decision and I treated it like it was permanent.",
+
+    # -- _FOUNDER_TOPICS ---------------------------------------------------
+    # 0 last thing that genuinely satisfied you
+    "The first batch where the besan laddoo held together without any binder "
+    "I wasn't happy with. Four months of it crumbling, and then it just "
+    "worked. What landed was that it was mine -- not a recipe I'd copied, "
+    "something I'd actually arrived at.",
+    # 1 trophy vs bridge
+    "The bridge. Easily. I don't need anyone to know it was me. I'd genuinely "
+    "be happy if someone's father ate one at a wedding and never once thought "
+    "about who made it.",
+    # 2 what recharges / flow
+    "The quiet kitchen, early, before anyone's up. That's where I lose three "
+    "hours without noticing. A loud room drains me -- I did a food expo in "
+    "Pune in June and I was finished by noon, and I didn't speak to a single "
+    "stall owner properly.",
+    # 3 considered dropping it / what 'done' means
+    "In April, after I costed it roughly and realised the margin might not be "
+    "there. I stayed with it because Diwali came around again and I watched "
+    "the same thing happen with my father. 'Done' for me would be a shop I "
+    "have no relationship with reordering without me asking.",
+    # 4 not scalable but doing anyway
+    "Hand-rolling every single laddoo and writing a note in the box. It "
+    "cannot scale and I know it. I'm doing it because it's the part that "
+    "feels like mine, and I'll probably hold onto it longer than I should.",
+    # 5 walked away / the line
+    "A distributor at the expo offered to help if I'd use palm oil and a "
+    "cheaper protein powder to bring cost down. I said no on the spot. The "
+    "line is that I won't sell my father something I wouldn't let him eat -- "
+    "if I break that, there's no reason for this thing to exist.",
+    # 6 perfectionism / polishing
+    "The logo. Two months, maybe forty versions, and it delayed the Instagram "
+    "page and therefore delayed anyone outside my circle ever hearing about "
+    "this. Same with the eleven recipe versions. I polish the thing I control "
+    "so I don't have to do the thing I can't.",
+    # 7 if fixed overnight, how much would it change life for the user
+    "For most people, honestly, not much -- it's a nicer snack. But for the "
+    "diabetic uncle at the wedding it changes the evening. He stops being the "
+    "person who can't. I think the mistake I keep making is pricing and "
+    "pitching this at the first group when the second group is the one who "
+    "actually needs it.",
+    # 8 is your own experience representative
+    "Probably not, and I've been assuming it is. My father is diabetic, so "
+    "festivals are loaded for me in a way they aren't for most people. I've "
+    "built the whole idea on my own household's experience and I've never "
+    "checked whether a stranger feels any of it. That's the gap.",
+)
+
+_DESI_BAR_ONBOARDING = {
+    "business_name": "Desi Protein Co.",
+    "problem_statement":
+        "People who have been told to cut sugar -- diabetics, and anyone "
+        "watching what they eat -- are excluded from Indian festival and "
+        "everyday sweets, and the healthy options on the shelf are Western "
+        "protein bars that do not belong on a mithai plate.",
+    "building_summary":
+        "Protein bars and mithai-format sweets made only from desi "
+        "ingredients -- ragi, jaggery, makhana, ghee, dates -- with no "
+        "refined sugar and no protein isolate.",
+    "industry": "Food & Beverage (D2C)",
+    "current_challenges": ["Sales", "Operations"],
+    "goal_90_day":
+        "One person outside my own network paying for a box, and a fully "
+        "loaded cost sheet I trust.",
+    "vision_1_year":
+        "Shops I have no personal relationship with reordering on their own, "
+        "and a sweet a diabetic guest can be handed at a wedding without "
+        "having to explain himself.",
+    "product_description":
+        "A range of hand-made Indian sweets and bars -- ragi-peanut, "
+        "besan-jaggery, makhana-date -- built to sit on the same plate as "
+        "traditional mithai while being something a diabetic can eat.",
+}
+
+DESI_BAR_ANSWERS = _DESI_BAR_TEXTS
+ANSWER_BANK["desi_bar"] = tuple(zip(
+    _TOPICS + _CURRENT_PROBLEM_TOPICS + _FOUNDER_TOPICS, _DESI_BAR_TEXTS))
+# Topic-neutral, like the rest: it must not say anything about a dimension
+# the question never raised, or the fallback itself becomes evidence.
+FALLBACKS["desi_bar"] = ("No, I have not got to that one yet -- it keeps "
+                         "sliding to next week behind whatever is in front "
+                         "of me that evening.")
+PERSONAS["desi_bar"] = DESI_BAR_ANSWERS
+_ONBOARDING["desi_bar"] = _DESI_BAR_ONBOARDING
+
+
 if __name__ == "__main__":
     sys.exit(main())
+
