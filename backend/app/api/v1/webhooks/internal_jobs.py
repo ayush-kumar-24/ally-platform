@@ -306,6 +306,47 @@ def send_task_reminders(
 
 
 @router.post(
+    "/assign-daily-quotes",
+    summary="Choose every founder's two dashboard lines for today",
+)
+def assign_daily_quotes_job(
+    db: Session = Depends(get_db),
+    _: None = Depends(authorise_internal_job),
+) -> dict:
+    """The midnight sweep behind the quote cards on Compass and Plan Your Day.
+
+    **Call this once a day, at 00:00 IST**, from EventBridge Scheduler -- not
+    from the GitHub Actions sweep, whose own workflow comment records its runs
+    landing two to five hours apart. A quote that arrives at 3am is fine; one
+    that arrives at 3pm changes the card under a founder mid-afternoon, which
+    is the thing the whole design exists to prevent.
+
+    Safe to call at any other time, and safe to call twice. A founder who
+    already has today's two lines is skipped before any model call is made, and
+    every write is first-write-wins, so a late manual run fills in whoever is
+    missing without disturbing anyone who is already served.
+
+    WATCH `by_fallback`. A fallback pick is invisible on the page by design --
+    it comes from the same shortlist, it is stable for the day, it looks like
+    any other line. Which means a provider that has been failing all week looks
+    exactly like one that is working, and this number is the only place the
+    difference shows. `by_model` at zero with `founders` in the dozens means
+    the OpenAI key, the routing row or DAILY_QUOTES_LLM is not what you think
+    it is.
+
+    The counts are logged as well as returned, for the same reason the task
+    reminder sweep logs its own: EventBridge records nothing of a target's
+    response body, so a number that is only returned is a number nobody can
+    alarm on.
+    """
+
+    from app.quotes.jobs import assign_daily_quotes
+
+    result = assign_daily_quotes(db)
+    return result
+
+
+@router.post(
     "/send-notification-emails",
     summary="Email any bell notifications not yet emailed (Pro founders only)",
 )

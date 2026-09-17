@@ -36,11 +36,18 @@ class LLMTask:
     SUPPORT_ROUTING = "support_routing"
     SUPPORT_ANSWER = "support_answer"
 
+    #: Choosing which two of a founder's shortlisted dashboard lines they see
+    #: today. Its own task because it is the cheapest judgement in the product
+    #: -- pick one of forty pre-written sentences -- and is routed to a small
+    #: model accordingly, rather than inheriting a frontier one from a
+    #: neighbouring task.
+    DAILY_QUOTE_SELECTION = "daily_quote_selection"
+
     ALL = (
         ANSWER_INTERPRETATION, NEXT_QUESTION_SELECTION, DISTRESS_DETECTION,
         DIAGNOSIS_REASONING, ANSWER_CONSISTENCY, ARCHETYPE_ASSIGNMENT, REPORT_NARRATIVE,
         FIRST_IMPRESSION, FOUNDER_DNA_DIMENSION_RESOLUTION,
-        SUPPORT_ROUTING, SUPPORT_ANSWER,
+        SUPPORT_ROUTING, SUPPORT_ANSWER, DAILY_QUOTE_SELECTION,
     )
 
 

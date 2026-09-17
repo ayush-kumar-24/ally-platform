@@ -218,6 +218,16 @@ class Settings(BaseSettings):
     # pays for it once. It fails to the un-summarised cards on any error.
     FOUNDER_DNA_SUMMARY_LLM: bool = False
 
+    # Let a model choose each founder's two dashboard lines from the shortlist
+    # the catalogue and their profile produce. Off => the deterministic pick,
+    # which is still per-founder and still stage-filtered -- the model is
+    # buying judgement about WHICH of forty relevant lines lands best, not the
+    # personalisation itself. A founder cannot tell which one chose, so watch
+    # the job's by_fallback count rather than the page.
+    #
+    # One call per founder per NIGHT, never per page view. See quotes/jobs.py.
+    DAILY_QUOTES_LLM: bool = False
+
     # Infer the founder's lifecycle stage from their diagnosis answers when
     # founders.stage_id is NULL. Off => the stage stays unknown, which is
     # today's behaviour and is NOT neutral: DefaultInterventionRelevance reads
