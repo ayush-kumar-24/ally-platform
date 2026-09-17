@@ -1,0 +1,300 @@
+{
+ "dna": {
+  "117": {
+   "a": "My sister runs HR at a manufacturing company, about two hundred people. She missed a PF deadline and got personally hauled up for it -- not the company, her. She was tracking statutory dates in a paper diary. I built a prototype over two weekends to show her, and she started using it. That was the point it stopped being an idea.",
+   "status": "ANSWERED"
+  },
+  "118": {
+   "a": "I talk to strangers now, which I never did. Three years ago I would have said I was an engineer who happened to have an idea. Now I spend half my week on calls with people I have never met, explaining the same thing. I am better at it than I was and still not comfortable with it.",
+   "status": "ANSWERED"
+  },
+  "119": {
+   "a": "A bulk document upload feature. The error handling was not what I wanted -- if one row failed the whole batch reported badly. I shipped it because three customers were waiting and the alternative was another two weeks. It has been fine, nobody has complained, which slightly annoys me.",
+   "status": "ANSWERED"
+  },
+  "120": {
+   "a": "Shipping state-wise compliance rules for all twenty-eight states in March. That took months and nobody else in this category has that depth. Two customers wrote to me about it unprompted. It landed because it was hard and it was the thing I am actually good at.",
+   "status": "ANSWERED"
+  },
+  "121": {
+   "a": "Around a renewal period last year when three customers all raised issues in the same week and I had a release going out. I pushed through -- worked two very long weekends and did it all myself. I did not ask anyone for help. In hindsight the engineers could have taken half of it.",
+   "status": "ANSWERED"
+  },
+  "122": {
+   "a": "An HR manager should never lie awake wondering if she missed a filing date. That sentence has not changed at all since I started. What has changed is that I now know sentence alone does not get a CFO to sign.",
+   "status": "ANSWERED"
+  },
+  "123": {
+   "a": "Honestly, the number of customers who are still actively using the product ninety days after onboarding. MRR going up has let me avoid looking at that one, because MRR can rise while that number falls.",
+   "status": "ANSWERED"
+  },
+  "124": {
+   "a": "A consultancy wanted to white-label us and resell under their brand. It would have roughly doubled revenue that year. They wanted control over what customers were told about statutory changes and I said no. I will not have someone else deciding what a customer hears about a deadline that could get them fined.",
+   "status": "ANSWERED"
+  },
+  "125": {
+   "a": "The multi-state release. Six weeks where I was almost entirely off sales calls and in the code with the team. We shipped more in that period than in the previous four months. The condition that made it possible was simply that I was not selling.",
+   "status": "ANSWERED"
+  },
+  "126": {
+   "a": "Figuring it out as I go, mostly. There is a rough plan for the product quarter. On the commercial side there is a target -- one crore ARR -- and not much of a plan underneath it.",
+   "status": "ANSWERED"
+  },
+  "127": {
+   "a": "A week in the summer where two deals I thought were closed both went quiet after the demo. Both had an enthusiastic HR person and then nothing. I rewrote the pitch deck that weekend. I did not call either of them to ask what actually happened.",
+   "status": "ANSWERED"
+  },
+  "128": {
+   "a": "That a good product does not sell itself. I genuinely believed for the first eighteen months that if we built the best compliance engine, growth would follow. It did not. I got that wrong and I am still not sure what the correct answer is.",
+   "status": "ANSWERED"
+  },
+  "129": {
+   "a": "Straight. Tell me the thing. I would rather hear it badly phrased and early than carefully phrased and late.",
+   "status": "ANSWERED"
+  },
+  "130": {
+   "a": "Yesterday. I was deep in a data migration issue and a prospect called with a question about ESI applicability. Forty minutes, then another thirty to get back into where I was. That happens most days.",
+   "status": "ANSWERED"
+  },
+  "131": {
+   "a": "That I am not sure I am the right person to be running the commercial side of this, and I have not said that to anyone because the obvious next step is to hire someone senior and I do not know how to evaluate that person.",
+   "status": "ANSWERED"
+  },
+  "132": {
+   "a": "Doing every demo myself. Answering compliance questions personally for customers who are already paying. Writing the content. I do it because I am better at it than anyone I have handed it to, and because it is the part I understand.",
+   "status": "ANSWERED"
+  },
+  "133": {
+   "a": "I held the multi-state release about seven weeks for edge cases affecting a small number of customers. Those seven weeks were weeks I was not selling. I would probably do it again, which may be the actual problem.",
+   "status": "ANSWERED"
+  },
+  "161": {
+   "a": "On product, I am the one slowing us down to de-risk -- if we get a filing rule wrong someone gets a penalty notice. On commercial decisions I move fast, probably too fast, because I find them less interesting.",
+   "status": "ANSWERED"
+  }
+ },
+ "cp": {
+  "5": {
+   "a": "Growth is stuck to me. Seventy percent of what closes, closes because I was on the call. I want to be at one crore ARR in the next year or so and I cannot personally sell my way there -- there are not enough hours. Every time I try to hand sales over it comes back to me.",
+   "status": "ANSWERED"
+  },
+  "6": {
+   "a": "Me, specifically me on sales calls. The product would keep running for a long time without me. New revenue would stop the same week.",
+   "status": "ANSWERED"
+  },
+  "7": {
+   "a": "There is no co-founder. With the engineers it is usually about scope -- someone wants to build the general version and I want the specific one that three customers asked for. We argue it out on merit and I decide. It gets resolved, it does not fester.",
+   "status": "ANSWERED"
+  },
+  "8": {
+   "a": "Pulling the usage data on the accounts that barely touch the product, and calling them. I have a rough sense of who they are. I have been avoiding it partly because I think the answer might be that they never needed it and I sold it to them anyway.",
+   "status": "ANSWERED"
+  }
+ },
+ "diag": {
+  "52": {
+   "a": "Nobody. There is no marketing or sales person -- all five people are product and engineering. I do it. I hired a junior person for outreach last year and it did not work; he could not handle the compliance questions on the second call so everything came back to me.",
+   "status": "ANSWERED"
+  },
+  "179": {
+   "a": "I read every contract myself and a lawyer drafted the template. I have not asked anyone whether that is adequate -- it has not felt like where the risk is. Larger customers send their own paper occasionally and I read those properly.",
+   "status": "ANSWERED"
+  },
+  "226": {
+   "a": "Forty-two companies paying us every month right now. Committed, not interested -- they are on live subscriptions, some for close to three years.",
+   "status": "ANSWERED"
+  },
+  "270": {
+   "a": "New sales. Entirely. The product would ship, the team is fine, existing customers would be served and onboarded. Nothing new would close, because I am on every deal that matters.",
+   "status": "ANSWERED"
+  },
+  "282": {
+   "a": "Forty-two companies paying every month, some for three years, and renewals that mostly happen without a fight. What I could not show you is why those forty-two and not others, or which of them we should be trying to find more of.",
+   "status": "ANSWERED"
+  },
+  "343": {
+   "a": "Per-employee per-month with slabs. I set the original number by looking at what the HRMS suites charged and pricing under them. It has not been revisited properly since, and I deviate from it more than I should -- if a deal is close and they push, I find something.",
+   "status": "ANSWERED"
+  },
+  "347": {
+   "a": "I do not know. The honest answer is that the main cost is my own time and I have never put a number on it. No paid acquisition to speak of, so on paper it looks free, which I know is wrong.",
+   "status": "GENUINELY_UNKNOWN"
+  },
+  "356": {
+   "a": "Roughly break-even. Software margins are good, and the costs are five salaries and infrastructure. It is not profitable in a way I would call meaningful, and some of my own savings went in early.",
+   "status": "ANSWERED"
+  },
+  "408": {
+   "a": "That growth is tied to my calendar. If I stop selling, new revenue stops. I have not done anything about it because the one thing I tried -- hiring for outreach -- failed, and I have not worked out what to try next.",
+   "status": "ANSWERED"
+  },
+  "412": {
+   "a": "No one is big. Forty-two customers and the largest is maybe five or six percent of revenue. I would have to check the exact number but concentration is genuinely not the thing that worries me.",
+   "status": "ANSWERED"
+  },
+  "423": {
+   "a": "Not really, no. The team is five engineers and they would probably describe it as 'Indian SMEs with HR compliance headaches', which is what I say too. Nobody has had to be more specific than that, including me.",
+   "status": "ANSWERED"
+  },
+  "441": {
+   "a": "The product roadmap is written and the team can see it. The commercial plan is a revenue number in my head and a spreadsheet of live deals. There is no written plan for how we get from four point two lakh a month to one crore ARR.",
+   "status": "ANSWERED"
+  },
+  "536": {
+   "a": "On the engineering side yes -- deploys, code review, on-call are all documented. Onboarding a new customer is half documented. The sales process is not written down anywhere at all; it is entirely in my head.",
+   "status": "ANSWERED"
+  },
+  "1712": {
+   "a": "For our customers that is literally what we sell. For ourselves -- our CA handles our own filings and reminds me. Slightly ironic, but our own compliance is not something I track in a system.",
+   "status": "ANSWERED"
+  },
+  "1714": {
+   "a": "Yes, we have a CA who handles our filings and flags things. Company secretary work he coordinates. That side is covered.",
+   "status": "ANSWERED"
+  },
+  "2275": {
+   "a": "On the engineering side, yes -- I have spent real time with them on how I want things reviewed and why. On anything commercial, no, because I have never actually handed any of it over to teach.",
+   "status": "ANSWERED"
+  },
+  "2278": {
+   "a": "The last real one was the outreach hire, and I described the task -- make calls, book demos -- not what success looked like or who to call. I gave him no list and no definition of a good prospect. That is on me.",
+   "status": "ANSWERED"
+  },
+  "2279": {
+   "a": "Constantly on sales. Every time I think about handing a demo over I think it will take longer to explain than to do. On engineering, almost never -- I do not feel that about the team's work at all.",
+   "status": "ANSWERED"
+  },
+  "2282": {
+   "a": "The second sales call. The first is a product walkthrough and anyone could learn it, but the second turns into specific compliance questions about their state, their headcount, their filings, and I have never trusted anyone else to hold that.",
+   "status": "ANSWERED"
+  },
+  "2285": {
+   "a": "Engineering, yes -- someone could pick it up from the docs. Sales, nothing. No playbook, no call script, no objection handling. If I disappeared, whoever took it over would be starting from zero.",
+   "status": "ANSWERED"
+  },
+  "2286": {
+   "a": "Answering a compliance question live on a call in a way that makes the person on the other end trust us. It is not that the knowledge is secret -- it is that I have it loaded and can use it in conversation, and nobody else here has that.",
+   "status": "ANSWERED"
+  },
+  "2289": {
+   "a": "Of the deals that closed this month, I was on essentially all of them -- around seventy percent of new customers overall close with me in the room, and the ones that do not are small and inbound. Product work ran fine without me.",
+   "status": "ANSWERED"
+  },
+  "2301": {
+   "a": "Both, and I could not cleanly separate them. The compliance depth comes from real conversations -- customers tell us when a state rule changes. The workflow decisions are more mine, based on what feels right and what the last few prospects asked about on calls.",
+   "status": "ANSWERED"
+  },
+  "2303": {
+   "a": "Forty-two companies paying for it, and customers who tell us we caught something that would have been a penalty. That is direct evidence the problem is real. Whether it is the same problem for a thirty-person company and a four-hundred-person company, I have not tested.",
+   "status": "ANSWERED"
+  },
+  "2305": {
+   "a": "Roughly, yes. I built it for an HR manager at a mid-size Indian company and that is who uses it. What has widened is the range -- we now have companies from about twenty employees up to five hundred, and I originally had something like my sister's company in mind, which is around two hundred.",
+   "status": "ANSWERED"
+  },
+  "2311": {
+   "a": "Proper interviews, where I was researching rather than selling -- maybe a dozen, and most of those were in the first year. Since then it is all been sales calls, which is a different conversation. I have not repeated the research.",
+   "status": "GENUINELY_UNKNOWN"
+  },
+  "2347": {
+   "a": "The ones who are in it every day, usually where there is one HR person carrying the whole compliance load and no one else. Beyond that I genuinely could not tell you whether our best customer is a thirty-person company or a four-hundred-person one. I think there is value across the range.",
+   "status": "ANSWERED"
+  },
+  "2348": {
+   "a": "I could split them by size, but I am not sure that is the split that matters. The more real difference is the ones who use it constantly versus the ones who barely log in after the first month. I have not worked out what actually separates those two groups.",
+   "status": "ANSWERED"
+  },
+  "2757": {
+   "a": "For the five engineers, roughly -- they each own an area and it is understood, though not much of it is in writing. Everything commercial is mine, so there is nobody to be unclear with.",
+   "status": "ANSWERED"
+  },
+  "2758": {
+   "a": "Engineering uses a tracker properly. Anything commercial lives in a Google Sheet and my head. The sales pipeline is a spreadsheet, a lot of WhatsApp, and my memory of where each deal is.",
+   "status": "ANSWERED"
+  },
+  "2761": {
+   "a": "The last hire was an engineer, and that was a clear role -- we needed backend capacity. The outreach hire before that was the opposite: I knew I needed help selling and hired someone without defining what the job actually was.",
+   "status": "ANSWERED"
+  },
+  "2763": {
+   "a": "Not specifically, no. I know it is someone commercial -- somebody who can run the sales process without me. Whether that is an SDR, an account executive or a sales lead, I do not know, and I do not know how I would evaluate them.",
+   "status": "ANSWERED"
+  },
+  "2766": {
+   "a": "Yes, the outreach hire. About eight months, and I knew by month three. I told myself it was a ramp problem. Looking back I had given him nothing to work with.",
+   "status": "ANSWERED"
+  },
+  "2769": {
+   "a": "Someone who can sell this without me. That is the gap and it is not a product skill -- it is knowing how to run a pipeline, qualify properly and handle a procurement conversation. Nobody here has it, including me.",
+   "status": "ANSWERED"
+  },
+  "2846": {
+   "a": "None. Not me, not anyone. I learned by doing demos and losing deals. I have read some things but I have never had any actual training and it has never occurred to me to get any.",
+   "status": "ANSWERED"
+  },
+  "2879": {
+   "a": "There is a rate card, and then in practice it varies. I present the slabs, and if they push I find a way -- a discount, a longer free period, a different slab. Different customers are on quite different effective rates for the same product and I have never gone back and cleaned it up.",
+   "status": "ANSWERED"
+  },
+  "2906": {
+   "a": "No. The content goes out when I have time and I do not define what success looks like beforehand. I notice afterwards if inbound picks up. There is no paid spend so there is not much to measure.",
+   "status": "ANSWERED"
+  },
+  "2938": {
+   "a": "Yes, that one I am clear on -- subscriptions are billed monthly and mostly collected on time, so earned and collected are close. I watch the bank balance and our CA keeps the books properly.",
+   "status": "ANSWERED"
+  },
+  "2939": {
+   "a": "For the next month, yes -- recurring revenue is predictable and costs are mostly salaries, so I can see it. Further out than that is guesswork because I do not have a reliable view of who might not renew.",
+   "status": "ANSWERED"
+  },
+  "55": {
+   "a": "Two out of five. I know the shape of it -- the HR manager finds us, gets excited, then it has to go up to the founder or the CFO for approval, and that is where it sits. Forty to fifty days start to finish. What I do not know is what actually happens inside that approval conversation, because I am not in the room for it.",
+   "status": "ANSWERED"
+  },
+  "2912": {
+   "a": "Not really -- we barely run campaigns at all. The content goes out when I have time, not in response to a competitor or a quiet period. If anything the problem is the opposite: there is no marketing rhythm to be reactive with.",
+   "status": "ANSWERED"
+  },
+  "2764": {
+   "a": "Figuring it out together, mostly. For an engineer it is reasonably good -- they pair with someone, there are docs, they ship something small in the first week. For the one commercial hire we made there was no onboarding at all, which is part of why it failed.",
+   "status": "ANSWERED"
+  },
+  "453": {
+   "a": "I own all of it. The engineers own technical risk in their areas -- uptime, data security, that is genuinely theirs. Everything commercial, financial and customer-facing sits with me, and I have not given any of it to anyone.",
+   "status": "ANSWERED"
+  },
+  "2085": {
+   "a": "No. Nothing regular. We get feedback when a customer raises something or when I am on a call with them, which is reactive. No surveys, no scheduled interviews, and I do not look at usage data in any structured way -- that is one of the things I know I should be doing and am not.",
+   "status": "ANSWERED"
+  },
+  "2123": {
+   "a": "No dashboard, no. I can pull usage from the database if I go and query it, and occasionally I do when something makes me curious. There is nothing that would tell me on a regular basis whether customers are behaving the way I assume they are.",
+   "status": "ANSWERED"
+  },
+  "2307": {
+   "a": "An HR manager at a mid-size Indian company is personally responsible for statutory deadlines she is tracking in a diary, and if she misses one the penalty notice has her name on it. We make sure she does not miss one.",
+   "status": "ANSWERED"
+  },
+  "2936": {
+   "a": "Only when something prompts me -- usually payroll at month end, or when I am about to commit to something. There is no schedule. Revenue is recurring and costs are mostly salaries, so it does not move much, which is the excuse I use for not checking properly.",
+   "status": "ANSWERED"
+  },
+  "537": {
+   "a": "The product walkthrough, a few hundred times -- essentially the same forty-minute explanation on every first call for three years. I keep thinking I should record it, and then the next call is slightly different and I do it live again. Internally, the deployment process I have explained maybe three times, and that one is written down now.",
+   "status": "ANSWERED"
+  },
+  "1711": {
+   "a": "No, the opposite -- regulatory is the one thing we take seriously, because we hold employee PII and salary data and we sell into compliance. We did a security review last year when a larger prospect asked for one. Our own statutory filings the CA handles on schedule.",
+   "status": "ANSWERED"
+  },
+  "525": {
+   "a": "An external CA does our accounting and filings, and we use Zoho Books. He sends me a monthly P&L. I read it, but I could not tell you much beyond the top and bottom line -- I have never asked him to break anything down by customer.",
+   "status": "ANSWERED"
+  },
+  "61": {
+   "a": "The first handful came from my sister's network -- her company, then two others where she knew the HR head. After that it was referral and search. We are three years past pilots now, forty-two paying companies, but that is how the first five happened.",
+   "status": "ANSWERED"
+  }
+ }
+}

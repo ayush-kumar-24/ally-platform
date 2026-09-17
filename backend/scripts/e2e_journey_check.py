@@ -1929,6 +1929,79 @@ class AnswerLedger:
                 f"never served twice)")
 
 
+#: The three states a question-keyed run can be in, kept apart on purpose.
+#: Collapsing them is how run #25 read as a Critical Gap founder: a deflection,
+#: an honest "we don't track that" and a question that does not apply to the
+#: business all reached the classifier as the same evasive non-answer.
+ANSWERED = "ANSWERED"                              # the founder answered it
+GENUINELY_UNKNOWN = "GENUINELY_UNKNOWN"            # he does not know
+GENUINELY_NON_APPLICABLE = "GENUINELY_NON_APPLICABLE"  # it does not apply here
+HARNESS_MISS = "HARNESS_MISS"                      # WE have no answer: a bug
+
+
+class QuestionKeyedLedger:
+    """Answers looked up by question id. No topic matching anywhere.
+
+    The topic-keyed bank cannot support a question-by-question audit: a stage
+    asks several questions per topic, so either one answer is served repeatedly
+    (run #24: one answer covered five questions, two root causes rested on it)
+    or the repeats become deflections that the classifier scores as evasion
+    (run #25: 17 of 30 answers non-substantive, five pillars Critical Gap).
+
+    Here every served question has its own answer, written against that
+    question. A question with no entry is a HARNESS_MISS -- our bug, reported
+    and counted, never quietly filled from somewhere else.
+
+    The map is {phase: {question_id: {"a": text, "status": ...}}}.
+    """
+
+    def __init__(self, path: str):
+        with open(path) as fh:
+            self.map = json.load(fh)
+        self.served: dict[str, list] = {}
+        self.misses: list[tuple[str, int, str]] = []
+        self.counts = {ANSWERED: 0, GENUINELY_UNKNOWN: 0,
+                       GENUINELY_NON_APPLICABLE: 0, HARNESS_MISS: 0}
+        self.reuses = 0
+        self._seen: set[tuple[str, str]] = set()
+
+    def answer(self, phase: str, qid, question_text: str) -> tuple[str, bool]:
+        key = str(qid)
+        entry = (self.map.get(phase) or {}).get(key)
+        if entry is None or not entry.get("a"):
+            self.counts[HARNESS_MISS] += 1
+            self.misses.append((phase, qid, question_text))
+            # Deliberately NOT a persona fallback. A miss must look like a miss
+            # in the transcript, not like something the founder said.
+            return "[HARNESS_MISS: no answer prepared for this question]", False
+        if (phase, key) in self._seen:
+            self.reuses += 1
+        self._seen.add((phase, key))
+        status = entry.get("status", ANSWERED)
+        self.counts[status] = self.counts.get(status, 0) + 1
+        self.served.setdefault(phase, []).append(
+            {"question_id": qid, "question": question_text,
+             "answer": entry["a"], "status": status})
+        return entry["a"], status == ANSWERED
+
+    def clean(self) -> bool:
+        return self.counts[HARNESS_MISS] == 0 and self.reuses == 0
+
+    def summary(self) -> str:
+        c = self.counts
+        total = sum(c.values())
+        return (
+            f"  answer map              {total} questions served\n"
+            f"    answered                {c[ANSWERED]}\n"
+            f"    genuinely unknown       {c[GENUINELY_UNKNOWN]}   "
+            f"(Siddharth does not know -- not a harness failure)\n"
+            f"    genuinely N/A           {c[GENUINELY_NON_APPLICABLE]}   "
+            f"(does not apply to this business -- not a harness failure)\n"
+            f"    HARNESS MISS            {c[HARNESS_MISS]}   "
+            f"<- must be 0 for a clean run\n"
+            f"    answer reuse            {self.reuses}   <- must be 0")
+
+
 def _tally(pairs) -> dict:
     out: dict = {}
     for _, label in pairs:
@@ -2381,7 +2454,7 @@ def _resolve_existing_founder(db, sa, *, email: str | None = None,
 
 
 def _walk(client, start_path, answer_path, id_field, label, out, persona="weak",
-          ledger=None):
+          ledger=None, qk_ledger=None, qk_phase=None):
     """Drive one question/answer phase to completion, recording every question."""
     r = client.post(start_path)
     if r.status_code not in (200, 201):
@@ -2411,9 +2484,13 @@ def _walk(client, start_path, answer_path, id_field, label, out, persona="weak",
     reprompts = 0
     while q:
         out.append(q)
-        answer, matched = (ledger.answer(q.get("question_text", ""))
-                           if ledger is not None
-                           else match_answer(q.get("question_text", ""), persona))
+        if qk_ledger is not None:
+            answer, matched = qk_ledger.answer(
+                qk_phase, q.get(id_field), q.get("question_text", ""))
+        elif ledger is not None:
+            answer, matched = ledger.answer(q.get("question_text", ""))
+        else:
+            answer, matched = match_answer(q.get("question_text", ""), persona)
         # The transcript has to carry what was actually SAID, not just what
         # was asked. Without it a reviewer cannot tell a real answer from a
         # deflection, which is exactly the check run #24 needed and failed.
@@ -2556,18 +2633,30 @@ def run(args) -> int:
     # One ledger for the whole journey -- a founder does not get his answers
     # back between phases. --repeat-answers restores the old behaviour, which
     # is what the earlier discrimination baselines were measured with.
-    ledger = None if args.repeat_answers else AnswerLedger(args.persona)
+    qk = QuestionKeyedLedger(args.answer_map) if args.answer_map else None
+    ledger = None if (args.repeat_answers or qk) else AnswerLedger(args.persona)
     ok = (
         _walk(client, "/api/v1/founder-dna/start", "/api/v1/founder-dna/answer",
               "founder_dna_question_id", "Founder DNA", dna, args.persona,
-              ledger)
+              ledger, qk, "dna")
         and _walk(client, "/api/v1/current-problem/start",
                   "/api/v1/current-problem/answer",
                   "current_problem_question_id", "Current Problem", problem,
-                  args.persona, ledger)
+                  args.persona, ledger, qk, "cp")
         and _walk(client, "/api/v1/diagnosis/start", "/api/v1/diagnosis/answer",
-                  "question_id", "Diagnosis", diagnosis, args.persona, ledger)
+                  "question_id", "Diagnosis", diagnosis, args.persona, ledger,
+                  qk, "diag")
     )
+    if qk is not None and not qk.clean():
+        print("\n" + "=" * 74)
+        print("CONTAMINATED RUN -- the answer map did not cover this path")
+        print("=" * 74)
+        print(qk.summary())
+        for phase, qid, text in qk.misses:
+            print(f"  MISS  {phase}/{qid}: {text[:100]}")
+        import json as _j
+        _j.dump(qk.misses, open("/tmp/qk_misses.json", "w"), indent=1)
+        print("\n  misses written to /tmp/qk_misses.json -- add answers and re-run.")
     if not ok:
         return 1
 
@@ -2624,7 +2713,9 @@ def run(args) -> int:
             {"f": fid}).all()
 
     print(f"  answer persona          {args.persona}")
-    if ledger is not None:
+    if qk is not None:
+        print(qk.summary())
+    elif ledger is not None:
         print(ledger.summary())
     for line in band_summary(rows, fallback_qids):
         print(line)
@@ -2731,6 +2822,12 @@ def main(argv=None) -> int:
                         "reaction. traction alone proved the engine COVERS "
                         "stage 4; the pair is what proves it DISCRIMINATES "
                         "there, the way weak/strong does at Ideation.")
+    p.add_argument("--answer-map", metavar="FILE",
+                   help="JSON {phase: {question_id: {a, status}}}. Answers are "
+                        "looked up by question id and nothing is matched by "
+                        "topic, which is what a question-by-question audit "
+                        "needs. A question with no entry is reported as a "
+                        "HARNESS MISS rather than filled from elsewhere.")
     p.add_argument("--repeat-answers", action="store_true",
                    help="serve the best-matching answer every time its topic "
                         "comes round, instead of once. The old behaviour: it "
