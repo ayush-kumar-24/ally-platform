@@ -80,21 +80,42 @@ Three behaviours worth knowing, all in `app/db/session.py`:
 If connection count ever becomes the constraint, the RDS answer is **RDS
 Proxy**, not a smaller pool.
 
-### Confirm these — they are not in the repository
+### The instance — confirmed 2026-09-16
 
-The workflow pins the cluster, region, subnets and security group. These are
-not recorded anywhere and someone should write them down here:
+The workflow pins the cluster, region, subnets and security group. Everything
+below was unrecorded until an infrastructure review answered it:
 
-- [ ] RDS instance class, and the `max_connections` that follows from it
-- [ ] Whether the instance is publicly accessible or reached inside the VPC
-      (the ECS tasks run with `assignPublicIp=ENABLED`)
-- [ ] Whether RDS Proxy is in front of it
-- [ ] Whether automated backups / point-in-time recovery are on, and the
-      retention window. `data/reference/` protects the *content*; founder
-      answers and reports exist only in this database and backups are the only
-      thing protecting them.
-- [ ] **Whether the `ally_app` role exists.** Check this one first; it is the
-      only item here that can have failed silently and permanently.
+| | |
+| --- | --- |
+| Instance | `ally-postgres` |
+| Class | `db.t3.micro` |
+| Publicly accessible | **No** — reached inside the VPC |
+| RDS Proxy | Not configured |
+| Multi-AZ | **No** |
+| Automated backups | **On, 7-day retention** |
+| `max_connections` | **81** |
+| In use at the time of the review | 13 (68 free, ~84% headroom) |
+
+Two things follow from those numbers and are worth keeping in view:
+
+**The connection ceiling is ~13 tasks.** Each Fargate task holds at most five
+connections (`DB_POOL_SIZE` 2 + `DB_POOL_MAX_OVERFLOW` 3), and every one-off
+migration task and every developer's psql session draws on the same 81. At 13
+in use there is plenty of room today; `db.t3.micro` is what sets the ceiling,
+so raising the pool is a decision against that number and not a free one. If
+connections ever become the constraint the answer is RDS Proxy, not a bigger
+pool.
+
+**Multi-AZ is off, so an AZ failure is downtime.** Not data loss -- the 7-day
+automated backups cover that -- but recovery means restoring, and restoring
+takes as long as it takes. That is a reasonable trade at this stage; it should
+be a decision someone has made rather than one nobody noticed.
+
+- [ ] **Whether the `ally_app` role exists.** The one item here that can have
+      failed silently and permanently. The role itself is confirmed present
+      (the runtime task connects as it, and the post-migration compatibility
+      check passes), but the four conditional RLS policies below have not been
+      queried yet.
 
 ### The `ally_app` role, and the policies that depend on it
 
@@ -268,13 +289,18 @@ print HTML (app/api/v1/reports/print_html.py) -> Gotenberg (headless Chromium) -
 
 The first path is the one that matches what the founder saw on screen: the
 forest palette, the band cards, the embedded Montserrat/Inter/Fraunces, five
-pages. The fallback is a plain two-page text document. Both return `200` with
-`Content-Type: application/pdf`, so **a misconfigured deploy does not look
-broken** -- it just quietly ships the wrong document to every founder who
-downloads their report.
+pages.
 
-The response carries `X-PDF-Renderer: gotenberg | reportlab-fallback` precisely
-so this is checkable. Check it.
+**There is no longer a substitute document.** This section used to describe a
+plain reportlab fallback that returned `200` with a real `application/pdf`
+body whenever Gotenberg was unreachable -- so a founder who downloaded during
+a blip got the wrong document, nothing retried, and nothing alerted. It was
+the quietest failure in the product.
+
+`app/api/v1/reports/pdf_delivery.py` replaced it: a rendered PDF is stored, and
+when the renderer is down the export answers **503** and records that someone
+is waiting, which `backfill_pending_pdfs` picks up later. A founder gets their
+real report or an honest "not yet" -- never a lookalike.
 
 ### On ECS it CAN be a sidecar — which App Runner could not
 
@@ -313,22 +339,35 @@ those failures lands as a silent fallback rather than an error.
 
 ### Confirming it actually works
 
-Once both services are up, export a real report and read the header -- the
-status code tells you nothing:
+`GET /api/v1/health` reports the renderer:
+
+* **`gotenberg`** -- exports work and match the on-screen report.
+* **`unavailable`** -- exports do NOT work: the endpoint answers 503 and queues
+  a backfill rather than substituting a different document.
+
+There is no `reportlab-fallback` value any more; leaving that label in place
+would tell whoever is on call that founders are getting a simpler PDF, when in
+fact they are getting none, and that is the difference between "fix it this
+week" and "fix it now".
 
 ```bash
-curl -sD - -o /dev/null -X POST   https://api.goxlally.ai/api/v1/reports/<id>/export   -H "Authorization: Bearer <token>" | grep -i x-pdf-renderer
+curl -s https://api.goxlally.ai/api/v1/health | grep -i pdf_renderer
 ```
 
-`x-pdf-renderer: gotenberg` is correct. `reportlab-fallback` means founders are
-getting the plain document.
+### Alert on it — DONE (2026-09-16)
 
-### Alert on it
+Two CloudWatch metric filters and an alarm are in place:
 
-Add a CloudWatch metric filter for `reportlab-fallback` and alarm on it. Nothing
-else in the system reports this: the founder gets a file, the request succeeds,
-Sentry sees nothing. The only other symptom is a founder mentioning their report
-"looks like a text file", which is not a monitoring strategy.
+| | |
+| --- | --- |
+| Metric filter | `ally-gotenberg-unreachable` -> `GotenbergUnreachable` |
+| Metric filter | `ally-gotenberg-render-failure` -> `GotenbergPdfFailure` |
+| Alarm | `Ally-Gotenberg-PDF-Failure`, threshold **any occurrence (>= 1)** |
+| Topic | `ally-prod-alerts` (email: Info@goxlally.ai) |
+| State at setup | OK |
+
+These watch for "no PDF produced", which is the real failure now that there is
+no fallback to detect.
 
 ## 4. Vercel
 
@@ -371,21 +410,26 @@ has to change if the service moves.
       when the database is unreachable. Confirm the load balancer's health
       check points here and not at `/`, which checks nothing
 - [ ] `SENTRY_DSN` is set and a manually-triggered test error reaches Sentry
-- [ ] A report export returns `X-PDF-Renderer: gotenberg`, **not**
-      `reportlab-fallback` (see §3a — the fallback is a 200 with a real PDF
-      attached, so a successful download does not confirm this)
-- [ ] The Gotenberg service is not reachable from the public internet
+- [ ] `GET /api/v1/health` reports `pdf_renderer: gotenberg`, not
+      `unavailable` (see §3a). A report export that returns 503 means the
+      renderer is down and a backfill has been queued — not that the request
+      failed
+- [x] **The Gotenberg service is not reachable from the public internet** —
+      confirmed 2026-09-16: it runs as an ECS sidecar on port 3000, and while
+      the task has a public IP, the security group admits only port 8000 from
+      the ALB's security group. There is no inbound rule for 3000
 - [ ] `frontend/vercel.json`'s rewrite destination matches `api.goxlally.ai`,
       committed and pushed
 - [ ] Full journey works end to end through `www.goxlally.ai`: sign in →
       onboarding → diagnosis → report → tour → dashboard
-- [ ] `select count(*) from pg_stat_activity` is comfortably under the
-      instance's `max_connections` with all tasks running. The old
+- [x] **`select count(*) from pg_stat_activity` is comfortably under the
+      instance's `max_connections`** — confirmed 2026-09-16: 13 of 81. The old
       `EMAXCONNSESSION` check on this list was a Supabase pooler error and
       cannot occur on RDS — this is its replacement
-- [ ] RDS automated backups are on, with a retention window someone has
-      actually chosen. `data/reference/` can rebuild the product's content;
-      nothing but backups can rebuild a founder's answers
+- [x] **RDS automated backups are on, with a retention window someone has
+      actually chosen** — confirmed 2026-09-16: 7 days. `data/reference/` can
+      rebuild the product's content; nothing but backups can rebuild a
+      founder's answers
 
 ## Rebuilding the database from nothing
 
