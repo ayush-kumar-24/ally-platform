@@ -39,7 +39,15 @@ class FrontendErrorReport(BaseModel):
     component_stack: str | None = Field(None, max_length=4000)
     url: str = Field(..., max_length=500)
     user_agent: str | None = Field(None, max_length=300)
-    # 'error_boundary' (React render error) | 'window_error' | 'unhandled_rejection'
+    # 'error_boundary' (a React render error -- a real bug)
+    # 'chunk_load'     (a tab open across a deploy asked for a chunk the new
+    #                   build no longer serves; not a bug, and the founder only
+    #                   needs to reload -- see frontend utils/loadChunk.js)
+    # 'window_error' | 'unhandled_rejection'
+    #
+    # Kept apart deliberately: a spike of 'chunk_load' means a deploy caught
+    # people mid-flow, a spike of 'error_boundary' means we shipped something
+    # broken. Reading them as one number hides both.
     source: str = Field("unknown", max_length=50)
     event_id: str | None = Field(None, max_length=100)
 

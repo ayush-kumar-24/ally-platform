@@ -90,6 +90,50 @@ arbitrary founder by id.
 5. Add the Vercel domain as a redirect URL in Supabase → Authentication →
    URL Configuration: `https://<your-domain>/guided/login`. Without it Google
    sign-in returns to a URL Supabase refuses.
+6. **Turn on Skew Protection** (Project → Settings → Advanced → Skew
+   Protection). Do not skip this — see below.
+
+## Skew Protection — required, and it is a manual toggle
+
+The app is code-split: every route is a separate hashed chunk
+(`assets/ProfileBuild-a1b2c3.js`), and a deploy changes every one of those
+names. A browser tab that loaded `index.html` **before** a deploy is still
+holding the old names, so the next lazy route it navigates to 404s.
+
+That is not theoretical. Guided onboarding is a ~20-minute single-tab session —
+by far the longest-lived tab in the product — so it is the one most likely to be
+open when a deploy lands, and a founder mid-sign-up was the one who paid for it.
+`/guided/login` is in the entry chunk and never goes stale, which is why the
+front door can look perfectly healthy while people in the middle of the flow hit
+an error card.
+
+With Skew Protection on, Vercel exposes `VERCEL_DEPLOYMENT_ID` to the build,
+`vite.config.js` stamps every asset URL with `?dpl=<id>`, and Vercel routes
+those requests back to the deployment they came from. The tab finishes its
+session on the build it started on; the next full page load picks up the new
+one. Nobody sees anything.
+
+Until the toggle is on, the variable is absent, the stamping is skipped, and the
+build is byte-for-byte what it was before — so the code side is safe to ship
+ahead of it, it simply does nothing. **The toggle is the part that actually
+prevents the bug.**
+
+Two layers behind it catch what is left (a deploy landing in the same second, a
+dropped connection):
+
+- `src/utils/loadChunk.js` retries once, then reloads the tab into the current
+  build. It stamps the attempt in *both* sessionStorage and a URL parameter, so
+  browsers that refuse storage get the recovery too — they used to be the only
+  ones that never did.
+- `src/components/ErrorBoundary.jsx` recognises a stale-chunk failure and says
+  "A new version is ready" with Reload as the primary button, instead of
+  "Something went wrong", which reads as a broken product.
+
+Crash reports separate the two: `source: 'chunk_load'` in the `/frontend-errors`
+log means a deploy caught someone mid-flow; `source: 'error_boundary'` means a
+real bug. If `chunk_load` is still appearing after the toggle is on, something
+is wrong with the stamping — check that asset URLs in `dist/index.html` carry
+`?dpl=`.
 
 ## What the rewrite does
 

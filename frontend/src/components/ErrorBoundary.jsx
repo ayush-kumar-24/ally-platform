@@ -1,10 +1,30 @@
 import React from 'react';
 import { reportError } from '../services/errorReporting';
+import { isChunkLoadError } from '../utils/loadChunk';
 
 /* ─────────────────────────────────────────────
    ErrorBoundary
    Class component — required by React for
    catching rendering errors in the subtree.
+
+   Two very different things land here, and they
+   used to be shown identically:
+
+   1. A real crash — a bug, and the founder can
+      do nothing but leave.
+   2. A STALE BUILD. The app is code-split, so a
+      tab opened before a deploy is still asking
+      for chunk file names that no longer exist
+      (see utils/loadChunk.js). Nothing is broken
+      and a reload fixes it completely.
+
+   (2) is common — onboarding is a ~20-minute
+   single-tab session, so it is the tab most
+   likely to be open when a deploy lands — and
+   showing it "Something went wrong" reads as
+   "this product is broken" to the one founder
+   who was mid-sign-up. It is an update, so it
+   now says so, and leads with Reload.
 ───────────────────────────────────────────── */
 
 class ErrorBoundary extends React.Component {
@@ -25,7 +45,14 @@ class ErrorBoundary extends React.Component {
   componentDidCatch(error, errorInfo) {
     this.setState({ errorInfo });
     console.error('[ErrorBoundary] Caught rendering error:', error, errorInfo);
-    reportError(error, { source: 'error_boundary', componentStack: errorInfo?.componentStack });
+    /* Reported under its own source so a redeploy's stale chunks never sit in
+       the same bucket as real crashes. They need opposite responses: a spike
+       of 'chunk_load' is "a deploy caught people mid-flow", a spike of
+       'error_boundary' is "we shipped a bug". */
+    reportError(error, {
+      source: isChunkLoadError(error) ? 'chunk_load' : 'error_boundary',
+      componentStack: errorInfo?.componentStack,
+    });
   }
 
   handleReset = () => {
@@ -54,6 +81,17 @@ class ErrorBoundary extends React.Component {
 
     const { error, errorInfo, showDetails } = this.state;
     const { label = 'This section' } = this.props;
+    const staleBuild = isChunkLoadError(error);
+
+    const reload = () => window.location.reload();
+    // The reload is the fix for a stale build, so it leads. For a real crash
+    // it rarely helps, so getting out of the broken screen leads instead.
+    const primary = staleBuild
+      ? { id: 'eb-reload-btn', text: 'Reload Page', onClick: reload }
+      : { id: 'eb-go-home-btn', text: 'Go Back to Safety', onClick: this.handleReset };
+    const secondary = staleBuild
+      ? { id: 'eb-go-home-btn', text: 'Go Back to Safety', onClick: this.handleReset }
+      : { id: 'eb-reload-btn', text: 'Reload Page', onClick: reload };
 
     return (
       <div style={styles.overlay}>
@@ -62,29 +100,53 @@ class ErrorBoundary extends React.Component {
         <div style={styles.orb2} />
 
         <div style={styles.card}>
-          {/* Icon */}
+          {/* Icon. A hazard triangle is the wrong word for an update -- it is
+              the first thing read, and it says "broken" before the heading
+              gets a chance to say otherwise. A refresh arrow for that case. */}
           <div style={styles.iconWrap}>
             <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#10B981' }}>
-              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-              <line x1="12" y1="9" x2="12" y2="13" />
-              <line x1="12" y1="17" x2="12.01" y2="17" />
+              {staleBuild ? (
+                <>
+                  <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+                  <polyline points="21 3 21 9 15 9" />
+                </>
+              ) : (
+                <>
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                  <line x1="12" y1="9" x2="12" y2="13" />
+                  <line x1="12" y1="17" x2="12.01" y2="17" />
+                </>
+              )}
             </svg>
           </div>
 
           {/* Heading */}
-          <h1 style={styles.heading}>Something went wrong</h1>
+          <h1 style={styles.heading}>
+            {staleBuild ? 'A new version is ready' : 'Something went wrong'}
+          </h1>
           <p style={styles.subtext}>
-            <strong style={{ color: '#34d399' }}>{label}</strong> encountered an unexpected error
-            and couldn&apos;t render. Your data is safe — this is just a display issue.
+            {staleBuild ? (
+              <>
+                We released an update to{' '}
+                <strong style={{ color: '#34d399' }}>{label}</strong> while you had this page
+                open. Reload to pick it up — you&apos;ll carry on from where you left off, and
+                everything you&apos;ve entered is already saved.
+              </>
+            ) : (
+              <>
+                <strong style={{ color: '#34d399' }}>{label}</strong> encountered an unexpected
+                error and couldn&apos;t render. Your data is safe — this is just a display issue.
+              </>
+            )}
           </p>
 
           {/* Actions */}
           <div style={styles.actions}>
-            <button id="eb-go-home-btn" style={styles.primaryBtn} onClick={this.handleReset}>
-              Go Back to Safety
+            <button id={primary.id} style={styles.primaryBtn} onClick={primary.onClick}>
+              {primary.text}
             </button>
-            <button id="eb-reload-btn" style={styles.secondaryBtn} onClick={() => window.location.reload()}>
-              Reload Page
+            <button id={secondary.id} style={styles.secondaryBtn} onClick={secondary.onClick}>
+              {secondary.text}
             </button>
           </div>
 
