@@ -51,3 +51,8 @@ skills-lock.json
 # would produce a diff on every dump even when not one row has changed -- the
 # exact noise the dump is written to avoid.
 backend/data/reference/manifest.json
+
+# One-off transcripts written by scripts/e2e_journey_check.py --json-out and the
+# markdown built from them. They are a record of a single run against a single
+# throwaway founder, so they go stale the moment the question bank changes.
+backend/*-diagnosis-transcript.md

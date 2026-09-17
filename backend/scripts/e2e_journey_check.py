@@ -1285,6 +1285,263 @@ assert len(_WEAK_CP_TEXTS) == len(_STRONG_CP_TEXTS) == len(_TRACTION_CP_TEXTS) \
 assert len(_WEAK_TEXTS) == len(_STRONG_TEXTS) == len(_TOPICS)
 assert len(_TRACTION_TEXTS) == len(_TRACTION_TOPICS)
 
+#: ALLY ITSELF, AT MVP — the product diagnosing its own founder.
+#:
+#: Written from what this repository actually contains and what building it
+#: actually turned up, not from an idea of a founder. Ally has a working
+#: product, a handful of testers, no paying customers, `PUBLIC_LAUNCH=false`
+#: so every feature is free, and a small team. Strong in the places real
+#: effort went (the engine, the rebuild procedure, the deploy pipeline) and
+#: genuinely weak in the places nobody has got to yet (pricing, distribution,
+#: anything written down about who owns what).
+#:
+#: The honest answers are the point. A persona that made Ally sound good would
+#: measure nothing.
+_ALLY_MVP_TEXTS = (
+    # 0 customers / validation
+    "None paying. About a dozen testers, all of them people we know or the "
+    "team itself, and the eighteen accounts held at Pro in the launch "
+    "migration are ours. So the product works and nobody has yet proved they "
+    "would pay for it, which are different facts and I try not to blur them.",
+    # 1 planning / priorities
+    "Badly. The week is set by whatever broke, and this week that was a "
+    "production deploy and a test suite nobody could read. I have not planned "
+    "a week in advance since we started building.",
+    # 2 market / competitors
+    "Early-stage founders in India who cannot afford a real advisor. I have "
+    "not sized it and I have not looked properly at who else does this -- "
+    "there are coaching programmes and there are generic AI chat products, "
+    "and I have never sat down and worked out which of them a founder picks "
+    "instead of us.",
+    # 3 product / analytics
+    "The engine is instrumented in the sense that every diagnosis writes a "
+    "report row and every model call is logged with its cost. What we do not "
+    "have is product analytics on the human side -- where someone abandons "
+    "the journey, how far into the thirty questions they get. I could tell "
+    "you what the engine did and not what the founder felt.",
+    # 4 pricing
+    "Three plans exist in the catalog and nobody has ever paid one of them. "
+    "The numbers came from what felt reasonable for an Indian founder, not "
+    "from anyone telling me what the problem costs them. Free carries almost "
+    "the whole product today on purpose, because the people using it are our "
+    "own testers.",
+    # 5 team
+    "Small -- a few engineers and me. Nothing about who owns what is written "
+    "down; we work it out in conversation, which held fine at three people "
+    "and is starting not to. When two of us disagree it comes to me, and "
+    "that is not a rule anyone agreed, it is just what happens.",
+    # 6 risk
+    "The one that actually worries me: the whole diagnosis depends on an LLM "
+    "classifying answers, and until this week nobody had proved that worked "
+    "in production. Not once. The report renders either way, which is exactly "
+    "what makes it dangerous. I have not written the rest down.",
+    # 7 decisions / stress
+    "Fast, and then I revisit them at night. Under pressure I do the thing in "
+    "front of me rather than the thing that matters -- last week that meant "
+    "shipping a deploy fix while the question about whether scoring works at "
+    "all sat untouched.",
+    # 8 feedback / blind spots
+    "The sharpest feedback I have had recently came from our own tooling "
+    "rather than a person: a review of the codebase found that three "
+    "documents described behaviour the code no longer had, and one of them "
+    "was mine. I would rather have heard it from a teammate first, and nobody "
+    "said it.",
+    # 9 purpose / motivation
+    "Because a founder at this stage cannot get an honest read on their own "
+    "business, and the advice they can afford is generic. I watched people "
+    "pay for programmes that told them what they already knew. That is worth "
+    "a few years.",
+    # 10 doing it well
+    "Trusted. If a founder reads their report and says 'that is the thing I "
+    "have been avoiding', we did it. Not the biggest, not the first -- I do "
+    "not know how I would measure trusted yet, which is a gap.",
+    # 11 the pitch
+    "Ally asks a founder about themselves and their business, and gives them "
+    "a diagnosis: what is actually wrong, the root causes underneath it, and "
+    "the three things to do next. I still take two goes to say it, because I "
+    "start explaining the six-pillar model instead of the outcome.",
+    # 12 own encounter
+    "I have been the founder who could not tell whether the problem was the "
+    "product or the market, and paid for advice that answered neither. Second "
+    "-hand more than first -- I have watched it closely more than I have "
+    "lived every version of it, and people do point that out.",
+    # 13 what it is built with
+    "FastAPI and React, Postgres on RDS, Claude for the classification and "
+    "OpenAI for embeddings, Gotenberg for the PDFs. We build the part nobody "
+    "else does -- the model of what a founder's problems actually are -- and "
+    "buy everything else.",
+    # 14 time wasted
+    "Firefighting infrastructure. I spent most of this week on a deploy "
+    "pipeline, a migration graph and a test suite, none of which is the "
+    "product. It needed doing and it was still not the thing that gets us a "
+    "paying customer.",
+    # 15 delegation
+    "Poorly. I explain the task and not the outcome, and then I am surprised "
+    "when it comes back as the thing I described rather than the thing I "
+    "wanted. Nobody has been taught how I want anything done, because I have "
+    "never written it down to teach from.",
+    # 16 founder dependency
+    "Most of it. If I were out for a week the product would keep serving, "
+    "because it is deployed and the pipeline works -- but no decision would "
+    "get made, and anything about the diagnosis model lives in my head and a "
+    "few documents I wrote.",
+    # 17 what is written down
+    "More than there was. The rebuild procedure is written down and has been "
+    "run twice, and the deploy is documented properly now. What is not "
+    "written down is anything about how we work: no process for who reviews "
+    "what, no runbook for anything a person does rather than a machine.",
+    # 18 role clarity
+    "Not in writing. Everyone does a bit of everything, which is honest for "
+    "four people and is already costing us -- things fall between us and I "
+    "find out when they have been sitting for days.",
+    # 19 decision rights
+    "It comes to me. There is no rule, and if I am deep in something it "
+    "waits. That is fine at this size and it is the first thing I would fix "
+    "if we hired two more people.",
+    # 20 performance
+    "I have no idea, honestly. There are no targets for anyone. Things get "
+    "done and I assume that means it is working, and I would probably only "
+    "notice a problem when something broke.",
+    # 21 kept someone on
+    "Not yet -- we have not been going long enough or hired widely enough for "
+    "that to have come up.",
+    # 22 churn
+    "No churn because no paying customers. Testers do go quiet, and I do not "
+    "chase them or ask why, which is probably the most useful signal "
+    "available to me right now and I am not collecting it.",
+    # 23 buying journey
+    "There isn't one. Every person using Ally got here because somebody on "
+    "the team told them about it. I could not describe the steps a stranger "
+    "would go through, because no stranger ever has.",
+    # 24 presenting pricing
+    "It is on the plans page and I have never talked anyone through it. The "
+    "first time I have to justify a number to a founder who is deciding will "
+    "be the first real test of whether it is right.",
+    # 25 cash
+    "I look when something prompts me. We are spending on infrastructure and "
+    "model calls against no revenue, so the number only moves one way and I "
+    "know roughly where it is without a schedule for checking.",
+    # 26 evidence of demand
+    "Weak, and I would say so to an investor. What I have is a working "
+    "product and testers who finish the journey. What I do not have is one "
+    "person outside our network who wanted it enough to pay. Any honest "
+    "version of the pitch has to lead with the model, not with traction.",
+    # 27 campaign
+    "We have not run one. Nothing has been launched, nothing has been "
+    "marketed, and there is no definition of success waiting for when we do.",
+    # 28 ICP drift
+    "I do not know yet -- there are not enough real users to have drifted "
+    "from. We designed for early-stage founders in India and the testers are "
+    "mostly people like us, which is not the same thing and I am aware of it.",
+    # 29 how the founder has changed
+    "I am far more suspicious of things that look like they are working. This "
+    "week a report rendered perfectly with zero model calls behind it, and "
+    "that has changed how I read every green tick since. The thing I have not "
+    "said out loud is that I am not sure the product is good yet -- only that "
+    "it runs.",
+    # 30 problem drift
+    "It has narrowed and I noticed late. We started on 'founders need advice' "
+    "and what the product actually does is tell a founder the one thing they "
+    "are avoiding. The six-pillar model is how we get there, not what we "
+    "sell, and I still describe it the wrong way round.",
+    # 31 data privacy
+    "We hold what founders say about their businesses at their most honest, "
+    "which is about as sensitive as it gets. Row-level security is on, "
+    "founder data is deliberately never in the repository, and backups were "
+    "confirmed at seven days -- this week, because nobody had checked before.",
+    # 32 pipeline
+    "One out of five. There is no pipeline. There are conversations with "
+    "people we know and no way to predict any of them, because none of them "
+    "have been asked for money.",
+    # 33 proposals
+    "Nothing reusable, because we have never sent one.",
+    # 34 contract oversight
+    "I read them myself and I am not qualified to. It has not caused a "
+    "problem yet, which is not the same as it being fine.",
+    # 35 publishing
+    "Almost never. There is a plan to write and it is the first thing "
+    "dropped when a week fills up, which is every week.",
+    # 36 the headline problem
+    "That nobody has paid us. Everything else -- the engine, the pipeline, "
+    "the tests -- is real work and none of it answers whether a founder "
+    "values this enough to buy it. I have been able to make progress on the "
+    "building, so I have kept building.",
+    # 37 what would need to be true
+    "One founder outside our network completing a diagnosis and telling me it "
+    "was worth paying for. Nothing technical is stopping that this week. What "
+    "stops it is that I have not asked anyone.",
+    # 38 already tried
+    "We put the product in front of the team and a few friendly founders and "
+    "watched them use it. It stalled because I treated 'they finished the "
+    "journey' as the result, and never asked the next question, which was "
+    "whether they would pay.",
+    # 39 single point of failure
+    "The classifier. If the model call fails, every answer scores the same "
+    "and the report comes out looking complete and saying nothing. That is "
+    "the failure I would least likely notice, and it went unverified in "
+    "production until this week.",
+    # 40 avoiding
+    "Asking a tester for money. I have had the conversation ready for weeks "
+    "and I keep finding an infrastructure problem to solve instead, and "
+    "there is always a real one available.",
+    # 41 the avoided metric
+    "How many testers finish the whole journey. I know how many started. I "
+    "have not looked at how many reached the report, because I think I know "
+    "the answer and I would rather not have it confirmed.",
+    # 42 recurring problem
+    "Things that look finished and are not. A test suite that was green "
+    "because it never ran, a document describing a feature that had been "
+    "removed, a report that renders with nothing behind it. Same shape every "
+    "time: the surface says done and nobody checked underneath.",
+    # 43 decisions landing on me
+    "All of them, and this week that included deciding whether to merge a "
+    "pull request nobody else had looked at. There is no reviewer other than "
+    "me, so 'should this ship' is a question with one possible answer.",
+    # 44 what landed
+    "Watching the whole journey run end to end against a database rebuilt "
+    "from nothing but the repository. Forty-six questions, a report at the "
+    "end, all six pillars assessed. It was the first time the thing existed "
+    "as a system rather than as parts I believed in.",
+    # 45 trophy or bridge
+    "The bridge, and I can tell that is true because the part I reread is the "
+    "founder's report, not anything about us. Early on I would probably have "
+    "said trophy.",
+    # 46 energy
+    "Early mornings before anything is on fire, and I do not protect them -- "
+    "they just happen when they happen. The weeks that flatten me are the "
+    "ones spent entirely on infrastructure, because at the end of them the "
+    "product is exactly where it was.",
+    # 47 why I stay / what done means
+    "I have thought about stopping, mostly on the days when the honest answer "
+    "to 'is this good' was 'I do not know'. What keeps me is that the problem "
+    "is real whether or not we solve it. Done would be a founder we have "
+    "never met paying for a diagnosis and acting on it.",
+    # 48 the unscalable thing
+    "I read the reports. Every one, personally, before anyone sees it. It "
+    "does not scale and it is the only reason I know what the engine actually "
+    "produces rather than what I hope it produces. It goes when I trust the "
+    "scoring, and I do not yet.",
+    # 49 the line
+    "Nothing has tested it properly, which I notice when I am asked. The "
+    "nearest thing: I will not ship a report that says something confident we "
+    "cannot support, and this week that meant refusing to treat a run with "
+    "zero model calls as a result.",
+    # 50 perfectionism
+    "The infrastructure, for most of a week. Migrations, test fixtures, a "
+    "drift check -- all of it genuinely broken and none of it the thing that "
+    "gets a customer. I was polishing what I knew how to fix.",
+    # 51 what it is worth to the user
+    "A founder at this stage burns months on the wrong problem, and the "
+    "advice that would have caught it costs more than they have. That is what "
+    "we are worth if we work. Nobody has put a number on it because nobody "
+    "has been asked to.",
+    # 52 does my experience generalise
+    "I assume it more than I should. I built this for the founder I have "
+    "been, and the testers are mostly people like me, so I have had very "
+    "little chance to be wrong out loud. That is the assumption I would most "
+    "like tested.",
+)
+
 #: A question that matches no topic still gets an answer of the right
 #: quality. Quality is the variable under test; subject is not, so the
 #: fallback is deliberately topic-neutral -- it must not smuggle in evidence
@@ -1306,6 +1563,11 @@ FALLBACKS = {
     # raise, or a fallback becomes evidence.
     "weak_traction": "No, not really -- I keep meaning to and then something "
                      "comes in and it goes to the bottom of the list again.",
+    # Topic-neutral like the rest: it must not smuggle in evidence about a
+    # dimension the question never raised.
+    "ally_mvp": "Partly, and not deliberately -- it is one of the things that "
+                "has never had a proper pass, so whatever is true of it today "
+                "is an accident rather than a decision.",
 }
 
 #: Every persona also carries the Current Problem topics, appended last.
@@ -1337,6 +1599,11 @@ ANSWER_BANK = {
                                + _FOUNDER_TOPICS,
                                _WEAK_TRACTION_TEXTS + _WEAK_TRACTION_CP_TEXTS
                                + _WEAK_TRACTION_FOUNDER_TEXTS)),
+    # Ally's own founder at MVP. One flat tuple in topic order rather than the
+    # three-part split the others use -- it was written against the topic list
+    # as a whole, and splitting it would only invite the halves to drift.
+    "ally_mvp": tuple(zip(_TRACTION_TOPICS + _CURRENT_PROBLEM_TOPICS
+                          + _FOUNDER_TOPICS, _ALLY_MVP_TEXTS)),
 }
 
 #: The texts alone, in topic order -- the index-based fallback when no
@@ -1354,9 +1621,12 @@ TRACTION_ANSWERS = (_TRACTION_TEXTS + _TRACTION_CP_TEXTS
 WEAK_TRACTION_ANSWERS = (_WEAK_TRACTION_TEXTS + _WEAK_TRACTION_CP_TEXTS
                          + _WEAK_TRACTION_FOUNDER_TEXTS)
 
+ALLY_MVP_ANSWERS = _ALLY_MVP_TEXTS
+
 PERSONAS = {"weak": WEAK_ANSWERS, "strong": STRONG_ANSWERS,
             "traction": TRACTION_ANSWERS,
-            "weak_traction": WEAK_TRACTION_ANSWERS}
+            "weak_traction": WEAK_TRACTION_ANSWERS,
+            "ally_mvp": ALLY_MVP_ANSWERS}
 
 
 #: A defining term is worth two, a supporting term one, and two points are
@@ -1678,7 +1948,49 @@ def cleanup_founder_journey(db, sa, *, fid: int | None = None, email: str | None
     return 1
 
 
-def _seed_founder(db, sa, stage_order: int) -> tuple[int, str]:
+#: Onboarding profiles, per persona. The default is a generic SaaS founder;
+#: `ally_mvp` describes Ally itself.
+#:
+#: This is not decoration. The founder row is CONTEXT the classifier reads
+#: alongside each answer, so a profile that says "Acme Compliance, compliance
+#: SaaS" under answers about building a diagnosis engine is not merely an
+#: incoherent transcript -- it is a contradiction the scoring is then asked to
+#: explain. The persona and the profile have to be the same founder.
+_ONBOARDING = {
+    None: {
+        "business_name": "Acme Compliance",
+        "problem_statement":
+            "Customers churn after the second month and I cannot tell why.",
+        "building_summary": "Compliance SaaS for Indian SMBs.",
+        "industry": "SaaS",
+        "current_challenges": ["Sales", "Cash flow"],
+        "goal_90_day": "Ten real customer interviews.",
+        "vision_1_year": "Series A raised.",
+    },
+    "ally_mvp": {
+        "business_name": "Ally",
+        "problem_statement":
+            "Founders at this stage cannot get an honest read on their own "
+            "business, and the advice they can afford is generic.",
+        "building_summary":
+            "Ally -- an AI business diagnosis for early-stage founders: what "
+            "is actually wrong, the root causes under it, and what to do next.",
+        "industry": "SaaS",
+        "current_challenges": ["Sales", "Cash flow"],
+        "goal_90_day":
+            "One founder outside our own network paying for a diagnosis.",
+        "vision_1_year":
+            "Founders we have never met completing a diagnosis and acting on "
+            "it, without us in the room.",
+        "product_description":
+            "A guided journey -- Founder DNA, the current problem, then a "
+            "staged diagnosis -- that produces a report scoring six pillars "
+            "of a founder's business and names the root causes beneath them.",
+    },
+}
+
+
+def _seed_founder(db, sa, stage_order: int, persona: str | None = None) -> tuple[int, str]:
     """A brand-new synthetic founder with a random user_id.
 
     Only works where founders.user_id carries no FK to auth.users -- see the
@@ -1713,6 +2025,7 @@ def _seed_founder(db, sa, stage_order: int) -> tuple[int, str]:
 
     email = f"e2e+{int(time.time())}@{TEST_DOMAIN}"
     revenue = REVENUE_BY_STAGE_ORDER.get(stage_order, FIELDS["current_revenue"])
+    profile = {**_ONBOARDING[None], **_ONBOARDING.get(persona, {})}
     try:
         fid = db.execute(sa.text("""
             insert into founders (user_id, email, full_name, stage_id, profile_completed,
@@ -1723,17 +2036,23 @@ def _seed_founder(db, sa, stage_order: int) -> tuple[int, str]:
                                   current_revenue, product_description,
                                   business_reality_signals)
             values (gen_random_uuid(), :e, 'E2E Test Founder', :s, true,
-                    'one_company',
-                    'Customers churn after the second month and I cannot tell why.',
-                    'Compliance SaaS for Indian SMBs.',
-                    'Acme Compliance', 'SaaS',
-                    '["Business"]'::jsonb, '["Sales","Cash flow"]'::jsonb,
-                    'Ten real customer interviews.', 'Series A raised.',
+                    'one_company', :problem, :building,
+                    :bizname, :industry,
+                    '["Business"]'::jsonb, cast(:challenges as jsonb),
+                    :goal90, :vision1,
                     '{"clear_next_step": true}'::jsonb, '["pricing"]'::jsonb,
                     :rev, :prod, cast(:breality as jsonb))
             returning founder_id"""),
             {"e": email, "s": stage_order, "rev": revenue,
-             "prod": FIELDS["product_description"],
+             "problem": profile["problem_statement"],
+             "building": profile["building_summary"],
+             "bizname": profile["business_name"],
+             "industry": profile["industry"],
+             "challenges": json.dumps(profile["current_challenges"]),
+             "goal90": profile["goal_90_day"],
+             "vision1": profile["vision_1_year"],
+             "prod": profile.get("product_description",
+                                 FIELDS["product_description"]),
              "breality": json.dumps(BUSINESS_REALITY)}).scalar_one()
     except Exception as exc:                                      # noqa: BLE001
         db.rollback()
@@ -1938,7 +2257,7 @@ def run(args) -> int:
             print(f"\n  existing founder {fid} ({label}) (unchanged: not created "
                   "by this script)")
         else:
-            fid, label = _seed_founder(db, sa, args.stage)
+            fid, label = _seed_founder(db, sa, args.stage, args.persona)
             print(f"\n  test founder {fid} <{label}> at stage_order {args.stage}")
 
     from fastapi import Depends
