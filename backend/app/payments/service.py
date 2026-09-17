@@ -41,6 +41,7 @@ from app.payments.errors import (
     PaymentsNotConfiguredError,
 )
 from app.payments.gateway import PaymentGateway, PaymentGatewayError
+from app.payments.gst_states import normalise_state
 from app.payments.invoice import Invoice, build_invoice
 from app.payments.models import CheckoutSession, WebhookOutcome, WebhookResult
 from app.payments.repository import PaymentRepository
@@ -140,7 +141,17 @@ class PaymentService:
     # --- founder-initiated ---------------------------------------------------
 
     def start_checkout(self, founder_id: int, tier: PlanTier,
-                       coupon_code: str | None = None) -> CheckoutSession:
+                       coupon_code: str | None = None,
+                       buyer_state: str | None = None) -> CheckoutSession:
+        """`buyer_state` is the GST place of supply, frozen onto the payment row.
+
+        Normalised here and stored canonically, so "gujrat", "GJ" and
+        "Gujarat " all become Gujarat -- the CGST+SGST vs IGST decision is
+        made later by comparing two state NAMES, and it must not turn on
+        spelling. An unrecognised value is stored as NULL rather than
+        preserved: a state nobody can match is worth no more than no state,
+        and NULL is what the invoice already treats as "cannot determine".
+        """
         if self.gateway is None:
             raise PaymentsNotConfiguredError()
 
@@ -188,6 +199,12 @@ class PaymentService:
                                 "error": str(exc)})
             raise PaymentGatewayUnavailableError() from exc
 
+        # Canonical or nothing -- see the docstring.
+        place_of_supply = normalise_state(buyer_state)
+        if buyer_state and place_of_supply is None:
+            logger.warning("payments: unrecognised buyer state at checkout, storing none",
+                           extra={"founder_id": founder_id, "submitted": buyer_state})
+
         # The payment row and the coupon reservation are one transaction: a
         # claimed slot must never outlive the payment it was claimed for, and a
         # discounted payment must never exist without the row that justifies
@@ -195,6 +212,10 @@ class PaymentService:
         payment_id = self.repository.create_pending(
             founder_id=founder_id, amount_inr=charge_inr, currency=_CURRENCY,
             gateway="razorpay", gateway_order_id=order.order_id,
+            # The GST place of supply, frozen now. Read off the payment for
+            # every future re-render of this invoice -- never off the founder,
+            # who may be somewhere else by then.
+            buyer_state=place_of_supply,
             # What this payment buys, recorded where the price was decided.
             # The gateway's notes carry it too, but those come back through
             # the browser and are not authority for a grant.

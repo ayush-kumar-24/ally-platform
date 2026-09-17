@@ -5,7 +5,7 @@ import { getProfile } from '../services/profile';
 import { getCatalog, getMyPlan } from '../services/plans';
 import { refreshPlanName } from '../hooks/usePlanName';
 import { confirmPayment, openCheckout, startCheckout, validateCoupon, waitForPlanActivation } from '../services/payments';
-import { downloadInvoicePdf, getInvoice, listInvoices } from '../services/invoices';
+import { downloadInvoicePdf, getInvoice, listGstStates, listInvoices } from '../services/invoices';
 
 /** The Knowledge libraries, in the order the sidebar lists them.
  *
@@ -348,16 +348,27 @@ function CheckoutView({ plan, onBack, onPaid }) {
   const [couponError, setCouponError] = useState(null);
   const [couponBusy, setCouponBusy] = useState(false);
 
+  /* The GST place of supply. Required before paying when the list loaded --
+     it decides whether the founder is charged CGST+SGST (their state is the
+     supplier's, Gujarat) or IGST (anywhere else), and that is not a thing to
+     guess on a tax document. `states === null` means the list has not arrived;
+     an empty list means it failed, and payment proceeds without it rather
+     than stranding a founder behind a dropdown that will not load.
+     `remembered` prefills from the founder's last payment so a returning
+     founder is not asked twice. */
+  const [states, setStates] = useState(null);
+  const [billingState, setBillingState] = useState('');
+
   /* Nothing started here may touch state after unmount: both the order request
      and the Razorpay popup outlive a "Back to Plans" click. */
   const alive = useRef(true);
   useEffect(() => () => { alive.current = false; }, []);
 
-  const createOrder = useCallback((couponCode = null) => {
+  const createOrder = useCallback((couponCode = null, stateName = billingState) => {
     setOrder(null);
     setOrderError(null);
     setPayError(null);
-    return startCheckout(plan.id, couponCode)
+    return startCheckout(plan.id, couponCode, stateName || null)
       .then((o) => { if (alive.current) setOrder(o); })
       .catch((err) => {
         if (!alive.current) return;
@@ -368,14 +379,14 @@ function CheckoutView({ plan, onBack, onPaid }) {
         if (couponCode) {
           setApplied(null);
           setCouponError(err?.detail || err?.message || 'That code is no longer available.');
-          startCheckout(plan.id)
+          startCheckout(plan.id, null, stateName || null)
             .then((o) => { if (alive.current) setOrder(o); })
             .catch((e) => { if (alive.current) setOrderError(e); });
           return;
         }
         setOrderError(err);
       });
-  }, [plan.id]);
+  }, [plan.id, billingState]);
 
   const applyCoupon = async () => {
     const code = couponInput.trim();
@@ -405,7 +416,36 @@ function CheckoutView({ plan, onBack, onPaid }) {
     createOrder();
   };
 
-  useEffect(() => { createOrder(); }, [createOrder]);  // full price until a code is applied
+  /* Rebuilt whenever the plan or the place of supply changes -- the state is
+     written onto the payment row, so it has to be on the row Razorpay is about
+     to charge against.
+
+     The applied code is read through a ref rather than a dependency: putting
+     `applied` in the dependency list would rebuild the order every time a code
+     was applied (which applyCoupon already does, itself), and NOT carrying it
+     at all would silently drop a founder's discount the moment they picked
+     their state. */
+  const appliedRef = useRef(null);
+  useEffect(() => { appliedRef.current = applied?.code ?? null; }, [applied]);
+  useEffect(() => { createOrder(appliedRef.current); }, [createOrder]);
+
+  /* The state list, and the founder's last-used state as a prefill.
+     Both failures are non-fatal: no list means the field is skipped and the
+     backend records no place of supply (IGST, nothing claimed), which is the
+     documented fallback rather than a broken checkout. */
+  useEffect(() => {
+    let cancelled = false;
+    listGstStates()
+      .then((list) => { if (!cancelled) setStates(Array.isArray(list) ? list : []); })
+      .catch(() => { if (!cancelled) setStates([]); });
+    listInvoices()
+      .then((rows) => {
+        const last = rows?.find((r) => r.tax?.place_of_supply)?.tax?.place_of_supply;
+        if (!cancelled && last) setBillingState(last);
+      })
+      .catch(() => { /* a prefill, not a requirement */ });
+    return () => { cancelled = true; };
+  }, []);
 
   /* Prefill only. Razorpay asks for anything we cannot supply, so a failed
      profile fetch costs the founder a field, not the payment. */
@@ -466,6 +506,11 @@ function CheckoutView({ plan, onBack, onPaid }) {
   const discountLabel = order?.discount_paise
     ? `₹${rupeesFromPaise(order.discount_paise)}` : null;
   const busy = payState !== 'idle';
+  /* Only ever blocks when there is a list to choose from. If the states call
+     failed there is nothing to pick, and a founder must not be held behind a
+     dropdown that will not load -- the backend records no place of supply and
+     the invoice falls back to IGST with none claimed. */
+  const needsState = states !== null && states.length > 0 && !billingState;
 
   return (
     <div className="bl-checkout-wrap stagger d1">
@@ -509,6 +554,37 @@ function CheckoutView({ plan, onBack, onPaid }) {
           {payError && (
             <div className="bl-pay-alert warn" role="alert">
               <span>{payError}</span>
+            </div>
+          )}
+
+          {/* Place of supply. Above Pay because it is written onto the payment
+              the moment Pay is pressed, and it decides the tax treatment
+              printed on the founder's invoice: their own state (Gujarat, where
+              GoXL supplies from) is CGST+SGST, anywhere else is IGST. Asked
+              once and prefilled from their last payment thereafter. */}
+          {states !== null && states.length > 0 && (
+            <div className="bl-billing-state">
+              <label htmlFor="checkout-state-select" className="bl-field-label">
+                Your state <span aria-hidden="true">·</span>{' '}
+                <span className="bl-field-hint">for your GST invoice</span>
+              </label>
+              <select
+                id="checkout-state-select"
+                className="bl-state-select"
+                value={billingState}
+                disabled={busy}
+                onChange={(e) => setBillingState(e.target.value)}
+              >
+                <option value="">Select your state…</option>
+                {states.map((st) => (
+                  <option key={st.code} value={st.name}>{st.name} ({st.code})</option>
+                ))}
+              </select>
+              {!billingState && (
+                <p className="bl-coupon-note">
+                  We need this to put the right GST breakdown on your invoice.
+                </p>
+              )}
             </div>
           )}
 
@@ -561,7 +637,7 @@ function CheckoutView({ plan, onBack, onPaid }) {
             type="button"
             className={`bl-pay-btn${busy ? ' loading' : ''}`}
             onClick={handlePay}
-            disabled={!order || busy}
+            disabled={!order || busy || needsState}
           >
             {busy ? (
               <>
@@ -573,7 +649,9 @@ function CheckoutView({ plan, onBack, onPaid }) {
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
                   <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
                 </svg>
-                {order ? `Pay ${amountLabel}` : 'Preparing secure checkout…'}
+                {needsState
+                  ? 'Select your state to continue'
+                  : (order ? `Pay ${amountLabel}` : 'Preparing secure checkout…')}
               </>
             )}
           </button>

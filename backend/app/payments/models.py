@@ -99,6 +99,11 @@ class InvoiceSource:
     list_amount_inr: object | None = None
     discount_inr: object | None = None
     coupon_code: str | None = None
+    #: The buyer's state at the time of the sale -- the GST place of supply,
+    #: frozen on the payment rather than read off the founder, so an invoice
+    #: never re-renders under a different tax treatment because the founder
+    #: moved. None on payments taken before this was collected.
+    buyer_state: str | None = None
     #: From the subscription this payment created: 'one_time' or 'monthly'.
     #: None on a payment whose subscription row is missing, which reads as
     #: monthly -- the conservative default, since a one-time purchase

@@ -45,7 +45,13 @@ from app.payments.invoice_assets import font_face_css, logo_data_uri
 #: under a name nobody recognises.
 BRAND_NAME_LEAD = "GoXL"
 BRAND_NAME_TAIL = "Ally"
-BRAND_TAGLINE = "by GoXL Entrepreneurship"
+#: What sits under the wordmark. NOT "by GoXL Entrepreneurship": that is the
+#: branding on the company's consulting invoices, and this document is for a
+#: different thing entirely -- a founder's software subscription. Putting the
+#: consulting brand on it would have a founder matching a Razorpay line for
+#: GoXL Ally against a document headed by a business they never bought from.
+#: The company itself is named where it belongs, in the footer, as the issuer.
+BRAND_TAGLINE = "Founder clarity platform"
 
 _CSS = """
 @page{size:A4;margin:14mm 13mm;}
@@ -126,6 +132,12 @@ table.items .num{text-align:right;white-space:nowrap;font-variant-numeric:tabula
   font-family:'Fraunces',Georgia,serif;font-size:16px;font-weight:600;color:#0E2A1B;}
 .totals .grand span:last-child{font-weight:600;}
 
+.words{clear:both;margin-top:16px;padding:9px 13px;background:#FBF8F3;
+  border-left:3px solid #2D6A4F;border-radius:0 7px 7px 0;font-size:10.5px;
+  color:#16241C;font-weight:600;}
+.words span{display:block;font-size:9px;text-transform:uppercase;
+  letter-spacing:.11em;color:#6B7A70;font-weight:700;margin-bottom:2px;}
+
 /* --- footer --- */
 .foot{margin-top:30px;padding-top:13px;border-top:1px solid #E5DED2;}
 .foot-name{font-size:11px;font-weight:700;color:#16241C;}
@@ -164,6 +176,49 @@ def _pct(value: Decimal) -> str:
     return f"{value.normalize():f}".rstrip("0").rstrip(".") or "0"
 
 
+#: Indian numbering, because that is what the amounts are grouped in above.
+_ONES = ("", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine",
+         "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen",
+         "Seventeen", "Eighteen", "Nineteen")
+_TENS = ("", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety")
+
+
+def _under_hundred(n: int) -> str:
+    if n < 20:
+        return _ONES[n]
+    return (_TENS[n // 10] + (" " + _ONES[n % 10] if n % 10 else "")).strip()
+
+
+def _words(n: int) -> str:
+    """`59000` -> `Fifty Nine Thousand`. Lakh and crore, not million."""
+    if n == 0:
+        return "Zero"
+    parts = []
+    for divisor, label in ((10_000_000, "Crore"), (100_000, "Lakh"), (1_000, "Thousand"),
+                           (100, "Hundred")):
+        if n >= divisor:
+            parts.append(f"{_words(n // divisor) if divisor == 10_000_000 else _under_hundred(n // divisor)} {label}")
+            n %= divisor
+    if n:
+        parts.append(_under_hundred(n))
+    return " ".join(p for p in parts if p.strip())
+
+
+def amount_in_words(amount: Decimal) -> str:
+    """"Seven Hundred Ninety Nine Rupees and Fifty Paise Only".
+
+    On the document for the same reason the company's existing invoices carry
+    it: a figure written out cannot be altered by changing one digit, and it
+    is the line a reviewer checks the numerals against.
+    """
+    whole = int(amount)
+    paise = int((amount - whole) * 100)
+    text = f"{_words(whole)} Rupee{'' if whole == 1 else 's'}"
+    if paise:
+        text += f" and {_under_hundred(paise)} Paise"
+    return text + " Only"
+
+
 def _money(symbol: str, amount: Decimal) -> str:
     return f"{symbol}{_rupees(amount)}"
 
@@ -186,6 +241,10 @@ def build_invoice_html(invoice: Invoice) -> str:
     symbol = "₹" if (invoice.currency or "INR").upper() == "INR" else ""
     tax = invoice.tax
     refunded = invoice.status == "refunded"
+    place_of_supply = ""
+    if tax and tax.place_of_supply:
+        code = tax.place_of_supply_code
+        place_of_supply = f"{tax.place_of_supply} ({code})" if code else tax.place_of_supply
 
     # The mark is optional by construction -- see invoice_assets.logo_data_uri.
     # The lockup reads correctly as pure typography without it, so an asset
@@ -197,12 +256,14 @@ def build_invoice_html(invoice: Invoice) -> str:
         ("Invoice no.", invoice.number),
         ("Payment ID", invoice.payment_reference or ""),
         ("Order ID", invoice.order_reference or ""),
-        # NO "Place of supply" ROW. Under GST that is the BUYER's state, and
-        # this product never asks for it. Printing the seller's state under
-        # that label -- which this document did in its first draft -- states
-        # the wrong party's location on a tax document and would misdescribe
-        # the tax treatment. The seller's state appears in the footer, named
-        # as the seller's.
+        # The BUYER's state, which is what "place of supply" means under GST --
+        # never the seller's, which is what an earlier draft of this document
+        # wrongly printed here. It comes from `tax.place_of_supply`, frozen on
+        # the payment row at checkout, and is simply absent on a payment taken
+        # before the state was collected: an unclaimed place of supply is
+        # visibly incomplete, where a guessed one is confidently wrong.
+        ("Place of supply", place_of_supply),
+        ("Country of supply", "India" if place_of_supply else ""),
     ])
 
     # The SAC column appears only on a tax invoice. A receipt claims no tax
@@ -245,6 +306,8 @@ def build_invoice_html(invoice: Invoice) -> str:
     foot_bits = [invoice.seller_address, invoice.seller_email]
     if invoice.seller_gstin:
         foot_bits.append(f"GSTIN: {invoice.seller_gstin}")
+    if invoice.seller_pan:
+        foot_bits.append(f"PAN: {invoice.seller_pan}")
     # Only on a tax invoice, and labelled as the SELLER's state so it cannot be
     # read as the place of supply (see the details block above).
     if tax and invoice.seller_state:
@@ -335,6 +398,9 @@ def build_invoice_html(invoice: Invoice) -> str:
     <div class="row grand"><span>Total paid</span>
       <span>{_money(symbol, invoice.gross_amount)}</span></div>
   </div>
+
+  <div class="words"><span>Total in words</span>
+    {escape(amount_in_words(invoice.gross_amount))}</div>
 
   <div class="foot">
     <div class="foot-name">{escape(invoice.seller_name)}</div>

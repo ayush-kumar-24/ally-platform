@@ -40,7 +40,7 @@ def source(**overrides) -> InvoiceSource:
         currency="INR", plan_tier="pro", gateway_order_id="order_abc",
         gateway_payment_id="pay_abc", paid_at=PAID_AT, created_at=PAID_AT,
         invoice_number=None, list_amount_inr=None, discount_inr=None,
-        coupon_code=None, billing_cycle="monthly",
+        coupon_code=None, billing_cycle="monthly", buyer_state=None,
     )
     base.update(overrides)
     return InvoiceSource(**base)
@@ -59,7 +59,10 @@ def no_gstin(monkeypatch):
 
 @pytest.fixture
 def with_gstin(monkeypatch):
-    monkeypatch.setattr(settings, "INVOICE_SELLER_GSTIN", "29AABCU9603R1ZM")
+    """GoXL's real registration: 24 is Gujarat, which is what makes a Gujarat
+    founder intra-state and everyone else inter-state."""
+    monkeypatch.setattr(settings, "INVOICE_SELLER_GSTIN", "24AALCG5562B1ZS")
+    monkeypatch.setattr(settings, "INVOICE_SELLER_STATE", "Gujarat")
     monkeypatch.setattr(settings, "INVOICE_GST_PERCENT", 18.0)
     return settings
 
@@ -130,7 +133,7 @@ def test_with_a_gstin_it_is_a_tax_invoice_carrying_the_sac_code(with_gstin):
     assert invoice.is_tax_invoice is True
     assert invoice.document_title == "Tax Invoice"
     assert invoice.sac_code == "998314"
-    assert invoice.seller_gstin == "29AABCU9603R1ZM"
+    assert invoice.seller_gstin == "24AALCG5562B1ZS"
 
 
 # --- numbering ------------------------------------------------------------
@@ -349,19 +352,21 @@ def test_the_company_issues_it_and_the_product_is_what_was_bought(monkeypatch, n
                         "GoXL Consulting Solutions Pvt. Ltd.")
     html = build_invoice_html(build())
     assert "GoXL Consulting Solutions Pvt. Ltd." in html   # issuer, in the footer
-    assert "by GoXL Entrepreneurship" in html              # the lockup
+    assert "GoXL" in html and "Ally" in html               # the lockup
     assert "GoXL Ally — Pro plan" in html                  # what was bought
+    # NOT the consulting brand. This document is a founder's software
+    # subscription, and heading it with the brand on GoXL's consulting
+    # invoices would have them matching a Razorpay line for GoXL Ally against
+    # a business they never bought from.
+    assert "Entrepreneurship" not in html
 
 
-def test_no_place_of_supply_row_is_ever_printed(with_gstin, monkeypatch):
-    """REGRESSION. The first draft printed the SELLER's state under a "Place of
-    supply" label. Under GST that field is the BUYER's state, which this
-    product never collects -- so the row stated the wrong party's location on a
-    tax document. The seller's state is now named as the seller's, in the
-    footer, and only on a tax invoice."""
-    monkeypatch.setattr(settings, "INVOICE_SELLER_STATE", "Gujarat")
-    html = build_invoice_html(build())
-    assert "Place of supply" not in html
+def test_place_of_supply_is_the_buyers_state_never_the_sellers(with_gstin):
+    """REGRESSION. An earlier draft printed the SELLER's state under this
+    label, which names the wrong party on a tax document. The buyer is in
+    Karnataka; the supplier is in Gujarat."""
+    html = build_invoice_html(build(buyer_state="Karnataka"))
+    assert "Karnataka (29)" in html          # place of supply: the buyer
     assert "State of supplier: Gujarat" in html
 
 
@@ -389,9 +394,9 @@ def test_a_refunded_document_is_the_record_of_the_original_charge(with_gstin):
     # is how five keys in this repo's own .env.example were parsed.
     "# blank = issue payment receipts, not tax invoices",
     "yes",
-    "29AABCU9603R1Z",       # 14 -- one short
-    "29AABCU9603R1ZMM",     # 16 -- one long
-    "29AABCU9603-1ZM",      # punctuation
+    "24AALCG5562B1Z",       # 14 -- one short
+    "24AALCG5562B1ZSS",     # 16 -- one long
+    "24AALCG5562B-ZS",      # punctuation
     "   ",
 ])
 def test_a_gstin_that_is_not_a_gstin_issues_a_receipt_not_a_tax_invoice(
@@ -410,7 +415,100 @@ def test_a_gstin_that_is_not_a_gstin_issues_a_receipt_not_a_tax_invoice(
 
 
 def test_a_real_gstin_is_accepted_and_normalised(monkeypatch):
-    monkeypatch.setattr(settings, "INVOICE_SELLER_GSTIN", " 29aabcu9603r1zm ")
+    monkeypatch.setattr(settings, "INVOICE_SELLER_GSTIN", " 24aalcg5562b1zs ")
     invoice = build()
     assert invoice.is_tax_invoice is True
-    assert invoice.seller_gstin == "29AABCU9603R1ZM"
+    assert invoice.seller_gstin == "24AALCG5562B1ZS"
+
+
+
+# --- CGST+SGST inside Gujarat, IGST everywhere else -----------------------
+
+def test_a_founder_in_gujarat_is_charged_cgst_and_sgst(with_gstin):
+    """GoXL supplies from Gujarat, so a Gujarat founder is an intra-state
+    supply: the tax splits into a central half and a state half."""
+    invoice = build(buyer_state="Gujarat")
+    tax = invoice.tax
+    assert tax.igst == 0
+    assert tax.cgst > 0 and tax.sgst > 0
+    assert tax.cgst + tax.sgst == tax.total_tax
+    assert tax.taxable_value + tax.total_tax == invoice.gross_amount
+    assert tax.place_of_supply == "Gujarat"
+    assert tax.place_of_supply_code == "24"
+
+    html = build_invoice_html(invoice)
+    assert "CGST @ 9%" in html and "SGST @ 9%" in html
+    assert "IGST" not in html
+    assert "Gujarat (24)" in html
+
+
+@pytest.mark.parametrize("state,code", [
+    ("Karnataka", "29"), ("Maharashtra", "27"), ("Delhi", "07"), ("Kerala", "32"),
+])
+def test_a_founder_outside_gujarat_is_charged_igst(state, code, with_gstin):
+    invoice = build(buyer_state=state)
+    tax = invoice.tax
+    assert tax.cgst == 0 and tax.sgst == 0
+    assert tax.igst == tax.total_tax
+    assert tax.taxable_value + tax.total_tax == invoice.gross_amount
+    assert tax.place_of_supply == state
+
+    html = build_invoice_html(invoice)
+    assert f"IGST @ 18%" in html
+    assert "CGST" not in html and "SGST" not in html
+    assert f"{state} ({code})" in html
+
+
+def test_the_split_changes_but_the_total_never_does(with_gstin):
+    """The founder pays what Razorpay charged either way. Only the division
+    between governments moves."""
+    inside = build(buyer_state="Gujarat")
+    outside = build(buyer_state="Karnataka")
+    assert inside.gross_amount == outside.gross_amount == Decimal("999.00")
+    assert inside.tax.total_tax == outside.tax.total_tax
+    assert inside.tax.taxable_value == outside.tax.taxable_value
+
+
+def test_an_unknown_buyer_state_falls_back_to_igst_and_claims_no_place(with_gstin):
+    """Payments taken before the state was collected. IGST, and no place of
+    supply named -- visibly incomplete beats confidently wrong."""
+    invoice = build(buyer_state=None)
+    assert invoice.tax.igst == invoice.tax.total_tax
+    assert invoice.tax.place_of_supply is None
+    html = build_invoice_html(invoice)
+    assert "Place of supply" not in html
+    assert "Country of supply" not in html
+
+
+@pytest.mark.parametrize("spelling", ["gujarat", "GUJARAT", " Gujarat ", "Gujrat", "GJ"])
+def test_spelling_does_not_decide_the_tax(spelling, with_gstin):
+    """The CGST/SGST-vs-IGST decision compares two state NAMES. If spelling
+    could change the answer, a founder typing "Gujrat" would be charged IGST
+    on a supply within the supplier's own state."""
+    assert build(buyer_state=spelling).tax.igst == 0
+
+
+def test_a_state_nobody_can_match_is_treated_as_unknown_not_as_a_guess(with_gstin):
+    invoice = build(buyer_state="Atlantis")
+    assert invoice.tax.place_of_supply is None
+    assert invoice.tax.igst == invoice.tax.total_tax
+
+
+# --- the amount in words --------------------------------------------------
+
+def test_the_total_is_also_written_out(no_gstin):
+    """A figure in words cannot be altered by changing one digit, which is why
+    the company's existing invoices carry it."""
+    html = build_invoice_html(build(amount_inr=Decimal("59000.00")))
+    assert "Fifty Nine Thousand Rupees Only" in html
+
+
+def test_paise_are_written_out_too(no_gstin):
+    html = build_invoice_html(build(amount_inr=Decimal("799.50")))
+    assert "Seven Hundred Ninety Nine Rupees and Fifty Paise Only" in html
+
+
+def test_lakhs_and_crores_not_millions(no_gstin):
+    from app.payments.invoice_html import amount_in_words
+    assert amount_in_words(Decimal("10500000")) == "One Crore Five Lakh Rupees Only"
+    assert amount_in_words(Decimal("1")) == "One Rupee Only"

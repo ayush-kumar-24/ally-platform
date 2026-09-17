@@ -1061,6 +1061,14 @@ body.sb-collapsed .sb-toggle .ic{transform:rotate(180deg)}
 .bl-incl-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .bl-incl-item{display:flex;align-items:center;gap:9px;font-size:13px;color:#16241c;font-weight:500}
 
+/* Place of supply (checkout) */
+.bl-billing-state{margin-bottom:14px}
+.bl-field-label{display:block;font-size:12px;font-weight:700;color:#16241c;margin-bottom:6px}
+.bl-field-hint{font-weight:500;color:#6c7a70}
+.bl-state-select{width:100%;padding:11px 13px;border:1px solid #e7e0d6;border-radius:10px;background:#fff;font-family:inherit;font-size:13.5px;color:#16241c;min-height:44px;cursor:pointer;transition:.2s}
+.bl-state-select:focus{outline:none;border-color:#1B4332;box-shadow:0 0 0 3px rgba(27,67,50,.1)}
+.bl-state-select:disabled{background:#f7f4ee;cursor:not-allowed}
+
 /* Invoice table */
 .bl-invoice-section{background:#fff;border:1px solid #e7e0d6;border-radius:18px;padding:22px 24px;box-shadow:0 1px 2px -1px rgba(6,20,13,.1)}
 .bl-invoice-table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:12px;border:1px solid #e7e0d6}

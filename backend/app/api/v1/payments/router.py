@@ -4,6 +4,7 @@
     POST /payments/confirm            settle a just-paid order without waiting
                                       for the webhook
     POST /payments/coupons/validate   price a discount code before committing
+    GET  /payments/states                       the GST states the buyer picks from
     GET  /payments/invoices                     this founder's billing history
     GET  /payments/invoices/{payment_id}        one receipt, as JSON
     GET  /payments/invoices/{payment_id}/pdf    the same receipt, downloadable
@@ -34,6 +35,7 @@ from app.api.deps import get_founder_record
 from app.core.container import container
 from app.db.session import get_db, set_admin_rls_context
 from app.models import Founder
+from app.payments.gst_states import GST_STATE_CODES
 from app.payments.invoice import Invoice, InvoiceNotAvailable
 from app.payments.invoice_html import build_invoice_html
 from app.payments.invoice_pdf import InvoiceRendererUnavailable, get_or_render_pdf
@@ -50,6 +52,12 @@ class CheckoutRequest(BaseModel):
     # A CODE, never an amount. The price is the catalog's to decide; see
     # PaymentService.start_checkout.
     coupon_code: str | None = Field(default=None, max_length=40)
+    # The founder's state, which is the GST place of supply. Optional at the
+    # API so an older frontend keeps working: a payment with no state still
+    # succeeds and simply yields an invoice with IGST and no place of supply
+    # claimed. Never an amount and never a tax figure -- the browser says WHERE
+    # the supply went, and the backend decides what that costs in tax.
+    billing_state: str | None = Field(default=None, max_length=60)
 
 
 class CouponValidateRequest(BaseModel):
@@ -126,7 +134,8 @@ def start_checkout(
     service=Depends(get_payment_service),
 ) -> CheckoutResponse:
     session = service.start_checkout(founder.founder_id, payload.tier,
-                                     coupon_code=payload.coupon_code)
+                                     coupon_code=payload.coupon_code,
+                                     buyer_state=payload.billing_state)
     return CheckoutResponse.from_domain(session)
 
 
@@ -198,6 +207,24 @@ def confirm_checkout(
 # ---------------------------------------------------------------------------
 
 
+class GstStateResponse(BaseModel):
+    name: str
+    code: str
+
+
+@router.get("/states", response_model=list[GstStateResponse],
+            summary="The states a founder picks their place of supply from")
+def list_gst_states() -> list[GstStateResponse]:
+    """Served rather than duplicated in the frontend.
+
+    The checkout dropdown and the CGST/SGST-vs-IGST decision have to agree on
+    the spelling of every state, and two hand-maintained lists eventually will
+    not. This is the same dict `build_invoice` compares against.
+    """
+    return [GstStateResponse(name=name, code=code)
+            for name, code in GST_STATE_CODES.items()]
+
+
 class InvoiceTaxResponse(BaseModel):
     percent: float
     taxable_value: float
@@ -205,6 +232,10 @@ class InvoiceTaxResponse(BaseModel):
     sgst: float
     igst: float
     total_tax: float
+    #: Null when the payment predates collecting the buyer's state, in which
+    #: case the split fell back to IGST and no place of supply is claimed.
+    place_of_supply: str | None = None
+    place_of_supply_code: str | None = None
 
 
 class InvoiceResponse(BaseModel):
@@ -242,7 +273,9 @@ class InvoiceResponse(BaseModel):
             tax = InvoiceTaxResponse(
                 percent=float(inv.tax.percent), taxable_value=float(inv.tax.taxable_value),
                 cgst=float(inv.tax.cgst), sgst=float(inv.tax.sgst), igst=float(inv.tax.igst),
-                total_tax=float(inv.tax.total_tax))
+                total_tax=float(inv.tax.total_tax),
+                place_of_supply=inv.tax.place_of_supply,
+                place_of_supply_code=inv.tax.place_of_supply_code)
         return cls(
             payment_id=payment_id, number=inv.number, document_title=inv.document_title,
             issued_at=inv.issued_at, paid_at=inv.paid_at, status=inv.status,

@@ -33,6 +33,7 @@ from decimal import ROUND_HALF_UP, Decimal
 
 from app.core.config import settings
 from app.core.logger import logger
+from app.payments.gst_states import is_intra_state, normalise_state, state_code
 from app.plans.catalog import PLANS, PlanTier
 
 #: SAC code for "online information and database access or retrieval services",
@@ -61,6 +62,11 @@ class TaxBreakdown:
     cgst: Decimal
     sgst: Decimal
     igst: Decimal
+    #: The state the supply was made to, and its GST code -- "Gujarat (24)" on
+    #: the document. None on a payment taken before the buyer's state was
+    #: collected, where no place of supply is claimed at all.
+    place_of_supply: str | None = None
+    place_of_supply_code: str | None = None
 
     @property
     def total_tax(self) -> Decimal:
@@ -85,10 +91,14 @@ class Invoice:
     seller_address: str
     seller_email: str
     seller_gstin: str | None
+    seller_pan: str | None
     seller_state: str | None
 
     buyer_name: str
     buyer_email: str
+    #: Canonical state name, or None when unknown. Present on receipts too --
+    #: it is where the founder was, not a tax claim.
+    buyer_state: str | None
 
     description: str
     plan_tier: str
@@ -172,7 +182,8 @@ def invoice_number(payment_id: int, paid_at: datetime | None) -> str:
     return f"{prefix}/{year}/{payment_id:06d}"
 
 
-def compute_tax(gross: Decimal, *, percent: Decimal, intra_state: bool) -> TaxBreakdown:
+def compute_tax(gross: Decimal, *, percent: Decimal, intra_state: bool,
+                place_of_supply: str | None = None) -> TaxBreakdown:
     """Back GST out of a GST-INCLUSIVE gross amount.
 
     taxable = gross * 100 / (100 + percent). Not `gross * percent`, which is
@@ -180,15 +191,15 @@ def compute_tax(gross: Decimal, *, percent: Decimal, intra_state: bool) -> TaxBr
     on top of a total the founder has already been charged, and every figure
     below it would overstate what they paid.
 
-    Intra-state splits into CGST+SGST, inter-state is a single IGST line. We do
-    not record the founder's state of supply, so the caller decides -- and
-    today it decides inter-state, which is the reading that does not assert a
-    place of supply we never asked for.
+    Intra-state splits into CGST+SGST, inter-state is a single IGST line. The
+    caller decides which, from the two states -- see `build_invoice`.
     """
     gross = _money(gross)
     if percent <= 0:
         return TaxBreakdown(percent=Decimal("0.00"), taxable_value=gross,
-                            cgst=Decimal("0.00"), sgst=Decimal("0.00"), igst=Decimal("0.00"))
+                            cgst=Decimal("0.00"), sgst=Decimal("0.00"), igst=Decimal("0.00"),
+                            place_of_supply=place_of_supply,
+                            place_of_supply_code=state_code(place_of_supply))
 
     taxable = _money(gross * Decimal(100) / (Decimal(100) + percent))
     # Derived by subtraction rather than computed independently, so the three
@@ -201,9 +212,13 @@ def compute_tax(gross: Decimal, *, percent: Decimal, intra_state: bool) -> TaxBr
         # The odd paisa goes to CGST. Arbitrary but fixed -- what matters is
         # that cgst + sgst is total_tax and not total_tax +/- 0.01.
         return TaxBreakdown(percent=percent, taxable_value=taxable,
-                            cgst=_money(total_tax - half), sgst=half, igst=Decimal("0.00"))
+                            cgst=_money(total_tax - half), sgst=half, igst=Decimal("0.00"),
+                            place_of_supply=place_of_supply,
+                            place_of_supply_code=state_code(place_of_supply))
     return TaxBreakdown(percent=percent, taxable_value=taxable,
-                        cgst=Decimal("0.00"), sgst=Decimal("0.00"), igst=total_tax)
+                        cgst=Decimal("0.00"), sgst=Decimal("0.00"), igst=total_tax,
+                        place_of_supply=place_of_supply,
+                        place_of_supply_code=state_code(place_of_supply))
 
 
 class InvoiceNotAvailable(Exception):
@@ -239,15 +254,27 @@ def build_invoice(source, *, founder_name: str, founder_email: str,
     gstin = _valid_gstin(settings.INVOICE_SELLER_GSTIN)
     is_tax_invoice = gstin is not None
 
+    seller_state = normalise_state(settings.INVOICE_SELLER_STATE)
+    buyer_state = normalise_state(source.buyer_state)
+
     tax = None
     if is_tax_invoice:
+        # THE RULE: supply within the supplier's own state is CGST+SGST;
+        # anywhere else in India is IGST. GoXL supplies from Gujarat, so a
+        # founder in Gujarat is charged CGST+SGST and everyone else IGST.
+        intra = is_intra_state(seller_state=seller_state, buyer_state=buyer_state)
+        if intra is None:
+            # One of the two states is unknown -- in practice a payment taken
+            # before the buyer's state was collected. IGST, and NO place of
+            # supply printed: naming one we never asked for is the error this
+            # whole path exists to avoid, and an unclaimed place of supply is
+            # visibly incomplete rather than confidently wrong.
+            intra = False
         tax = compute_tax(
             gross,
             percent=Decimal(str(settings.INVOICE_GST_PERCENT)),
-            # Inter-state: we hold no state of supply for the founder, and
-            # asserting one we never collected would be a worse error than the
-            # conservative single-line split. See compute_tax.
-            intra_state=False,
+            intra_state=intra,
+            place_of_supply=buyer_state,
         )
 
     # The catalog is consulted for the plan's DISPLAY NAME and nothing else --
@@ -269,10 +296,12 @@ def build_invoice(source, *, founder_name: str, founder_email: str,
         seller_name=settings.INVOICE_SELLER_NAME,
         seller_address=settings.INVOICE_SELLER_ADDRESS,
         seller_email=settings.INVOICE_SELLER_EMAIL,
-        seller_gstin=gstin or None,
-        seller_state=(settings.INVOICE_SELLER_STATE or "").strip() or None,
+        seller_gstin=gstin,
+        seller_pan=(settings.INVOICE_SELLER_PAN or "").strip() or None,
+        seller_state=seller_state,
         buyer_name=founder_name,
         buyer_email=founder_email,
+        buyer_state=buyer_state,
         description=f"GoXL Ally — {plan_name} plan",
         plan_tier=source.plan_tier or "",
         billing_cycle="One-time purchase" if one_time else "Monthly subscription",

@@ -35,10 +35,12 @@ class FakeService:
         self.raises = raises
         self.confirm_result = confirm_result
         self.calls = []
+        self.state_calls = []
         self.confirm_calls = []
 
-    def start_checkout(self, founder_id, tier, coupon_code=None):
+    def start_checkout(self, founder_id, tier, coupon_code=None, buyer_state=None):
         self.calls.append((founder_id, tier, coupon_code))
+        self.state_calls.append(buyer_state)
         if self.raises:
             raise self.raises
         return self.session
@@ -346,3 +348,43 @@ def test_confirm_elevates_the_rls_context_for_the_grant(client):
         "order_id": "order_1", "razorpay_payment_id": "pay_1"})
 
     assert any(s.info for s in sessions), "confirm ran without an admin RLS context"
+
+
+def test_checkout_forwards_the_buyers_state_as_the_place_of_supply(client):
+    """The one fact only the founder knows. It says WHERE the supply went; the
+    backend decides what that costs in tax."""
+    _use(FakeService(session=CheckoutSession(
+        payment_id=1, order_id="order_1", amount_paise=99900, currency="INR",
+        key_id="rzp_test_key")))
+
+    client.http.post(f"{BASE}/checkout", json={"tier": "pro", "billing_state": "Gujarat"})
+
+    service = app.dependency_overrides[get_payment_service]()
+    assert service.state_calls[0] == "Gujarat"
+
+
+def test_checkout_still_works_without_a_state(client):
+    """Optional at the API so an older frontend keeps working: the payment
+    succeeds and the invoice simply claims no place of supply."""
+    _use(FakeService(session=CheckoutSession(
+        payment_id=1, order_id="order_1", amount_paise=99900, currency="INR",
+        key_id="rzp_test_key")))
+
+    resp = client.http.post(f"{BASE}/checkout", json={"tier": "pro"})
+
+    assert resp.status_code == 200
+    service = app.dependency_overrides[get_payment_service]()
+    assert service.state_calls[0] is None
+
+
+def test_the_states_endpoint_serves_the_list_the_tax_decision_uses(client):
+    """One list, so the dropdown and the CGST/SGST-vs-IGST comparison cannot
+    disagree about how a state is spelt."""
+    resp = client.http.get(f"{BASE}/states")
+
+    assert resp.status_code == 200
+    states = resp.json()
+    by_name = {s["name"]: s["code"] for s in states}
+    assert by_name["Gujarat"] == "24"      # the supplier's own state
+    assert by_name["Karnataka"] == "29"
+    assert len(states) > 30

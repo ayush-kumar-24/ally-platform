@@ -94,7 +94,7 @@ class FakeRepository:
 
     def create_pending(self, *, founder_id, amount_inr, currency, gateway, gateway_order_id,
                        plan_tier, coupon_id=None, list_amount_inr=None, discount_inr=None,
-                       commit=True):
+                       buyer_state=None, commit=True):
         pid = self._next_payment_id
         self._next_payment_id += 1
         self._payments[pid] = {
@@ -102,7 +102,7 @@ class FakeRepository:
             "gateway_order_id": gateway_order_id, "gateway_payment_id": None,
             "amount_inr": amount_inr, "subscription_id": None, "plan_tier": plan_tier,
             "coupon_id": coupon_id, "list_amount_inr": list_amount_inr,
-            "discount_inr": discount_inr,
+            "discount_inr": discount_inr, "buyer_state": buyer_state,
         }
         self._by_order[gateway_order_id] = pid
         self.commits.append(("create_pending", commit))

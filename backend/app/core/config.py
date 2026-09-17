@@ -663,7 +663,19 @@ class Settings(BaseSettings):
     # split without a registration number is not a document anyone may claim
     # input credit against. Set it and the same payment renders as a tax
     # invoice instead -- see invoice.py, which is where that decision lives.
-    INVOICE_SELLER_GSTIN: str = ""
+    # GoXL's own GSTIN, as printed on the company's existing invoices. The
+    # leading 24 IS Gujarat -- a GSTIN's first two digits are the state code --
+    # which is why INVOICE_SELLER_STATE below reads Gujarat and why a founder
+    # in Gujarat is charged CGST+SGST while everyone else is charged IGST.
+    #
+    # Setting this means the product issues TAX INVOICES. Blank it and every
+    # document reverts to a plain payment receipt with no tax breakdown; a
+    # value that is not a 15-character GSTIN does the same, loudly, rather
+    # than issuing invalid tax invoices (see invoice.py::_valid_gstin).
+    INVOICE_SELLER_GSTIN: str = "24AALCG5562B1ZS"
+    # The PAN embedded in that GSTIN (characters 3-12), printed alongside it
+    # exactly as the company's existing invoices do.
+    INVOICE_SELLER_PAN: str = "AALCG5562B"
     # GST rate applied to the amount actually charged, which is treated as
     # GST-INCLUSIVE (it is what Razorpay took from the founder, so the tax has
     # to be backed out of it, never added on top). Ignored entirely when no

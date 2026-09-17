@@ -34,6 +34,17 @@ export function listInvoices() {
   return get('/payments/invoices');
 }
 
+/**
+ * The states a founder picks their place of supply from, with GST codes.
+ *
+ * Fetched rather than hardcoded here: the checkout dropdown and the backend's
+ * CGST/SGST-vs-IGST comparison have to agree on the spelling of every state,
+ * and two hand-maintained lists eventually will not.
+ */
+export function listGstStates() {
+  return get('/payments/states');
+}
+
 /** One receipt's details, without downloading the file. */
 export function getInvoice(paymentId) {
   return get(`/payments/invoices/${paymentId}`);

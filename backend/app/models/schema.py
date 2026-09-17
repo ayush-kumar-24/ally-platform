@@ -1334,6 +1334,8 @@ class Payments(Base):
     gateway_order_id: Mapped[Optional[str]] = mapped_column(String(200))
     invoice_url: Mapped[Optional[str]] = mapped_column(Text)
     invoice_number: Mapped[Optional[str]] = mapped_column(String(50))
+    #: GST place of supply, frozen at checkout. See migration f3a8c61d9e47.
+    buyer_state: Mapped[Optional[str]] = mapped_column(String(60))
     failure_reason: Mapped[Optional[str]] = mapped_column(Text)
     paid_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
     refunded_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))

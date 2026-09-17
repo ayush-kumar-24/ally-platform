@@ -41,11 +41,21 @@ const CHECKOUT_JS_URL = 'https://checkout.razorpay.com/v1/checkout.js';
  * @returns {Promise<{payment_id:number, order_id:string, amount_paise:number,
  *                    currency:string, key_id:string}>}
  */
-export function startCheckout(tier, couponCode = null) {
+export function startCheckout(tier, couponCode = null, billingState = null) {
   // A code, never a price. The backend prices the plan from its own catalog;
   // anything the browser sent would be a number a founder could edit.
-  return post('/payments/checkout',
-    couponCode ? { tier, coupon_code: couponCode } : { tier });
+  //
+  // `billingState` is the GST place of supply and IS sent from here, because
+  // it is the one fact only the founder knows. It says WHERE the supply went,
+  // never what the tax is: the backend decides CGST+SGST (a founder in the
+  // supplier's own state, Gujarat) versus IGST (everywhere else), and it
+  // freezes the state onto the payment row so the invoice cannot re-render
+  // under a different tax treatment years later.
+  return post('/payments/checkout', {
+    tier,
+    ...(couponCode ? { coupon_code: couponCode } : {}),
+    ...(billingState ? { billing_state: billingState } : {}),
+  });
 }
 
 /**
