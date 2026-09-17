@@ -56,3 +56,4 @@ backend/data/reference/manifest.json
 # markdown built from them. They are a record of a single run against a single
 # throwaway founder, so they go stale the moment the question bank changes.
 backend/*-diagnosis-transcript.md
+backend/*-diagnosis-comparison.pdf

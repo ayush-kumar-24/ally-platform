@@ -1542,6 +1542,171 @@ _ALLY_MVP_TEXTS = (
     "like tested.",
 )
 
+#: THE SAME BUSINESS, RUN BY SOMEONE WHO HAS NOT DONE THE WORK.
+#:
+#: `ally_mvp`'s counterpart, and the pair is the discrimination test at stage
+#: 3. Identical facts -- Ally, Prototype/MVP, a dozen testers, no paying
+#: customers, a handful of people, everything free -- because if the two
+#: personas described different businesses, a difference in the report would
+#: not tell you which of the two caused it.
+#:
+#: What differs is entirely the founder: no measurement, no notes, no second
+#: opinion, nothing written down, and above all no idea which of it matters.
+#: `ally_mvp` names the thing it is avoiding; this one has not noticed there
+#: is one.
+_ALLY_WEAK_TEXTS = (
+    # 0 customers
+    "Some people are using it. The team and a few friends -- I'd have to "
+    "check how many. Nobody's paying yet but that's not really the stage "
+    "we're at.",
+    # 1 planning
+    "I don't plan as such. I open the laptop and deal with what's there. It "
+    "mostly works out.",
+    # 2 market
+    "Every founder needs this, so it's huge. I haven't looked at competitors "
+    "-- there's nothing quite like what we're doing.",
+    # 3 product
+    "We ship constantly. I don't have numbers on what gets used, but the "
+    "product's in good shape and people seem happy with it.",
+    # 4 pricing
+    "There are three plans. The numbers felt right. Nobody's complained "
+    "about them, so I think we're fine there.",
+    # 5 team
+    "There's a few of us and everyone knows what they're doing. We don't "
+    "need process at this size -- we just talk.",
+    # 6 risk
+    "Nothing major. The tech is solid and we've got AWS behind it. I don't "
+    "really think in terms of risks, I just fix things when they come up.",
+    # 7 decisions
+    "I decide quickly and move on. Overthinking kills startups. I don't write "
+    "decisions down, I just remember them.",
+    # 8 feedback
+    "People are generally positive. Nobody's told me anything hard recently. "
+    "I'd like to think I'm approachable enough that they would.",
+    # 9 purpose
+    "Because AI is going to change how founders get advice and we want to be "
+    "there. It's a big opportunity and the timing is right.",
+    # 10 doing it well
+    "Being the first to really crack it. If we're the name people think of "
+    "when they think founder diagnosis, that's the win.",
+    # 11 the pitch
+    "It's an AI platform for founders -- diagnosis, insights, a whole system "
+    "around their business. It takes me a while to explain because there's a "
+    "lot to it.",
+    # 12 own encounter
+    "I've been around founders for years and I've seen the problem. Not "
+    "something I lived through myself exactly, but I know it's real.",
+    # 13 tools
+    "We built most of it ourselves. I didn't look much at what was out there "
+    "-- it was faster to just build it the way I wanted.",
+    # 14 time wasted
+    "I'm busy the whole time, so not much is wasted. There's always more to "
+    "do than hours. I've never actually looked at where the time goes.",
+    # 15 delegation
+    "I hand things over when I'm stretched. If it comes back wrong I redo it. "
+    "Faster than explaining it twice.",
+    # 16 founder dependency
+    "It'd be fine. The system runs itself, it's all deployed. I'd pick up "
+    "whatever piled up when I got back.",
+    # 17 written down
+    "It's mostly in my head and that's been fine. We're too small for "
+    "documentation -- it'd be out of date by the time anyone read it.",
+    # 18 role clarity
+    "Everyone knows their bit. Writing it down would make it feel like a "
+    "corporate job, and that's not what we are.",
+    # 19 decision rights
+    "It comes to me and that's how it should be at this stage. I'm the one "
+    "with the full picture.",
+    # 20 performance
+    "They're working hard, I can see that. I'd know if someone wasn't pulling "
+    "their weight.",
+    # 21 kept someone on
+    "No, hasn't come up.",
+    # 22 churn
+    "People drift off sometimes but they're not paying, so it's not churn "
+    "really. They'll come back when it's more polished.",
+    # 23 buying journey
+    "They hear about it and they sign up. I haven't mapped it because there "
+    "isn't much to map yet.",
+    # 24 presenting pricing
+    "It's on the page. I'd explain it if someone asked, though nobody has.",
+    # 25 cash
+    "I check now and then. We're spending on infrastructure and the AI calls, "
+    "which is what you'd expect at this stage.",
+    # 26 evidence
+    "The product works end to end, which is more than most people have at "
+    "this point. That's the evidence. Revenue follows the product.",
+    # 27 campaign
+    "Not yet -- we'll do marketing once it's ready. No point driving people "
+    "to something that isn't finished.",
+    # 28 ICP drift
+    "It's early-stage founders and that hasn't changed. The testers are "
+    "roughly that.",
+    # 29 how the founder has changed
+    "More confident, I'd say. I know the space better than I did. I can't "
+    "think of anything I've got badly wrong.",
+    # 30 problem drift
+    "Same problem we started with. Founders need better advice, and that's "
+    "what we're building.",
+    # 31 data privacy
+    "It's on AWS with all the standard stuff. I haven't had anyone look at "
+    "it specifically but I'm not worried about it.",
+    # 32 pipeline
+    "There isn't one yet and that's fine -- we're not selling. I'd say a "
+    "three because the interest is there.",
+    # 33 proposals
+    "Haven't needed one.",
+    # 34 contracts
+    "I read them. It's not complicated stuff.",
+    # 35 publishing
+    "We'll start once there's something to announce. No point before.",
+    # 36 the headline problem
+    "Getting it finished, really. There's a long list and I'm the bottleneck "
+    "on most of it. Once the product's properly done the rest follows.",
+    # 37 what would need to be true
+    "More hours, or another engineer. It's a throughput problem more than "
+    "anything.",
+    # 38 already tried
+    "We showed it to some founders and they liked it. That went fine -- "
+    "there wasn't really anything to stall.",
+    # 39 single point of failure
+    "Nothing that worries me. It's deployed and it's been stable.",
+    # 40 avoiding
+    "Nothing I can think of. I work through the list.",
+    # 41 avoided metric
+    "I'm not avoiding any of them. I don't look at numbers much because at "
+    "this stage they don't tell you anything.",
+    # 42 recurring problem
+    "Nothing recurring. Things come up and we deal with them.",
+    # 43 decisions landing on me
+    "All of them, but that's normal for a founder. It's my company.",
+    # 44 what landed
+    "Getting it live. Seeing the whole thing work felt good after all the "
+    "months of building.",
+    # 45 trophy or bridge
+    "The trophy, I'd say. I'd like this to be the thing I'm known for.",
+    # 46 energy
+    "I'm energised most of the time, honestly. I don't really track it -- if "
+    "I'm working on the product I'm fine.",
+    # 47 why I stay / done
+    "Never seriously thought about stopping. Done would be a big exit, or "
+    "the platform everyone uses.",
+    # 48 the unscalable thing
+    "Not much -- it's all automated, that's the point of it. I suppose I'm "
+    "doing everything, but that's just being early.",
+    # 49 the line
+    "I'd never do anything dodgy. Hasn't come up.",
+    # 50 perfectionism
+    "I wouldn't call it perfectionism, I'd call it standards. I'd rather it "
+    "was right. It hasn't cost us anything I can point to.",
+    # 51 what it is worth
+    "A lot -- founders waste years on the wrong things. I haven't put a "
+    "number on it but it's obviously valuable.",
+    # 52 does my experience generalise
+    "I think so. I understand this space well and the problem's the same for "
+    "everyone at this stage.",
+)
+
 #: A question that matches no topic still gets an answer of the right
 #: quality. Quality is the variable under test; subject is not, so the
 #: fallback is deliberately topic-neutral -- it must not smuggle in evidence
@@ -1568,6 +1733,8 @@ FALLBACKS = {
     "ally_mvp": "Partly, and not deliberately -- it is one of the things that "
                 "has never had a proper pass, so whatever is true of it today "
                 "is an accident rather than a decision.",
+    "ally_weak": "Not really, no. It hasn't come up as a problem so I've not "
+                 "spent time on it.",
 }
 
 #: Every persona also carries the Current Problem topics, appended last.
@@ -1604,6 +1771,9 @@ ANSWER_BANK = {
     # as a whole, and splitting it would only invite the halves to drift.
     "ally_mvp": tuple(zip(_TRACTION_TOPICS + _CURRENT_PROBLEM_TOPICS
                           + _FOUNDER_TOPICS, _ALLY_MVP_TEXTS)),
+    # The same business without the work behind it -- the stage-3 quality pair.
+    "ally_weak": tuple(zip(_TRACTION_TOPICS + _CURRENT_PROBLEM_TOPICS
+                           + _FOUNDER_TOPICS, _ALLY_WEAK_TEXTS)),
 }
 
 #: The texts alone, in topic order -- the index-based fallback when no
@@ -1622,11 +1792,13 @@ WEAK_TRACTION_ANSWERS = (_WEAK_TRACTION_TEXTS + _WEAK_TRACTION_CP_TEXTS
                          + _WEAK_TRACTION_FOUNDER_TEXTS)
 
 ALLY_MVP_ANSWERS = _ALLY_MVP_TEXTS
+ALLY_WEAK_ANSWERS = _ALLY_WEAK_TEXTS
 
 PERSONAS = {"weak": WEAK_ANSWERS, "strong": STRONG_ANSWERS,
             "traction": TRACTION_ANSWERS,
             "weak_traction": WEAK_TRACTION_ANSWERS,
-            "ally_mvp": ALLY_MVP_ANSWERS}
+            "ally_mvp": ALLY_MVP_ANSWERS,
+            "ally_weak": ALLY_WEAK_ANSWERS}
 
 
 #: A defining term is worth two, a supporting term one, and two points are
@@ -1988,6 +2160,10 @@ _ONBOARDING = {
             "of a founder's business and names the root causes beneath them.",
     },
 }
+
+#: The weak counterpart runs the SAME business, so it gets the same profile.
+#: Anything else would make the comparison a test of two companies.
+_ONBOARDING["ally_weak"] = _ONBOARDING["ally_mvp"]
 
 
 def _seed_founder(db, sa, stage_order: int, persona: str | None = None) -> tuple[int, str]:
