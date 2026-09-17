@@ -632,6 +632,35 @@ class Settings(BaseSettings):
     # network namespace. Without that sidecar every PDF download 503s forever.
     GOTENBERG_URL: str = "http://localhost:3000"
 
+    # --- Invoices / receipts (app/payments/invoice.py) ---
+    # Who the invoice is FROM. These are the only parts of the document that
+    # are not derived from the payment row, and they are configuration rather
+    # than constants because the legal entity behind the product is not this
+    # code's business to hardcode -- a name or address change must not need a
+    # deploy of the payments module.
+    INVOICE_SELLER_NAME: str = "GoXL Ally"
+    INVOICE_SELLER_ADDRESS: str = ""
+    INVOICE_SELLER_EMAIL: str = ""
+    # The seller's GSTIN. EMPTY IS MEANINGFUL, and it is the default on
+    # purpose: with no GSTIN configured the document is rendered as a PAYMENT
+    # RECEIPT with no tax breakdown, because a tax invoice that shows a GST
+    # split without a registration number is not a document anyone may claim
+    # input credit against. Set it and the same payment renders as a tax
+    # invoice instead -- see invoice.py, which is where that decision lives.
+    INVOICE_SELLER_GSTIN: str = ""
+    # GST rate applied to the amount actually charged, which is treated as
+    # GST-INCLUSIVE (it is what Razorpay took from the founder, so the tax has
+    # to be backed out of it, never added on top). Ignored entirely when no
+    # GSTIN is set. 18% is the SAC 998314 rate for the service sold here.
+    INVOICE_GST_PERCENT: float = 18.0
+    # The seller's state, which decides whether the split is CGST+SGST (same
+    # state) or IGST (inter-state). We do not collect the founder's state, so
+    # the honest reading is inter-state unless a founder-side state is known;
+    # see invoice.py. Empty means "do not name a place of supply at all".
+    INVOICE_SELLER_STATE: str = ""
+    # Prefix for the human-readable document number: ALLY/2026/000123.
+    INVOICE_NUMBER_PREFIX: str = "ALLY"
+
     # Where the FOUNDER-FACING APP lives. MUST be https://app.goxlally.ai.
     #
     # Used to send a founder back into the app after an external redirect that

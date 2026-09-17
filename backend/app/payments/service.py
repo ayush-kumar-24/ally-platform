@@ -41,6 +41,7 @@ from app.payments.errors import (
     PaymentsNotConfiguredError,
 )
 from app.payments.gateway import PaymentGateway, PaymentGatewayError
+from app.payments.invoice import Invoice, build_invoice
 from app.payments.models import CheckoutSession, WebhookOutcome, WebhookResult
 from app.payments.repository import PaymentRepository
 from app.plans.catalog import PLANS, PlanTier
@@ -87,6 +88,54 @@ class PaymentService:
         # working; a checkout that passes no code never touches it.
         self.coupons = coupons
         self._now = clock or (lambda: datetime.now(timezone.utc))
+
+    # --- invoices / receipts -------------------------------------------------
+    #
+    # Read-only, and deliberately so: issuing a document must never be able to
+    # move money, grant a plan or touch a subscription. The only writes on this
+    # path are the invoice number and the stored-PDF pointer, both in
+    # invoice_pdf.py and both idempotent.
+
+    def list_invoices(self, founder_id: int, *, limit: int = 50) -> list[tuple[int, Invoice]]:
+        """This founder's billing history as (payment_id, Invoice) pairs, newest first.
+
+        Paired rather than returning bare Invoices because an Invoice carries a
+        document NUMBER, not a payment id -- the number is the founder's
+        reference and the id is the API's, and collapsing them would put an
+        internal key somewhere customers quote back to support.
+
+        Built through the same `build_invoice` the PDF uses, so the amount in
+        the history list and the amount on the downloaded receipt are the same
+        computation and cannot disagree. A row that somehow will not build is
+        SKIPPED rather than failing the list: one unrenderable payment must not
+        hide a founder's entire billing history from them.
+        """
+        founder = self.repository.founder_identity(founder_id)
+        invoices: list[tuple[int, Invoice]] = []
+        for source in self.repository.list_invoiceable(founder_id, limit=limit):
+            try:
+                invoices.append((source.payment_id, build_invoice(
+                    source, founder_name=founder["full_name"],
+                    founder_email=founder["email"])))
+            except Exception as exc:  # noqa: BLE001 -- see docstring
+                logger.error("payments: could not build an invoice for a listed payment",
+                             extra={"payment_id": source.payment_id,
+                                    "founder_id": founder_id, "error": str(exc)})
+        return invoices
+
+    def get_invoice(self, founder_id: int, payment_id: int):
+        """One payment's document, or None when it is not this founder's.
+
+        None covers "no such payment" and "not yours" with the same answer on
+        purpose: distinguishing them would tell a caller which payment ids
+        exist, and a receipt is exactly the kind of object worth probing for.
+        """
+        source = self.repository.get_invoice_source(payment_id, founder_id=founder_id)
+        if source is None:
+            return None
+        founder = self.repository.founder_identity(founder_id)
+        return build_invoice(source, founder_name=founder["full_name"],
+                             founder_email=founder["email"])
 
     # --- founder-initiated ---------------------------------------------------
 

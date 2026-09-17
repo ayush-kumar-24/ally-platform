@@ -11,7 +11,7 @@ from datetime import datetime
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.payments.models import PaymentRecord
+from app.payments.models import InvoiceSource, PaymentRecord
 
 
 class PaymentRepository:
@@ -112,6 +112,114 @@ class PaymentRepository:
         )
         self.db.commit()
 
+    # --- invoices / receipts -----------------------------------------------
+
+    #: One projection, two callers (the list and the single document), so a
+    #: receipt can never show a figure the billing history disagrees with.
+    #: LEFT JOINs throughout: a payment with no coupon and a payment whose
+    #: subscription row is missing must both still produce a document.
+    _INVOICE_SELECT = (
+        "SELECT p.payment_id, p.founder_id, p.status, p.amount_inr, p.currency, "
+        "       p.plan_tier, p.gateway_order_id, p.gateway_payment_id, p.paid_at, "
+        "       p.created_at, p.invoice_number, p.list_amount_inr, p.discount_inr, "
+        "       c.code AS coupon_code, s.billing_cycle "
+        "FROM payments p "
+        "LEFT JOIN coupons c ON c.coupon_id = p.coupon_id "
+        "LEFT JOIN subscriptions s ON s.subscription_id = p.subscription_id "
+    )
+
+    def list_invoiceable(self, founder_id: int, *, limit: int = 50) -> list[InvoiceSource]:
+        """This founder's billing history, newest first.
+
+        Only captured and refunded payments. A pending row is a checkout that
+        was abandoned or is still settling, and listing those as billing
+        history would show a founder a charge they may never have been made --
+        the one thing a payments list must never do.
+        """
+        rows = self.db.execute(
+            text(self._INVOICE_SELECT +
+                 "WHERE p.founder_id = :fid AND p.status IN ('success', 'refunded') "
+                 "ORDER BY COALESCE(p.paid_at, p.created_at) DESC, p.payment_id DESC "
+                 "LIMIT :lim"),
+            {"fid": founder_id, "lim": limit},
+        ).mappings().all()
+        return [_to_invoice_source(r) for r in rows]
+
+    def get_invoice_source(self, payment_id: int, *, founder_id: int) -> InvoiceSource | None:
+        """One payment, scoped to its owner IN THE QUERY.
+
+        The founder id is a WHERE clause and not a check the caller is trusted
+        to remember: a receipt carries a name, an email and an amount, so a
+        route that forgot to compare owners would be handing one founder
+        another's billing details. Here that mistake is not reachable.
+        """
+        row = self.db.execute(
+            text(self._INVOICE_SELECT + "WHERE p.payment_id = :pid AND p.founder_id = :fid"),
+            {"pid": payment_id, "fid": founder_id},
+        ).mappings().first()
+        return _to_invoice_source(row) if row else None
+
+    def founder_identity(self, founder_id: int) -> dict:
+        """The name and email a receipt is addressed to.
+
+        Falls back to empty strings rather than raising: a founder row that is
+        mid-deletion, or one whose name was never captured, must still be able
+        to download a receipt for money they actually paid. A receipt with a
+        blank name is a small problem; one that 500s is a founder who cannot
+        expense a charge.
+        """
+        row = self.db.execute(
+            text("SELECT full_name, email FROM founders WHERE founder_id = :fid"),
+            {"fid": founder_id},
+        ).mappings().first()
+        if row is None:
+            return {"full_name": "", "email": ""}
+        return {"full_name": row["full_name"] or "", "email": row["email"] or ""}
+
+    def record_invoice_number(self, payment_id: int, *, founder_id: int,
+                              number: str) -> None:
+        """Write the issued number down, once.
+
+        `WHERE invoice_number IS NULL` makes this first-write-wins: two
+        concurrent downloads of the same receipt cannot renumber it, and a
+        later change to the derivation rule cannot renumber an invoice a
+        founder already holds a copy of.
+
+        The founder id is in the WHERE clause for the same reason it is on the
+        read: the database's own founder-isolation policy already covers this
+        (migration d91c6e4b72aa), but that policy is scoped to the `ally_app`
+        role and is skipped wherever the role does not exist. A write that is
+        only safe because of a policy that might not be installed is a write
+        worth scoping here too.
+        """
+        self.db.execute(
+            text("UPDATE payments SET invoice_number = :num "
+                 "WHERE payment_id = :pid AND founder_id = :fid "
+                 "  AND invoice_number IS NULL"),
+            {"num": number, "pid": payment_id, "fid": founder_id},
+        )
+        self.db.commit()
+
+    def record_invoice_url(self, payment_id: int, *, founder_id: int, url: str) -> None:
+        """Point the payment at its stored PDF. Best-effort by design: the
+        document is correct with or without this, the pointer only makes the
+        next download a fetch instead of a render. Scoped by founder for the
+        same reason as record_invoice_number above."""
+        self.db.execute(
+            text("UPDATE payments SET invoice_url = :url "
+                 "WHERE payment_id = :pid AND founder_id = :fid"),
+            {"url": url, "pid": payment_id, "fid": founder_id},
+        )
+        self.db.commit()
+
+    def invoice_storage_key(self, payment_id: int, *, founder_id: int) -> str | None:
+        row = self.db.execute(
+            text("SELECT invoice_url FROM payments "
+                 "WHERE payment_id = :pid AND founder_id = :fid"),
+            {"pid": payment_id, "fid": founder_id},
+        ).mappings().first()
+        return row["invoice_url"] if row else None
+
     # --- subscriptions + the plan itself ------------------------------------
 
     def create_subscription(
@@ -152,4 +260,17 @@ def _to_record(row) -> PaymentRecord | None:
         gateway_order_id=row["gateway_order_id"], gateway_payment_id=row["gateway_payment_id"],
         amount_inr=row["amount_inr"], subscription_id=row["subscription_id"],
         plan_tier=row["plan_tier"] if "plan_tier" in row.keys() else None,
+    )
+
+
+def _to_invoice_source(row) -> InvoiceSource:
+    return InvoiceSource(
+        payment_id=row["payment_id"], founder_id=row["founder_id"], status=row["status"],
+        amount_inr=row["amount_inr"], currency=row["currency"], plan_tier=row["plan_tier"],
+        gateway_order_id=row["gateway_order_id"],
+        gateway_payment_id=row["gateway_payment_id"],
+        paid_at=row["paid_at"], created_at=row["created_at"],
+        invoice_number=row["invoice_number"],
+        list_amount_inr=row["list_amount_inr"], discount_inr=row["discount_inr"],
+        coupon_code=row["coupon_code"], billing_cycle=row["billing_cycle"],
     )

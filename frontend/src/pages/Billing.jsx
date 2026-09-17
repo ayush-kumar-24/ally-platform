@@ -5,6 +5,7 @@ import { getProfile } from '../services/profile';
 import { getCatalog, getMyPlan } from '../services/plans';
 import { refreshPlanName } from '../hooks/usePlanName';
 import { confirmPayment, openCheckout, startCheckout, validateCoupon, waitForPlanActivation } from '../services/payments';
+import { downloadInvoicePdf, getInvoice, listInvoices } from '../services/invoices';
 
 /** The Knowledge libraries, in the order the sidebar lists them.
  *
@@ -784,7 +785,14 @@ function SuccessView({ plan, order, onViewStatus }) {
       <h2 className="bl-success-title">Payment Successful!</h2>
       <p className="bl-success-sub">
         Welcome to the <strong>{plan.name} Plan</strong>. Your {plan.oneTime ? 'plan' : 'subscription'} is now active.
-        A payment receipt has been sent to <strong>{founder?.email ?? 'your email'}</strong>.
+        {/* This used to promise that "a payment receipt has been sent to
+            <your email>". Nothing in this product sends one -- there is no
+            receipt email anywhere in the backend -- so every founder who went
+            looking for it in their inbox was looking for something that was
+            never sent. The receipt is real now, and it is downloadable right
+            here and from Billing History, which is what this says instead. */}
+        Your receipt is ready to download below, and stays available under
+        Billing History for <strong>{founder?.email ?? 'your account'}</strong>.
       </p>
       <div className="bl-success-details">
         <div className="bl-sd-row"><span>Plan</span><strong>{plan.name}</strong></div>
@@ -809,9 +817,235 @@ function SuccessView({ plan, order, onViewStatus }) {
         )}
         <div className="bl-sd-row"><span>Status</span><strong className="bl-status-badge active">Active</strong></div>
       </div>
+      <SuccessReceipt paymentId={order?.payment_id} />
+
       <button id="view-subscription-btn" className="bl-pay-btn" onClick={onViewStatus}>
         View My Subscription
       </button>
+    </div>
+  );
+}
+
+/**
+ * The receipt, offered the moment the plan goes active.
+ *
+ * Fetched rather than assumed: the button appears only once the backend
+ * confirms a document exists for this payment. An always-visible "Download
+ * receipt" that 404s is worse than no button — a founder who has just been
+ * charged and cannot get a receipt will assume the charge itself went wrong.
+ *
+ * The one retry covers the narrow gap where the plan grant has landed but the
+ * payment row is a beat behind. It is not a poll: `activated` already means
+ * captured, so a second failure is a real one and the founder is told plainly
+ * that the receipt is on the billing page rather than left with a spinner.
+ */
+function SuccessReceipt({ paymentId }) {
+  const [invoice, setInvoice] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!paymentId) return undefined;
+    let cancelled = false;
+    let timer = null;
+
+    const load = (retry) => getInvoice(paymentId)
+      .then((inv) => { if (!cancelled) setInvoice(inv); })
+      .catch(() => {
+        if (cancelled) return;
+        // 409 while the capture settles. One more try, then stop.
+        if (retry) timer = setTimeout(() => load(false), 2500);
+      });
+
+    load(true);
+    return () => { cancelled = true; if (timer) clearTimeout(timer); };
+  }, [paymentId]);
+
+  if (!invoice) return null;
+
+  const download = async () => {
+    setBusy(true);
+    setError('');
+    try {
+      await downloadInvoicePdf(invoice.payment_id, invoice.number);
+    } catch (err) {
+      setError(err?.message || 'Could not download your receipt. You can get it from Billing History.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <button
+        type="button"
+        className="bl-action-btn ghost"
+        style={{ marginBottom: 12 }}
+        disabled={busy}
+        onClick={download}
+      >
+        <DownloadIcon />
+        <span style={{ marginLeft: 7 }}>
+          {busy ? 'Preparing…' : `Download ${invoice.document_title}`}
+        </span>
+      </button>
+      {error && (
+        <p className="dash-empty" style={{ color: '#b4531f' }} role="alert">{error}</p>
+      )}
+    </>
+  );
+}
+
+/** A date on a receipt, as a founder reads it. Empty for anything
+ *  unparseable, so a bad value renders nothing rather than "Invalid Date". */
+function fmtPaidDate(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+/** An amount the API already decided. Formatted, never computed: en-IN gives
+ *  Indian digit grouping, and the number itself is the backend's. */
+function fmtAmount(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '—';
+  return `₹${n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function DownloadIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"
+         strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="7 10 12 15 17 10" />
+      <line x1="12" y1="15" x2="12" y2="3" />
+    </svg>
+  );
+}
+
+/**
+ * Billing history — the founder's real payments, with a receipt to download.
+ *
+ * This section used to be a hardcoded table of four invented invoices
+ * (INV-2026-007 at ₹999 "Paid", and three more) shown to every founder, with a
+ * PDF button that did nothing. It was then replaced with an honest empty state
+ * until an invoice endpoint existed. This is that endpoint, wired up.
+ *
+ * NOTHING HERE IS COMPUTED. Every figure is rendered straight from the API
+ * response, which read it back out of the payments row Razorpay charged
+ * against. A total assembled in JSX can disagree with the one printed on the
+ * PDF, and the founder has no way to tell which is the real one.
+ */
+function BillingHistory({ refreshKey = 0 }) {
+  const [rows, setRows] = useState(null);   // null = still loading
+  const [failed, setFailed] = useState(false);
+  const [busyId, setBusyId] = useState(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    setFailed(false);
+    listInvoices()
+      .then((list) => { if (!cancelled) setRows(Array.isArray(list) ? list : []); })
+      // A failed fetch is NOT an empty history: telling a founder who has paid
+      // that they have no receipts is the same lie the fake table told, in the
+      // other direction. Say the list could not be loaded instead.
+      .catch(() => { if (!cancelled) { setRows([]); setFailed(true); } });
+    return () => { cancelled = true; };
+  }, [refreshKey]);
+
+  const download = useCallback(async (row) => {
+    setBusyId(row.payment_id);
+    setError('');
+    try {
+      await downloadInvoicePdf(row.payment_id, row.number);
+    } catch (err) {
+      // The API writes a better sentence than any generic one we'd substitute
+      // ("nothing is wrong with your payment — try again in a few minutes").
+      setError(err?.message || 'Could not download that receipt. Please try again.');
+    } finally {
+      setBusyId(null);
+    }
+  }, []);
+
+  return (
+    <div className="bl-invoice-section">
+      <div className="bl-section-label" style={{ marginBottom: 14 }}>Billing History</div>
+
+      {rows === null && <p className="dash-empty">Loading your receipts…</p>}
+
+      {rows !== null && failed && (
+        <p className="dash-empty">
+          We couldn't load your billing history just now. Please refresh in a moment.
+        </p>
+      )}
+
+      {rows !== null && !failed && rows.length === 0 && (
+        <p className="dash-empty">
+          No payments yet. Once you buy a plan, your receipts will appear here.
+        </p>
+      )}
+
+      {rows !== null && rows.length > 0 && (
+        <div className="bl-invoice-table-wrap">
+          <table className="bl-invoice-table">
+            <thead>
+              <tr>
+                <th>Receipt</th>
+                <th>Date</th>
+                <th>Description</th>
+                <th>Amount</th>
+                <th>Status</th>
+                <th aria-label="Download" />
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row.payment_id}>
+                  <td className="inv-id">{row.number}</td>
+                  <td>{fmtPaidDate(row.paid_at)}</td>
+                  <td>
+                    {row.description}
+                    {row.coupon_code && (
+                      <span style={{ display: 'block', fontSize: 11.5, color: '#556458' }}>
+                        Coupon {row.coupon_code}
+                      </span>
+                    )}
+                  </td>
+                  <td className="inv-amount">{fmtAmount(row.amount_inr)}</td>
+                  <td>
+                    <span className={`bl-status-badge ${row.status === 'refunded' ? '' : 'active'}`}>
+                      {row.status === 'refunded' ? 'Refunded' : 'Paid'}
+                    </span>
+                  </td>
+                  <td>
+                    <button
+                      type="button"
+                      className="inv-dl-btn"
+                      disabled={busyId === row.payment_id}
+                      onClick={() => download(row)}
+                      /* The document's own word for itself: with no GSTIN
+                         configured the backend issues a payment receipt, not a
+                         tax invoice, and the button must not promise one. */
+                      title={`Download ${row.document_title}`}
+                    >
+                      <DownloadIcon />
+                      {busyId === row.payment_id ? 'Preparing…' : 'PDF'}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {error && (
+        <p className="dash-empty" style={{ marginTop: 12, color: '#b4531f' }} role="alert">
+          {error}
+        </p>
+      )}
     </div>
   );
 }
@@ -846,12 +1080,7 @@ function StatusView({ onUpgrade, currentPlan, subscription }) {
           </div>
         </div>
 
-        <div className="bl-invoice-section">
-          <div className="bl-section-label" style={{ marginBottom: 14 }}>Billing History</div>
-          <p className="dash-empty">
-            No invoices yet. Once billing is live, your receipts will appear here.
-          </p>
-        </div>
+        <BillingHistory />
       </div>
     );
   }
@@ -935,18 +1164,7 @@ function StatusView({ onUpgrade, currentPlan, subscription }) {
         </div>
       </div>
 
-      {/* Invoice history */}
-      {/* This table listed four invoices -- INV-2026-007 at ₹999 "Paid", and
-          three more -- for every founder who opened the page, with a PDF button
-          that did nothing. They were invented: there is no invoice endpoint in
-          the API at all. Fabricated payment records are not a placeholder, so
-          the section says what is true until billing history actually exists. */}
-      <div className="bl-invoice-section">
-        <div className="bl-section-label" style={{ marginBottom: 14 }}>Billing History</div>
-        <p className="dash-empty">
-          No invoices yet. Once billing is live, your receipts will appear here.
-        </p>
-      </div>
+      <BillingHistory />
     </div>
   );
 }

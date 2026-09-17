@@ -4,6 +4,9 @@
     POST /payments/confirm            settle a just-paid order without waiting
                                       for the webhook
     POST /payments/coupons/validate   price a discount code before committing
+    GET  /payments/invoices                     this founder's billing history
+    GET  /payments/invoices/{payment_id}        one receipt, as JSON
+    GET  /payments/invoices/{payment_id}/pdf    the same receipt, downloadable
 
 `POST /payments/checkout` only ever creates a *pending* payment and hands back
 what the frontend needs to open Razorpay's Checkout.js widget.
@@ -22,13 +25,18 @@ closes the tab, and both end in the same idempotent grant.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from datetime import datetime
+
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.api.deps import get_founder_record
 from app.core.container import container
 from app.db.session import get_db, set_admin_rls_context
 from app.models import Founder
+from app.payments.invoice import Invoice, InvoiceNotAvailable
+from app.payments.invoice_html import build_invoice_html
+from app.payments.invoice_pdf import InvoiceRendererUnavailable, get_or_render_pdf
 from app.payments.models import CheckoutSession, WebhookOutcome
 from app.plans.catalog import PlanTier
 
@@ -171,3 +179,182 @@ def confirm_checkout(
     )
     activated = result.outcome in (WebhookOutcome.CAPTURED, WebhookOutcome.ALREADY_PROCESSED)
     return ConfirmResponse(activated=activated, outcome=result.outcome, plan=result.plan)
+
+
+# ---------------------------------------------------------------------------
+# Invoices / receipts
+#
+# Three views of ONE document. The list, the JSON detail and the PDF are all
+# built by PaymentService.get_invoice / list_invoices from the same payments
+# row, so the figure a founder reads on the billing page is by construction the
+# figure printed on the file they download. The billing page used to render a
+# hardcoded table of four invented invoices with a PDF button that did nothing;
+# these endpoints are what that placeholder was waiting for.
+#
+# OWNERSHIP is enforced in the repository's WHERE clause, not here -- see
+# PaymentRepository.get_invoice_source. A receipt carries a name, an email and
+# an amount, so "route forgot to check the owner" is not a mistake this code
+# should be able to make.
+# ---------------------------------------------------------------------------
+
+
+class InvoiceTaxResponse(BaseModel):
+    percent: float
+    taxable_value: float
+    cgst: float
+    sgst: float
+    igst: float
+    total_tax: float
+
+
+class InvoiceResponse(BaseModel):
+    """Rupees, not paise -- this is display copy, and every other price the
+    billing page renders is in rupees.
+
+    `is_tax_invoice` is the only field the UI needs to branch on: false means
+    no GSTIN is configured, the document is a payment receipt, and `tax` is
+    null. The UI must not infer a tax split from the absence of one.
+    """
+
+    payment_id: int
+    number: str
+    document_title: str
+    issued_at: datetime | None
+    paid_at: datetime | None
+    status: str
+    description: str
+    plan_tier: str
+    billing_cycle: str
+    currency: str
+    amount_inr: float
+    list_amount_inr: float | None = None
+    discount_inr: float | None = None
+    coupon_code: str | None = None
+    is_tax_invoice: bool
+    tax: InvoiceTaxResponse | None = None
+    payment_reference: str | None = None
+    order_reference: str | None = None
+
+    @classmethod
+    def from_domain(cls, payment_id: int, inv: Invoice) -> "InvoiceResponse":
+        tax = None
+        if inv.tax is not None:
+            tax = InvoiceTaxResponse(
+                percent=float(inv.tax.percent), taxable_value=float(inv.tax.taxable_value),
+                cgst=float(inv.tax.cgst), sgst=float(inv.tax.sgst), igst=float(inv.tax.igst),
+                total_tax=float(inv.tax.total_tax))
+        return cls(
+            payment_id=payment_id, number=inv.number, document_title=inv.document_title,
+            issued_at=inv.issued_at, paid_at=inv.paid_at, status=inv.status,
+            description=inv.description, plan_tier=inv.plan_tier,
+            billing_cycle=inv.billing_cycle, currency=inv.currency,
+            amount_inr=float(inv.gross_amount),
+            list_amount_inr=float(inv.list_amount) if inv.list_amount is not None else None,
+            discount_inr=float(inv.discount) if inv.discount is not None else None,
+            coupon_code=inv.coupon_code, is_tax_invoice=inv.is_tax_invoice, tax=tax,
+            payment_reference=inv.payment_reference, order_reference=inv.order_reference)
+
+
+def _owned_invoice(service, founder: Founder, payment_id: int) -> Invoice:
+    """This founder's invoice, or the right refusal.
+
+    404 for "not yours or not there" -- one answer for both, so the endpoint
+    cannot be used to discover which payment ids exist. 409 for a payment that
+    is real and this founder's but not captured: the document is not wrong, it
+    does not exist YET, and a founder mid-checkout should be told to wait
+    rather than told their payment is missing.
+    """
+    try:
+        invoice = service.get_invoice(founder.founder_id, payment_id)
+    except InvoiceNotAvailable as exc:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "This payment has not been captured yet, so there is no receipt for "
+            "it. If you have just paid, try again in a moment.",
+        ) from exc
+    if invoice is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No such payment.")
+    return invoice
+
+
+@router.get("/invoices", response_model=list[InvoiceResponse],
+            summary="This founder's billing history")
+def list_invoices(
+    founder: Founder = Depends(get_founder_record),
+    service=Depends(get_payment_service),
+) -> list[InvoiceResponse]:
+    """Captured and refunded payments only.
+
+    A pending row is an abandoned or still-settling checkout, and listing one
+    as billing history would show a founder a charge they may never have been
+    made -- the one thing a payments list must never do.
+    """
+    return [InvoiceResponse.from_domain(payment_id, inv)
+            for payment_id, inv in service.list_invoices(founder.founder_id)]
+
+
+@router.get("/invoices/{payment_id}", response_model=InvoiceResponse,
+            summary="One receipt, as JSON")
+def get_invoice(
+    payment_id: int,
+    founder: Founder = Depends(get_founder_record),
+    service=Depends(get_payment_service),
+) -> InvoiceResponse:
+    return InvoiceResponse.from_domain(payment_id,
+                                       _owned_invoice(service, founder, payment_id))
+
+
+@router.get("/invoices/{payment_id}/document", response_class=Response,
+            summary="The receipt as HTML -- the same document the PDF is made of")
+def get_invoice_document(
+    payment_id: int,
+    founder: Founder = Depends(get_founder_record),
+    service=Depends(get_payment_service),
+) -> Response:
+    """Served so the on-screen receipt and the downloaded PDF cannot drift.
+
+    A React component re-implementing this layout is exactly how the report PDF
+    diverged from the screen once already; there is one template here, and both
+    outputs come out of it.
+    """
+    html = build_invoice_html(_owned_invoice(service, founder, payment_id))
+    return Response(content=html, media_type="text/html; charset=utf-8")
+
+
+@router.get("/invoices/{payment_id}/pdf", response_class=Response,
+            summary="Download the receipt as a PDF")
+def download_invoice_pdf(
+    payment_id: int,
+    founder: Founder = Depends(get_founder_record),
+    service=Depends(get_payment_service),
+) -> Response:
+    """The stored copy if there is one, else rendered and kept -- never a
+    substitute document.
+
+    503 rather than a plainer fallback PDF when the renderer is down, for the
+    same reason report exports do it (app/api/v1/reports/pdf_delivery.py): a
+    founder who downloads during a blip and receives a different-looking
+    document has no way to know it, and this one is a financial record. A
+    missing receipt is recoverable by pressing the button again; a wrong one
+    that looks fine is not.
+    """
+    invoice = _owned_invoice(service, founder, payment_id)
+    try:
+        pdf = get_or_render_pdf(service.repository, invoice, payment_id=payment_id,
+                                founder_id=founder.founder_id)
+    except InvoiceRendererUnavailable as exc:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "We could not produce your receipt PDF just now. Nothing is wrong "
+            "with your payment -- please try again in a few minutes.",
+            headers={"Retry-After": "120"},
+        ) from exc
+
+    # The number, not the payment id: this is the name the file carries into a
+    # founder's accounts, and slashes are not legal in one.
+    filename = f"{invoice.number.replace('/', '-')}.pdf"
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
