@@ -3628,6 +3628,358 @@ PERSONAS["vikram_logistics"] = VIKRAM_ANSWERS
 _ONBOARDING["vikram_logistics"] = _VIKRAM_ONBOARDING
 
 
+# ---------------------------------------------------------------------------
+# `siddharth_saas` -- a blind QA case at Early Traction, B2B SaaS.
+#
+# ComplyFlow: HR compliance software for Indian SMEs. Three years, 42 paying
+# companies, about Rs 4.2 lakh MRR, five engineers, and a founder who closes
+# most of the deals himself.
+#
+# The case tests whether the engine separates the four actors a B2B SaaS
+# business actually has -- the HR manager who uses it, the founder or CFO who
+# approves it, the company that pays, and the person whose pain it solves. The
+# founder never names the distinction. He describes it repeatedly without
+# noticing it, and reaches for a product explanation every time a commercial
+# fact appears.
+# ---------------------------------------------------------------------------
+_SIDDHARTH_TEXTS = (
+    # ---- _TOPICS (15) ---------------------------------------------------
+    # 0 customers spoken to / validation
+    "A lot, but mostly during sales rather than as research. I am on nearly "
+    "every first call -- probably seventy percent of new customers close with "
+    "me in the room. What I notice is the HR manager is usually the one who "
+    "finds us and gets excited, and then the founder or the CFO is the one who "
+    "actually has to sign. Those are two quite different conversations and I "
+    "run both.",
+    # 1 planning / time / priorities
+    "Split badly. Sales calls eat the mornings and I do product in the "
+    "evenings, which is when I am least sharp. I would guess half my week is "
+    "sales, a third product decisions, the rest admin. The product half is the "
+    "part I am actually good at.",
+    # 2 market / competitors
+    "There are the big HRMS suites -- greytHR, Keka, Zoho People -- which do "
+    "everything and do compliance badly as a module. And there are consultants "
+    "doing it manually. Our compliance depth is genuinely better than any of "
+    "them, I have gone through their products feature by feature. That is not "
+    "me being biased, it is a real gap. What I find harder to explain is why "
+    "that does not convert faster.",
+    # 3 product / what you have built
+    "Three years in. Statutory reminders, employee document vault, PF and ESI "
+    "workflow, state-wise compliance calendar, audit trail. Forty-two paying "
+    "companies, about four point two lakh MRR. Five of us on product and "
+    "engineering. The product is solid -- that I am confident about.",
+    # 4 pricing / revenue / money
+    "Per-employee per-month, with slabs. Honestly it varies more than it "
+    "should -- early customers are on old rates, and if someone pushes I "
+    "usually find a way. I could not give you an average revenue per customer "
+    "off the top of my head without opening the sheet. I know the total.",
+    # 5 team / co-founder
+    "No co-founder. Five people on product and engineering, all technical. "
+    "Nobody owns sales except me. I hired a junior person for outreach last "
+    "year and it did not work out -- he could not answer the compliance "
+    "questions that come up on the second call, so everything came back to me "
+    "anyway.",
+    # 6 risk
+    "Concentration is not really the risk -- forty-two customers, no one is "
+    "huge. What worries me is that growth is tied to my calendar. If I stop "
+    "selling, new revenue stops. I have not written any of this down.",
+    # 7 decision under uncertainty
+    "I gather data where data exists. Where it does not, I go on judgement, "
+    "and I am usually reasoning from the product side -- what would make this "
+    "better, what would remove friction. That is my instinct for most "
+    "problems.",
+    # 8 feedback / criticism / blind spot
+    "I take product feedback very well, genuinely. Sales feedback I find "
+    "harder. When a prospect says it is too expensive or they do not see the "
+    "value, my first reaction is that they have not understood what it does, "
+    "and I go back and explain it again. Someone told me I argue with "
+    "prospects. I would say I clarify.",
+    # 9 why / vision / origin
+    "I was a backend engineer and my sister runs HR at a two-hundred-person "
+    "manufacturing company. I watched her miss a PF deadline and get "
+    "personally hauled up for it -- the anxiety of that stayed with me. She "
+    "was tracking statutory dates in a diary. In three years I want compliance "
+    "to be something an Indian SME does not have to think about.",
+    # 10 first / best / trusted
+    "Trusted. Compliance is not a category where you want to be the exciting "
+    "new thing. If we get a filing date wrong, somebody gets a notice with "
+    "their name on it.",
+    # 11 explain it in one breath
+    "HR compliance software for Indian SMEs -- statutory reminders, employee "
+    "documentation and HR workflows, so nobody misses a PF or ESI deadline.",
+    # 12 personally ran into the problem
+    "Through my sister, not directly. I have never been an HR manager. I have "
+    "sat next to one for years and watched what the job actually does to "
+    "someone.",
+    # 13 tools
+    "For the product, proper tooling. For the business, embarrassing -- the "
+    "pipeline is a Google Sheet, a lot of WhatsApp, and frankly my own memory. "
+    "I know which deals are live because I am on all of them. We put in a CRM "
+    "last year and I stopped updating it after about six weeks.",
+    # 14 time that eats the most
+    "Repeating the same product explanation on sales calls. I have given "
+    "essentially the same forty-minute walkthrough a few hundred times. I keep "
+    "thinking I should record it, and then the next call is slightly different "
+    "and I do it live again.",
+
+    # ---- _OPERATING_TOPICS (21) -----------------------------------------
+    # 0 delegation
+    "Product I delegate reasonably -- the engineers own their areas. Sales I "
+    "have not delegated at all, and I am not sure it is delegable yet. The "
+    "second call always turns into a compliance discussion and I am the only "
+    "one who can hold that.",
+    # 1 if you got sick / in your absence
+    "The product would ship, the team is fine. New sales would stop entirely. "
+    "Existing customers would be served. So the business would survive and "
+    "would not grow.",
+    # 2 written down / SOPs
+    "Engineering has proper process -- code review, deploys, on-call. Sales "
+    "has nothing written. No playbook, no call script, no objection handling "
+    "document. It is all in my head, which is fine while I am the one doing "
+    "it.",
+    # 3 who owns what / role clarity
+    "Clear on the engineering side. On the commercial side I own everything "
+    "-- lead generation, demos, pricing, closing, and then onboarding and "
+    "account management afterwards. There is nobody to be unclear with.",
+    # 4 decision rights / disagreements
+    "Product disagreements we argue out on merit and usually I decide. It "
+    "works because we are small and everyone is technical. Nothing really gets "
+    "stuck.",
+    # 5 how do you know the team is performing
+    "Engineering I can see -- velocity, bugs, what ships. There is no "
+    "equivalent measure on the commercial side because there is nobody else "
+    "doing it.",
+    # 6 hiring / kept someone too long
+    "The outreach hire, about eight months. I knew by month three it was not "
+    "working and I told myself it was a ramp problem. In hindsight I had given "
+    "him nothing to work with -- no script, no list, no definition of who to "
+    "call.",
+    # 7 churn / retention
+    "We lose some. I could not give you a number -- we do not calculate it "
+    "properly, it is more that I notice when somebody does not renew. My sense "
+    "is it is the ones who never really got going after onboarding. Some "
+    "customers are in the product every day and some I look at the logs and "
+    "there is almost nothing after the first month.",
+    # 8 buying journey
+    "Usually the HR manager searches for something or hears about us, comes "
+    "in, likes it. Then it has to go up -- to the founder in a smaller "
+    "company, or the CFO in a bigger one. That is where it slows down. Forty "
+    "to fifty days from first call to signature, and most of that is waiting "
+    "for the approval conversation to happen.",
+    # 9 pricing / quotes / discounts
+    "Per-employee slabs, but I deviate. If a deal is close and they push on "
+    "price I will do something. Different customers are on quite different "
+    "effective rates for the same thing and I have never gone back and "
+    "cleaned that up.",
+    # 10 cash / profit / margin
+    "We are roughly break-even, funded by revenue and some of my savings. "
+    "Gross margin is good, it is software. What I do not have is any view of "
+    "what it costs to acquire a customer, because the main cost is my time and "
+    "I have never priced that.",
+    # 11 evidence of demand beyond your own belief
+    "Forty-two companies paying every month for up to three years. That is "
+    "real. What I could not show you is why those forty-two and not others, or "
+    "which of them we should be trying to find more of.",
+    # 12 marketing / campaigns
+    "Some content on compliance deadlines, a bit of LinkedIn, mostly written "
+    "by me when I have time. No paid spend to speak of. Most of it comes "
+    "through referral and search.",
+    # 13 who you designed it for vs who buys
+    "We have companies from about twenty employees up to five hundred. I "
+    "genuinely think there is value across the whole range -- compliance is "
+    "compliance. If you asked me which size is our best customer I would have "
+    "to think about it, and I am not sure I would have a good answer.",
+    # 14 who are you now as a leader
+    "Still mostly an engineer who sells because he has to. I am comfortable "
+    "talking about the product to anyone. Standing in front of a CFO talking "
+    "about ROI, I am less comfortable, and I suspect it shows.",
+    # 15 changed shape / when
+    "It changed when we crossed about twenty-five customers. Before that I "
+    "knew every account personally and what they used. Now I do not, and I "
+    "have not replaced that knowledge with anything measured.",
+    # 16 data / privacy
+    "This one we take seriously -- we hold employee PII, salary data, "
+    "statutory records. Encrypted at rest, access controls, audit logs, we did "
+    "a security review last year because a larger prospect asked. It is one of "
+    "the few business processes that is properly documented.",
+    # 17 sales pipeline
+    "In a sheet, and in my head. I could tell you roughly what is live because "
+    "I am on all of it, but I could not give you a conversion rate by stage "
+    "or tell you where deals die. I know it takes forty to fifty days.",
+    # 18 templates / proposals
+    "A proposal template exists. The demo is not templated -- I do it live "
+    "and adapt as I go, which people tell me is a strength and is also why "
+    "nobody else can do it.",
+    # 19 contracts / oversight
+    "Standard subscription agreement drafted by a lawyer, I sign them. Larger "
+    "customers occasionally send their own paper and I read those properly. "
+    "Not a bottleneck.",
+    # 20 publishing content
+    "Irregularly -- maybe two or three compliance explainers a month when "
+    "things are calm, nothing for weeks when they are not. It does bring "
+    "inbound when I keep it up, which I do not.",
+
+    # ---- _CURRENT_PROBLEM_TOPICS (8) ------------------------------------
+    # 0 single biggest thing
+    "Growth is stuck to me. Seventy percent of what closes, closes because I "
+    "was on the call. I want to be at one crore ARR in the next year or so and "
+    "I cannot personally sell my way there -- the maths does not work, there "
+    "are not enough hours. But every time I try to hand sales over it comes "
+    "back to me.",
+    # 1 what would need to be true this week
+    "Somebody other than me would have to run a full cycle -- first call to "
+    "signature -- on a real deal, and win it. That would tell me whether this "
+    "is teachable or whether it genuinely needs me.",
+    # 2 already tried / why it stalled
+    "I hired the outreach person, which failed. I wrote about half a sales "
+    "playbook in January and never finished it. I also built a self-serve "
+    "signup flow thinking it would let smaller companies buy without a call -- "
+    "we got signups and almost none of them converted to paid. That one I have "
+    "not properly worked out.",
+    # 3 what would stop it cold
+    "Me. Specifically me on sales calls. The product would keep running "
+    "without me for a long time; new revenue would stop the same week.",
+    # 4 avoiding this week
+    "Going through the accounts that barely use the product. I have a rough "
+    "sense of who they are and I have been avoiding actually pulling the "
+    "usage data and calling them, partly because I think the answer might be "
+    "that they never needed it and I sold it to them anyway.",
+    # 5 metric quietly avoiding
+    "Real churn, calculated properly. And activation -- what percentage of "
+    "customers are actually using the thing sixty days in. I have a feeling "
+    "both numbers are worse than the story I tell myself, and the MRR going up "
+    "has let me not look.",
+    # 6 problem that keeps resurfacing
+    "Deals stalling at the approval stage. The HR manager is sold, then it "
+    "goes to the founder or the CFO and sits. I keep treating it as a "
+    "messaging problem and rewriting the deck, and it keeps happening.",
+    # 7 decision that landed on you
+    "Which features go in the next release. That is genuinely mine to decide, "
+    "I think -- but I notice I am deciding it from what the last three "
+    "prospects asked for on calls, which is not really a system.",
+
+    # ---- _FOUNDER_TOPICS (9) --------------------------------------------
+    # 0 last thing that satisfied you
+    "We shipped state-wise compliance rules for all twenty-eight states in "
+    "March. Nobody else in this category has that depth. Two customers "
+    "specifically mentioned it. That felt like the thing I am actually here "
+    "to do.",
+    # 1 trophy vs bridge
+    "The bridge. If ComplyFlow disappeared and somebody else made HR "
+    "compliance boring and safe for Indian SMEs, I would be genuinely fine "
+    "with that. I want the problem solved more than I want to be the one who "
+    "solved it.",
+    # 2 what recharges / flow
+    "Building. A hard technical problem and a closed door and I lose the whole "
+    "day happily. What drains me is back-to-back sales calls -- four in a day "
+    "and I am finished, even though objectively it is just talking.",
+    # 3 considered dropping it / what 'done' means
+    "Around year two, when we were at maybe twelve customers and I could not "
+    "see how it scaled. What kept me in was a customer telling me we had "
+    "caught something that would have been a real penalty for them. 'Done' "
+    "would be the company growing without me on every call.",
+    # 4 not scalable but doing anyway
+    "Doing every demo myself. Answering compliance questions personally, "
+    "including for customers who are already paying. Writing the content. None "
+    "of it scales and I do it because I am better at it than anyone I have "
+    "managed to hand it to.",
+    # 5 walked away / the line
+    "A consultancy wanted to white-label us and resell under their brand. Good "
+    "money, would have doubled revenue that year. I said no because they "
+    "wanted to control what we told customers about statutory changes, and I "
+    "will not have somebody else deciding what a customer is told about a "
+    "deadline that could get them fined.",
+    # 6 perfectionism
+    "Yes, on product. I held the multi-state release back about seven weeks "
+    "for edge cases that affected a small number of customers. Meanwhile "
+    "nothing happened on the sales side because I was heads-down on that. I "
+    "would probably do it again, which may be the problem.",
+    # 7 if fixed overnight, what changes for the user
+    "For the HR manager, enormous -- she stops lying awake about a date she "
+    "might have missed. For the business owner it is quieter: he avoids a "
+    "penalty he was not thinking about. That difference might be why the HR "
+    "person is excited and the person signing is lukewarm.",
+    # 8 is your own experience representative
+    "Probably not. I am technical and I find the product obvious, and I have "
+    "assumed the value is self-evident in the same way. When a prospect does "
+    "not see it my instinct is that I explained it badly, not that they are "
+    "genuinely different from me. I have never been an HR manager or a CFO.",
+)
+
+_SIDDHARTH_EXTRA = (
+    ((("who actually uses", "daily users", "who uses the product",
+       "actually using it day to day"),
+      ("users", "who uses")),
+     "The HR manager, almost always, and sometimes an HR executive under her. "
+     "One or two per company regardless of company size, which is "
+     "interesting now that I say it out loud. The founder or CFO who approved "
+     "it typically never logs in again after the first month."),
+    ((("who approves", "who signs off", "economic buyer", "who pays",
+       "approving the purchase"),
+      ("approve", "sign off", "budget holder")),
+     "Founder in a twenty-to-hundred person company, CFO or finance head "
+     "above that. They are not the ones who feel the problem day to day -- "
+     "they feel it once, when there is a notice. So I am selling relief to "
+     "one person and insurance to another, in the same call."),
+    ((("why do customers churn", "why they leave", "reason customers leave",
+       "why do they cancel"),
+      ("churn", "cancel", "leave")),
+     "My honest answer is they never really started using it. Whether that is "
+     "an onboarding problem, or whether they were the wrong companies to sell "
+     "to, I do not know. I have assumed it was onboarding and built more "
+     "onboarding."),
+    ((("could someone else close", "another salesperson", "somebody else sell",
+       "hire a salesperson"),
+      ("salesperson", "close the same deal")),
+     "I want to say yes but the evidence says no -- I tried it once and it "
+     "came back to me. The sticking point is the second call, where it turns "
+     "into specific compliance questions about their state and their headcount "
+     "and their filings."),
+    ((("self-serve", "free trial", "sign up without", "product-led"),
+      ("self-serve", "trial", "signup")),
+     "We built one. Signups came, conversion to paid was almost nothing, and "
+     "I never diagnosed why. I assumed the smaller companies were not serious. "
+     "I have not actually gone and asked any of them."),
+    ((("expansion revenue", "upsell", "existing customers spend more",
+       "grow accounts"),
+      ("upsell", "expansion")),
+     "Barely. Revenue grows when a customer's headcount grows, because we are "
+     "per-employee, and that happens on its own. We have never deliberately "
+     "sold anything additional to an existing customer."),
+)
+
+_SIDDHARTH_ONBOARDING = {
+    "business_name": "ComplyFlow",
+    "problem_statement":
+        "Indian SMEs miss statutory HR deadlines -- PF, ESI, state filings -- "
+        "because compliance is tracked in diaries and spreadsheets by one "
+        "overloaded HR manager, and the penalty lands on a named person.",
+    "building_summary":
+        "B2B SaaS for HR compliance at Indian SMEs: statutory reminders, "
+        "employee documentation, and HR workflows.",
+    "industry": "SaaS",
+    "current_challenges": ["Sales", "Operations"],
+    "goal_90_day":
+        "One full sales cycle closed by somebody who is not me, and a real "
+        "churn and activation number I trust.",
+    "vision_1_year":
+        "One crore ARR, with most of it closing without me on the call.",
+    "product_description":
+        "HR compliance software for Indian SMEs -- statutory reminders, an "
+        "employee document vault, PF and ESI workflows and a state-wise "
+        "compliance calendar, sold per employee per month.",
+}
+
+SIDDHARTH_ANSWERS = _SIDDHARTH_TEXTS
+ANSWER_BANK["siddharth_saas"] = tuple(zip(
+    _TRACTION_TOPICS + _CURRENT_PROBLEM_TOPICS + _FOUNDER_TOPICS,
+    _SIDDHARTH_TEXTS)) + _SIDDHARTH_EXTRA
+FALLBACKS["siddharth_saas"] = ("Honestly, I do not know -- we do not track "
+                               "that. I would have to go and look.")
+PERSONAS["siddharth_saas"] = SIDDHARTH_ANSWERS
+_ONBOARDING["siddharth_saas"] = _SIDDHARTH_ONBOARDING
+
+
 if __name__ == "__main__":
     sys.exit(main())
 
