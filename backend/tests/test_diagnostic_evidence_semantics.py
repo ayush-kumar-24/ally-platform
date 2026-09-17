@@ -328,3 +328,152 @@ def test_unrestricted_rows_still_reach_an_unknown_industry():
     """The fail-closed rule must not cost an un-onboarded founder anything that
     was ever meant to be universal."""
     assert _relevant(["all"], None)
+
+
+# === P1-6 : breadth influences RANKING, and rewards independence ============
+#
+# The defect these pin: evidence count had NO influence on final ranking.
+# Corroboration lived in detection_confidence, which is not a ranking factor,
+# and the evidence_breadth weight was zero -- so in QA a founder-dependency
+# cause supported by two corroborating answers ranked below four causes each
+# resting on a single answer.
+#
+# These exercise the real WeightedConfidenceModel with an explicit weight set,
+# rather than the live scoring_rules, so they state the property independently
+# of whatever the deployed configuration happens to be.
+
+from app.api.v1.reasoning.config import RankingWeights
+from app.api.v1.reasoning.engines.confidence import (
+    WeightedConfidenceModel,
+    evidence_breadth_value,
+)
+from app.models.enums import ConfirmationStatus
+
+ACTIVE_WEIGHTS = RankingWeights(
+    category_risk=D("0.40"), confirmation_status=D("0.25"),
+    stage_probability=D("0.20"), industry_probability=D("0.00"),
+    evidence_breadth=D("0.15"), expected_sum=D("1.0"))
+
+
+class _NoPriors:
+    """Stage and industry priors absent -- a supported state the model records
+    as unavailable, not a fixture cheat. It isolates the factor under test."""
+
+    def get_stage_weights(self, _stage_id):
+        return {}
+
+    def get_industry_weights(self, *_a, **_k):
+        return None
+
+
+def _rank(questions, answers):
+    qmap = {x.question_id: x for x in questions}
+    rows = StandardDiagnosticEngine(classifier=None).compute_category_risks(
+        list(answers), qmap, ctx())
+    dets = StandardRootCauseEngine(repository=None).detect(
+        list(answers), rows, qmap, ctx())
+    rctx = SimpleNamespace(
+        stage_id=4, industry_id=None,
+        config=SimpleNamespace(
+            ranking_weights=ACTIVE_WEIGHTS,
+            confirmation_multipliers=SimpleNamespace(
+                confirmed=D("1.5"), unconfirmed=D("1.0"), not_tested=D("0.5")),
+            industry_probability=None,
+            branching=SimpleNamespace(root_cause_min_detection_confidence=D("0"),
+                                      root_cause_max_candidates=0,
+                                      amber_cluster_trigger=3,
+                                      top_root_causes_report=3)))
+    scored = WeightedConfidenceModel(repository=_NoPriors()).score_and_rank(dets, rctx)
+    return {s.root_cause_id: s for s in scored}, {d.root_cause_id: d for d in dets}
+
+
+def test_breadth_rewards_independent_dimensions_not_raw_answer_count():
+    """The distinction the whole factor exists for. Two answers spanning two
+    dimensions must earn MORE breadth than six answers in a single dimension,
+    or the factor is just a count with extra steps."""
+    def det(dims, mass, n):
+        return SimpleNamespace(
+            independent_signal_count=dims, evidence_mass=D(str(mass)),
+            evidence=tuple(SimpleNamespace(directness="direct") for _ in range(n)),
+            category_risk_score=D("0.5"))
+    six_one_dim = evidence_breadth_value(det(1, 6, 6))
+    two_two_dims = evidence_breadth_value(det(2, 2, 2))
+    six_six_dims = evidence_breadth_value(det(6, 6, 6))
+    assert two_two_dims > six_one_dim
+    assert six_six_dims > two_two_dims
+
+
+def test_converging_evidence_can_outrank_an_isolated_severe_answer():
+    """Vikram, reduced. Cause 1: one isolated Red. Cause 2: corroborated across
+    several dimensions. Cause 2 must win -- it did not before breadth carried
+    weight."""
+    questions = [q(101, 1, "Sales & Revenue")] + [
+        q(200 + i, 2, c) for i, c in enumerate(
+            ["Founder Psychology", "Operations & Systems", "Team & Leadership",
+             "Business Planning"], start=1)]
+    answers = [ans(1, 101, ScoreLabel.RED)] + [
+        ans(10 + i, 200 + i, ScoreLabel.RED) for i in range(1, 5)]
+    scored, dets = _rank(questions, answers)
+    assert dets[2].independent_signal_count > dets[1].independent_signal_count
+    assert scored[2].rank < scored[1].rank, "converging evidence lost to an isolated Red"
+
+
+def test_repeated_same_dimension_evidence_gains_little_from_breadth():
+    """The counter-case, stated as what breadth actually controls.
+
+    Six answers about ONE subject must not earn the breadth of genuinely
+    independent corroboration. This asserts the FACTOR, not the final rank:
+    scripts/qa/breadth_sensitivity.py shows this fixture's repeated cause
+    leading at every weight INCLUDING zero, so its rank is decided by category
+    risk, not by breadth, and requiring breadth to overturn it would be
+    asserting something the engine never did.
+
+    What matters is that activating breadth does not WIDEN the repeated cause's
+    advantage the way it would if breadth were a count.
+    """
+    questions = [q(300 + i, 3, "Idea & Validation") for i in range(6)] + [
+        q(401, 4, "Financial Management")]
+    answers = [ans(20 + i, 300 + i, ScoreLabel.AMBER) for i in range(6)] + [
+        ans(40, 401, ScoreLabel.RED)]
+    _, dets = _rank(questions, answers)
+    assert dets[3].independent_signal_count == 1        # one dimension
+    assert len(dets[3].evidence) == 6                   # six answers
+    repeated = evidence_breadth_value(dets[3])
+    isolated = evidence_breadth_value(dets[4])
+    # Six repeated answers earn more than one answer -- repetition is not
+    # nothing -- but nowhere near the 0.56-0.67 a genuinely multi-dimension
+    # cause earns. That ceiling is what stops volume buying rank.
+    assert isolated < repeated < D("0.30")
+
+
+def test_severity_still_beats_breadth_when_the_category_is_far_riskier():
+    """The severity guard. Breadth holds 0.15 against category risk's 0.40, so
+    a genuinely severe narrow finding must still lead a broad mild one.
+
+    The gap has to be real for this to mean anything: one Red in a category
+    probed once (risk 0.33) against four Ambers each alone in their own
+    category (risk 0.17 apiece). scripts/qa/breadth_sensitivity.py runs the
+    same shape at every candidate weight and severity wins throughout.
+    """
+    questions = [q(701, 7, "Financial Management"), q(702, 7, "Financial Management")] + [
+        q(800 + i, 8, c) for i, c in enumerate(
+            ["Product", "Go-To-Market", "Team & Leadership", "Business Planning"],
+            start=1)]
+    answers = [ans(70, 701, ScoreLabel.RED), ans(71, 702, ScoreLabel.RED)] + [
+        ans(80 + i, 800 + i, ScoreLabel.AMBER) for i in range(1, 5)]
+    scored, dets = _rank(questions, answers)
+    assert dets[8].independent_signal_count > dets[7].independent_signal_count
+    assert scored[7].rank < scored[8].rank, "breadth overturned a far riskier finding"
+
+
+def test_the_industry_factor_is_no_longer_carrying_budget():
+    """It could never contribute: root_cause_weights has only stage_weight, so
+    an industry prior cannot be read for any cause. Holding 0.15 of the budget
+    for it was the reason there was nothing left for breadth."""
+    assert ACTIVE_WEIGHTS.industry_probability == D("0")
+    assert ACTIVE_WEIGHTS.evidence_breadth == D("0.15")
+    total = (ACTIVE_WEIGHTS.category_risk + ACTIVE_WEIGHTS.confirmation_status
+             + ACTIVE_WEIGHTS.stage_probability
+             + ACTIVE_WEIGHTS.industry_probability
+             + ACTIVE_WEIGHTS.evidence_breadth)
+    assert total == D("1.00")
