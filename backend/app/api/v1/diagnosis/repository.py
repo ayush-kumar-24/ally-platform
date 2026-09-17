@@ -22,6 +22,8 @@ class DiagnosisRepository:
         self._problem_to_pillar: dict[int, int] | None = None
         #: Same, for problem_to_dimension().
         self._problem_to_dimension: dict[int, str] | None = None
+        #: Same, for problem_to_code().
+        self._problem_to_code: dict[int, str] | None = None
 
     # --- Sessions ---
 
@@ -290,6 +292,32 @@ class DiagnosisRepository:
                 problem_id: dimension_code for problem_id, dimension_code in rows
             }
         return self._problem_to_dimension
+
+    def problem_to_code(self) -> dict[int, str]:
+        """{problem_id: problem_code} for the whole catalogue.
+
+        Same shape, size and memoisation rationale as `problem_to_pillar`, and
+        again a separate query rather than another column on it: that map is
+        load-bearing for scoring, this one only feeds the context gate
+        (`context_scope`), and a caller must not be able to treat a missing
+        code as a missing pillar.
+
+        The code is the stable, human-checkable identity of a problem --
+        `problem_id` is a surrogate key that migrations have reassigned before,
+        so a precondition map keyed on ids would silently point at the wrong
+        problems after a reseed. Keying on codes is why that map is reviewable.
+        """
+        if self._problem_to_code is None:
+            rows = self.db.execute(
+                _text(
+                    "select problem_id, problem_code from problems "
+                    "where problem_code is not null"
+                )
+            ).all()
+            self._problem_to_code = {
+                problem_id: problem_code for problem_id, problem_code in rows
+            }
+        return self._problem_to_code
 
     def answered_count_per_pillar_category(
         self, session_id: int
