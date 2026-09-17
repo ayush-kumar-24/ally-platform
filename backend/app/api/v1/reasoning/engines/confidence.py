@@ -188,9 +188,33 @@ class WeightedConfidenceModel(ConfidenceModel):
     ) -> ScoredRootCause:
         weights = context.config.ranking_weights
 
-        # 1. Category risk (already normalised 0..1 by the diagnostic layer).
-        cat_available = detection.category_risk_score is not None
-        cat_value = _clamp(detection.category_risk_score or _ZERO, _ZERO, _ONE)
+        # 1. Category risk -- the RANKING-facing reading when the detection
+        # carries one, falling back to the founder-facing value otherwise.
+        #
+        # These are two different questions and were previously answered by one
+        # number. `category_risk_score` is the founder's health model: a mean
+        # over the answers in one category, so a category asked once and
+        # answered Red reads 1.0 while a category asked five times reads 0.5 on
+        # the same evidence. The adaptive interview asks MORE questions where it
+        # suspects a problem, so that reading penalised the engine's own
+        # investigation -- and with confirmation constant and both priors absent,
+        # it decided the whole ranking in the live QA runs.
+        #
+        # `ranking_category_risk` smooths the per-category intensity with a
+        # prior and averages it across every category the cause actually draws
+        # evidence from. The founder-facing value is untouched: report flags,
+        # health bands, the NO_CLEAR_DIAGNOSIS gate and every stored session
+        # value still read it, and it is still what this model reports back on
+        # the ScoredRootCause.
+        #
+        # The fallback matters for compatibility: a detection built by older
+        # code, or by an enricher, has no ranking value and keeps the previous
+        # behaviour exactly.
+        ranking_risk = getattr(detection, "ranking_category_risk", None)
+        cat_source = (ranking_risk if ranking_risk is not None
+                      else detection.category_risk_score)
+        cat_available = cat_source is not None
+        cat_value = _clamp(cat_source or _ZERO, _ZERO, _ONE)
 
         # 2. Confirmation multiplier (0.5 / 1.0 / 1.5) -- always available.
         conf_multiplier = self._multiplier(detection.confirmation_status, multipliers)
@@ -257,7 +281,13 @@ class WeightedConfidenceModel(ConfidenceModel):
 
         return ScoredRootCause(
             root_cause_id=detection.root_cause_id,
-            category_risk_score=cat_value,
+            # The FOUNDER-FACING value, deliberately not `cat_value`: this is
+            # what is persisted on detected_root_causes and surfaced, and its
+            # meaning must not silently change to the ranking reading.
+            category_risk_score=_clamp(
+                detection.category_risk_score
+                if detection.category_risk_score is not None else _ZERO,
+                _ZERO, _ONE),
             confirmation_status=detection.confirmation_status,
             confirmation_multiplier=conf_multiplier,
             stage_probability=stage_value,

@@ -158,6 +158,28 @@ class RootCauseDetection:
     # detection_score is this divided by its own maximum, which is exactly the
     # step that loses the quantity.
     evidence_mass: Decimal = Decimal("0")
+    # --- Option C: a ranking-facing risk, separate from the founder-facing one
+    # `category_risk_score` above is the founder's diagnostic health model. It is
+    # a MEAN over the answers in one category, so a category asked once and
+    # answered Red scores the maximum 1.0 while a category asked five times
+    # scores 0.5 on the same evidence. Since the adaptive interview asks MORE
+    # questions where it suspects a problem, that reading penalises the engine's
+    # own investigation, and it decided both live QA inversions.
+    #
+    # It stays exactly as it is: report flags, health bands, the
+    # NO_CLEAR_DIAGNOSIS gate and every stored session value depend on it.
+    #
+    # `ranking_category_risk` answers a different question -- how much relevant
+    # evidence did we actually collect about THIS cause -- and only the ranker
+    # reads it. Two differences from the founder-facing value:
+    #   * the per-category intensity is smoothed by a prior, so one question
+    #     answered Red cannot reach the maximum;
+    #   * it is averaged across every category this cause draws evidence from,
+    #     weighted by the evidence in each, rather than borrowed whole from the
+    #     single "dominant" category, which discards the rest.
+    # None when no category the cause touches carries a risk, and absence is
+    # recorded rather than read as zero.
+    ranking_category_risk: Decimal | None = None
 
 
 @dataclass(frozen=True)

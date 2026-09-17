@@ -167,13 +167,35 @@ class _NoPriors:
         return None
 
 
+def category_risks_for(questions, answers):
+    """Compute risks the way production does -- for EVERY answered category.
+
+    Hand-written partial risk lists are what produced the earlier false finding
+    that category_risk_score could be None in production. It cannot: every
+    answered category gets a row. Mirroring that here keeps the analysis honest.
+    """
+    by_cat: dict[str, list] = {}
+    cat_of = {x.question_id: x.category for x in questions}
+    for a in answers:
+        by_cat.setdefault(cat_of[a.question_id], []).append(a)
+    rows = []
+    for category, members in sorted(by_cat.items()):
+        raw = sum((m.score for m in members), D("0"))
+        max_score = D("2") * len(members)
+        norm = min(D("1"), raw / max_score) if max_score else D("0")
+        rows.append(CategoryRisk(category=category, raw_score=raw,
+                                 max_score=max_score, normalised_risk=norm,
+                                 is_flagged=norm >= D("0.5")))
+    return rows
+
+
 def run(scenario: dict, breadth: Decimal):
     w = weights_for(breadth)
     c = ctx(w)
     engine = StandardRootCauseEngine(repository=None)
     qmap = {x.question_id: x for x in scenario["questions"]}
-    detections = engine.detect(list(scenario["answers"]), list(scenario["risks"]),
-                               qmap, c)
+    risks = category_risks_for(scenario["questions"], scenario["answers"])
+    detections = engine.detect(list(scenario["answers"]), risks, qmap, c)
     model = WeightedConfidenceModel(repository=_NoPriors())
     scored = model.score_and_rank(detections, c)
     by_id = {d.root_cause_id: d for d in detections}
@@ -206,7 +228,8 @@ def main() -> None:
                 print(f"     #{rank}  {label:<34} score={score}  "
                       f"dims={det.independent_signal_count} mass={det.evidence_mass} "
                       f"breadth={bv} direct={direct}/{len(det.evidence)} "
-                      f"det_score={det.detection_score}")
+                      f"cat_founder={det.category_risk_score} "
+                      f"cat_ranking={det.ranking_category_risk}")
             want = scenario.get("want")
             if want is not None:
                 ok = "OK " if winner == want else "NOT MET"

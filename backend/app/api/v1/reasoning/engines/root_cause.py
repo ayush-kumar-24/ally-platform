@@ -76,6 +76,9 @@ class StandardRootCauseEngine(RootCauseEngine):
         }
         flagged_categories = {c.category for c in category_risks if c.is_flagged}
         risk_by_category = {c.category: c.normalised_risk for c in category_risks}
+        # The full rows too: the ranking-facing intensity needs raw_score and
+        # max_score, which the normalised map has already divided away.
+        risk_rows = {c.category: c for c in category_risks}
 
         # Group every classification under the root cause its question maps to.
         # Classifications whose question is not in the bank are skipped -- they
@@ -96,6 +99,7 @@ class StandardRootCauseEngine(RootCauseEngine):
                 follow_up_by_question=follow_up_by_question,
                 flagged_categories=flagged_categories,
                 risk_by_category=risk_by_category,
+                risk_rows=risk_rows,
                 context=context,
             )
             if detection is not None:
@@ -144,6 +148,7 @@ class StandardRootCauseEngine(RootCauseEngine):
         follow_up_by_question: dict[int, AnswerClassification],
         flagged_categories: set[str],
         risk_by_category: dict[str, Decimal],
+        risk_rows: dict[str, object],
         context: ReasoningContext,
     ) -> RootCauseDetection | None:
         negative = [m for m in members if m.label != ScoreLabel.GREEN]
@@ -222,9 +227,64 @@ class StandardRootCauseEngine(RootCauseEngine):
             evidence=evidence,
             contributing_factors=contributing_factors,
             category_risk_score=risk_by_category.get(category),
+            ranking_category_risk=self._ranking_category_risk(negative, questions, risk_rows),
             independent_signal_count=independent_signal_count,
             evidence_mass=evidence_mass,
         )
+
+    #: Smoothing prior for the ranking-facing category intensity, in questions.
+    #: The founder-facing mean divides by the questions actually asked, so one
+    #: question answered Red scores 1.0 -- the maximum the scale allows, from a
+    #: single answer. Adding k pseudo-questions to the denominator means a
+    #: category has to be probed more than once to reach a high intensity, which
+    #: removes the "asking again lowers the score" artifact without touching the
+    #: founder-facing number. k = 2 is the smallest value that stops a single
+    #: answer dominating; it is deliberately not tuned to a persona.
+    _RANKING_RISK_PRIOR = Decimal("2")
+
+    def _ranking_category_risk(
+        self,
+        negative: list[AnswerClassification],
+        questions: dict[int, "Question"],
+        risk_rows: dict[str, object],
+    ) -> Decimal | None:
+        """Evidence-weighted category intensity for THIS cause, 0..1.
+
+        Two departures from `category_risk_score`, both deliberate:
+
+        1. Smoothed intensity. raw / (red_band * (asked + k)) instead of
+           raw / (red_band * asked). A category asked once and answered Red
+           reads 0.33 rather than 1.00, so depth of investigation no longer
+           deflates a category and a single answer no longer maxes it out.
+
+        2. Averaged across the categories this cause actually spans, weighted by
+           its own evidence in each. `_dominant_category` picks one label and
+           the ranker borrowed that category's risk whole -- for a cause whose
+           evidence sits in six categories, five were thrown away.
+
+        Returns None when no category carrying this cause's evidence has a risk
+        row, so the ranker can record the factor as unavailable instead of
+        scoring it zero.
+        """
+        weighted = Decimal(0)
+        total = Decimal(0)
+        for m in negative:
+            question = questions.get(m.question_id)
+            category = getattr(question, "category", None) if question else None
+            row = risk_rows.get(category) if category else None
+            if row is None:
+                continue
+            asked = (Decimal(row.max_score) / _MAX_BAND_SCORE
+                     if _MAX_BAND_SCORE else Decimal(0))
+            denominator = _MAX_BAND_SCORE * (asked + self._RANKING_RISK_PRIOR)
+            if denominator <= 0:
+                continue
+            intensity = Decimal(row.raw_score) / denominator
+            weighted += m.score * intensity
+            total += m.score
+        if total <= 0:
+            return None
+        return _q(min(Decimal(1), max(Decimal(0), weighted / total)))
 
     @staticmethod
     def _dimension_of(question_id: int, questions) -> str | None:
