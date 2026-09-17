@@ -31,7 +31,8 @@ from app.api.v1.diagnosis.stage_scope import (
     STRATEGIC_CLARITY,
     TEAM_AND_LEADERSHIP,
 )
-from app.api.v1.reports.document import _coverage_note, _standing
+from app.api.v1.reports.document import (_coverage_note, _pillar_verdicts,
+                                          _standing)
 from app.api.v1.reports.narrator import TemplateNarrator, _pillar_label
 
 IDEATION, EARLY, FULL = 1, 2, 5
@@ -150,12 +151,20 @@ def _slots(pillars):
 
 
 def test_a_concern_line_carries_the_qualifier():
-    prose = TemplateNarrator()._business_dna(_slots([
-        {**_p("Product & Execution", ["Execution Velocity"], 3),
-         "band": "Needs Attention"},
-    ]), TONE)
+    """A partially-scoped concern still says what was actually assessed.
 
-    assert "Product & Execution (Execution Velocity only) — Needs Attention." in prose
+    The verdict now renders as a card rather than a sentence, so the qualifier
+    rides the card's own scope line instead of the pillar's name -- same claim,
+    read in the same glance. Asserted here because a card that dropped it would
+    tell a pre-launch founder their whole product was assessed when what was
+    assessed was how fast they move.
+    """
+    pillar = {**_p("Product & Execution", ["Execution Velocity"], 3),
+              "band": "Needs Attention"}
+    verdicts = _pillar_verdicts([pillar])
+
+    assert "Execution Velocity only" in verdicts
+    assert "Needs Attention" in verdicts
 
 
 def test_the_strongest_list_carries_the_qualifier_too():
@@ -172,14 +181,25 @@ def test_the_strongest_list_carries_the_qualifier_too():
 
 def test_a_fully_scoped_report_reads_exactly_as_it_did():
     """The regression guard. Every pillar at Growth is covered in full, so no
-    founder at that stage sees a qualifier anywhere."""
-    prose = TemplateNarrator()._business_dna(_slots([
+    founder at that stage sees a qualifier anywhere.
+
+    The per-pillar verdict moved out of the prose and into the document's
+    verdict list (document._pillar_verdicts) -- six of them joined into one
+    paragraph was the least readable block in the report. The qualifier rule is
+    unchanged and is asserted in both places, because either one rendering a
+    stray "(... only)" is the bug this guards.
+    """
+    pillars = [
         {**_p("Market Clarity", ["a", "b", "c", "d"], 4), "band": "Strong"},
         {**_p("Team & Leadership", ["a", "b", "c"], 3), "band": "Critical Gap"},
-    ]), TONE)
-
+    ]
+    prose = TemplateNarrator()._business_dna(_slots(pillars), TONE)
     assert "only)" not in prose
-    assert "Team & Leadership — Critical Gap." in prose
+
+    verdicts = _pillar_verdicts(pillars)
+    assert "only" not in verdicts
+    assert "Team &amp; Leadership" in verdicts
+    assert "Critical Gap" in verdicts
 
 
 # --- the HTML document ------------------------------------------------------

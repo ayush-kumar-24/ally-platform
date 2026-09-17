@@ -70,6 +70,69 @@ _FACTOR_CATEGORY_RISK = "category_risk"
 _FACTOR_CONFIRMATION = "confirmation"
 _FACTOR_STAGE_PROBABILITY = "stage_probability"
 _FACTOR_INDUSTRY_PROBABILITY = "industry_probability"
+_FACTOR_EVIDENCE_BREADTH = "evidence_breadth"
+
+# --- evidence breadth -------------------------------------------------------
+# Saturation constants for the breadth factor. Both are shaped, not tuned to a
+# persona: the point is diminishing returns, so that a second dimension matters
+# a lot and a ninth matters little.
+#
+# _BREADTH_K: dimensions beyond the first needed to reach half credit. With
+# k = 2, one dimension scores 0 -- a single dimension is not breadth by any
+# reading -- two score 0.33, three 0.50, six 0.71.
+_BREADTH_K = Decimal("2")
+# _DEPTH_M0: evidence mass at which depth reaches half credit. 4 is two Reds or
+# four Ambers, i.e. the point where repetition has genuinely said something.
+_DEPTH_M0 = Decimal("4")
+# How the two halves divide. Independence leads because the failure being fixed
+# is breadth being invisible; depth is kept so that repetition is not worth
+# nothing, which is the Desi Protein case -- the founder really did say it six
+# times, it is simply one pattern rather than six.
+_W_INDEPENDENCE = Decimal("0.6")
+_W_DEPTH = Decimal("0.4")
+
+
+def evidence_breadth_value(detection) -> Decimal:
+    """How broadly corroborated a detection is, 0..1. Pure, no config reads.
+
+    Three parts, deliberately NOT a count:
+
+      independence  distinct dimensions beyond the first, saturating. Six
+                    answers on one subject score zero here; six answers across
+                    six subjects score high. This is the part detection_score's
+                    mean throws away.
+      depth         evidence mass, saturating. Repetition earns something, so a
+                    founder who says the same thing six times is not treated as
+                    having said it once -- but it cannot masquerade as breadth.
+      directness    the share of evidence given straight to a question mapped to
+                    this cause. Everything the deterministic engine produces is
+                    direct today, so this is 1.0 in practice; it is applied as a
+                    multiplier now so that inferred evidence, when a producer
+                    exists, is worth less than a founder's own words rather than
+                    being worth the same.
+
+    Severity is untouched. This factor only says how WIDELY a cause is
+    supported; how BADLY it scores is category risk and confirmation, which keep
+    their weights. A single severe answer can still outrank a broad one.
+    """
+    count = max(int(getattr(detection, "independent_signal_count", 0) or 0), 0)
+    mass = Decimal(getattr(detection, "evidence_mass", 0) or 0)
+
+    beyond_first = Decimal(max(count - 1, 0))
+    independence = (beyond_first / (beyond_first + _BREADTH_K)
+                    if beyond_first > 0 else _ZERO)
+    depth = mass / (mass + _DEPTH_M0) if mass > 0 else _ZERO
+
+    evidence = tuple(getattr(detection, "evidence", ()) or ())
+    if evidence:
+        direct = sum(1 for e in evidence
+                     if getattr(e, "directness", "direct") == "direct")
+        directness = Decimal(direct) / Decimal(len(evidence))
+    else:
+        directness = _ZERO
+
+    return _clamp(_q(directness * (_W_INDEPENDENCE * independence
+                                   + _W_DEPTH * depth)), _ZERO, _ONE)
 
 
 def _q(value: Decimal) -> Decimal:
@@ -125,9 +188,33 @@ class WeightedConfidenceModel(ConfidenceModel):
     ) -> ScoredRootCause:
         weights = context.config.ranking_weights
 
-        # 1. Category risk (already normalised 0..1 by the diagnostic layer).
-        cat_available = detection.category_risk_score is not None
-        cat_value = _clamp(detection.category_risk_score or _ZERO, _ZERO, _ONE)
+        # 1. Category risk -- the RANKING-facing reading when the detection
+        # carries one, falling back to the founder-facing value otherwise.
+        #
+        # These are two different questions and were previously answered by one
+        # number. `category_risk_score` is the founder's health model: a mean
+        # over the answers in one category, so a category asked once and
+        # answered Red reads 1.0 while a category asked five times reads 0.5 on
+        # the same evidence. The adaptive interview asks MORE questions where it
+        # suspects a problem, so that reading penalised the engine's own
+        # investigation -- and with confirmation constant and both priors absent,
+        # it decided the whole ranking in the live QA runs.
+        #
+        # `ranking_category_risk` smooths the per-category intensity with a
+        # prior and averages it across every category the cause actually draws
+        # evidence from. The founder-facing value is untouched: report flags,
+        # health bands, the NO_CLEAR_DIAGNOSIS gate and every stored session
+        # value still read it, and it is still what this model reports back on
+        # the ScoredRootCause.
+        #
+        # The fallback matters for compatibility: a detection built by older
+        # code, or by an enricher, has no ranking value and keeps the previous
+        # behaviour exactly.
+        ranking_risk = getattr(detection, "ranking_category_risk", None)
+        cat_source = (ranking_risk if ranking_risk is not None
+                      else detection.category_risk_score)
+        cat_available = cat_source is not None
+        cat_value = _clamp(cat_source or _ZERO, _ZERO, _ONE)
 
         # 2. Confirmation multiplier (0.5 / 1.0 / 1.5) -- always available.
         conf_multiplier = self._multiplier(detection.confirmation_status, multipliers)
@@ -140,6 +227,17 @@ class WeightedConfidenceModel(ConfidenceModel):
         # 4. Industry-adjusted prior via the injected strategy.
         industry_value, industry_available = self._industry_probability(
             context, industry_weights, detection.root_cause_id
+        )
+
+        # 5. Evidence breadth (Phase B). Weight defaults to zero, so this
+        # contributes nothing and changes no ranking until a weight is set in
+        # scoring_rules. `available` reports whether the detection actually
+        # carried breadth data -- a detection built by older code has none, and
+        # absence is recorded rather than invented, as with the other factors.
+        breadth_value = evidence_breadth_value(detection)
+        breadth_available = bool(
+            getattr(detection, "independent_signal_count", 0)
+            or getattr(detection, "evidence_mass", 0)
         )
 
         components = (
@@ -171,12 +269,25 @@ class WeightedConfidenceModel(ConfidenceModel):
                 _q(weights.industry_probability * industry_value),
                 industry_available,
             ),
+            ScoreComponent(
+                _FACTOR_EVIDENCE_BREADTH,
+                weights.evidence_breadth,
+                breadth_value,
+                _q(weights.evidence_breadth * breadth_value),
+                breadth_available,
+            ),
         )
         final = _q(sum((c.contribution for c in components), _ZERO))
 
         return ScoredRootCause(
             root_cause_id=detection.root_cause_id,
-            category_risk_score=cat_value,
+            # The FOUNDER-FACING value, deliberately not `cat_value`: this is
+            # what is persisted on detected_root_causes and surfaced, and its
+            # meaning must not silently change to the ranking reading.
+            category_risk_score=_clamp(
+                detection.category_risk_score
+                if detection.category_risk_score is not None else _ZERO,
+                _ZERO, _ONE),
             confirmation_status=detection.confirmation_status,
             confirmation_multiplier=conf_multiplier,
             stage_probability=stage_value,

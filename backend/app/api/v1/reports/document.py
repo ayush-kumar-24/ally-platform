@@ -754,6 +754,42 @@ _FACTS_SKIP = {
 }
 
 
+def _pillar_verdicts(pillars: Sequence[Mapping[str, Any]]) -> str:
+    """The per-pillar verdicts as a list, one card each.
+
+    These used to arrive as narrator prose: six verdicts, each a name, a band
+    and a paragraph of description, joined with spaces into a single block that
+    ran most of a page. It was the densest thing in the report and the least
+    readable, which is backwards -- this is the section founders come for.
+
+    Structured here instead, from the same facts the narrator was handed, so
+    each pillar gets its own row and the band is a chip rather than a phrase
+    buried mid-sentence. Concerns lead, because they are what to act on.
+    """
+    ranked = [p for p in pillars if p.get("band")]
+    if not ranked:
+        return ""
+    order = {"Critical Gap": 0, "Needs Attention": 1, "Developing": 2, "Strong": 3}
+    ranked.sort(key=lambda p: order.get(str(p.get("band")), 9))
+    items = []
+    for p in ranked:
+        band = str(p.get("band") or "")
+        tone = {"Critical Gap": "t-critical", "Needs Attention": "t-critical",
+                "Developing": "t-watch"}.get(band, "t-ok")
+        name = str(p.get("pillar_name") or "Pillar")
+        note = _coverage_note(p)
+        desc = str(p.get("band_description") or "").strip()
+        items.append(
+            f'<li class="verdict {tone}">'
+            f'<div class="verdict-head"><span class="verdict-name">{e(name)}</span>'
+            f'<span class="verdict-band">{e(band)}</span></div>'
+            + (f'<span class="verdict-scope">{e(note)}</span>' if note else "")
+            + (f'<p class="verdict-desc">{e(desc)}</p>' if desc else "")
+            + '</li>'
+        )
+    return f'<ul class="verdicts">{"".join(items)}</ul>'
+
+
 def _section_body(key: str, narrative, ctx: Mapping[str, Any]) -> str:
     """The body of one numbered section: its prose, plus whatever visual
     treatment that section has.
@@ -780,7 +816,9 @@ def _section_body(key: str, narrative, ctx: Mapping[str, Any]) -> str:
         # only the prose is wrapped here.
         return f'<div class="care">{prose}</div>' if prose else ""
     if key == "business_dna":
-        extra = _standing(ctx["pillars"], ctx["bands"]) + _high_low(ctx["categories"])
+        extra = (_standing(ctx["pillars"], ctx["bands"])
+                 + _pillar_verdicts(_facts(narrative, "business_dna").get("pillars") or [])
+                 + _high_low(ctx["categories"]))
     elif key == "problem_path":
         # The narrative's prose is rendered INSIDE _root_cause (it leads the
         # trail), so it must not be prepended here too. When there is no cause

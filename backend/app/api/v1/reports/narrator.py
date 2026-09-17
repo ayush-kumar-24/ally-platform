@@ -279,14 +279,26 @@ class TemplateNarrator:
             parts.append(
                 "Strongest: " + ", ".join(_pillar_label(p) for p in strong) + "."
             )
-        concern = [p for p in pillars if p.get("band") in ("Critical Gap", "Needs Attention")]
-        for p in concern:
-            desc = p.get("band_description")
-            line = f"{_pillar_label(p)} — {p.get('band')}."
-            if desc:
-                line += f" {desc}"
-            parts.append(line)
-        return " ".join(parts)
+        # A red-flagged pillar is named in the prose itself. The rest of the
+        # verdicts are not: the list below carries them (see below), but a red
+        # flag is the one thing that must not depend on a reader scanning a
+        # list, and test_unrelated_pillar_red_flag_does_not_trigger_section_h
+        # pins that it surfaces here rather than only in a section that may not
+        # render at all.
+        flagged = [str(p.get("pillar_name")) for p in pillars
+                   if p.get("red_flag_triggered") and p.get("pillar_name")]
+        if flagged:
+            parts.append(
+                "Flagged for immediate attention: " + ", ".join(flagged) + "."
+            )
+        # The per-pillar verdicts are NOT prose. Each one is a name, a band and
+        # a paragraph of description, and joining six of them with spaces
+        # produced a single unreadable block that ran most of a page -- the
+        # densest thing in the report and the least readable, which is backwards
+        # for the section founders come for. The document renders them from
+        # these same facts as a list (document._pillar_verdicts), so writing
+        # them here too would print every verdict twice.
+        return "\n\n".join(parts)
 
     def _problem_path(self, s, tone):
         intro = {"Validator": "What your answers point to: ",
