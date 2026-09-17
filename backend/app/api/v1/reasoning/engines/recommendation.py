@@ -86,12 +86,28 @@ class DefaultInterventionRelevance:
         stage_ok = not stages or stage_id is None or stage_id in stages
 
         industries = list(industry_relevance or [])
-        industry_ok = (
-            not industries
-            or _UNIVERSAL_INDUSTRY in industries
-            or industry_code is None
-            or industry_code in industries
-        )
+        if not industries or _UNIVERSAL_INDUSTRY in industries:
+            # Unrestricted: applies to every founder, industry known or not.
+            industry_ok = True
+        elif industry_code is None:
+            # RESTRICTED intervention, UNKNOWN founder industry -> withhold.
+            #
+            # This is the one place the relevance test fails CLOSED, and only
+            # because the intervention itself declares it is not universal. The
+            # steps under such a row presuppose a business model: measured in
+            # QA, a B2B logistics founder was told to "assign one person
+            # authority to say no to feature requests" and to "set up usage
+            # tracking for your next feature launch" as his first action.
+            # Admitting those to someone whose industry we cannot determine is
+            # the failure mode the tag exists to prevent, so absence of the fact
+            # withholds rather than admits.
+            #
+            # Everything unrestricted still reaches everyone, so an
+            # un-onboarded founder loses nothing they would otherwise get --
+            # they only lose rows that were never meant to be universal.
+            industry_ok = False
+        else:
+            industry_ok = industry_code in industries
         return stage_ok and industry_ok
 
 

@@ -49,7 +49,9 @@ class SymptomDetector:
 
         by_problem: dict[int, list[AnswerClassification]] = defaultdict(list)
         for c in classifications:
-            if c.label == ScoreLabel.GREEN:
+            # Green is not a symptom; NOT_APPLICABLE is not evidence at all and
+            # would put a None score into the severity sum below.
+            if c.label == ScoreLabel.GREEN or not c.label.is_scored:
                 continue
             question = questions.get(c.question_id)
             if question is not None:

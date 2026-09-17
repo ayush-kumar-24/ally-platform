@@ -88,6 +88,11 @@ class StandardRootCauseEngine(RootCauseEngine):
             question = questions.get(c.question_id)
             if question is None:
                 continue
+            # NOT_APPLICABLE never becomes evidence: it is not a signal that
+            # this cause is present OR absent, so it must not open a detection
+            # and must not sit in `members` diluting detection_confidence.
+            if not c.label.is_scored:
+                continue
             grouped[question.root_cause_id].append(c)
 
         detections: list[RootCauseDetection] = []
@@ -195,12 +200,34 @@ class StandardRootCauseEngine(RootCauseEngine):
         independent_signal_count = len(dimensions)
         evidence_mass = _q(sum((m.score for m in negative), Decimal(0)))
 
-        # detection_confidence: corroboration across ALL probes of this root
-        # cause, Green included. A Green answer is evidence the cause is NOT
-        # active, so it lowers confidence -- distinguishing "one isolated Red" from
-        # "Red across everything we asked".
+        # detection_confidence: how sure we are the cause is actually PRESENT.
+        #
+        # Two factors, because they answer different questions and the previous
+        # formula answered only the first:
+        #
+        #   intensity     -- how bad the answers were, across ALL probes of this
+        #                    cause, Green included. A Green is evidence the cause
+        #                    is NOT active, so it pulls intensity down and
+        #                    distinguishes "one isolated Red" from "Red across
+        #                    everything we asked".
+        #   corroboration -- how much we actually asked. One probe cannot
+        #                    corroborate itself.
+        #
+        # Without the second factor a single Red answer produced
+        # detection_confidence = 2.0 / (2 * 1) = 1.0 -- maximum confidence from
+        # one sentence. Measured in QA: 6 of 8 root causes rested on a single
+        # answer and 6 carried confidence 1.0000, in all three personas.
+        #
+        # Corroboration is n / (n + 1): 0.50 at one probe, 0.67 at two, 0.75 at
+        # three, approaching 1 thereafter. Deliberately gentle -- it caps a
+        # lone answer at half confidence without punishing a cause the interview
+        # only had budget to probe twice, and it never reaches 1.0, because no
+        # finite number of probes makes a diagnosis certain.
         max_all = _MAX_BAND_SCORE * len(members)
-        detection_confidence = _q(sum((m.score for m in members), Decimal(0)) / max_all)
+        intensity = sum((m.score for m in members), Decimal(0)) / max_all
+        probes = Decimal(len(members))
+        corroboration = probes / (probes + Decimal(1))
+        detection_confidence = _q(intensity * corroboration)
 
         confirmation_status = self._confirmation_status(
             members=members,
