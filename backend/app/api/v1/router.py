@@ -4,6 +4,7 @@ from sqlalchemy import text
 from app.api.v1.chat.router import router as chat_api_router
 from app.api.v1.calendar.router import router as calendar_router
 from app.api.v1.planning.router import router as planning_router
+from app.api.v1.quotes.router import router as quotes_router
 from app.api.v1.founder_goals.router import router as founder_goals_router
 from app.api.v1.achievements.router import router as achievements_router
 from app.api.v1.vision.router import public_router as vision_public_router
@@ -73,6 +74,7 @@ api_router.include_router(reports_public_router)
 api_router.include_router(reports_router)
 api_router.include_router(chat_api_router)
 api_router.include_router(planning_router)
+api_router.include_router(quotes_router)
 api_router.include_router(calendar_router)
 api_router.include_router(founder_goals_router)
 api_router.include_router(achievements_router)
