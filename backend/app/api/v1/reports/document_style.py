@@ -109,12 +109,27 @@ STYLE = """
 .rp .care p{color:#38493E;}
 
 .rp .bars{display:flex;flex-direction:column;gap:15px;}
-.rp .bar-row{display:grid;grid-template-columns:190px minmax(0,1fr) 54px;align-items:center;gap:18px;}
+.rp .bar-row{display:grid;grid-template-columns:180px minmax(0,1fr) 116px;align-items:center;gap:16px;}
 .rp .bar-name{font-size:14.5px;font-weight:500;color:var(--ink);}
 .rp .bar-weight{display:block;font-size:11.5px;color:var(--ink-faint);font-weight:400;}
+/* Per-pillar verdicts. Was one run-on prose block; now a card each, so a
+   founder can find their weakest pillar without reading the whole thing. */
+.rp .verdicts{list-style:none;margin:22px 0 0;padding:0;display:flex;flex-direction:column;gap:10px;}
+.rp .verdict{border:1px solid #E7E1D6;border-left:3px solid #C9C2B4;border-radius:8px;padding:11px 14px;background:#FCFBF8;break-inside:avoid;page-break-inside:avoid;}
+.rp .verdict.t-critical{border-left-color:var(--rust);}
+.rp .verdict.t-watch{border-left-color:var(--amber);}
+.rp .verdict.t-ok{border-left-color:var(--forest-500);}
+.rp .verdict-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;}
+.rp .verdict-name{font-size:14.5px;font-weight:600;color:var(--ink);}
+.rp .verdict-band{font-size:11.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap;}
+.rp .verdict.t-critical .verdict-band{color:var(--rust);}
+.rp .verdict.t-watch .verdict-band{color:var(--amber);}
+.rp .verdict.t-ok .verdict-band{color:var(--forest-500);}
+.rp .verdict-scope{display:block;font-size:11.5px;color:var(--ink-faint);margin-top:2px;}
+.rp .verdict-desc{margin:7px 0 0;font-size:13.5px;line-height:1.55;color:var(--ink-soft,#4a4a44);}
 .rp .bar-track{position:relative;height:9px;border-radius:999px;background:#E7E1D6;overflow:hidden;}
 .rp .bar-fill{height:100%;border-radius:999px;}
-.rp .bar-val{text-align:right;font-size:15px;font-weight:700;font-variant-numeric:tabular-nums;}
+.rp .bar-val{text-align:right;font-size:13px;line-height:1.25;font-weight:700;hyphens:none;overflow-wrap:normal;word-break:keep-all;}
 .rp .t-critical .bar-fill{background:linear-gradient(90deg,#A8412C,var(--rust));}
 .rp .t-critical .bar-val{color:var(--rust);}
 .rp .t-watch .bar-fill{background:linear-gradient(90deg,#B87A22,var(--amber));}
@@ -323,7 +338,8 @@ STYLE = """
 @media (max-width:860px){
   .rp .hero{grid-template-columns:1fr;padding:34px 26px 36px;}
   .rp .split,.rp .cause-grid,.rp .road,.rp .stats{grid-template-columns:1fr;}
-  .rp .bar-row{grid-template-columns:140px minmax(0,1fr) 46px;gap:12px;}
+  .rp .bar-row{grid-template-columns:150px minmax(0,1fr) 104px;gap:12px;}
+  .rp .bar-val{font-size:12px;}
   .rp .shell{padding:18px 16px 70px;}
 }
 @media (prefers-reduced-motion:reduce){.rp *{animation:none!important;transition:none!important;}}
