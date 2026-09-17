@@ -618,3 +618,25 @@ def test_metering_failure_does_not_fail_the_users_request():
 
     gate = ChatGate(founder_id=UID, tier="pro", service=Broken(), enforced=True)
     assert gate.record(1_000) is None          # swallowed, not raised
+
+
+# --- the pricing page's GST line -------------------------------------------
+
+def test_the_catalog_publishes_the_business_gst_rate():
+    """Served rather than hardcoded in the pricing page: a tax rate kept in two
+    places eventually disagrees, and the card would be quoting a number the
+    checkout no longer charges."""
+    from app.api.v1.plans.router import catalog
+
+    assert catalog()["business_gst_percent"] == 18.0
+
+
+def test_no_gst_rate_is_published_when_none_is_charged(monkeypatch):
+    """With no seller GSTIN nothing is added on top -- the same check checkout
+    makes. A card reading "+18% for business" would be advertising a charge
+    that never happens."""
+    from app.api.v1.plans.router import catalog
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "INVOICE_SELLER_GSTIN", "")
+    assert catalog()["business_gst_percent"] is None

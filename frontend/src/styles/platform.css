@@ -1061,6 +1061,9 @@ body.sb-collapsed .sb-toggle .ic{transform:rotate(180deg)}
 .bl-incl-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .bl-incl-item{display:flex;align-items:center;gap:9px;font-size:13px;color:#16241c;font-weight:500}
 
+.pc-gst{margin-top:5px;font-size:11px;color:#6c7a70;line-height:1.45}
+.pc-gst strong{color:#16241c;font-weight:700}
+
 .bl-os-taxnote{margin-top:10px;font-size:11px;line-height:1.55;color:#6c7a70}
 
 /* Personal vs business (checkout) */

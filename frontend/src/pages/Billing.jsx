@@ -112,12 +112,18 @@ function CheckIcon({ size = 18, color = '#10B981' }) {
 function useCatalog() {
   const [plans, setPlans] = useState(MOCK_PLANS);
   const [live, setLive] = useState(false);
+  /* The rate a business purchase adds on top, straight from the backend so the
+     pricing page never keeps its own copy of a tax rate. Null means none is
+     added -- no seller GSTIN is configured -- and the cards then say nothing
+     about business GST rather than advertising a charge that never happens. */
+  const [businessGst, setBusinessGst] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
     getCatalog()
       .then((catalog) => {
         if (cancelled || !catalog?.plans?.length) return;
+        setBusinessGst(catalog.business_gst_percent ?? null);
         const callMins = catalog.call_duration_minutes ?? 15;
         const callPrice = catalog.call_price_inr ?? 300;
         setPlans(catalog.plans.map((p) => {
@@ -176,11 +182,11 @@ function useCatalog() {
     return () => { cancelled = true; };
   }, []);
 
-  return { plans, live };
+  return { plans, live, businessGst };
 }
 
 function PlansView({ onSelectPlan, currentPlan }) {
-  const { plans: PLANS } = useCatalog();
+  const { plans: PLANS, businessGst } = useCatalog();
   return (
     <>
       {/* Hero */}
@@ -222,6 +228,16 @@ function PlansView({ onSelectPlan, currentPlan }) {
                 )}
               </div>
               {plan.price > 0 && <div className="pc-sub">{plan.oneTime ? 'one-time payment' : 'billed monthly'}</div>}
+              {/* Said on the CARD, not just at checkout. The price above is what
+                  a person pays, GST included; a business adds the tax on top and
+                  reclaims it. Meeting that number for the first time on the pay
+                  button, one step after choosing a plan, is the surprise this
+                  line exists to prevent. */}
+              {plan.price > 0 && businessGst !== null && (
+                <div className="pc-gst">
+                  Incl. GST · <strong>+{businessGst}%</strong> for business purchases
+                </div>
+              )}
               <button
                 id={`plan-cta-${plan.id}`}
                 className={`pc-cta${isCurrent ? '' : ' primary'}`}

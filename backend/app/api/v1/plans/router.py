@@ -36,6 +36,8 @@ from app.plans.catalog import (
     get_plan,
 )
 
+from app.payments.invoice import seller_gstin
+
 router = APIRouter(prefix="/plans", tags=["plans"])
 
 
@@ -46,6 +48,14 @@ def catalog() -> dict:
         "tokens_per_credit": TOKENS_PER_CREDIT,
         "call_price_inr": CALL_PRICE_INR,
         "call_duration_minutes": settings.DISCOVERY_CALL_DURATION_MINUTES,
+        # The rate a BUSINESS purchase adds on top, so the pricing page can say
+        # so without keeping its own copy of a tax rate. Null when no seller
+        # GSTIN is configured, because then nothing is added and a card
+        # claiming "+18% for business" would be advertising a charge that
+        # never happens -- the same check checkout itself makes.
+        "business_gst_percent": (
+            settings.INVOICE_GST_PERCENT if seller_gstin() else None
+        ),
         "topup": {"credits": TOPUP_CREDITS, "price_inr": TOPUP_PRICE_INR},
         "plans": [
             {
