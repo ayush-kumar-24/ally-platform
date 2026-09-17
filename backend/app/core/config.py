@@ -638,9 +638,25 @@ class Settings(BaseSettings):
     # than constants because the legal entity behind the product is not this
     # code's business to hardcode -- a name or address change must not need a
     # deploy of the payments module.
-    INVOICE_SELLER_NAME: str = "GoXL Ally"
-    INVOICE_SELLER_ADDRESS: str = ""
+    # The LEGAL ENTITY, not the product. A receipt is issued by a company, and
+    # "GoXL Ally" is the name of a piece of software -- a founder expensing this
+    # or handing it to an accountant needs the name that matches the one on
+    # their bank statement and on the Terms they accepted. Both this and the
+    # address below are the company's own already-published details, taken from
+    # the Grievance Officer block in frontend/src/pages/PrivacyPolicy.jsx so
+    # that two founder-facing documents cannot state different addresses for
+    # the same company. Overridable, like everything else here.
+    INVOICE_SELLER_NAME: str = "GoXL Consulting Solutions Pvt. Ltd."
+    INVOICE_SELLER_ADDRESS: str = ("513, National Plaza, RC Dutt Road, Alkapuri, "
+                                   "Vadodara, Gujarat, India - 390007")
     INVOICE_SELLER_EMAIL: str = ""
+    # Artwork for the document header. Empty uses the bundled Ally mark
+    # (app/payments/assets/ally-logo-mark.png, byte-identical to the
+    # frontend's /ally-logo-mark.png so the receipt and the app cannot show
+    # different logos). Point it at a file to use different artwork -- a
+    # combined GoXL/Ally lockup, say -- with no code change. It is embedded
+    # into the document, so it must be readable from the API container.
+    INVOICE_LOGO_PATH: str = ""
     # The seller's GSTIN. EMPTY IS MEANINGFUL, and it is the default on
     # purpose: with no GSTIN configured the document is rendered as a PAYMENT
     # RECEIPT with no tax breakdown, because a tax invoice that shows a GST
@@ -657,7 +673,11 @@ class Settings(BaseSettings):
     # state) or IGST (inter-state). We do not collect the founder's state, so
     # the honest reading is inter-state unless a founder-side state is known;
     # see invoice.py. Empty means "do not name a place of supply at all".
-    INVOICE_SELLER_STATE: str = ""
+    #
+    # Gujarat, matching the registered address above. Note this does NOT by
+    # itself make an intra-state split possible: that needs the BUYER's state,
+    # which this product never asks for.
+    INVOICE_SELLER_STATE: str = "Gujarat"
     # Prefix for the human-readable document number: ALLY/2026/000123.
     INVOICE_NUMBER_PREFIX: str = "ALLY"
 

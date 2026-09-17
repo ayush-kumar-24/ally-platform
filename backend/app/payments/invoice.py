@@ -26,11 +26,13 @@ first issue as the audit trail of that.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import ROUND_HALF_UP, Decimal
 
 from app.core.config import settings
+from app.core.logger import logger
 from app.plans.catalog import PLANS, PlanTier
 
 #: SAC code for "online information and database access or retrieval services",
@@ -121,6 +123,43 @@ class Invoice:
         return "Tax Invoice" if self.is_tax_invoice else "Payment Receipt"
 
 
+#: A GSTIN is exactly 15 alphanumerics. This is a SHAPE check, not a checksum:
+#: it is here to catch a misconfiguration, not to validate a registration.
+_GSTIN_SHAPE = re.compile(r"^[0-9A-Z]{15}$")
+
+
+def _valid_gstin(raw: str | None) -> str | None:
+    """The configured GSTIN, or None when there isn't a usable one.
+
+    Not `bool(gstin)`, because "non-empty" is a dangerously low bar for the
+    switch that turns a payment receipt into a TAX INVOICE. A .env written as
+
+        INVOICE_SELLER_GSTIN=          # blank = issue receipts
+
+    parses -- in python-dotenv, as this repo's own .env.example did for five
+    other keys -- with the COMMENT as the value. Non-empty, so every receipt
+    would have silently become a tax invoice claiming a GST split under a
+    registration number reading "# blank = issue receipts". Founders would have
+    filed them, and nobody would have found out from this end.
+
+    So the shape is checked and anything else is treated as unset, loudly. The
+    safe direction is unambiguous here: issuing a receipt when a tax invoice
+    was wanted is a config fix, while issuing an invalid tax invoice is a
+    document already in somebody's accounts.
+    """
+    candidate = (raw or "").strip().upper()
+    if not candidate:
+        return None
+    if not _GSTIN_SHAPE.match(candidate):
+        logger.error(
+            "payments: INVOICE_SELLER_GSTIN is not a 15-character GSTIN; issuing "
+            "payment receipts instead of tax invoices until it is corrected",
+            extra={"configured_length": len(candidate)},
+        )
+        return None
+    return candidate
+
+
 def invoice_number(payment_id: int, paid_at: datetime | None) -> str:
     """`ALLY/2026/000123` -- deterministic, so re-issuing is not re-numbering.
 
@@ -197,8 +236,8 @@ def build_invoice(source, *, founder_name: str, founder_email: str,
         )
 
     gross = _money(source.amount_inr)
-    gstin = (settings.INVOICE_SELLER_GSTIN or "").strip()
-    is_tax_invoice = bool(gstin)
+    gstin = _valid_gstin(settings.INVOICE_SELLER_GSTIN)
+    is_tax_invoice = gstin is not None
 
     tax = None
     if is_tax_invoice:

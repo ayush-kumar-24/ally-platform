@@ -315,3 +315,102 @@ def test_a_receipt_is_still_served_when_storage_is_unconfigured(monkeypatch, no_
     assert invoice_pdf.get_or_render_pdf(repo, build(), payment_id=123,
                                          founder_id=7) == b"%PDF-new"
     assert repo.urls == []  # nothing to point at
+
+
+# --- branding and the document's identity ---------------------------------
+
+def test_the_logo_and_fonts_travel_inside_the_document(no_gstin):
+    """Gotenberg has no network. A linked logo is a broken-image box and a
+    linked webfont silently falls back to the wrong typeface -- both invisible
+    until a founder is looking at the PDF."""
+    html = build_invoice_html(build())
+    assert "data:image/png;base64," in html      # the mark
+    assert "data:font/woff2;base64," in html     # the faces
+    assert "<link" not in html
+    # Nothing to fetch at render time, from anywhere.
+    assert "http://" not in html and "https://" not in html
+
+
+def test_a_missing_logo_costs_a_logo_not_a_receipt(monkeypatch, no_gstin):
+    """The header is typography first; the mark is on top of it."""
+    from app.payments import invoice_html
+
+    monkeypatch.setattr(invoice_html, "logo_data_uri", lambda: None)
+    html = invoice_html.build_invoice_html(build())
+    assert "<img" not in html
+    assert "GoXL" in html and "999.00" in html   # the document still works
+
+
+def test_the_company_issues_it_and_the_product_is_what_was_bought(monkeypatch, no_gstin):
+    """Two different names in two different places, on purpose: the founder's
+    bank statement says the company, the thing they bought says the product.
+    Collapsing them leaves a receipt that cannot be matched to its charge."""
+    monkeypatch.setattr(settings, "INVOICE_SELLER_NAME",
+                        "GoXL Consulting Solutions Pvt. Ltd.")
+    html = build_invoice_html(build())
+    assert "GoXL Consulting Solutions Pvt. Ltd." in html   # issuer, in the footer
+    assert "by GoXL Entrepreneurship" in html              # the lockup
+    assert "GoXL Ally — Pro plan" in html                  # what was bought
+
+
+def test_no_place_of_supply_row_is_ever_printed(with_gstin, monkeypatch):
+    """REGRESSION. The first draft printed the SELLER's state under a "Place of
+    supply" label. Under GST that field is the BUYER's state, which this
+    product never collects -- so the row stated the wrong party's location on a
+    tax document. The seller's state is now named as the seller's, in the
+    footer, and only on a tax invoice."""
+    monkeypatch.setattr(settings, "INVOICE_SELLER_STATE", "Gujarat")
+    html = build_invoice_html(build())
+    assert "Place of supply" not in html
+    assert "State of supplier: Gujarat" in html
+
+
+def test_a_receipt_never_names_the_sellers_state(no_gstin, monkeypatch):
+    """It appears only where a tax treatment is being claimed."""
+    monkeypatch.setattr(settings, "INVOICE_SELLER_STATE", "Gujarat")
+    assert "State of supplier" not in build_invoice_html(build())
+
+
+def test_a_refunded_document_is_the_record_of_the_original_charge(with_gstin):
+    """"Amount refunded ₹799" above "Paid on 14 Mar" read as two contradictory
+    facts. The amount is what was charged; the stamp and the note carry the
+    refund."""
+    html = build_invoice_html(build(status="refunded"))
+    assert "Amount paid" in html
+    assert "Total paid" in html
+    assert "Refunded" in html
+    assert "subsequently refunded" in html
+
+
+# --- the GSTIN is the switch, so it is checked before it is trusted -------
+
+@pytest.mark.parametrize("configured", [
+    # The exact string python-dotenv hands back for `KEY=   # comment`, which
+    # is how five keys in this repo's own .env.example were parsed.
+    "# blank = issue payment receipts, not tax invoices",
+    "yes",
+    "29AABCU9603R1Z",       # 14 -- one short
+    "29AABCU9603R1ZMM",     # 16 -- one long
+    "29AABCU9603-1ZM",      # punctuation
+    "   ",
+])
+def test_a_gstin_that_is_not_a_gstin_issues_a_receipt_not_a_tax_invoice(
+        configured, monkeypatch):
+    """Issuing a receipt when a tax invoice was wanted is a config fix. Issuing
+    an INVALID tax invoice is a document already in somebody's accounts."""
+    monkeypatch.setattr(settings, "INVOICE_SELLER_GSTIN", configured)
+    invoice = build()
+    assert invoice.is_tax_invoice is False
+    assert invoice.tax is None
+    assert invoice.seller_gstin is None
+    # The bad value must not be printed anywhere either. Guarded because an
+    # empty needle is trivially "in" any string.
+    if configured.strip():
+        assert configured.strip() not in build_invoice_html(invoice)
+
+
+def test_a_real_gstin_is_accepted_and_normalised(monkeypatch):
+    monkeypatch.setattr(settings, "INVOICE_SELLER_GSTIN", " 29aabcu9603r1zm ")
+    invoice = build()
+    assert invoice.is_tax_invoice is True
+    assert invoice.seller_gstin == "29AABCU9603R1ZM"
