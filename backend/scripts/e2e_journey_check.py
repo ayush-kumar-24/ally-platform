@@ -1852,6 +1852,83 @@ def match_answer(question_text: str, persona: str = "weak") -> tuple[str, bool]:
     return best, True
 
 
+#: What Siddharth -- or any founder -- says when a question revisits ground he
+#: has already covered. Deliberately topic-neutral and carrying no new fact:
+#: the point of a deflection is that it adds nothing, so a band earned on one
+#: is a band the engine assigned to "I already told you", not to the founder.
+_DEFLECTIONS = (
+    "I think I covered that earlier.",
+    "That's related to what I mentioned before -- I don't have anything to add "
+    "beyond it.",
+    "Same answer as before, really.",
+    "I don't have another specific number for that.",
+)
+
+
+class AnswerLedger:
+    """Serves each prepared answer AT MOST ONCE for the length of a run.
+
+    The bank is keyed by topic, not by question, and a stage asks several
+    questions per topic. Without this, the highest-scoring answer is served
+    again every time its topic comes round: in run #24 one answer covered five
+    questions, among them "what does it cost to acquire one paying customer",
+    which it does not address. The engine then scored those repeats as evidence
+    and built two of its three root causes on them.
+
+    That is fine for what this harness was first built for -- proving the
+    engine separates a capable founder from an incapable one, where only the
+    aggregate matters. It is not fine for judging whether a diagnosis follows
+    from its evidence, because the evidence is then something the persona never
+    said. So: once an answer is spent, the next question on that topic gets a
+    deflection, which is what a real founder gives when asked the same thing
+    twice, and which carries no new claim for the engine to score.
+
+    One ledger spans all three phases, because a founder does not get his
+    answers back between them.
+    """
+
+    def __init__(self, persona: str):
+        self.persona = persona
+        self._spent: set[int] = set()
+        self.matched = 0
+        self.deflected = 0
+        self.unknown = 0
+
+    def answer(self, question_text: str) -> tuple[str, bool]:
+        """(answer, matched) -- the same contract match_answer has, so the
+        caller does not care which of the two it is talking to."""
+        low = (question_text or "").lower()
+        best_i, best_rank, spent_hit = None, (0, 0), False
+        for i, (topic, _) in enumerate(ANSWER_BANK[self.persona]):
+            rank = _score(topic, low)
+            if rank[1] < _MATCH_THRESHOLD or rank <= best_rank:
+                continue
+            if i in self._spent:
+                # Records that the topic WAS reached, so a second question on
+                # it deflects rather than falling back -- "I covered that" and
+                # "I have never tracked that" are different founder states and
+                # must not be collapsed.
+                spent_hit = True
+                continue
+            best_i, best_rank = i, rank
+        if best_i is not None:
+            self._spent.add(best_i)
+            self.matched += 1
+            return ANSWER_BANK[self.persona][best_i][1], True
+        if spent_hit:
+            self.deflected += 1
+            return _DEFLECTIONS[self.deflected % len(_DEFLECTIONS)], False
+        self.unknown += 1
+        return FALLBACKS[self.persona], False
+
+    def summary(self) -> str:
+        return (f"  answers served          {self.matched} unique, "
+                f"{self.deflected} deflected (topic already spent), "
+                f"{self.unknown} not known to this founder\n"
+                f"    reuses                  0  (consume-once: an answer is "
+                f"never served twice)")
+
+
 def _tally(pairs) -> dict:
     out: dict = {}
     for _, label in pairs:
@@ -2303,7 +2380,8 @@ def _resolve_existing_founder(db, sa, *, email: str | None = None,
     return fid, label
 
 
-def _walk(client, start_path, answer_path, id_field, label, out, persona="weak"):
+def _walk(client, start_path, answer_path, id_field, label, out, persona="weak",
+          ledger=None):
     """Drive one question/answer phase to completion, recording every question."""
     r = client.post(start_path)
     if r.status_code not in (200, 201):
@@ -2333,7 +2411,13 @@ def _walk(client, start_path, answer_path, id_field, label, out, persona="weak")
     reprompts = 0
     while q:
         out.append(q)
-        answer, matched = match_answer(q.get("question_text", ""), persona)
+        answer, matched = (ledger.answer(q.get("question_text", ""))
+                           if ledger is not None
+                           else match_answer(q.get("question_text", ""), persona))
+        # The transcript has to carry what was actually SAID, not just what
+        # was asked. Without it a reviewer cannot tell a real answer from a
+        # deflection, which is exactly the check run #24 needed and failed.
+        q["_answer_text"] = answer
         # Recorded on the question itself so the summary can separate bands
         # earned by the persona from bands earned by the generic answer.
         q["_fell_back"] = not matched
@@ -2469,15 +2553,20 @@ def run(args) -> int:
     print("\n" + "=" * 74)
     print("JOURNEY")
     print("=" * 74)
+    # One ledger for the whole journey -- a founder does not get his answers
+    # back between phases. --repeat-answers restores the old behaviour, which
+    # is what the earlier discrimination baselines were measured with.
+    ledger = None if args.repeat_answers else AnswerLedger(args.persona)
     ok = (
         _walk(client, "/api/v1/founder-dna/start", "/api/v1/founder-dna/answer",
-              "founder_dna_question_id", "Founder DNA", dna, args.persona)
+              "founder_dna_question_id", "Founder DNA", dna, args.persona,
+              ledger)
         and _walk(client, "/api/v1/current-problem/start",
                   "/api/v1/current-problem/answer",
                   "current_problem_question_id", "Current Problem", problem,
-                  args.persona)
+                  args.persona, ledger)
         and _walk(client, "/api/v1/diagnosis/start", "/api/v1/diagnosis/answer",
-                  "question_id", "Diagnosis", diagnosis, args.persona)
+                  "question_id", "Diagnosis", diagnosis, args.persona, ledger)
     )
     if not ok:
         return 1
@@ -2535,6 +2624,8 @@ def run(args) -> int:
             {"f": fid}).all()
 
     print(f"  answer persona          {args.persona}")
+    if ledger is not None:
+        print(ledger.summary())
     for line in band_summary(rows, fallback_qids):
         print(line)
     with SessionLocal() as db:
@@ -2640,6 +2731,12 @@ def main(argv=None) -> int:
                         "reaction. traction alone proved the engine COVERS "
                         "stage 4; the pair is what proves it DISCRIMINATES "
                         "there, the way weak/strong does at Ideation.")
+    p.add_argument("--repeat-answers", action="store_true",
+                   help="serve the best-matching answer every time its topic "
+                        "comes round, instead of once. The old behaviour: it "
+                        "is what the discrimination baselines were measured "
+                        "with, and it inflates evidence when several questions "
+                        "share a topic.")
     p.add_argument("--json-out", metavar="FILE", help="write the full transcript as JSON")
     args = p.parse_args(argv)
 
@@ -3907,13 +4004,20 @@ _SIDDHARTH_TEXTS = (
 )
 
 _SIDDHARTH_EXTRA = (
-    ((("who actually uses", "daily users", "who uses the product",
-       "actually using it day to day"),
-      ("users", "who uses")),
-     "The HR manager, almost always, and sometimes an HR executive under her. "
-     "One or two per company regardless of company size, which is "
-     "interesting now that I say it out loud. The founder or CFO who approved "
-     "it typically never logs in again after the first month."),
+    # Aimed at the ONE question in the bank that asks the B2B actor split --
+    # "Who actually pays for this, and who actually uses it day to day -- are
+    # they the same person?" -- which otherwise ties with the generic customer
+    # topic and loses on first-topic-wins. The answer covers both halves
+    # because the question asks both.
+    ((("who actually pays", "actually uses it day to day",
+       "are they the same person", "who actually uses", "daily users"),
+      ("users", "who uses", "pays for this")),
+     "No, and that is the whole shape of it. The HR manager uses it, every "
+     "day -- her and maybe one executive under her, and that is true whether "
+     "the company has thirty people or four hundred. The founder or the CFO "
+     "is the one who actually signs and pays, and they typically never log in "
+     "again after the first month. So the person with the pain and the person "
+     "with the budget are two different people."),
     ((("who approves", "who signs off", "economic buyer", "who pays",
        "approving the purchase"),
       ("approve", "sign off", "budget holder")),
