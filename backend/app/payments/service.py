@@ -33,6 +33,7 @@ from app.coupons.service import CouponService
 from app.credits.models import CreditOperation
 from app.credits.service import CreditService
 from app.payments.errors import (
+    InvalidBusinessDetailsError,
     InvalidCheckoutCallbackError,
     InvalidCheckoutError,
     PaymentNotFoundError,
@@ -41,9 +42,15 @@ from app.payments.errors import (
     PaymentsNotConfiguredError,
 )
 from app.payments.gateway import PaymentGateway, PaymentGatewayError
-from app.payments.gst_states import normalise_state
+from app.payments.gst_states import normalise_gstin, normalise_state, state_of_gstin
 from app.payments.invoice import Invoice, build_invoice
-from app.payments.models import CheckoutSession, WebhookOutcome, WebhookResult
+from app.payments.models import (
+    BusinessIdentity,
+    CheckoutSession,
+    PurchaseType,
+    WebhookOutcome,
+    WebhookResult,
+)
 from app.payments.repository import PaymentRepository
 from app.plans.catalog import PLANS, PlanTier
 
@@ -70,6 +77,68 @@ def _one_month_after(start: datetime) -> datetime:
 # system-initiated sentinel app/plans/service.py and app/plans/reconciliation.py
 # already use for a non-admin credit_transactions row.
 _SYSTEM_ADMIN_ID = 0
+
+
+def _checked_business_identity(
+    identity: BusinessIdentity | None, *, place_of_supply: str | None,
+) -> BusinessIdentity | None:
+    """Vet a business buyer's tax identity, or refuse the checkout.
+
+    Three checks, in the order a founder would hit them:
+
+    1. A GSTIN and a legal name are both REQUIRED. A tax invoice without the
+       buyer's registration is one their company cannot claim credit against,
+       and the whole point of choosing "business" was to get a claimable one.
+       The registered name matters for the same reason -- it is frequently not
+       the founder's own name, and the credit is claimed against the entity.
+
+    2. The GSTIN must be shaped like a GSTIN. A typo here is silent: the
+       document looks perfect and is rejected at their accountant's desk weeks
+       later.
+
+    3. The GSTIN's own state must match the place of supply they selected. A
+       GSTIN's first two digits ARE its state, so these two facts cannot
+       legitimately disagree -- and if they do, one of them is deciding the
+       CGST/SGST-vs-IGST split wrongly. Refusing is the only safe answer: we
+       cannot know which of the two the founder got wrong, and picking one
+       silently would put the wrong tax on the document.
+
+    Returns None for a personal purchase, unchanged.
+    """
+    if identity is None:
+        return None
+
+    gstin = normalise_gstin(identity.gstin)
+    legal_name = " ".join((identity.legal_name or "").split())
+
+    if not identity.gstin or not legal_name:
+        raise InvalidBusinessDetailsError(
+            "A business purchase needs your GSTIN and your registered business "
+            "name, so the invoice is one you can claim input credit against."
+        )
+    if gstin is None:
+        raise InvalidBusinessDetailsError(
+            "That GSTIN does not look right. A GSTIN is 15 characters, like "
+            "24AALCG5562B1ZS. Please check it and try again."
+        )
+
+    gstin_state = state_of_gstin(gstin)
+    if gstin_state is None:
+        raise InvalidBusinessDetailsError(
+            "That GSTIN does not start with a valid state code. Please check "
+            "the first two digits and try again."
+        )
+    if place_of_supply and gstin_state != place_of_supply:
+        raise InvalidBusinessDetailsError(
+            f"Your GSTIN is registered in {gstin_state}, but you selected "
+            f"{place_of_supply} as your state. These have to match, because "
+            f"together they decide the GST on your invoice."
+        )
+
+    return BusinessIdentity(
+        gstin=gstin, legal_name=legal_name,
+        address=" ".join((identity.address or "").split()) or None,
+    )
 
 
 class PaymentService:
@@ -142,7 +211,9 @@ class PaymentService:
 
     def start_checkout(self, founder_id: int, tier: PlanTier,
                        coupon_code: str | None = None,
-                       buyer_state: str | None = None) -> CheckoutSession:
+                       buyer_state: str | None = None,
+                       purchase_type: PurchaseType | None = None,
+                       business: BusinessIdentity | None = None) -> CheckoutSession:
         """`buyer_state` is the GST place of supply, frozen onto the payment row.
 
         Normalised here and stored canonically, so "gujrat", "GJ" and
@@ -209,6 +280,13 @@ class PaymentService:
         # claimed slot must never outlive the payment it was claimed for, and a
         # discounted payment must never exist without the row that justifies
         # the discount.
+        # Vetted against the place of supply decided just above, because the
+        # GSTIN's own state and the selected state have to agree.
+        checked = _checked_business_identity(
+            business if purchase_type == PurchaseType.BUSINESS else None,
+            place_of_supply=place_of_supply,
+        )
+
         payment_id = self.repository.create_pending(
             founder_id=founder_id, amount_inr=charge_inr, currency=_CURRENCY,
             gateway="razorpay", gateway_order_id=order.order_id,
@@ -216,6 +294,12 @@ class PaymentService:
             # every future re-render of this invoice -- never off the founder,
             # who may be somewhere else by then.
             buyer_state=place_of_supply,
+            # Who bought it. None stays None: a payment taken before this was
+            # asked must not be relabelled 'personal' after the fact.
+            purchase_type=purchase_type.value if purchase_type else None,
+            buyer_gstin=checked.gstin if checked else None,
+            buyer_legal_name=checked.legal_name if checked else None,
+            buyer_address=checked.address if checked else None,
             # What this payment buys, recorded where the price was decided.
             # The gateway's notes carry it too, but those come back through
             # the browser and are not authority for a grant.

@@ -45,6 +45,25 @@ class InvalidCheckoutError(PaymentError):
         super().__init__(f"Cannot start checkout: {reason}.", status_code=422)
 
 
+class InvalidBusinessDetailsError(PaymentError):
+    """A business purchase whose tax identity will not do.
+
+    REFUSED RATHER THAN DOWNGRADED. The tempting alternative -- drop the bad
+    GSTIN and issue a personal invoice -- charges the founder and hands their
+    company a document it cannot claim credit against, which they discover
+    weeks later at their accountant's desk. A founder who has just typed their
+    GSTIN in is at the keyboard NOW and can fix a typo in ten seconds.
+
+    422, and the message is written for the founder because it is shown to
+    them; each caller passes the specific thing that is wrong rather than a
+    generic "invalid details", since "your GSTIN is registered in Maharashtra
+    but you selected Karnataka" is actionable and "invalid" is not.
+    """
+
+    def __init__(self, reason: str):
+        super().__init__(reason, status_code=422)
+
+
 class InvalidWebhookSignatureError(PaymentError):
     """A webhook payload whose signature does not match. 401: this is an
     authentication failure (is this really Razorpay?), not a validation

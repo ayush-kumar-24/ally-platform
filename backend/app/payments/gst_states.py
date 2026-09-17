@@ -20,6 +20,8 @@ Codes 25 (Daman & Diu, merged into 26) and 34 are absent because they are.
 
 from __future__ import annotations
 
+import re
+
 #: Canonical name -> GST state code. Ordered by code, which is how every
 #: official listing of these is ordered.
 GST_STATE_CODES: dict[str, str] = {
@@ -128,3 +130,37 @@ def is_intra_state(*, seller_state: str | None, buyer_state: str | None) -> bool
     if seller is None or buyer is None:
         return None
     return seller == buyer
+
+
+#: A GSTIN is exactly 15 alphanumerics, and its first two digits are the GST
+#: state code of the registration. This is a SHAPE check, not a checksum: it
+#: catches a misconfigured seller and a mistyped buyer, and it is not a claim
+#: that the registration exists.
+_GSTIN_SHAPE = re.compile(r"^[0-9A-Z]{15}$")
+
+#: Codes -> canonical name, for reading a state back out of a GSTIN.
+_BY_CODE: dict[str, str] = {code: name for name, code in GST_STATE_CODES.items()}
+
+
+def normalise_gstin(raw: str | None) -> str | None:
+    """A GSTIN in canonical form, or None if this is not shaped like one.
+
+    Upper-cased and stripped, because founders paste them with spaces and in
+    lower case and a registration number is neither.
+    """
+    candidate = " ".join((raw or "").split()).upper().replace(" ", "")
+    if not candidate or not _GSTIN_SHAPE.match(candidate):
+        return None
+    return candidate
+
+
+def state_of_gstin(gstin: str | None) -> str | None:
+    """The state a GSTIN is registered in, read from its leading two digits.
+
+    None when the GSTIN is malformed or its prefix is not a code in the
+    statutory list -- an unrecognised prefix is a typo, not a new state.
+    """
+    normalised = normalise_gstin(gstin)
+    if normalised is None:
+        return None
+    return _BY_CODE.get(normalised[:2])

@@ -109,6 +109,8 @@ body{margin:0;background:#fff;color:#16241C;
   letter-spacing:.11em;color:#6B7A70;font-weight:700;}
 .col .who{font-size:13px;font-weight:700;color:#0E2A1B;}
 .col .line{color:#4A5A50;font-size:10.5px;word-break:break-word;}
+.col .line.sub{color:#8A968E;font-size:9.5px;margin-top:4px;}
+.col .line strong{color:#16241C;font-weight:650;}
 dl.kv{margin:0;display:grid;grid-template-columns:auto 1fr;gap:3px 12px;font-size:10.5px;}
 dl.kv dt{color:#7A8A80;margin:0;white-space:nowrap;}
 dl.kv dd{margin:0;font-weight:600;color:#16241C;text-align:right;
@@ -269,6 +271,29 @@ def build_invoice_html(invoice: Invoice) -> str:
         if company_logo else ""
     )
 
+    # WHO THE DOCUMENT IS ADDRESSED TO -- the one place the two kinds of buyer
+    # actually differ. A business gets its registered name, its GSTIN and (when
+    # supplied) its address, which is what its accountant needs to claim the
+    # input credit; the person who paid is named underneath, because support
+    # and the payment itself are still tied to them. A personal buyer gets
+    # their own name and email and no registration, because they have none and
+    # printing an empty "GSTIN:" label invites the question of why it is blank.
+    if invoice.is_business:
+        billed_to_label = "Billed to (business)"
+        lines = [f'<div class="who">{escape(invoice.buyer_legal_name or "—")}</div>']
+        if invoice.buyer_address:
+            lines.append(f'<div class="line">{escape(invoice.buyer_address)}</div>')
+        lines.append(
+            f'<div class="line"><strong>GSTIN:</strong> {escape(invoice.buyer_gstin or "")}</div>')
+        lines.append(
+            f'<div class="line sub">Purchased by {escape(invoice.buyer_name or "")}'
+            f' · {escape(invoice.buyer_email or "")}</div>')
+        billed_to = "".join(lines)
+    else:
+        billed_to_label = "Billed to"
+        billed_to = (f'<div class="who">{escape(invoice.buyer_name or "—")}</div>'
+                     f'<div class="line">{escape(invoice.buyer_email or "")}</div>')
+
     details = _kv([
         ("Invoice no.", invoice.number),
         ("Payment ID", invoice.payment_reference or ""),
@@ -386,9 +411,8 @@ def build_invoice_html(invoice: Invoice) -> str:
 
   <div class="cols">
     <div class="col">
-      <h2>Billed to</h2>
-      <div class="who">{escape(invoice.buyer_name or "—")}</div>
-      <div class="line">{escape(invoice.buyer_email or "")}</div>
+      <h2>{billed_to_label}</h2>
+      {billed_to}
     </div>
     <div class="col">
       <h2>Details</h2>

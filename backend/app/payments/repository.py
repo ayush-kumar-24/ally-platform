@@ -24,7 +24,9 @@ class PaymentRepository:
         self, *, founder_id: int, amount_inr: int, currency: str, gateway: str,
         gateway_order_id: str, plan_tier: str, coupon_id: int | None = None,
         list_amount_inr: int | None = None, discount_inr: int | None = None,
-        buyer_state: str | None = None, commit: bool = True,
+        buyer_state: str | None = None, purchase_type: str | None = None,
+        buyer_gstin: str | None = None, buyer_legal_name: str | None = None,
+        buyer_address: str | None = None, commit: bool = True,
     ) -> int:
         """`amount_inr` is always what the gateway was asked to charge.
 
@@ -42,14 +44,17 @@ class PaymentRepository:
                 "INSERT INTO payments "
                 "(founder_id, amount_inr, currency, status, payment_gateway, "
                 " gateway_order_id, plan_tier, coupon_id, list_amount_inr, discount_inr, "
-                " buyer_state) "
+                " buyer_state, purchase_type, buyer_gstin, buyer_legal_name, "
+                " buyer_address) "
                 "VALUES (:fid, :amt, :cur, 'pending', :gw, :goid, :tier, :cid, :list, :disc, "
-                "        :bstate) "
+                "        :bstate, :ptype, :bgstin, :blegal, :baddr) "
                 "RETURNING payment_id"
             ),
             {"fid": founder_id, "amt": amount_inr, "cur": currency, "gw": gateway,
              "goid": gateway_order_id, "tier": plan_tier, "cid": coupon_id,
-             "list": list_amount_inr, "disc": discount_inr, "bstate": buyer_state},
+             "list": list_amount_inr, "disc": discount_inr, "bstate": buyer_state,
+             "ptype": purchase_type, "bgstin": buyer_gstin,
+             "blegal": buyer_legal_name, "baddr": buyer_address},
         ).scalar()
         if commit:
             self.db.commit()
@@ -124,7 +129,8 @@ class PaymentRepository:
         "SELECT p.payment_id, p.founder_id, p.status, p.amount_inr, p.currency, "
         "       p.plan_tier, p.gateway_order_id, p.gateway_payment_id, p.paid_at, "
         "       p.created_at, p.invoice_number, p.list_amount_inr, p.discount_inr, "
-        "       p.buyer_state, "
+        "       p.buyer_state, p.purchase_type, p.buyer_gstin, "
+        "       p.buyer_legal_name, p.buyer_address, "
         "       c.code AS coupon_code, s.billing_cycle "
         "FROM payments p "
         "LEFT JOIN coupons c ON c.coupon_id = p.coupon_id "
@@ -276,5 +282,7 @@ def _to_invoice_source(row) -> InvoiceSource:
         invoice_number=row["invoice_number"],
         list_amount_inr=row["list_amount_inr"], discount_inr=row["discount_inr"],
         coupon_code=row["coupon_code"], billing_cycle=row["billing_cycle"],
-        buyer_state=row["buyer_state"],
+        buyer_state=row["buyer_state"], purchase_type=row["purchase_type"],
+        buyer_gstin=row["buyer_gstin"], buyer_legal_name=row["buyer_legal_name"],
+        buyer_address=row["buyer_address"],
     )

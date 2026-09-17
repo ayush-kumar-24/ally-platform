@@ -41,7 +41,8 @@ const CHECKOUT_JS_URL = 'https://checkout.razorpay.com/v1/checkout.js';
  * @returns {Promise<{payment_id:number, order_id:string, amount_paise:number,
  *                    currency:string, key_id:string}>}
  */
-export function startCheckout(tier, couponCode = null, billingState = null) {
+export function startCheckout(tier, couponCode = null, billingState = null,
+                              business = null) {
   // A code, never a price. The backend prices the plan from its own catalog;
   // anything the browser sent would be a number a founder could edit.
   //
@@ -51,10 +52,25 @@ export function startCheckout(tier, couponCode = null, billingState = null) {
   // supplier's own state, Gujarat) versus IGST (everywhere else), and it
   // freezes the state onto the payment row so the invoice cannot re-render
   // under a different tax treatment years later.
+  // `business` is `{ gstin, name, address }` when the founder is buying for a
+  // company, and null otherwise. It changes WHO THE INVOICE IS ADDRESSED TO
+  // and nothing else -- both kinds of buyer pay the same price for the same
+  // plan and are charged the same GST. The backend validates it (shape, and
+  // that the GSTIN's own state matches the selected one) and REFUSES the
+  // checkout if it does not check out, rather than quietly issuing a personal
+  // invoice the company cannot claim credit against.
   return post('/payments/checkout', {
     tier,
     ...(couponCode ? { coupon_code: couponCode } : {}),
     ...(billingState ? { billing_state: billingState } : {}),
+    ...(business
+      ? {
+          purchase_type: 'business',
+          business_gstin: business.gstin,
+          business_name: business.name,
+          ...(business.address ? { business_address: business.address } : {}),
+        }
+      : { purchase_type: 'personal' }),
   });
 }
 

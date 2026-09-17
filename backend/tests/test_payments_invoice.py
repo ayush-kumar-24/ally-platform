@@ -41,6 +41,8 @@ def source(**overrides) -> InvoiceSource:
         gateway_payment_id="pay_abc", paid_at=PAID_AT, created_at=PAID_AT,
         invoice_number=None, list_amount_inr=None, discount_inr=None,
         coupon_code=None, billing_cycle="monthly", buyer_state=None,
+        purchase_type=None, buyer_gstin=None, buyer_legal_name=None,
+        buyer_address=None,
     )
     base.update(overrides)
     return InvoiceSource(**base)
@@ -549,3 +551,88 @@ def test_a_missing_company_mark_costs_a_logo_not_a_receipt(monkeypatch, no_gstin
     html = invoice_html.build_invoice_html(build())
     assert 'class="foot-mark"' not in html
     assert "GoXL Consulting Solutions Pvt. Ltd." in html   # the footer still works
+
+
+# --- personal vs business -------------------------------------------------
+
+BUSINESS = dict(purchase_type="business", buyer_gstin="24AALCG5562B1ZS",
+                buyer_legal_name="Blissnack Pvt Ltd",
+                buyer_address="402, Race Course Road, Vadodara, Gujarat 390007")
+
+
+def test_a_business_invoice_is_addressed_to_the_company_with_its_gstin(with_gstin):
+    """Without the buyer's own registration the company has paid 18% GST it
+    cannot reclaim. This is the whole reason the choice exists."""
+    invoice = build(buyer_state="Gujarat", **BUSINESS)
+    assert invoice.is_business is True
+    assert invoice.buyer_gstin == "24AALCG5562B1ZS"
+    assert invoice.buyer_legal_name == "Blissnack Pvt Ltd"
+
+    html = build_invoice_html(invoice)
+    assert "Billed to (business)" in html
+    assert "Blissnack Pvt Ltd" in html
+    assert "24AALCG5562B1ZS" in html
+    assert "402, Race Course Road" in html
+    # The person who paid is still named -- support and the charge are theirs.
+    assert "Asha Rao" in html
+
+
+def test_a_personal_invoice_carries_no_registration_at_all(with_gstin):
+    """An empty "GSTIN:" label on a personal invoice invites the question of
+    why it is blank."""
+    invoice = build(buyer_state="Gujarat", purchase_type="personal")
+    assert invoice.is_business is False
+    assert invoice.buyer_gstin is None
+
+    html = build_invoice_html(invoice)
+    assert "Billed to (business)" not in html
+    assert "GSTIN:" in html          # the SELLER's, in the footer
+    assert html.count("GSTIN:") == 1  # and only the seller's
+    assert "Asha Rao" in html and "asha@example.com" in html
+
+
+def test_a_payment_from_before_the_question_renders_as_personal(with_gstin):
+    """purchase_type NULL means "we never asked", and those founders received
+    the personal layout -- so that is what re-rendering must keep giving."""
+    invoice = build(buyer_state="Gujarat", purchase_type=None)
+    assert invoice.is_business is False
+    assert "Billed to (business)" not in build_invoice_html(invoice)
+
+
+def test_business_without_a_gstin_falls_back_to_the_personal_layout(with_gstin):
+    """Both halves are required. A flag with no registration would print a
+    "Billed to (business)" block with an empty GSTIN -- which reads as a
+    claimable tax invoice and is not one."""
+    invoice = build(buyer_state="Gujarat", purchase_type="business",
+                    buyer_legal_name="Blissnack Pvt Ltd")
+    assert invoice.is_business is False
+    assert "Billed to (business)" not in build_invoice_html(invoice)
+
+
+def test_both_kinds_of_buyer_pay_the_same_tax_on_the_same_supply(with_gstin):
+    """Business does NOT mean "GST is added" and personal does not mean it is
+    waived. The split is decided by the two states, not by who the buyer is."""
+    personal = build(buyer_state="Gujarat", purchase_type="personal")
+    business = build(buyer_state="Gujarat", **BUSINESS)
+    assert personal.gross_amount == business.gross_amount
+    assert personal.tax.total_tax == business.tax.total_tax
+    assert personal.tax.cgst == business.tax.cgst
+    assert personal.tax.sgst == business.tax.sgst
+
+
+def test_a_business_buyer_outside_gujarat_still_gets_igst(with_gstin):
+    """The buyer's kind and the buyer's state are independent facts."""
+    invoice = build(buyer_state="Karnataka", purchase_type="business",
+                    buyer_gstin="29AABCU9603R1ZM", buyer_legal_name="Acme Pvt Ltd")
+    assert invoice.is_business is True
+    assert invoice.tax.igst == invoice.tax.total_tax
+    assert "Karnataka (29)" in build_invoice_html(invoice)
+
+
+def test_a_business_name_cannot_inject_markup(with_gstin):
+    invoice = build(buyer_state="Gujarat", purchase_type="business",
+                    buyer_gstin="24AALCG5562B1ZS",
+                    buyer_legal_name="<script>alert(1)</script>")
+    html = build_invoice_html(invoice)
+    assert "<script>alert(1)</script>" not in html
+    assert "&lt;script&gt;" in html

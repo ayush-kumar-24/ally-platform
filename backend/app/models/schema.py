@@ -1336,6 +1336,11 @@ class Payments(Base):
     invoice_number: Mapped[Optional[str]] = mapped_column(String(50))
     #: GST place of supply, frozen at checkout. See migration f3a8c61d9e47.
     buyer_state: Mapped[Optional[str]] = mapped_column(String(60))
+    #: Who bought it, and their tax identity. See migration b2f6a4c81d59.
+    purchase_type: Mapped[Optional[str]] = mapped_column(String(20))
+    buyer_gstin: Mapped[Optional[str]] = mapped_column(String(15))
+    buyer_legal_name: Mapped[Optional[str]] = mapped_column(String(200))
+    buyer_address: Mapped[Optional[str]] = mapped_column(Text)
     failure_reason: Mapped[Optional[str]] = mapped_column(Text)
     paid_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
     refunded_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))

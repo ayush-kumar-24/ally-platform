@@ -36,11 +36,14 @@ class FakeService:
         self.confirm_result = confirm_result
         self.calls = []
         self.state_calls = []
+        self.buyer_calls = []
         self.confirm_calls = []
 
-    def start_checkout(self, founder_id, tier, coupon_code=None, buyer_state=None):
+    def start_checkout(self, founder_id, tier, coupon_code=None, buyer_state=None,
+                       purchase_type=None, business=None):
         self.calls.append((founder_id, tier, coupon_code))
         self.state_calls.append(buyer_state)
+        self.buyer_calls.append((purchase_type, business))
         if self.raises:
             raise self.raises
         return self.session
@@ -388,3 +391,81 @@ def test_the_states_endpoint_serves_the_list_the_tax_decision_uses(client):
     assert by_name["Gujarat"] == "24"      # the supplier's own state
     assert by_name["Karnataka"] == "29"
     assert len(states) > 30
+
+
+# --- personal vs business at the checkout route ----------------------------
+
+def test_a_business_checkout_forwards_the_buyers_tax_identity(client):
+    from app.payments.models import PurchaseType
+
+    _use(FakeService(session=CheckoutSession(
+        payment_id=1, order_id="order_1", amount_paise=99900, currency="INR",
+        key_id="rzp_test_key")))
+
+    client.http.post(f"{BASE}/checkout", json={
+        "tier": "pro", "billing_state": "Gujarat", "purchase_type": "business",
+        "business_gstin": "24AALCG5562B1ZS", "business_name": "Blissnack Pvt Ltd",
+        "business_address": "402, Race Course Road, Vadodara",
+    })
+
+    service = app.dependency_overrides[get_payment_service]()
+    purchase_type, business = service.buyer_calls[0]
+    assert purchase_type == PurchaseType.BUSINESS
+    assert business.gstin == "24AALCG5562B1ZS"
+    assert business.legal_name == "Blissnack Pvt Ltd"
+    assert business.address == "402, Race Course Road, Vadodara"
+
+
+def test_a_personal_checkout_carries_no_business_object_at_all(client):
+    """The service is never handed half a business on a personal checkout."""
+    from app.payments.models import PurchaseType
+
+    _use(FakeService(session=CheckoutSession(
+        payment_id=1, order_id="order_1", amount_paise=99900, currency="INR",
+        key_id="rzp_test_key")))
+
+    client.http.post(f"{BASE}/checkout",
+                     json={"tier": "pro", "purchase_type": "personal"})
+
+    service = app.dependency_overrides[get_payment_service]()
+    purchase_type, business = service.buyer_calls[0]
+    assert purchase_type == PurchaseType.PERSONAL
+    assert business is None
+
+
+def test_an_older_client_that_sends_no_purchase_type_still_checks_out(client):
+    """A payment with no purchase type records none and renders the personal
+    layout -- which is what those founders were already getting."""
+    _use(FakeService(session=CheckoutSession(
+        payment_id=1, order_id="order_1", amount_paise=99900, currency="INR",
+        key_id="rzp_test_key")))
+
+    resp = client.http.post(f"{BASE}/checkout", json={"tier": "pro"})
+
+    assert resp.status_code == 200
+    service = app.dependency_overrides[get_payment_service]()
+    assert service.buyer_calls[0] == (None, None)
+
+
+def test_an_unknown_purchase_type_is_rejected(client):
+    _use(FakeService())
+    r = client.http.post(f"{BASE}/checkout",
+                         json={"tier": "pro", "purchase_type": "charity"})
+    assert r.status_code == 422
+
+
+def test_bad_business_details_are_refused_with_the_reason(client):
+    """422 and the service's own sentence, because it names the specific thing
+    to fix and the founder is at the keyboard to fix it."""
+    from app.payments.errors import InvalidBusinessDetailsError
+
+    _use(FakeService(raises=InvalidBusinessDetailsError(
+        "Your GSTIN is registered in Maharashtra, but you selected Gujarat.")))
+
+    r = client.http.post(f"{BASE}/checkout", json={
+        "tier": "pro", "billing_state": "Gujarat", "purchase_type": "business",
+        "business_gstin": "27AALCG5562B1ZS", "business_name": "X Pvt Ltd",
+    })
+
+    assert r.status_code == 422
+    assert "Maharashtra" in r.json()["message"]

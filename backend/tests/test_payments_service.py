@@ -94,7 +94,8 @@ class FakeRepository:
 
     def create_pending(self, *, founder_id, amount_inr, currency, gateway, gateway_order_id,
                        plan_tier, coupon_id=None, list_amount_inr=None, discount_inr=None,
-                       buyer_state=None, commit=True):
+                       buyer_state=None, purchase_type=None, buyer_gstin=None,
+                       buyer_legal_name=None, buyer_address=None, commit=True):
         pid = self._next_payment_id
         self._next_payment_id += 1
         self._payments[pid] = {
@@ -103,6 +104,8 @@ class FakeRepository:
             "amount_inr": amount_inr, "subscription_id": None, "plan_tier": plan_tier,
             "coupon_id": coupon_id, "list_amount_inr": list_amount_inr,
             "discount_inr": discount_inr, "buyer_state": buyer_state,
+            "purchase_type": purchase_type, "buyer_gstin": buyer_gstin,
+            "buyer_legal_name": buyer_legal_name, "buyer_address": buyer_address,
         }
         self._by_order[gateway_order_id] = pid
         self.commits.append(("create_pending", commit))
@@ -844,3 +847,84 @@ def test_confirm_unconfigured_gateway_refuses():
     service, _, _ = _service(gateway=None)
     with pytest.raises(PaymentsNotConfiguredError):
         service.confirm_checkout(42, order_id="order_1", gateway_payment_id="pay_1")
+
+
+# --- business purchases: the buyer's own tax identity ----------------------
+
+class TestBusinessIdentity:
+    """`_checked_business_identity` is what stands between a founder's typo and
+    a tax invoice their accountant rejects weeks later.
+
+    Everything here REFUSES rather than downgrading. Issuing a personal invoice
+    to someone who asked for a business one charges them and hands their company
+    a document it cannot claim credit against -- and they find out long after
+    the founder has left the keyboard.
+    """
+
+    @staticmethod
+    def _check(gstin, name="Blissnack Pvt Ltd", address=None, state="Gujarat"):
+        from app.payments.models import BusinessIdentity
+        from app.payments.service import _checked_business_identity
+
+        return _checked_business_identity(
+            BusinessIdentity(gstin=gstin, legal_name=name, address=address),
+            place_of_supply=state,
+        )
+
+    def test_a_personal_purchase_has_nothing_to_check(self):
+        from app.payments.service import _checked_business_identity
+
+        assert _checked_business_identity(None, place_of_supply="Gujarat") is None
+
+    def test_a_valid_identity_is_normalised_not_merely_accepted(self):
+        """Founders paste registration numbers in lower case and with spaces."""
+        checked = self._check(" 24aalcg5562b1zs ", name="  Blissnack   Pvt Ltd  ")
+        assert checked.gstin == "24AALCG5562B1ZS"
+        assert checked.legal_name == "Blissnack Pvt Ltd"
+
+    def test_the_gstins_state_must_match_the_selected_state(self):
+        """A GSTIN's first two digits ARE its state, so these cannot legitimately
+        disagree -- and if they do, one of them is deciding the CGST/SGST vs
+        IGST split wrongly. We cannot know which, so we refuse."""
+        from app.payments.errors import InvalidBusinessDetailsError
+
+        with pytest.raises(InvalidBusinessDetailsError) as exc:
+            self._check("27AALCG5562B1ZS", state="Gujarat")   # 27 is Maharashtra
+        # The message names both states, because "invalid" is not actionable.
+        assert "Maharashtra" in str(exc.value) and "Gujarat" in str(exc.value)
+
+    @pytest.mark.parametrize("gstin", [
+        "24AALCG", "24AALCG5562B1ZSS", "24AALCG-562B1ZS", "",
+    ])
+    def test_a_gstin_that_is_not_a_gstin_is_refused(self, gstin):
+        from app.payments.errors import InvalidBusinessDetailsError
+
+        with pytest.raises(InvalidBusinessDetailsError):
+            self._check(gstin)
+
+    def test_an_unknown_state_code_is_refused(self):
+        """99 is not a state. An unrecognised prefix is a typo, not a new one."""
+        from app.payments.errors import InvalidBusinessDetailsError
+
+        with pytest.raises(InvalidBusinessDetailsError):
+            self._check("99AALCG5562B1ZS", state=None)
+
+    def test_the_registered_name_is_required(self):
+        """The credit is claimed against the entity, and its registered name is
+        frequently not the founder's own."""
+        from app.payments.errors import InvalidBusinessDetailsError
+
+        with pytest.raises(InvalidBusinessDetailsError):
+            self._check("24AALCG5562B1ZS", name="   ")
+
+    def test_an_address_is_optional_and_blank_becomes_none(self):
+        assert self._check("24AALCG5562B1ZS", address="   ").address is None
+        assert self._check("24AALCG5562B1ZS", address="Vadodara").address == "Vadodara"
+
+    def test_a_checkout_with_no_place_of_supply_still_vets_the_gstin_itself(self):
+        """The cross-check needs a state; the shape check never does."""
+        from app.payments.errors import InvalidBusinessDetailsError
+
+        assert self._check("27AALCG5562B1ZS", state=None).gstin == "27AALCG5562B1ZS"
+        with pytest.raises(InvalidBusinessDetailsError):
+            self._check("nonsense", state=None)

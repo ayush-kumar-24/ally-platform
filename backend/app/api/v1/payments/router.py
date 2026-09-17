@@ -39,7 +39,12 @@ from app.payments.gst_states import GST_STATE_CODES
 from app.payments.invoice import Invoice, InvoiceNotAvailable
 from app.payments.invoice_html import build_invoice_html
 from app.payments.invoice_pdf import InvoiceRendererUnavailable, get_or_render_pdf
-from app.payments.models import CheckoutSession, WebhookOutcome
+from app.payments.models import (
+    BusinessIdentity,
+    CheckoutSession,
+    PurchaseType,
+    WebhookOutcome,
+)
 from app.plans.catalog import PlanTier
 
 router = APIRouter(prefix="/payments", tags=["payments"])
@@ -58,6 +63,21 @@ class CheckoutRequest(BaseModel):
     # claimed. Never an amount and never a tax figure -- the browser says WHERE
     # the supply went, and the backend decides what that costs in tax.
     billing_state: str | None = Field(default=None, max_length=60)
+    # Who is buying. Optional so an older frontend keeps working -- such a
+    # payment records no purchase type and renders the personal layout, which
+    # is what those founders were already getting.
+    #
+    # It decides WHO THE INVOICE IS ADDRESSED TO and nothing else: both kinds
+    # of buyer pay the same price for the same plan and are charged the same
+    # GST. Business simply means the document carries the company's own
+    # registration, so the company can claim input credit on it.
+    purchase_type: PurchaseType | None = None
+    # Required when purchase_type is business; ignored otherwise. Validated
+    # server-side, including that the GSTIN's own state matches billing_state
+    # -- see PaymentService._checked_business_identity.
+    business_gstin: str | None = Field(default=None, max_length=20)
+    business_name: str | None = Field(default=None, max_length=200)
+    business_address: str | None = Field(default=None, max_length=500)
 
 
 class CouponValidateRequest(BaseModel):
@@ -133,9 +153,21 @@ def start_checkout(
     founder: Founder = Depends(get_founder_record),
     service=Depends(get_payment_service),
 ) -> CheckoutResponse:
+    # The identity object is assembled only for a business purchase, so the
+    # service is never handed half a business on a personal checkout.
+    business = None
+    if payload.purchase_type == PurchaseType.BUSINESS:
+        business = BusinessIdentity(
+            gstin=payload.business_gstin or "",
+            legal_name=payload.business_name or "",
+            address=payload.business_address,
+        )
+
     session = service.start_checkout(founder.founder_id, payload.tier,
                                      coupon_code=payload.coupon_code,
-                                     buyer_state=payload.billing_state)
+                                     buyer_state=payload.billing_state,
+                                     purchase_type=payload.purchase_type,
+                                     business=business)
     return CheckoutResponse.from_domain(session)
 
 
@@ -261,6 +293,11 @@ class InvoiceResponse(BaseModel):
     list_amount_inr: float | None = None
     discount_inr: float | None = None
     coupon_code: str | None = None
+    #: Who bought it. The billing page uses this to label the row; the
+    #: document itself is what actually differs.
+    is_business: bool = False
+    buyer_gstin: str | None = None
+    buyer_legal_name: str | None = None
     is_tax_invoice: bool
     tax: InvoiceTaxResponse | None = None
     payment_reference: str | None = None
@@ -285,6 +322,8 @@ class InvoiceResponse(BaseModel):
             list_amount_inr=float(inv.list_amount) if inv.list_amount is not None else None,
             discount_inr=float(inv.discount) if inv.discount is not None else None,
             coupon_code=inv.coupon_code, is_tax_invoice=inv.is_tax_invoice, tax=tax,
+            is_business=inv.is_business, buyer_gstin=inv.buyer_gstin,
+            buyer_legal_name=inv.buyer_legal_name,
             payment_reference=inv.payment_reference, order_reference=inv.order_reference)
 
 

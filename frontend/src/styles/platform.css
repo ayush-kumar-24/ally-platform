@@ -1061,6 +1061,16 @@ body.sb-collapsed .sb-toggle .ic{transform:rotate(180deg)}
 .bl-incl-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .bl-incl-item{display:flex;align-items:center;gap:9px;font-size:13px;color:#16241c;font-weight:500}
 
+/* Personal vs business (checkout) */
+.bl-buyer-type{margin-bottom:14px}
+.bl-check{display:flex;align-items:flex-start;gap:9px;font-size:13px;color:#16241c;cursor:pointer;line-height:1.5}
+.bl-check input{margin-top:2px;width:16px;height:16px;accent-color:#1B4332;cursor:pointer;flex-shrink:0}
+.bl-biz-fields{margin-top:12px;padding:14px;background:#fbf9f5;border:1px solid #e7e0d6;border-radius:12px}
+.bl-text-input{width:100%;padding:10px 12px;border:1px solid #e7e0d6;border-radius:9px;background:#fff;font-family:inherit;font-size:13.5px;color:#16241c;min-height:42px;margin-bottom:10px}
+.bl-text-input:focus{outline:none;border-color:#1B4332;box-shadow:0 0 0 3px rgba(27,67,50,.1)}
+.bl-text-input:disabled{background:#f7f4ee;cursor:not-allowed}
+.bl-biz-fields .bl-coupon-note{margin:-4px 0 10px}
+
 /* Place of supply (checkout) */
 .bl-billing-state{margin-bottom:14px}
 .bl-field-label{display:block;font-size:12px;font-weight:700;color:#16241c;margin-bottom:6px}

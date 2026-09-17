@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { MOCK_PLANS } from '../data/mockData';
 import { getProfile } from '../services/profile';
@@ -359,16 +359,36 @@ function CheckoutView({ plan, onBack, onPaid }) {
   const [states, setStates] = useState(null);
   const [billingState, setBillingState] = useState('');
 
+  /* Personal or business. It changes WHO THE INVOICE IS ADDRESSED TO and
+     nothing else: the price and the GST are identical either way. Business
+     means the document carries the company's own GSTIN, so the company can
+     claim input credit on it -- which is the entire reason to ask. */
+  const [forBusiness, setForBusiness] = useState(false);
+  const [biz, setBiz] = useState({ gstin: '', name: '', address: '' });
+
   /* Nothing started here may touch state after unmount: both the order request
      and the Razorpay popup outlive a "Back to Plans" click. */
   const alive = useRef(true);
   useEffect(() => () => { alive.current = false; }, []);
 
+  /* Memoised so it is a stable dependency of createOrder: rebuilt only when
+     the founder actually changes something, not on every keystroke elsewhere.
+     Null unless the business box is ticked AND both required fields are filled
+     -- an order must not be created with half a business on it, and the
+     backend would refuse it anyway. */
+  const businessPayload = useMemo(() => {
+    if (!forBusiness) return null;
+    const gstin = biz.gstin.trim();
+    const name = biz.name.trim();
+    if (!gstin || !name) return null;
+    return { gstin, name, address: biz.address.trim() };
+  }, [forBusiness, biz.gstin, biz.name, biz.address]);
+
   const createOrder = useCallback((couponCode = null, stateName = billingState) => {
     setOrder(null);
     setOrderError(null);
     setPayError(null);
-    return startCheckout(plan.id, couponCode, stateName || null)
+    return startCheckout(plan.id, couponCode, stateName || null, businessPayload)
       .then((o) => { if (alive.current) setOrder(o); })
       .catch((err) => {
         if (!alive.current) return;
@@ -379,14 +399,14 @@ function CheckoutView({ plan, onBack, onPaid }) {
         if (couponCode) {
           setApplied(null);
           setCouponError(err?.detail || err?.message || 'That code is no longer available.');
-          startCheckout(plan.id, null, stateName || null)
+          startCheckout(plan.id, null, stateName || null, businessPayload)
             .then((o) => { if (alive.current) setOrder(o); })
             .catch((e) => { if (alive.current) setOrderError(e); });
           return;
         }
         setOrderError(err);
       });
-  }, [plan.id, billingState]);
+  }, [plan.id, billingState, businessPayload]);
 
   const applyCoupon = async () => {
     const code = couponInput.trim();
@@ -511,6 +531,10 @@ function CheckoutView({ plan, onBack, onPaid }) {
      dropdown that will not load -- the backend records no place of supply and
      the invoice falls back to IGST with none claimed. */
   const needsState = states !== null && states.length > 0 && !billingState;
+  /* Ticking the business box and leaving it empty must not buy a personal
+     invoice by accident -- that is the exact outcome the founder was trying to
+     avoid by ticking it. */
+  const needsBusiness = forBusiness && !businessPayload;
 
   return (
     <div className="bl-checkout-wrap stagger d1">
@@ -556,6 +580,79 @@ function CheckoutView({ plan, onBack, onPaid }) {
               <span>{payError}</span>
             </div>
           )}
+
+          {/* Personal or business. Above the state field because it decides
+              whether the GSTIN box below is even shown, and above Pay because
+              both are written onto the payment the moment Pay is pressed.
+              Nothing here changes the price: the founder pays the same either
+              way, and this only decides whose name and registration the
+              invoice carries. */}
+          <div className="bl-buyer-type">
+            <label className="bl-check">
+              <input
+                type="checkbox"
+                checked={forBusiness}
+                disabled={busy}
+                onChange={(e) => setForBusiness(e.target.checked)}
+              />
+              <span>
+                I&apos;m buying this for a business
+                <span className="bl-field-hint"> · adds your GSTIN to the invoice so you can claim input credit</span>
+              </span>
+            </label>
+
+            {forBusiness && (
+              <div className="bl-biz-fields">
+                <label htmlFor="checkout-biz-name" className="bl-field-label">
+                  Registered business name
+                </label>
+                <input
+                  id="checkout-biz-name"
+                  type="text"
+                  className="bl-text-input"
+                  placeholder="Blissnack Pvt Ltd"
+                  value={biz.name}
+                  disabled={busy}
+                  onChange={(e) => setBiz(b => ({ ...b, name: e.target.value }))}
+                />
+
+                <label htmlFor="checkout-biz-gstin" className="bl-field-label">
+                  GSTIN
+                </label>
+                <input
+                  id="checkout-biz-gstin"
+                  type="text"
+                  className="bl-text-input"
+                  placeholder="24AALCG5562B1ZS"
+                  value={biz.gstin}
+                  autoCapitalize="characters"
+                  autoComplete="off"
+                  spellCheck="false"
+                  maxLength={20}
+                  disabled={busy}
+                  onChange={(e) => setBiz(b => ({ ...b, gstin: e.target.value.toUpperCase() }))}
+                />
+                {/* Said here rather than only in the error, because it is
+                    cheaper to read a rule than to be refused by one. */}
+                <p className="bl-coupon-note">
+                  Your GSTIN&apos;s state must match the state you select below.
+                </p>
+
+                <label htmlFor="checkout-biz-address" className="bl-field-label">
+                  Registered address <span className="bl-field-hint">· optional</span>
+                </label>
+                <input
+                  id="checkout-biz-address"
+                  type="text"
+                  className="bl-text-input"
+                  placeholder="402, Race Course Road, Vadodara, Gujarat 390007"
+                  value={biz.address}
+                  disabled={busy}
+                  onChange={(e) => setBiz(b => ({ ...b, address: e.target.value }))}
+                />
+              </div>
+            )}
+          </div>
 
           {/* Place of supply. Above Pay because it is written onto the payment
               the moment Pay is pressed, and it decides the tax treatment
@@ -637,7 +734,7 @@ function CheckoutView({ plan, onBack, onPaid }) {
             type="button"
             className={`bl-pay-btn${busy ? ' loading' : ''}`}
             onClick={handlePay}
-            disabled={!order || busy || needsState}
+            disabled={!order || busy || needsState || needsBusiness}
           >
             {busy ? (
               <>
@@ -649,9 +746,11 @@ function CheckoutView({ plan, onBack, onPaid }) {
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
                   <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
                 </svg>
-                {needsState
-                  ? 'Select your state to continue'
-                  : (order ? `Pay ${amountLabel}` : 'Preparing secure checkout…')}
+                {needsBusiness
+                  ? 'Add your business name and GSTIN'
+                  : needsState
+                    ? 'Select your state to continue'
+                    : (order ? `Pay ${amountLabel}` : 'Preparing secure checkout…')}
               </>
             )}
           </button>

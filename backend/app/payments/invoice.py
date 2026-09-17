@@ -26,14 +26,19 @@ first issue as the audit trail of that.
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import ROUND_HALF_UP, Decimal
 
 from app.core.config import settings
 from app.core.logger import logger
-from app.payments.gst_states import is_intra_state, normalise_state, state_code
+from app.payments.models import PurchaseType
+from app.payments.gst_states import (
+    is_intra_state,
+    normalise_gstin,
+    normalise_state,
+    state_code,
+)
 from app.plans.catalog import PLANS, PlanTier
 
 #: SAC code for "online information and database access or retrieval services",
@@ -124,6 +129,17 @@ class Invoice:
     paid_at: datetime | None
     status: str
 
+    #: True when the founder said they were buying for a business AND supplied
+    #: a tax identity that checked out. False covers both "they said personal"
+    #: and "we never asked" -- the document is identical either way, so the
+    #: template has one thing to branch on rather than a tri-state.
+    is_business: bool = False
+    #: The buyer's own registration. Set only on a business purchase; this is
+    #: what makes the invoice claimable by them.
+    buyer_gstin: str | None = None
+    buyer_legal_name: str | None = None
+    buyer_address: str | None = None
+
     @property
     def sac_code(self) -> str | None:
         return SAC_CODE if self.is_tax_invoice else None
@@ -131,11 +147,6 @@ class Invoice:
     @property
     def document_title(self) -> str:
         return "Tax Invoice" if self.is_tax_invoice else "Payment Receipt"
-
-
-#: A GSTIN is exactly 15 alphanumerics. This is a SHAPE check, not a checksum:
-#: it is here to catch a misconfiguration, not to validate a registration.
-_GSTIN_SHAPE = re.compile(r"^[0-9A-Z]{15}$")
 
 
 def _valid_gstin(raw: str | None) -> str | None:
@@ -157,14 +168,14 @@ def _valid_gstin(raw: str | None) -> str | None:
     was wanted is a config fix, while issuing an invalid tax invoice is a
     document already in somebody's accounts.
     """
-    candidate = (raw or "").strip().upper()
-    if not candidate:
+    if not (raw or "").strip():
         return None
-    if not _GSTIN_SHAPE.match(candidate):
+    candidate = normalise_gstin(raw)
+    if candidate is None:
         logger.error(
             "payments: INVOICE_SELLER_GSTIN is not a 15-character GSTIN; issuing "
             "payment receipts instead of tax invoices until it is corrected",
-            extra={"configured_length": len(candidate)},
+            extra={"configured_length": len((raw or "").strip())},
         )
         return None
     return candidate
@@ -289,6 +300,14 @@ def build_invoice(source, *, founder_name: str, founder_email: str,
 
     one_time = (source.billing_cycle or "").lower() == "one_time"
 
+    # A business purchase is one that SAID business AND carries a usable GSTIN.
+    # Both halves are required: the flag alone would print a "Billed to" block
+    # with an empty registration, which reads as a tax invoice a company can
+    # claim against and is not one. A row that somehow has the flag without the
+    # number degrades to the personal layout, which is honest about what it is.
+    is_business = (source.purchase_type == PurchaseType.BUSINESS.value
+                   and bool(source.buyer_gstin))
+
     return Invoice(
         number=source.invoice_number or invoice_number(source.payment_id, source.paid_at),
         issued_at=issued_at or source.paid_at or datetime.now(timezone.utc),
@@ -302,6 +321,10 @@ def build_invoice(source, *, founder_name: str, founder_email: str,
         buyer_name=founder_name,
         buyer_email=founder_email,
         buyer_state=buyer_state,
+        is_business=is_business,
+        buyer_gstin=source.buyer_gstin if is_business else None,
+        buyer_legal_name=source.buyer_legal_name if is_business else None,
+        buyer_address=source.buyer_address if is_business else None,
         description=f"GoXL Ally — {plan_name} plan",
         plan_tier=source.plan_tier or "",
         billing_cycle="One-time purchase" if one_time else "Monthly subscription",

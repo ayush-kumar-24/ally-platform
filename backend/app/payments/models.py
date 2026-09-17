@@ -4,6 +4,39 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from enum import Enum
+
+
+class PurchaseType(str, Enum):
+    """Who a payment was made by, for the purposes of the invoice.
+
+    NOT a pricing tier and NOT a plan: both kinds of buyer pay the same price
+    for the same plan and are charged the same GST. What differs is the
+    identity the tax invoice is addressed to, and therefore whether the buyer
+    can claim input tax credit on it.
+
+    A payment with no purchase_type at all predates the question being asked.
+    That is deliberately NOT spelled `PERSONAL`: the invoice renders it with
+    the personal layout, because that is what those founders received, but
+    "we never asked" stays distinguishable from "they told us personal".
+    """
+
+    PERSONAL = "personal"
+    BUSINESS = "business"
+
+
+@dataclass(frozen=True)
+class BusinessIdentity:
+    """The buyer's own tax identity, for a business purchase.
+
+    Carried as one object rather than three loose arguments so that "a business
+    purchase always has all three" is a shape the type system can hold, instead
+    of an invariant every caller has to remember.
+    """
+
+    gstin: str
+    legal_name: str
+    address: str | None = None
 
 
 @dataclass(frozen=True)
@@ -99,6 +132,15 @@ class InvoiceSource:
     list_amount_inr: object | None = None
     discount_inr: object | None = None
     coupon_code: str | None = None
+    #: 'personal', 'business', or None for a payment taken before the question
+    #: was asked. See PurchaseType.
+    purchase_type: str | None = None
+    #: The buyer's own registration, on a business purchase. This is what makes
+    #: the tax invoice claimable by them -- without it a company has paid GST it
+    #: cannot reclaim.
+    buyer_gstin: str | None = None
+    buyer_legal_name: str | None = None
+    buyer_address: str | None = None
     #: The buyer's state at the time of the sale -- the GST place of supply,
     #: frozen on the payment rather than read off the founder, so an invoice
     #: never re-renders under a different tax treatment because the founder
