@@ -131,7 +131,10 @@ def test_int_499_carries_the_approved_metadata(rows):
     assert r["problem_id"] == "30"                       # FND-005
     assert r["capability_domain"] == "Explaining the Business"
     assert r["section"] == "Fundraising"                 # mirrors problems.category
-    assert _json(r, "stage_relevance") == STAGE_0_TO_1
+    # Stage scoping is asserted on its own below -- it is the field that had to
+    # be corrected after the live run, so it gets a test that says why rather
+    # than a bare value in a metadata sweep.
+    assert _json(r, "stage_relevance") == [2, 3, 4, 5, 6, 7, 8]
     assert _json(r, "industry_relevance") == ["all"]
     assert _json(r, "design_principles") == [
         "minimum_effective_dose", "evidence_based"]
@@ -267,11 +270,151 @@ def test_the_two_cohorts_do_not_overlap(rows):
     assert len(COHORT_A | COHORT_B) == 12
 
 
-def test_stage_coverage_has_no_hole(rows):
-    """Somebody at every stage from Validation on can receive an FND-005 action
-    plan. Rescoping the three without adding INT-499 would have left Stage 0->1
-    with a finding and nothing to do about it."""
+def test_the_four_rows_between_them_reach_every_stage_from_validation_on(rows):
+    """UNION-level only, and the name now says so.
+
+    This was called `test_stage_coverage_has_no_hole`, which claimed something
+    it never checked. A union over four rows says somebody at each stage can get
+    SOME FND-005 plan; it says nothing about whether the cause a given founder
+    actually tripped has one. The real end-to-end run found exactly that gap --
+    RC-312 detected at stage 6 with no recommendation -- while this assertion
+    stayed green. Per-cause coverage is
+    `test_every_cohort_a_cause_has_an_intervention_wherever_it_can_be_asked`.
+    """
     covered = set()
     for code in ("INT-366", "INT-367", "INT-368", "INT-499"):
         covered |= set(_json(rows[code], "stage_relevance"))
     assert covered == set(STAGE_0_TO_1) | set(STAGE_1_TO_10)
+
+
+# --- E. per-cause coverage: the claim the old name implied ------------------
+
+#: Cohort-A causes that are askable at Stage 1->10+ as well as Stage 0->1,
+#: read off the live bank:
+#:
+#:   RC-312  Q281 (Stage 0->1) + Q143  (Stage 1->10+)
+#:   RC-314  Q286 (Stage 0->1) + Q157  (Stage 1->10+)
+#:
+#: The other four (RC-311, RC-315, RC-316, RC-320) have Stage 0->1 questions
+#: only. This is why INT-499 cannot be scoped to [2, 3, 4]: two of the causes it
+#: serves can be detected at any stage, so the intervention must reach any
+#: stage. Its steps assume nothing about stage -- write a sentence, list your
+#: claims, explain it to someone, name the alternative.
+COHORT_A_ASKABLE_AT_EVERY_STAGE = {"RC-312", "RC-314"}
+
+ALL_DIAGNOSED_STAGES = STAGE_0_TO_1 + STAGE_1_TO_10   # 2..8; stage 1 is ideation
+
+
+def test_int_499_reaches_every_stage_a_cause_it_serves_can_be_detected_at(rows):
+    """The correction. At [2, 3, 4] a stage 5-8 founder who tripped RC-312 or
+    RC-314 got a finding and no action -- verified live before the fix, and
+    pre-existing rather than introduced by the split: INT-368 carried RC-312 at
+    [2, 3, 4] too."""
+    assert _json(rows["INT-499"], "stage_relevance") == ALL_DIAGNOSED_STAGES
+
+
+def test_int_499_does_not_reach_ideation(rows):
+    """Stage 1 is out. `withheld_categories_for` withholds the whole Fundraising
+    CATEGORY at ideation, so no FND-005 question is ever asked there and no
+    cause can be detected -- an intervention offered at stage 1 would be an
+    action plan for a finding that cannot exist."""
+    assert 1 not in _json(rows["INT-499"], "stage_relevance")
+
+
+@pytest.mark.parametrize("cause", sorted(COHORT_A_ASKABLE_AT_EVERY_STAGE))
+@pytest.mark.parametrize("stage", ALL_DIAGNOSED_STAGES)
+def test_a_dual_stage_cause_always_resolves_to_an_intervention(rows, cause, stage):
+    """Parametrised over cause AND stage so a failure names the pair. This is
+    the assertion that would have caught the live gap."""
+    serving = [code for code in ("INT-366", "INT-367", "INT-368", "INT-499")
+               if cause in _json(rows[code], "root_cause_ids")
+               and stage in _json(rows[code], "stage_relevance")]
+    assert serving, f"{cause} detected at stage {stage} has no intervention"
+    assert serving == ["INT-499"]
+
+
+@pytest.mark.parametrize("cause", sorted(COHORT_A - COHORT_A_ASKABLE_AT_EVERY_STAGE))
+def test_a_stage_0_to_1_only_cause_is_still_served_at_its_own_stages(rows, cause):
+    """Widening INT-499 must not have moved these off the stages that matter to
+    them. They are reachable everywhere now, which costs nothing -- their
+    questions only exist at Stage 0->1, so they cannot be detected later."""
+    served = _json(rows["INT-499"], "root_cause_ids")
+    assert cause in served
+    for stage in STAGE_0_TO_1:
+        assert stage in _json(rows["INT-499"], "stage_relevance")
+
+
+def test_widening_int_499_did_not_move_the_investor_rows(rows):
+    """The three keep [5, 6, 7, 8]. INT-499 now overlaps them, which is correct
+    and not a conflict: at stage 6 a founder tripping RC-312 gets INT-499 and
+    one tripping RC-317 gets INT-368, because the engine matches on root cause
+    first and only then filters by stage."""
+    for code in ("INT-366", "INT-367", "INT-368"):
+        assert _json(rows[code], "stage_relevance") == STAGE_1_TO_10
+
+
+def test_the_overlap_cannot_produce_two_plans_for_one_cause(rows):
+    """INT-499 and the three now share stages 5-8, so disjoint root causes is
+    the only thing keeping one finding from yielding two recommendations."""
+    late = {code: set(_json(rows[code], "root_cause_ids"))
+            for code in ("INT-366", "INT-367", "INT-368", "INT-499")}
+    codes = sorted(late)
+    for i, a in enumerate(codes):
+        for b in codes[i + 1:]:
+            assert not late[a] & late[b], f"{a} and {b} share a root cause"
+
+
+# --- F. the real relevance predicate, not just the metadata -----------------
+#
+# Everything above reads the committed row. These run the shipped predicate the
+# recommendation engine actually filters with, so a change to its semantics
+# fails here rather than silently re-opening the gap.
+
+from app.api.v1.reasoning.engines.recommendation import (  # noqa: E402
+    DefaultInterventionRelevance,
+)
+
+_RELEVANCE = DefaultInterventionRelevance()
+
+
+def _relevant(row, stage: int) -> bool:
+    return _RELEVANCE.is_relevant(
+        stage_relevance=_json(row, "stage_relevance"),
+        industry_relevance=_json(row, "industry_relevance"),
+        stage_id=stage,
+        industry_code=None,
+    )
+
+
+@pytest.mark.parametrize("stage", ALL_DIAGNOSED_STAGES)
+def test_the_engine_finds_int_499_relevant_at_every_diagnosed_stage(rows, stage):
+    assert _relevant(rows["INT-499"], stage)
+
+
+def test_the_engine_does_not_find_int_499_relevant_at_ideation(rows):
+    assert not _relevant(rows["INT-499"], 1)
+
+
+@pytest.mark.parametrize("cause", ["RC-312", "RC-314"])
+def test_a_stage_6_founder_tripping_a_dual_stage_cause_gets_int_499(rows, cause):
+    """The exact live failure, as the engine sees it: cause served AND stage
+    relevant. Before the widening this held for neither RC-312 nor RC-314."""
+    row = rows["INT-499"]
+    assert cause in _json(row, "root_cause_ids")
+    assert _relevant(row, 6)
+
+
+@pytest.mark.parametrize("code", ["INT-366", "INT-367", "INT-368"])
+@pytest.mark.parametrize("stage", STAGE_0_TO_1)
+def test_the_engine_still_withholds_the_investor_rows_from_early_stages(
+        rows, code, stage):
+    """The protection the split bought. Widening INT-499 must not have relaxed
+    it -- a non-raising Early Traction founder must still never see these."""
+    assert not _relevant(rows[code], stage)
+
+
+@pytest.mark.parametrize("code", ["INT-366", "INT-367", "INT-368"])
+@pytest.mark.parametrize("stage", STAGE_1_TO_10)
+def test_the_engine_finds_the_investor_rows_relevant_from_growth_on(
+        rows, code, stage):
+    assert _relevant(rows[code], stage)
