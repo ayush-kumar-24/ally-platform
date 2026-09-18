@@ -69,6 +69,8 @@ const BUSINESS = {
   audience: 'customer_segment',
   audienceOther: 'customer_segment_other',
   industry: 'industry',
+  teamSize: 'team_size',
+  businessModel: 'business_model',
   founderReality: 'founder_reality_signals',
   businessReality: 'business_reality_signals',
   invisibleGaps: 'invisible_gaps',
@@ -134,6 +136,8 @@ export function toGuidedAnswers(profile) {
     audience: profile.customer_segment || [],
     audienceOther: profile.customer_segment_other || '',
     industry: profile.industry || '',
+    teamSize: profile.team_size || '',
+    businessModel: profile.business_model || '',
     founderReality: profile.founder_reality_signals || null,
     businessReality: profile.business_reality_signals || null,
     invisibleGaps: profile.invisible_gaps || [],
@@ -160,12 +164,30 @@ const OWNER = {
  * Throws if any section fails, so the caller can tell them it didn't stick.
  */
 export async function saveProfileEdits(changes) {
-  const calls = [
+  const owners = [
     [OWNER.business, updateBusinessSection],
     [OWNER.founder, updateFounderSection],
     [OWNER.goals, updateGoals],
     [OWNER.profile, updateProfile],
-  ]
+  ];
+
+  // A field owned by no section used to be filtered out silently: no call, no
+  // error, no log, and the founder's answer simply never reached the server.
+  // That is how team_size and business_model could be collected by onboarding
+  // and still be NULL for every founder -- the bug reports it as "Ally does not
+  // capture my context", and nothing in the UI or the network tab shows it.
+  // Failing loudly here turns a silent data-loss bug into a startup-time one.
+  const owned = new Set(owners.flatMap(([fields]) => [...fields]));
+  const orphans = Object.keys(changes).filter((field) => !owned.has(field));
+  if (orphans.length > 0) {
+    throw new Error(
+      `saveProfileEdits: no section endpoint owns ${orphans.join(', ')}. ` +
+      'Add the field to the OWNER map in services/profile.js and to the ' +
+      'matching section schema in backend/app/schemas/sections.py.',
+    );
+  }
+
+  const calls = owners
     .map(([fields, call]) => {
       const payload = Object.fromEntries(
         Object.entries(changes).filter(([field]) => fields.has(field)),

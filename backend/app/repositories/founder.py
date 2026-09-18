@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.models import Founder
 from app.repositories.base import BaseRepository
+from app.services.industry_mapping import resolve_industry_id
 from app.services.profile_progress import validate_profile
 
 
@@ -31,12 +32,47 @@ class FounderRepository(BaseRepository[Founder]):
         Recomputing it here, on every write through this repository (which is
         every PATCH /profile/* endpoint), means it can never go stale.
         """
+        data = self._with_industry_mapping(db, obj, data)
         obj = super().update(db, obj, data, commit=False)
         completed = validate_profile(obj)["valid"]
         if obj.profile_completed != completed:
             obj.profile_completed = completed
         self._finish(db, obj, commit)
         return obj
+
+    @staticmethod
+    def _with_industry_mapping(db: Session, obj: Founder, data: dict[str, Any]) -> dict[str, Any]:
+        """Keep `industry_mapped_id` in step with `industry`, on every write.
+
+        `founders.industry` is a dropdown LABEL; `industry_mapped_id` is the
+        catalogue key that the reasoning context, the diagnosis session snapshot
+        and the Ally context builder all read. Nothing wrote it. It was NULL for
+        46 of 47 production founders, so every industry-aware decision
+        downstream had no industry to work with.
+
+        Derived here rather than in a route because this repository is the choke
+        point every PATCH /profile/* goes through -- the same reason
+        `profile_completed` is recomputed here. A second writer is how the two
+        columns drift apart.
+
+        Three deliberate behaviours:
+
+          * An UNRESOLVABLE label clears the mapping rather than leaving a stale
+            one. A founder who moves from "SaaS" to something we cannot map is
+            not still in SaaS, and a wrong industry filters their questions to
+            somebody else's -- worse than no industry, which fails open.
+          * An explicit `industry_mapped_id` in the payload WINS. No schema
+            offers that field today, so this only matters to internal callers
+            and to tests; it is here so this method can never overwrite a
+            caller who genuinely knows better.
+          * Only touched when `industry` is actually part of this write. A PATCH
+            of goals must not re-derive anything.
+        """
+        if "industry" not in data or "industry_mapped_id" in data:
+            return data
+        resolved = data.copy()
+        resolved["industry_mapped_id"] = resolve_industry_id(db, data.get("industry"))
+        return resolved
 
     def get_by_user_id(self, db: Session, user_id) -> Founder | None:
         """Look up a founder by the canonical Ally user UUID."""
