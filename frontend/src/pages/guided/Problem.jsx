@@ -1,17 +1,31 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
-import { updateBusinessSection } from '../../services/profile';
-import { primary } from '../../utils/profileDisplay';
+import { labels } from '../../utils/profileDisplay';
 
 function buildExamples(profile) {
-  // profile.biggestChallenge is a jsonb array (current_challenges) -- primary()
-  // reads it back as one plain string instead of handing the raw array to
-  // setProblem, which made `problem` a non-string and crashed handleContinue's
-  // `.trim()`. Was keyed to 'challenges', which stopped existing when the
-  // 2026-08-17 redesign renamed it -- same class of silent-fallback bug this
-  // file's own comment already once described.
-  const suggestions = [primary('biggestChallenge', profile.biggestChallenge), 'Growth flatlined', 'Users don\'t activate', 'Cash feels tight'].filter(Boolean);
+  /* The founder's OWN challenges first. They picked these minutes ago, so they
+     are the only suggestions guaranteed to mean something for their business.
+     biggestChallenge is a jsonb array (current_challenges) -- labels() reads it
+     back as one plain string per answer, instead of handing the raw array to
+     setProblem, which made `problem` a non-string and crashed handleContinue's
+     `.trim()`. Was keyed to 'challenges', which stopped existing when the
+     2026-08-17 redesign renamed it -- same class of silent-fallback bug this
+     file's own comment already once described.
+
+     The padding behind them is deliberately industry-neutral. It used to read
+     "Growth flatlined" / "Users don't activate", which is SaaS talk: live-
+     reported by a founder running an industrial construction firm, who was
+     offered "Users don't activate" as a way to describe what felt stuck. A
+     suggestion that cannot apply is worse than no suggestion -- it tells the
+     founder this product was not built for them. These three hold for a
+     contractor, a clinic and a SaaS alike. */
+  const suggestions = [
+    ...labels('biggestChallenge', profile.biggestChallenge),
+    'Cash feels tight',
+    'Growth has stalled',
+    'Too much depends on me',
+  ].filter(Boolean);
   return Array.from(new Set(suggestions)).slice(0, 3);
 }
 
@@ -20,7 +34,14 @@ export default function Problem() {
   const { user, setUser } = useApp();
   const profile = user?.founderProfile || {};
   const examples = useMemo(() => buildExamples(profile), [profile]);
-  const [problem, setProblem] = useState(user?.problem || profile.problem || '');
+  /* Seeded from this screen's OWN previous answer, never from `problem`.
+     `problem` is the answer to onboarding Q5, "What problem are you trying to
+     solve?" -- the problem the BUSINESS exists to solve. This screen asks
+     "What feels most stuck right now?", which is the founder's current pain
+     and a different question entirely. Live-reported: a founder arrived here
+     to find the box already holding their company description, one tap from
+     sending it as the symptom the whole diagnosis is built on. */
+  const [problem, setProblem] = useState(profile.perceivedProblem || '');
   const [starting, setStarting] = useState(false);
 
   /**
@@ -49,19 +70,28 @@ export default function Problem() {
   const handleContinue = async () => {
     if (starting) return;
     setStarting(true);
+    /* perceivedProblem only. `user.problem` is the session copy of onboarding
+       Q5's answer -- ProfileBuild and Summary both write it from there and read
+       it back as that -- and AppContext persists the whole user object to
+       localStorage, so writing this screen's answer into it made the same
+       swap the server-side one did, and made it survive a reload. */
     setUser((prev) => ({
       ...prev,
-      problem,
       founderProfile: {
         ...(prev?.founderProfile || {}),
         perceivedProblem: problem,
       },
     }));
-    try {
-      await updateBusinessSection({ problem_statement: problem });
-    } catch {
-      // Not fatal -- the diagnosis itself doesn't depend on this having saved.
-    }
+    /* Deliberately NOT written to problem_statement. That column holds the
+       answer to onboarding Q5 -- a different question -- and the founder has
+       already reviewed and confirmed it on the summary screen. Saving here
+       overwrote it with the answer to this one, so "What problem are you
+       trying to solve?" silently became whatever felt stuck that morning, and
+       the summary they had just approved was gone.
+
+       Nothing is lost by not saving: the Current Problem phase that this
+       hand-off leads into asks for the symptom properly and persists it
+       server-side, which is what the report's page 3 reads. */
     navigate('/app/founder-dna-journey');
   };
 
