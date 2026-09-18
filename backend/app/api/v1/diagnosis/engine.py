@@ -14,6 +14,11 @@ and inventing a trigger rule now would bake in behaviour the scoring engine
 would have to unpick later.
 """
 
+from app.api.v1.diagnosis.founder_context import FounderContext
+from app.api.v1.diagnosis.industry_scope import (
+    filter_by_industry,
+    industry_content_summary,
+)
 from app.api.v1.diagnosis.context_scope import (
     context_tokens,
     gated_problem_codes,
@@ -288,7 +293,10 @@ class QuestionSelectionEngine:
             return set()
 
     def candidate_questions(
-        self, session: DiagnosisSession, founder: Founder
+        self,
+        session: DiagnosisSession,
+        founder: Founder,
+        context: FounderContext | None = None,
     ) -> list[Question]:
         """Unanswered, stage-eligible, in-scope questions for this session.
 
@@ -305,9 +313,18 @@ class QuestionSelectionEngine:
             # verbatim during Founder DNA -- see list_candidate_questions.
             founder_id=founder.founder_id,
         )
-        return self._in_scope(candidates, founder)
+        # Built here when the caller did not supply one. The service passes its
+        # own so a context enriched during the session (Step 4's learned facts)
+        # reaches the gates rather than being rebuilt from the row each turn.
+        context = context if context is not None else FounderContext.from_founder(founder)
+        return self._in_scope(candidates, founder, context)
 
-    def _in_scope(self, candidates: list[Question], founder: Founder) -> list[Question]:
+    def _in_scope(
+        self,
+        candidates: list[Question],
+        founder: Founder,
+        context: FounderContext | None = None,
+    ) -> list[Question]:
         """Drop questions this founder should not be asked.
 
         CONTEXT runs first and is a different axis from the rest: it asks
@@ -359,7 +376,8 @@ class QuestionSelectionEngine:
         # Rebinding `candidates` is deliberate: the stage-scope fallback further
         # down returns this name, so a stage-scope data problem re-admits the
         # stage filters and never re-admits a gated problem.
-        candidates = self._context_gated(candidates, founder)
+        context = context if context is not None else FounderContext.from_founder(founder)
+        candidates = self._context_gated(candidates, founder, context)
 
         scope = resolve_scope(founder)
         if scope is None or scope.withholds_nothing:
@@ -428,7 +446,10 @@ class QuestionSelectionEngine:
         return scoped
 
     def _context_gated(
-        self, candidates: list[Question], founder: Founder
+        self,
+        candidates: list[Question],
+        founder: Founder,
+        context: FounderContext | None = None,
     ) -> list[Question]:
         """Drop questions whose problem presupposes something this founder
         has not told us is true. See `context_scope`.
@@ -443,6 +464,16 @@ class QuestionSelectionEngine:
         invariant to `_in_scope`'s, restated here because this filter runs
         before it and would otherwise hand it nothing to work with.
         """
+        context = context if context is not None else FounderContext.from_founder(founder)
+
+        # INDUSTRY first, and on its own terms. It reads question-level metadata
+        # rather than the problem/root-cause codes the rest of this method uses,
+        # so composing it as a separate pass keeps each axis independently
+        # degradable -- the property the pillar and dimension tests already rely
+        # on. Later axes (business model, team, tag preconditions) compose here
+        # the same way, against the same FounderContext.
+        candidates = self._industry_gated(candidates, context)
+
         tokens = context_tokens(founder)
         gated = gated_problem_codes(tokens)
         gated_causes = gated_root_cause_codes(tokens)
@@ -488,6 +519,58 @@ class QuestionSelectionEngine:
                 },
             )
         return kept
+
+    def _industry_gated(
+        self, candidates: list[Question], context: FounderContext
+    ) -> list[Question]:
+        """Drop questions written for a different industry. See `industry_scope`.
+
+        Three ways to end up not gating, all of them admitting the question:
+
+          * the founder's industry is unknown -- the common case, and the
+            deliberate one: "we never asked" must not filter anyone;
+          * `industry_relevance` is absent from this database, which is true of
+            any environment that has not yet run 62ebd946ebc0. Degrades like
+            every other optional map rather than raising;
+          * the gate would empty the set, which means the bank and the industry
+            tagging disagree; ending a diagnosis over that is worse than asking
+            a question aimed at a neighbouring industry.
+
+        There is no cross-industry fallback in any of those paths: an industry
+        with no questions of its own keeps the universal ones and borrows
+        nothing.
+        """
+        if not candidates or not context.knows_industry:
+            return candidates
+        try:
+            result = filter_by_industry(candidates, context)
+        except Exception:                                  # noqa: BLE001
+            logger.warning(
+                "Industry scope unavailable; leaving the set ungated",
+                extra={"stage": "industry_scope", "industry": context.industry_code},
+            )
+            return candidates
+
+        if not result.removed:
+            return candidates
+
+        if not result.kept:
+            logger.warning(
+                "Industry scope matched no candidate question; leaving the set "
+                "ungated rather than ending the diagnosis",
+                extra={**result.log_extra(), "reason": "would_empty_pool"},
+            )
+            return candidates
+
+        # Says which of the two states this founder is in -- "this industry has
+        # content here" or "this industry is not populated yet" -- because a
+        # small pool alone cannot tell them apart, and only one is a data gap.
+        logger.info(
+            "diagnosis scoped to industry",
+            extra={**result.log_extra(),
+                   **industry_content_summary(result.kept, context)},
+        )
+        return list(result.kept)
 
     def _cause_code_map_or_none(self) -> dict[int, str]:
         """root_cause_id -> root_cause_code, or {} when it cannot be read.

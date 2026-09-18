@@ -17,6 +17,7 @@ from app.api.v1.diagnosis.founder_context import (
     ALL_FAMILIES,
     FAMILY_BUSINESS_MODEL,
     FAMILY_CHALLENGES,
+    FAMILY_FUNDRAISING,
     FAMILY_INDUSTRY,
     FAMILY_REVENUE,
     FAMILY_STAGE,
@@ -184,11 +185,30 @@ def test_ticking_fundraising_satisfies_the_intent_token():
     assert ctx.verdict(TOKEN_FUNDRAISING_INTENT) is SATISFIED
 
 
-def test_not_ticking_fundraising_is_unknown_never_contradicted():
-    # "Biggest challenge, pick up to three" -- a founder mid-raise who is more
-    # worried about sales will not tick it. Absence is not evidence.
+def test_answering_the_challenges_question_without_ticking_fundraising_denies_it():
+    # This mirrors `context_scope.context_tokens`, which has shipped since the
+    # fundraising gate existed: a founder who was SHOWN the option and did not
+    # pick it has answered. (My first cut returned UNKNOWN here, which would
+    # have quietly re-admitted every investor question to every non-raising
+    # founder -- two readings of one signal is the defect this type exists to
+    # remove, so the live gate's reading wins.)
     ctx = FounderContext.from_founder(founder(current_challenges=["Growth", "Sales & Marketing"]))
+    assert ctx.verdict(TOKEN_FUNDRAISING_INTENT) is CONTRADICTED
+
+
+def test_an_unanswered_challenges_question_leaves_fundraising_unknown():
+    # The other half: nothing in the schema means "bootstrapped", so an absent
+    # or unreadable answer is not a denial.
+    ctx = FounderContext.from_founder(founder(current_challenges=None))
     assert ctx.verdict(TOKEN_FUNDRAISING_INTENT) is UNKNOWN
+
+
+def test_other_challenges_stay_unknown_even_when_the_question_was_answered():
+    # "Pick up to three": a founder who picked three other things has not
+    # denied marketing. Only fundraising is settled by the act of answering.
+    ctx = FounderContext.from_founder(founder(current_challenges=["Growth"]))
+    assert ctx.verdict("challenge:growth") is SATISFIED
+    assert ctx.verdict("challenge:marketing") is UNKNOWN
 
 
 def test_fundraising_label_matches_case_insensitively_but_not_as_a_substring():
@@ -197,13 +217,14 @@ def test_fundraising_label_matches_case_insensitively_but_not_as_a_substring():
     ).verdict(TOKEN_FUNDRAISING_INTENT) is SATISFIED
     assert FounderContext.from_founder(
         founder(current_challenges=["Fundraising timeline"])
-    ).verdict(TOKEN_FUNDRAISING_INTENT) is UNKNOWN
+    ).verdict(TOKEN_FUNDRAISING_INTENT) is CONTRADICTED
 
 
 @pytest.mark.parametrize("raw", [None, [], "Fundraising", {"a": 1}, [None, ""], 42])
 def test_malformed_challenges_are_unknown_and_never_raise(raw):
     ctx = FounderContext.from_founder(founder(current_challenges=raw))
     assert FAMILY_CHALLENGES in ctx.unknowns
+    assert FAMILY_FUNDRAISING in ctx.unknowns
     assert ctx.verdict(TOKEN_FUNDRAISING_INTENT) is UNKNOWN
 
 
@@ -250,7 +271,7 @@ def test_a_positive_session_fact_also_works():
 @pytest.mark.parametrize("token,expected", [
     (TOKEN_HAS_TEAM, FAMILY_TEAM),
     (TOKEN_HAS_REVENUE, FAMILY_REVENUE),
-    (TOKEN_FUNDRAISING_INTENT, FAMILY_CHALLENGES),
+    (TOKEN_FUNDRAISING_INTENT, FAMILY_FUNDRAISING),
     ("industry:agritech", FAMILY_INDUSTRY),
     ("team:solo", FAMILY_TEAM),
     ("model:b2b", FAMILY_BUSINESS_MODEL),
@@ -302,7 +323,7 @@ def test_a_fully_known_founder_has_no_unknown_families():
                 current_revenue="5L_25L", current_challenges=["Fundraising"]),
         industry_code="agritech",
     )
-    assert ctx.unknowns == frozenset()
+    assert ctx.unknowns == frozenset({FAMILY_CHALLENGES})   # "up to three" is never complete
 
 
 # --- the personas from the QA matrix ---------------------------------------
@@ -315,7 +336,7 @@ def test_persona_a_solo_agritech_stage_0():
     assert ctx.verdict(TOKEN_HAS_TEAM) is CONTRADICTED          # no team questions
     assert ctx.verdict("industry:agritech") is SATISFIED        # agritech allowed
     assert ctx.verdict("industry:saas") is CONTRADICTED         # SaaS-only excluded
-    assert ctx.verdict(TOKEN_FUNDRAISING_INTENT) is UNKNOWN     # not stated -> keep
+    assert ctx.verdict(TOKEN_FUNDRAISING_INTENT) is CONTRADICTED  # answered, not picked
     assert ctx.verdict(None) is SATISFIED                       # universal allowed
 
 

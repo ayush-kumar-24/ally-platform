@@ -771,7 +771,12 @@ class Settings(BaseSettings):
     # informative next question. Falls back to the deterministic pick if the LLM is
     # off, errors, or returns an out-of-shortlist id. Uses LLM_PROVIDER / LLM_MODEL.
     ADAPTIVE_QUESTIONS: bool = False
-    ADAPTIVE_SHORTLIST_SIZE: int = 8
+    # Five, not eight. The advisor's job is to pick the most informative next
+    # probe from a set the deterministic layer has already established is
+    # eligible -- a longer list does not make that choice better, it makes each
+    # candidate a smaller share of the prompt. Isolated behind this setting, so
+    # this is the only place the number lives.
+    ADAPTIVE_SHORTLIST_SIZE: int = 5
     ADAPTIVE_TIMEOUT_SECONDS: float = 20.0
 
     # Report narrative prose via LLM (report_narrative task). Off => deterministic
