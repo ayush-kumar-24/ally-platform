@@ -10,13 +10,14 @@
  * option's wording lives in exactly one place: data/onboardingQuestions.js.
  */
 
-import { QUESTIONS } from '../data/onboardingQuestions';
-
-/* A `group` question holds its options on its PARTS, not on itself -- Q3's
-   experience and revenue cards and Q9's invisible gaps all live one level
-   down. Walking only the top level silently lost them, which showed up as a
-   founder's experience reading back as the raw enum ('one_company'). */
-const ASKABLE = QUESTIONS.flatMap((q) => (q.type === 'group' ? q.parts : [q]));
+/* ASKABLE, not QUESTIONS: a `group` question holds its options on its PARTS,
+   not on itself -- Q3's experience and revenue cards and Q9's invisible gaps
+   all live one level down. Walking only the top level silently lost them,
+   which showed up as a founder's experience reading back as the raw enum
+   ('one_company'). This file used to keep its own copy of that flatten; it is
+   shared now, because the same omission has since been made twice more (see
+   the note on ASKABLE itself). */
+import { ASKABLE } from '../data/onboardingQuestions';
 
 /** { questionKey: { storedValue: shownLabel } }, built from the question set. */
 const LABELS = Object.fromEntries(
