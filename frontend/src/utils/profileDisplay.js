@@ -58,7 +58,20 @@ export function readable(key, value) {
 
 /** Compact form: "Hiring, Cash flow, Scaling" — for panels and chips. */
 export function listed(key, value) {
-  return clean(value).map((v) => labelFor(key, v)).join(', ');
+  return labels(key, value).join(', ');
+}
+
+/**
+ * Every stored value as its own label, as an array.
+ *
+ * The same walk listed() does, stopping before the join — for the callers that
+ * want one element per answer (a chip each, a list item each) rather than one
+ * string. Without it those callers reached past this module for the raw jsonb
+ * array and did their own labelling, which is how a stored enum ends up on
+ * screen.
+ */
+export function labels(key, value) {
+  return clean(value).map((v) => labelFor(key, v));
 }
 
 /** The first entry only — for sentences that want one thing, not all of them. */
