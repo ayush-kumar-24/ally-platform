@@ -538,20 +538,35 @@ export function effectiveQuestions(path) {
  * is undefined, not the stage part, and anything that then reads a field off
  * it throws.
  *
- * This is the third time that has bitten: profileDisplay.js's ASKABLE and
- * Summary.jsx's yesNoSummary both carry their own copy of this flatten, each
- * added after the same bug. ProfileBuild's confirmField did not, and crashed
- * the whole onboarding screen on `q.section` the instant a founder picked
- * their stage. One shared lookup, so the next reader gets it right by default.
+ * That has now bitten three times. profileDisplay.js (a founder's experience
+ * reading back as the raw enum 'one_company') and Summary.jsx's yesNoSummary
+ * (Business Reality silently blank) each grew their own private copy of this
+ * flatten after being caught. ProfileBuild's confirmField never got one, and
+ * threw on `q.section` the instant a founder picked their stage -- taking the
+ * whole onboarding screen down at question 3 of 11, for everyone.
+ *
+ * So it lives here once and those three read it, rather than each rediscovering
+ * it the hard way. Anything looking a question up BY KEY wants this or
+ * askableByKey(); QUESTIONS itself is for walking the flow in order, and
+ * effectiveQuestions()/questionCount() for the founder's path through it.
  *
  * Parts carry no `section` of their own -- they inherit the group's, which is
  * what the DNA side panel already does when it lists them as rows.
+ *
+ * One caveat, because it is invisible until it bites: keys are NOT unique
+ * across parts. Q4 declares 'buildingName' twice, once per path ("What You're
+ * Building" on Path 2, "Idea Name" on Path 1), and a key can only resolve to
+ * one of them -- the later, Path 1 entry. Both sit in the same group, so
+ * anything path-independent (`section`, `type`) is the same either way and
+ * safe to read here. Anything a founder SEES that differs by path -- `label`,
+ * `q`, `placeholder` -- must come from activeParts(question, path) instead,
+ * which is what the flow and the DNA panel already use.
  */
-const ASKABLE_BY_KEY = new Map(
-  QUESTIONS.flatMap((q) => (q.type === 'group'
-    ? q.parts.map((p) => [p.key, { ...p, section: p.section ?? q.section }])
-    : [[q.key, q]])),
-);
+export const ASKABLE = QUESTIONS.flatMap((q) => (q.type === 'group'
+  ? q.parts.map((p) => ({ ...p, section: p.section ?? q.section }))
+  : [q]));
+
+const ASKABLE_BY_KEY = new Map(ASKABLE.map((q) => [q.key, q]));
 
 /** The question or group part with this key, or undefined if there is none. */
 export function askableByKey(key) {

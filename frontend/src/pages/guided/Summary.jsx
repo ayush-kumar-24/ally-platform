@@ -4,7 +4,7 @@ import { useApp } from '../../context/AppContext';
 import { labelFor, listed, midSentence, primary, readable } from '../../utils/profileDisplay';
 import { saveProfileEdits } from '../../services/profile';
 import { useFounderRead } from '../../hooks/useFounderRead';
-import { PATH_1, PATH_2, QUESTIONS, STAGE_BY_NAME } from '../../data/onboardingQuestions';
+import { askableByKey, PATH_1, PATH_2, STAGE_BY_NAME } from '../../data/onboardingQuestions';
 
 /* Rewritten 2026-08-17 for the 4-section, path-branching onboarding redesign.
    The previous FIELD_ORDER/SAVE_AS were never updated when that rewrite
@@ -67,11 +67,11 @@ const SAVE_AS = {
  * to "[object Object]". Same per-item Yes/No summary the live onboarding
  * flow and its resume path already build. */
 function yesNoSummary(key, value) {
-  // Business Reality is a PART of Q9's group, not a top-level question, so
-  // the lookup has to descend one level or it silently returns ''.
-  const q = QUESTIONS.flatMap((x) => (x.type === 'group' ? x.parts : [x]))
-    .find((x) => x.key === key);
-  if (!q || !value) return '';
+  // askableByKey, not QUESTIONS.find: Business Reality is a PART of Q9's
+  // group, not a top-level question, so the lookup has to descend one level
+  // or it silently returns ''. This used to be a local copy of that flatten.
+  const q = askableByKey(key);
+  if (!q?.items || !value) return '';
   return q.items.map((it) => `${it.text}: ${value[it.key] ? 'Yes' : 'No'}`).join(' · ');
 }
 
