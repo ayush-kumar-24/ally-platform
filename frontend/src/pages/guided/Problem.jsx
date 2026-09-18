@@ -24,13 +24,27 @@ export default function Problem() {
   const [starting, setStarting] = useState(false);
 
   /**
-   * Hands off into the REAL diagnosis (/app/diagnosis, backend-driven, gated on
-   * the server's is_complete flag). This used to navigate into a scripted
+   * Hands off into the REAL diagnosis: backend-driven, and entered at
+   * /app/founder-dna-journey. This used to navigate into a scripted
    * `/guided/reveal -> root-cause -> conclusion -> report` sequence that was
    * entirely hardcoded UI theater -- fixed dialogue and a fixed "root cause"
    * regardless of what a founder typed here -- so every founder saw a finished
    * report after one tap. That sequence has been removed; this is now the only
    * diagnosis a founder goes through.
+   *
+   * That removal pointed this at /app/diagnosis, which is the THIRD of three
+   * phases. POST /diagnosis/start refuses with 409 until Founder DNA and the
+   * Current Problem capture are both done (see diagnosis/service.py's
+   * start_session), so every founder finishing onboarding landed on a chat
+   * that could only say "I couldn't start your diagnosis just now. Please
+   * refresh to try again." -- advice that can never work, on the very first
+   * screen after they finished setting themselves up.
+   *
+   * The journey entry point is where every other "start your diagnosis"
+   * affordance in the app already sends them: the sidebar item (PlatformLayout),
+   * the dashboard's empty state and compass loop, DnaState, the recommendations
+   * page, and Ally's own missing_information suggestion. This makes the last
+   * step of onboarding agree with all six.
    */
   const handleContinue = async () => {
     if (starting) return;
@@ -48,7 +62,7 @@ export default function Problem() {
     } catch {
       // Not fatal -- the diagnosis itself doesn't depend on this having saved.
     }
-    navigate('/app/diagnosis');
+    navigate('/app/founder-dna-journey');
   };
 
   return (

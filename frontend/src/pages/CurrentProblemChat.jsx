@@ -96,7 +96,15 @@ export default function CurrentProblemChat() {
         // A 409 here means the Founder DNA phase isn't finished -- a routing
         // problem, not a server fault, and "please refresh" would loop them
         // forever on a page that cannot work yet.
-        const needsDna = err?.response?.status === 409;
+        //
+        // `err.status`, not `err.response.status`: services/api.js normalises
+        // every failure into an ApiError carrying {status, detail, code} and
+        // deliberately keeps axios internals away from callers, so
+        // `err.response` is always undefined here. This read therefore never
+        // matched, and the redirect below was dead code -- a founder who had
+        // not finished Founder DNA got the "please refresh" dead end anyway,
+        // which is exactly what this branch existed to prevent.
+        const needsDna = err?.status === 409 || err?.code === 'FounderDnaNotCompleteError';
         setMessages([{ role: 'ally', time: clock(),
           text: needsDna
             ? "Let's finish getting to know you first — I'll take you back."

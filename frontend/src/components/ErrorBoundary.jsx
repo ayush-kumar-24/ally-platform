@@ -27,6 +27,34 @@ import { isChunkLoadError } from '../utils/loadChunk';
    now says so, and leads with Reload.
 ───────────────────────────────────────────── */
 
+/**
+ * A DOM that no longer matches the tree React thinks it rendered.
+ *
+ * React only ever removes a node it put there itself, so "the node to be
+ * removed is not a child of this node" means something OUTSIDE React moved or
+ * deleted it first. In practice that is the browser or an extension rewriting
+ * the page underneath us: Chrome's page translation (it replaces each text
+ * node with a <font> wrapper), an AI assistant or writing-tool toolbar, a
+ * password manager injecting into a form. Audited 2026-09-18: nothing in this
+ * app mutates the DOM inside #root -- every appendChild/removeChild we make is
+ * on document.body or document.head, outside React's tree -- and there is only
+ * one createRoot.
+ *
+ * It is worth telling apart because it is NOT a bug in the page the founder is
+ * on, and because it explains a symptom that otherwise looks impossible: the
+ * failed removal leaves the old DOM orphaned on screen, so the founder sees the
+ * previous screen still sitting there with this card rendered BELOW it.
+ * Reloading resolves it every time -- the fresh tree and the DOM start in step
+ * again.
+ */
+function isDomSyncError(error) {
+  const message = String(error?.message || error || '');
+  return (
+    error?.name === 'NotFoundError'
+    && /removeChild|insertBefore|replaceChild/i.test(message)
+  ) || /not a child of this node/i.test(message);
+}
+
 class ErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
@@ -50,7 +78,9 @@ class ErrorBoundary extends React.Component {
        of 'chunk_load' is "a deploy caught people mid-flow", a spike of
        'error_boundary' is "we shipped a bug". */
     reportError(error, {
-      source: isChunkLoadError(error) ? 'chunk_load' : 'error_boundary',
+      source: isChunkLoadError(error) ? 'chunk_load'
+        : isDomSyncError(error) ? 'dom_sync'
+        : 'error_boundary',
       componentStack: errorInfo?.componentStack,
     });
   }
@@ -82,14 +112,18 @@ class ErrorBoundary extends React.Component {
     const { error, errorInfo, showDetails } = this.state;
     const { label = 'This section' } = this.props;
     const staleBuild = isChunkLoadError(error);
+    // Not a fault in this page -- something outside React rewrote the DOM.
+    // Reload is the fix, so it leads, exactly as it does for a stale build.
+    const domSync = !staleBuild && isDomSyncError(error);
+    const reloadLeads = staleBuild || domSync;
 
     const reload = () => window.location.reload();
     // The reload is the fix for a stale build, so it leads. For a real crash
     // it rarely helps, so getting out of the broken screen leads instead.
-    const primary = staleBuild
+    const primary = reloadLeads
       ? { id: 'eb-reload-btn', text: 'Reload Page', onClick: reload }
       : { id: 'eb-go-home-btn', text: 'Go Back to Safety', onClick: this.handleReset };
-    const secondary = staleBuild
+    const secondary = reloadLeads
       ? { id: 'eb-go-home-btn', text: 'Go Back to Safety', onClick: this.handleReset }
       : { id: 'eb-reload-btn', text: 'Reload Page', onClick: reload };
 
@@ -105,7 +139,7 @@ class ErrorBoundary extends React.Component {
               gets a chance to say otherwise. A refresh arrow for that case. */}
           <div style={styles.iconWrap}>
             <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#10B981' }}>
-              {staleBuild ? (
+              {reloadLeads ? (
                 <>
                   <path d="M21 12a9 9 0 1 1-2.64-6.36" />
                   <polyline points="21 3 21 9 15 9" />
@@ -122,10 +156,18 @@ class ErrorBoundary extends React.Component {
 
           {/* Heading */}
           <h1 style={styles.heading}>
-            {staleBuild ? 'A new version is ready' : 'Something went wrong'}
+            {staleBuild ? 'A new version is ready'
+              : domSync ? 'This page needs a refresh'
+              : 'Something went wrong'}
           </h1>
           <p style={styles.subtext}>
-            {staleBuild ? (
+            {domSync ? (
+              <>
+                Something outside {label} changed this page while it was updating — usually a
+                browser extension or a page translation. Nothing is broken and nothing is lost;
+                reloading puts it right.
+              </>
+            ) : staleBuild ? (
               <>
                 We released an update to{' '}
                 <strong style={{ color: '#34d399' }}>{label}</strong> while you had this page
