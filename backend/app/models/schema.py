@@ -518,6 +518,11 @@ class Problems(Base):
     )
 
     problem_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    # Added by migration 62ebd946ebc0. A jsonb array of industry codes,
+    # or ["all"] for a question every industry may be asked. Same shape as
+    # interventions.industry_relevance, which predates it.
+    industry_relevance: Mapped[Optional[dict]] = mapped_column(
+        JSONB, server_default=text('\'["all"]\'::jsonb'))
     problem_code: Mapped[str] = mapped_column(String(20), nullable=False)
     problem_name: Mapped[str] = mapped_column(String(200), nullable=False)
     category: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -1113,6 +1118,11 @@ class RootCauses(Base):
     )
 
     root_cause_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    # Added by migration 62ebd946ebc0. A jsonb array of industry codes,
+    # or ["all"] for a question every industry may be asked. Same shape as
+    # interventions.industry_relevance, which predates it.
+    industry_relevance: Mapped[Optional[dict]] = mapped_column(
+        JSONB, server_default=text('\'["all"]\'::jsonb'))
     root_cause_code: Mapped[str] = mapped_column(String(20), nullable=False)
     problem_id: Mapped[int] = mapped_column(Integer, nullable=False)
     root_cause_name: Mapped[str] = mapped_column(String(200), nullable=False)
@@ -1373,6 +1383,11 @@ class Questions(Base):
     )
 
     question_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    # Added by migration 62ebd946ebc0. A jsonb array of industry codes,
+    # or ["all"] for a question every industry may be asked. Same shape as
+    # interventions.industry_relevance, which predates it.
+    industry_relevance: Mapped[Optional[dict]] = mapped_column(
+        JSONB, server_default=text('\'["all"]\'::jsonb'))
     question_code: Mapped[str] = mapped_column(String(100), nullable=False)
     category: Mapped[str] = mapped_column(String(100), nullable=False)
     question_text: Mapped[str] = mapped_column(Text, nullable=False)

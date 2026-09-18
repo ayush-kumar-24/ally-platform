@@ -19,6 +19,7 @@ from app.api.v1.diagnosis.advisor import AnswerInsight, NextQuestionAdvisor, res
 from app.api.v1.diagnosis import incremental_confidence
 from app.api.v1.diagnosis.engine import QuestionSelectionEngine
 from app.api.v1.diagnosis.founder_brief import build_founder_brief
+from app.api.v1.diagnosis.founder_context import FounderContext
 from app.api.v1.diagnosis.repository import DiagnosisRepository
 from app.core.config import settings
 from app.core.logger import logger
@@ -756,7 +757,10 @@ class DiagnosisService:
         Returns the insight alongside the pick so the caller can act on its
         responsiveness verdict; None when no advisor ran or it failed.
         """
-        candidates = self.engine.candidate_questions(session, founder)
+        # Built once per turn and handed down, so the gates, the brief and
+        # (from Step 4) anything the session learns all read one object.
+        context = FounderContext.from_founder(founder)
+        candidates = self.engine.candidate_questions(session, founder, context)
         if not candidates:
             return None, None  # bank exhausted -> completion
 

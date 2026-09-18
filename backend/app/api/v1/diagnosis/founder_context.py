@@ -59,10 +59,19 @@ FAMILY_TEAM = "team"
 FAMILY_BUSINESS_MODEL = "business_model"
 FAMILY_REVENUE = "revenue"
 FAMILY_CHALLENGES = "challenges"
+#: Fundraising intent is its OWN family, separate from the challenges it is
+#: derived from, because the two have different negative semantics. Answering
+#: the challenges question at all settles fundraising ("they were shown the
+#: option and did not pick it" -- the rule `context_scope.context_tokens` has
+#: shipped since the gate existed). It does NOT settle the others: the question
+#: is "pick up to three", so a founder with a marketing problem who picked
+#: three other things has not denied marketing. Collapsing the two families
+#: would either break the live fundraising gate or over-gate everything else.
+FAMILY_FUNDRAISING = "fundraising"
 
 ALL_FAMILIES = frozenset({
     FAMILY_STAGE, FAMILY_INDUSTRY, FAMILY_TEAM,
-    FAMILY_BUSINESS_MODEL, FAMILY_REVENUE, FAMILY_CHALLENGES,
+    FAMILY_BUSINESS_MODEL, FAMILY_REVENUE, FAMILY_CHALLENGES, FAMILY_FUNDRAISING,
 })
 
 #: Tokens that carry no `prefix:` because they read as English in a precondition
@@ -76,7 +85,7 @@ TOKEN_FUNDRAISING_INTENT = "fundraising_intent"
 _BARE_TOKEN_FAMILIES = {
     TOKEN_HAS_TEAM: FAMILY_TEAM,
     TOKEN_HAS_REVENUE: FAMILY_REVENUE,
-    TOKEN_FUNDRAISING_INTENT: FAMILY_CHALLENGES,
+    TOKEN_FUNDRAISING_INTENT: FAMILY_FUNDRAISING,
 }
 
 _PREFIX_FAMILIES = {
@@ -257,13 +266,17 @@ class FounderContext:
         if challenges is None:
             challenges = ()
             unknowns.add(FAMILY_CHALLENGES)
+            unknowns.add(FAMILY_FUNDRAISING)
         else:
             for challenge in challenges:
                 tokens.add(f"challenge:{challenge.lower()}")
+            # Fundraising is settled either way once the question was answered;
+            # the other challenges are not (see FAMILY_FUNDRAISING above).
             if any(c.casefold() == FUNDRAISING_CHALLENGE.casefold() for c in challenges):
                 tokens.add(TOKEN_FUNDRAISING_INTENT)
             else:
-                unknowns.add(FAMILY_CHALLENGES)
+                denied.add(TOKEN_FUNDRAISING_INTENT)
+            unknowns.add(FAMILY_CHALLENGES)
 
         return cls(
             stage_order=stage_order,
