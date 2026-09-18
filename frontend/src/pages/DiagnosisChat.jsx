@@ -23,6 +23,27 @@ import { FEEDBACK } from '../services/feedback';
 
 const clock = (d) => (d ? new Date(d) : new Date()).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 
+/* POST /diagnosis/start answers 409 when the founder has not finished an
+   EARLIER phase -- this chat is the third of three (Founder DNA, then the
+   Current Problem capture, then the business interrogation). That is a routing
+   answer, not a server fault: no amount of refreshing clears it, so the
+   generic "please refresh to try again" below is both wrong and a dead end for
+   anyone who arrives here early. Each one names the phase that is actually
+   next, and we take them there -- the same move CurrentProblemChat makes when
+   Founder DNA is missing. Keyed on the backend's error class name (ApiError
+   carries it as `code`) rather than the bare status, so a future 409 that
+   means something else is not silently swallowed as a wrong-turn. */
+const NEXT_PHASE = {
+  FounderDnaNotCompleteError: {
+    text: "Let's finish getting to know you first — I'll take you back.",
+    go: '/app/founder-dna-journey',
+  },
+  CurrentProblemNotCompleteError: {
+    text: "First tell me what's going on, in your own words — I'll take you there.",
+    go: '/app/current-problem',
+  },
+};
+
 export default function DiagnosisChat() {
   const navigate = useNavigate();
   const { user, showToast } = useApp();
@@ -114,6 +135,24 @@ export default function DiagnosisChat() {
         // (403/429/5xx) that lands here instead. Refreshing cannot clear any of
         // them, so the message above was both wrong and a dead end.
         //
+        /* An earlier phase is unfinished -- settled by the error itself, so
+           there is nothing to ask /plans about. Handled before the usage
+           lookup below for that reason, and because that lookup can fail on
+           its own and fall through to the dead-end message. */
+        const phase = NEXT_PHASE[error?.code];
+        if (phase) {
+          setMessages([{ role: 'ally', time: clock(), text: phase.text }]);
+          setTimeout(() => { if (!cancelled) navigate(phase.go, { replace: true }); }, 1800);
+          return;
+        }
+        /* No stage on the founder, so there is no question bank to draw from.
+           Nowhere to send them automatically -- the backend's own message
+           already says where to set it -- so this blocks rather than loops. */
+        if (error?.code === 'StageNotRecordedError') {
+          setBlocked(error.detail
+            || "Tell us what stage you're at in your profile — the questions you'll be asked depend on it.");
+          return;
+        }
         // The founder's usage is the thing that actually settles it, so ask for
         // it rather than inferring the answer from which error came back. Same
         // count and limit the start gate enforces (plans/router.py
@@ -134,7 +173,9 @@ export default function DiagnosisChat() {
           text: "I couldn't start your diagnosis just now. Please refresh to try again." }]);
       });
     return () => { cancelled = true; };
-  }, []);
+    // `navigate` is stable across renders in react-router v6, so listing it
+    // cannot re-run this effect and re-start the diagnosis.
+  }, [navigate]);
 
   const answer = async (text) => {
     if (!text.trim() || busy || done) return;
