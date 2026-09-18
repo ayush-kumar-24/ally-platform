@@ -241,6 +241,50 @@ export const QUESTIONS = [
         ],
       },
       {
+        key: 'teamSize',
+        field: 'team_size',
+        label: 'Team Size',
+        type: 'single',
+        // Asked on BOTH paths. A Stage 0 founder has a team or does not, and
+        // the answer changes which questions the diagnosis may ask them --
+        // delegation, hiring and decision-rights questions presuppose people
+        // to delegate to. Without it, team size is UNKNOWN and those questions
+        // stay eligible for everyone, which is what founders reported.
+        paths: BOTH,
+        q: "And who's building this with you right now?",
+        // Phrasing counts people doing the work, not payroll: a two-co-founder
+        // pre-hire company is "2-5", not "just me". The VALUES mirror the
+        // founders.team_size CHECK constraint exactly -- see TeamSize in
+        // backend/app/schemas/founder.py. Do not invent a seventh band.
+        options: [
+          { label: 'Just me', value: 'solo' },
+          { label: '2-5 people', value: '2_5' },
+          { label: '6-10 people', value: '6_10' },
+          { label: '11-25 people', value: '11_25' },
+          { label: '26-50 people', value: '26_50' },
+          { label: '50+ people', value: '50_plus' },
+        ],
+      },
+      {
+        key: 'businessModel',
+        field: 'business_model',
+        label: 'Business Model',
+        type: 'single',
+        // BOTH paths: an idea-stage founder usually knows who they intend to
+        // sell to even before they sell to anyone.
+        paths: BOTH,
+        q: 'And who do you sell to?',
+        // Mirrors BusinessModel in backend/app/schemas/founder.py.
+        options: [
+          { label: 'Businesses (B2B)', value: 'B2B' },
+          { label: 'Consumers (B2C)', value: 'B2C' },
+          { label: 'Businesses who serve consumers (B2B2C)', value: 'B2B2C' },
+          { label: 'A marketplace connecting both', value: 'marketplace' },
+          { label: 'Direct to consumer (D2C)', value: 'D2C' },
+          { label: 'Something else', value: 'other' },
+        ],
+      },
+      {
         key: 'revenue',
         field: 'current_revenue',
         label: 'Monthly Revenue',

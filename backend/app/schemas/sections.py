@@ -30,7 +30,13 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.schemas.founder import BusinessRealityCheck, CleanStrList, FounderRealityCheck  # noqa: F401 (re-exported for callers of this module)
+from app.schemas.founder import (  # noqa: F401 (re-exported for callers of this module)
+    BusinessModel,
+    BusinessRealityCheck,
+    CleanStrList,
+    FounderRealityCheck,
+    TeamSize,
+)
 
 # Mirrors the founders experience_level CHECK, so a bad value is a clean 422
 # at the API instead of a 500 from the database.
@@ -83,6 +89,11 @@ class BusinessInfoRead(BaseModel):
     founder_reality_signals: FounderRealityCheck | None = None
     business_reality_signals: BusinessRealityCheck | None = None
     invisible_gaps: list[str] | None = None
+    # Both are nullable and stay that way: every founder onboarded before these
+    # questions existed has NULL here, and NULL must keep reading as "we did not
+    # ask" rather than as an answer. See FounderContext -- unknown fails open.
+    team_size: str | None = None
+    business_model: str | None = None
 
 
 class BusinessInfoUpdate(BaseModel):
@@ -116,6 +127,17 @@ class BusinessInfoUpdate(BaseModel):
     current_challenges_other: str | None = Field(default=None, max_length=200)
     founder_reality_signals: FounderRealityCheck | None = None
     business_reality_signals: BusinessRealityCheck | None = None
+    # TeamSize / BusinessModel are imported from app.schemas.founder rather than
+    # redeclared: `founders.team_size` already has a CHECK constraint with these
+    # six values and FounderUpdate already validates against it. A second
+    # vocabulary here is how the two drift apart.
+    #
+    # Why these were missing until now: this schema is `extra="forbid"`, and
+    # PATCH /profile/business is the only endpoint the guided flow writes
+    # business fields through -- so a client sending team_size got a 422, and
+    # the column stayed NULL for every founder the application ever created.
+    team_size: TeamSize | None = None
+    business_model: BusinessModel | None = None
     invisible_gaps: CleanStrList | None = None
 
 
