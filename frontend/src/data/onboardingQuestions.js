@@ -527,6 +527,38 @@ export function effectiveQuestions(path) {
 }
 
 /**
+ * Every question a founder is actually ASKED, keyed by its own key -- a
+ * group's parts lifted to the top level, each carrying the section of the
+ * group it came from.
+ *
+ * QUESTIONS is not a lookup table. Its entries are the eleven questions in
+ * flow order, and three of the things a founder answers -- stage, experience,
+ * revenue -- are PARTS of Q3's group rather than entries in it, as are the
+ * two reality checks inside Q9. So `QUESTIONS.find((x) => x.key === 'stage')`
+ * is undefined, not the stage part, and anything that then reads a field off
+ * it throws.
+ *
+ * This is the third time that has bitten: profileDisplay.js's ASKABLE and
+ * Summary.jsx's yesNoSummary both carry their own copy of this flatten, each
+ * added after the same bug. ProfileBuild's confirmField did not, and crashed
+ * the whole onboarding screen on `q.section` the instant a founder picked
+ * their stage. One shared lookup, so the next reader gets it right by default.
+ *
+ * Parts carry no `section` of their own -- they inherit the group's, which is
+ * what the DNA side panel already does when it lists them as rows.
+ */
+const ASKABLE_BY_KEY = new Map(
+  QUESTIONS.flatMap((q) => (q.type === 'group'
+    ? q.parts.map((p) => [p.key, { ...p, section: p.section ?? q.section }])
+    : [[q.key, q]])),
+);
+
+/** The question or group part with this key, or undefined if there is none. */
+export function askableByKey(key) {
+  return ASKABLE_BY_KEY.get(key);
+}
+
+/**
  * Every guided key a question can write, including a group's parts. Used by
  * the resume path to decide whether a question has already been answered.
  */

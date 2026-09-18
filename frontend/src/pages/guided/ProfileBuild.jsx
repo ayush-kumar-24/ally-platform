@@ -10,6 +10,7 @@ import MessageActions from '../../components/MessageActions';
 import {
   QUESTIONS as ALL_QUESTIONS,
   activeOptions,
+  askableByKey,
   activeParts,
   effectiveQuestions,
   questionCount,
@@ -204,11 +205,21 @@ export default function ProfileBuild() {
   }, []);
 
   const confirmField = useCallback((key, text, animate) => {
-    // Searches the full superset, not questionsRef.current -- keys are unique
-    // across both paths, and a pure lookup-by-key has no ordering dependency.
-    const q = ALL_QUESTIONS.find((x) => x.key === key);
+    /* Looks up the full superset rather than questionsRef.current -- keys are
+       unique across both paths, and a pure lookup-by-key has no ordering
+       dependency. It has to search the ASKED questions, though, not the eleven
+       top-level ones: stage, experience and revenue are PARTS of Q3's group,
+       so `QUESTIONS.find((x) => x.key === 'stage')` came back undefined and
+       `q.section` below threw the moment a founder picked their stage --
+       taking down the entire onboarding screen mid-flow. askableByKey()
+       descends into a group's parts and gives them their group's section.
+
+       Still optional-chained: which panel section to open is a presentation
+       detail, and it must never again be the reason a founder loses the
+       screen they are halfway through. */
+    const q = askableByKey(key);
     setEmptyGone(true);
-    setSectionsOpen((o) => ({ ...o, [q.section]: true }));
+    if (q?.section) setSectionsOpen((o) => ({ ...o, [q.section]: true }));
     if (animate && !reduce) {
       setFields((f) => ({ ...f, [key]: { status: 'building', text } }));
       fieldTimers.current.push(setTimeout(() => {
