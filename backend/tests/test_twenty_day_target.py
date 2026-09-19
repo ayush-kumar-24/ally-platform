@@ -529,7 +529,10 @@ def test_building_a_target_writes_nothing(db):
     "app/api/v1/reasoning/engines/root_cause.py",
     "app/api/v1/reasoning/engines/recommendation.py",
     "app/api/v1/reasoning/reporting/generator.py",
-    "app/api/v1/reports/generator.py",
+    # app/api/v1/reports/generator.py is no longer here: the Founder Report
+    # composition layer is the intended consumer of this engine, and the
+    # dependency runs one way (report -> engine). The reverse direction is
+    # pinned in test_report_capability_sections.
     "app/api/v1/diagnosis/engine.py",
     "app/api/v1/diagnosis/advisor.py",
     "app/api/v1/diagnosis/gap_engine.py",

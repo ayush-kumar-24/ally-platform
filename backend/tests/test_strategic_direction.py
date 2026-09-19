@@ -488,7 +488,10 @@ def test_the_engine_reuses_steps_6_8_and_9a_without_restating_them():
     "app/api/v1/reasoning/engines/diagnostic.py",
     "app/api/v1/reasoning/engines/root_cause.py",
     "app/api/v1/reasoning/engines/recommendation.py",
-    "app/api/v1/reports/generator.py",
+    # app/api/v1/reports/generator.py is no longer here: the Founder Report
+    # composition layer is the intended consumer of this engine, and the
+    # dependency runs one way (report -> engine). The reverse direction is
+    # pinned in test_report_capability_sections.
     "app/api/v1/diagnosis/engine.py",
     "app/api/v1/diagnosis/advisor.py",
     "app/api/v1/diagnosis/gap_engine.py",

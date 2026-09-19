@@ -145,7 +145,12 @@ def test_all_three_founder_facing_routes_filter():
 
     source = (BACKEND_DIR / "app" / "api" / "v1" / "reports" / "routes.py").read_text(
         encoding="utf-8")
-    assert source.count("_visible_to(_build_narrative(db, report), founder, db)") == 2
+    # Three, not two: /export joined /reports/{id} and /document when the
+    # strategic-direction section became paid -- a plan-filtered PDF is
+    # rendered per download and never stored (see export_pdf). /insights is
+    # gated too, through a differently-shaped call that
+    # test_report_capability_sections pins separately.
+    assert source.count("_visible_to(_build_narrative(db, report), founder, db)") == 3
     assert 'dependencies=[Depends(require_recommendations)]' in source
 
 
