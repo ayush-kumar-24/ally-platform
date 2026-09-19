@@ -509,6 +509,103 @@ jobs:
           echo "Database migration successful."
 
       # ---------------------------------------------------------
+      # 9A0. EMBED NEW INDUSTRY SEED DATA
+      #
+      # The industry seeds intentionally arrive with 1536-d
+      # zero-vector placeholders and NULL embedding metadata.
+      #
+      # 02_regenerate_embeddings treats embedding_model IS NULL
+      # as "never embedded", so it safely picks up these rows.
+      #
+      # Scope:
+      #   12 industry datasets
+      #   180 problems
+      #   793 root causes
+      #   720 questions
+      #
+      # Industry reference rows themselves are not embedded.
+      # Embeddings are generated for problems, root causes, and questions.
+      #
+      # Uses privileged migration credentials because vectors and
+      # embedding metadata are written back to production.
+      # ---------------------------------------------------------
+
+      - name: Embed pending industry seed data
+        run: |
+          RESULT=$(aws ecs run-task \
+            --cluster "$ECS_CLUSTER" \
+            --launch-type FARGATE \
+            --task-definition "${{ steps.migration-taskdef.outputs.arn }}" \
+            --network-configuration \
+            "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SECURITY_GROUP],assignPublicIp=ENABLED}" \
+            --overrides \
+            "{\"containerOverrides\":[{\"name\":\"$CONTAINER_NAME\",\"command\":[\"python\",\"-m\",\"scripts.embedding_migration.02_regenerate_embeddings\",\"--tables\",\"root_causes,problems,questions\"]}]}")
+
+          echo "$RESULT"
+
+          TASK_ARN=$(echo "$RESULT" | jq -r '.tasks[0].taskArn // empty')
+
+          if [ -z "$TASK_ARN" ]; then
+            echo "Could not start industry seed embedding task."
+            echo "$RESULT" | jq '.failures'
+            exit 1
+          fi
+
+          echo "Industry embedding task: $TASK_ARN"
+          echo "Waiting up to 90 minutes for industry embeddings."
+
+          TASK_STOPPED=false
+
+          for attempt in $(seq 1 360); do
+            LAST_STATUS=$(aws ecs describe-tasks \
+              --cluster "$ECS_CLUSTER" \
+              --tasks "$TASK_ARN" \
+              --query 'tasks[0].lastStatus' \
+              --output text)
+
+            echo "Industry embedding status: $LAST_STATUS (attempt $attempt/360)"
+
+            if [ "$LAST_STATUS" = "STOPPED" ]; then
+              TASK_STOPPED=true
+              break
+            fi
+
+            sleep 15
+          done
+
+          if [ "$TASK_STOPPED" != "true" ]; then
+            echo "INDUSTRY EMBEDDING TIMED OUT after 90 minutes."
+
+            aws ecs stop-task \
+              --cluster "$ECS_CLUSTER" \
+              --task "$TASK_ARN" \
+              --reason "GitHub deployment timed out waiting for industry embeddings"
+
+            echo "ECS service will NOT be updated."
+            exit 1
+          fi
+
+          EXIT_CODE=$(aws ecs describe-tasks \
+            --cluster "$ECS_CLUSTER" \
+            --tasks "$TASK_ARN" \
+            --query "tasks[0].containers[?name=='$CONTAINER_NAME'].exitCode | [0]" \
+            --output text)
+
+          echo "Industry embedding exit code: $EXIT_CODE"
+
+          if [ "$EXIT_CODE" != "0" ]; then
+            echo "INDUSTRY SEED EMBEDDING FAILED."
+
+            aws ecs describe-tasks \
+              --cluster "$ECS_CLUSTER" \
+              --tasks "$TASK_ARN" \
+              --query 'tasks[0].{stoppedReason:stoppedReason,containers:containers[*].{name:name,reason:reason,exitCode:exitCode}}'
+
+            echo "ECS service will NOT be updated."
+            exit 1
+          fi
+
+          echo "Industry seed embeddings completed successfully."
       # 9A. EMBED BUSINESS-DNA QUESTIONS 2130-2229
       #
       # Uses the privileged migration task because this step writes
