@@ -87,6 +87,16 @@ REFERENCE_TABLES: tuple[tuple[str, str], ...] = (
     ("question_tags", "The tag vocabulary questions are classified against."),
     ("questions", "The diagnosis bank, INCLUDING 1-2129 which exist nowhere else."),
     ("question_tag_mapping", "Question -> tag."),
+    # The capability taxonomy (f2a91c3d7b58). Ordered after questions and
+    # interventions because the two mapping tables are their children.
+    ("capability_domains", "Capability taxonomy: the seven domains."),
+    ("capabilities", "Capability taxonomy: what a business can or cannot do."),
+    ("capability_evidence_criteria", "Observable statements per capability."),
+    ("intervention_capabilities", "Intervention -> capability it builds."),
+    # question_capabilities is NOT dumped: it is deliberately empty until the
+    # Step-8 curation pass, and a dump file with no rows has no `insert into`
+    # line for test_every_dumped_file_leads_with_its_primary_key to check. The
+    # migration creates the table; there is simply nothing to seed yet.
     ("founder_dna_questions", "The Founder DNA journey."),
     ("current_problem_questions", "The Current Problem phase."),
     ("notification_types", "Notification catalogue."),

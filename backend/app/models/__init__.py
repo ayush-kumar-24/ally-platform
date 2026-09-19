@@ -17,13 +17,21 @@ Class names follow sqlacodegen's convention (pluralised: `Founders`,
 """
 
 from app.models import (
-    auth, llm, memory, partitioned, schema, session_context, suggestions, waitlist,
+    auth, capability, llm, memory, partitioned, schema, session_context,
+    suggestions, waitlist,
 )
 from app.models.auth import RevokedTokenRow
 from app.models.waitlist import WaitlistRegistration
 from app.models.llm import LLMCallLog, ModelTaskRouting
 from app.models.memory import FounderMemory, FounderMemoryEvent
 from app.models.partitioned import AnalyticsEvent, AuditLog, Message
+from app.models.capability import (
+    Capability,
+    CapabilityDomain,
+    CapabilityEvidenceCriterion,
+    InterventionCapability,
+    QuestionCapability,
+)
 from app.models.schema import Founders
 from app.models.session_context import SessionContextFact
 from app.models.suggestions import SuggestionFeedbackRow, SuggestionRow
