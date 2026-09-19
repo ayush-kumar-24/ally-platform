@@ -250,15 +250,24 @@ def test_a_future_requirement_can_reference_a_capability_without_target_logic(db
     assert criteria >= 3, "a requirement needs criteria to be judged against"
 
 
-def test_question_capability_infrastructure_exists_and_is_empty(db, capsys):
-    """Deliberately empty: a fabricated mapping would produce confident evidence
-    about capabilities nobody checked."""
-    mapped = db.execute(text("SELECT count(*) FROM question_capabilities")).scalar()
+def test_question_capability_mapping_is_partial_by_design(db, capsys):
+    """Step 7A curated this; Step 5 shipped it empty.
+
+    The assertion that matters is that it is STILL PARTIAL. A fabricated mapping
+    would produce confident evidence about capabilities nobody checked, so the
+    1,874 unmapped questions are the designed outcome, not a backlog to burn
+    down. Full coverage here would mean the curation forced matches.
+    """
+    mapped = db.execute(text(
+        "SELECT count(DISTINCT question_id) FROM question_capabilities")).scalar()
     total = db.execute(text("SELECT count(*) FROM questions")).scalar()
-    assert mapped == 0
+    assert 0 < mapped < total, (
+        "the mapping must be seeded and partial; see "
+        "backend/docs/QUESTION-CAPABILITY-MAPPING.md"
+    )
     with capsys.disabled():
-        print(f"\n    questions: 0/{total} mapped to capabilities "
-              f"-- curation pending, see CAPABILITY-TAXONOMY.md")
+        print(f"\n    questions: {mapped}/{total} mapped to capabilities "
+              f"({mapped / total:.0%}) -- see QUESTION-CAPABILITY-MAPPING.md")
 
 
 # =========================================================== 11: no gap states yet
