@@ -385,6 +385,16 @@ class DiagnosisRepository:
         names = self.capability_names()
         return compute_capability_gaps(requirements, assessments, names)
 
+    def prioritized_capability_gaps_for_session(self, session_id: int, founder_context, target):
+        """Step 9A: the same session's `CapabilityGap`s (Step 8, above),
+        filtered to `status == GAP` and ordered by `gap_priority.py`'s
+        documented, deterministic factors. Adds no query of its own -- it is
+        exactly `capability_gaps_for_session`'s output, prioritized."""
+        from app.api.v1.diagnosis.gap_priority import prioritize_capability_gaps
+
+        gaps = self.capability_gaps_for_session(session_id, founder_context, target)
+        return prioritize_capability_gaps(gaps)
+
     # --- Session-learned context -------------------------------------------
 
     def session_context_facts(self, session_id: int) -> dict[str, bool]:
