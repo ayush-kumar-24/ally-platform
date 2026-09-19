@@ -57,12 +57,22 @@ from app.api.v1.diagnosis.capability_levels import CapabilityLevel
 from app.core.logger import logger
 from app.services.llm import LLMMessage, LLMProvider, LLMProviderError, LLMRequest, LLMRole
 
-_MIN_CONFIDENCE = 0.6
 #: Below this, the extractor's own uncertainty is the reason to store nothing --
 #: not a defect in the model's answer. A hedge is not evidence. Set well above
 #: zero deliberately: "no fabricated evidence" (case 9) means the bar for
 #: STORING is high, even though the bar for ATTEMPTING is just "the question is
 #: mapped and was answered".
+#:
+#: PUBLIC (no leading underscore) because Step 7C's aggregation reuses this
+#: EXACT number as its participation floor -- see capability_assessment.py.
+#: Every row that exists in `capability_evidence` already cleared this bar at
+#: write time, so in today's single-writer system the floor at aggregation time
+#: is a belt, not the buckle: it is what stops a future or alternate writer
+#: (there is no DB CHECK requiring >= this, only >= 0) from smuggling a hedge
+#: into the current-state read. Reusing the constant, not a second number, is
+#: what makes the threshold "justified from existing Step 7B semantics" rather
+#: than arbitrary.
+MIN_CONFIDENCE = 0.6
 
 
 @dataclass(frozen=True)
@@ -194,7 +204,7 @@ class LLMCapabilityEvidenceExtractor(CapabilityEvidenceExtractor):
             return None
 
         confidence = self._coerce_confidence(data.get("confidence"))
-        if confidence < _MIN_CONFIDENCE:
+        if confidence < MIN_CONFIDENCE:
             return None                                    # a hedge is not evidence
 
         criterion_id = self._coerce_criterion(data.get("criterion_id"), criteria)

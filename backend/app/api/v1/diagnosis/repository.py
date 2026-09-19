@@ -332,6 +332,18 @@ class DiagnosisRepository:
         )
         return [dict(r) for r in self.db.execute(_text(sql), {"sid": session_id}).mappings().all()]
 
+    def current_capability_assessments(self, session_id: int):
+        """Step 7C: the current read for every capability this session has AT
+        LEAST ONE observation for. A thin composition -- read the immutable
+        evidence, hand it to the pure aggregator -- deliberately not a new
+        query of its own, so the SAME rows `capability_evidence_for_session`
+        already exposes for debugging are what the assessment is computed
+        from. No new table, no write, no side effect.
+        """
+        from app.api.v1.diagnosis.capability_assessment import assess_capabilities
+
+        return assess_capabilities(self.capability_evidence_for_session(session_id))
+
     # --- Session-learned context -------------------------------------------
 
     def session_context_facts(self, session_id: int) -> dict[str, bool]:
