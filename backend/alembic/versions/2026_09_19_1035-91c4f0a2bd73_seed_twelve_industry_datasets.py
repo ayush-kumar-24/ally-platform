@@ -42,6 +42,18 @@ def upgrade() -> None:
             """
         )
 
+    # Keep the industries SERIAL sequence aligned with existing production rows.
+    # Some legacy industry rows were loaded with explicit primary-key values.
+    bind.exec_driver_sql(
+        """
+        SELECT setval(
+            pg_get_serial_sequence('industries', 'industry_id'),
+            COALESCE((SELECT MAX(industry_id) FROM industries), 1),
+            EXISTS (SELECT 1 FROM industries)
+        )
+        """
+    )
+
     industry_rows = [
         ('agritech', 'Agriculture & AgriTech', 'Agriculture, farm inputs, farmer services, agri marketplaces, precision farming, agri-fintech, cold-chain and post-harvest businesses.'),
         ('automotive', 'Automotive & Mobility', 'Vehicle, EV, mobility, fleet, automotive component and aftermarket businesses.'),
