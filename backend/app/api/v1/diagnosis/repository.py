@@ -395,6 +395,99 @@ class DiagnosisRepository:
         gaps = self.capability_gaps_for_session(session_id, founder_context, target)
         return prioritize_capability_gaps(gaps)
 
+    def stage_id_for_stage_order(self, stage_order: int | None) -> int | None:
+        """founder_stages.stage_id for a stage_order, or None when unknown.
+
+        A real lookup, not an assumption: `interventions.stage_relevance` holds
+        stage_ids while FounderContext carries a stage_order. The two coincide
+        in today's seed data and relying on that coincidence would be a latent
+        bug the day a stage is inserted or reordered.
+        """
+        if stage_order is None:
+            return None
+        try:
+            return self.db.execute(
+                _text("SELECT stage_id FROM founder_stages WHERE stage_order = :o"),
+                {"o": stage_order},
+            ).scalar()
+        except Exception:                                      # noqa: BLE001
+            logger.warning("founder_stages unavailable; intervention stage filter "
+                           "will fail open", extra={"stage": "gap_intervention"})
+            return None
+
+    def interventions_for_capabilities(self, capability_ids) -> dict[int, list]:
+        """{capability_id: [intervention rows]} for the curated
+        `intervention_capabilities` map, in ONE bounded query.
+
+        Read-only, and never N+1 regardless of how many capabilities are gapped:
+        the whole set is fetched with a single `= ANY(:ids)`. Rows come back
+        ordered by intervention_id so the caller's own ordering starts from a
+        stable place. Nothing here filters -- eligibility is the pure
+        function's job, against the existing relevance strategy.
+        """
+        ids = [int(cid) for cid in capability_ids]
+        if not ids:
+            return {}
+        sql = (
+            "SELECT ic.capability_id, i.intervention_id, i.intervention_code,"
+            "       i.section, i.stage_relevance, i.industry_relevance"
+            "  FROM intervention_capabilities ic"
+            "  JOIN interventions i ON i.intervention_id = ic.intervention_id"
+            " WHERE ic.capability_id = ANY(:ids)"
+            " ORDER BY ic.capability_id, i.intervention_id"
+        )
+        try:
+            rows = self.db.execute(_text(sql), {"ids": ids}).mappings().all()
+        except Exception:                                      # noqa: BLE001
+            logger.warning("intervention_capabilities unavailable; every gap will "
+                           "read as uncovered", extra={"stage": "gap_intervention"})
+            return {}
+        by_capability: dict[int, list] = {}
+        for row in rows:
+            by_capability.setdefault(row["capability_id"], []).append(dict(row))
+        return by_capability
+
+    def intervention_candidates_for_session(self, session_id: int, founder_context, target):
+        """Step 9B: this session's prioritized gaps -> existing intervention
+        candidates + explicitly uncovered gaps. Read-only; issues no write."""
+        from app.api.v1.diagnosis.gap_intervention import select_interventions_for_gaps
+
+        gaps = self.prioritized_capability_gaps_for_session(
+            session_id, founder_context, target
+        )
+        by_capability = self.interventions_for_capabilities(
+            tuple(g.capability_id for g in gaps)
+        )
+        return select_interventions_for_gaps(
+            gaps, by_capability,
+            stage_id=self.stage_id_for_stage_order(
+                getattr(founder_context, "stage_order", None)),
+            industry_code=getattr(founder_context, "industry_code", None),
+        )
+
+    def intervention_coverage_summary(self) -> list[dict]:
+        """Per-capability intervention coverage, for content-gap analysis.
+
+        Library-wide and founder-independent -- it answers "what can the
+        library address at all", not "what does this founder get". One bounded
+        query over two small static tables.
+        """
+        sql = (
+            "SELECT c.capability_id, c.capability_code, c.capability_name,"
+            "       count(ic.intervention_id) AS mapped"
+            "  FROM capabilities c"
+            "  LEFT JOIN intervention_capabilities ic"
+            "         ON ic.capability_id = c.capability_id"
+            " GROUP BY c.capability_id, c.capability_code, c.capability_name"
+            " ORDER BY mapped, c.capability_code"
+        )
+        try:
+            return [dict(r) for r in self.db.execute(_text(sql)).mappings().all()]
+        except Exception:                                      # noqa: BLE001
+            logger.warning("intervention coverage unavailable",
+                           extra={"stage": "gap_intervention"})
+            return []
+
     # --- Session-learned context -------------------------------------------
 
     def session_context_facts(self, session_id: int) -> dict[str, bool]:
