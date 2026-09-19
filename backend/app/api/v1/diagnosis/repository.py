@@ -465,6 +465,108 @@ class DiagnosisRepository:
             industry_code=getattr(founder_context, "industry_code", None),
         )
 
+    def capability_detail(self, capability_ids) -> dict[int, dict]:
+        """{capability_id: {capability_name, description}} in one bounded query.
+        The capability IS the 20-day outcome, so its own words are what the
+        target states -- nothing is composed from them."""
+        ids = [int(cid) for cid in capability_ids]
+        if not ids:
+            return {}
+        try:
+            rows = self.db.execute(_text(
+                "SELECT capability_id, capability_code, capability_name, description"
+                "  FROM capabilities WHERE capability_id = ANY(:ids)"
+            ), {"ids": ids}).mappings().all()
+        except Exception:                                      # noqa: BLE001
+            logger.warning("capability detail unavailable",
+                           extra={"stage": "twenty_day_target"})
+            return {}
+        return {row["capability_id"]: dict(row) for row in rows}
+
+    def capability_criteria(self, capability_ids) -> dict[int, list]:
+        """{capability_id: [evidence criteria]} in one bounded query.
+
+        These are Step 5's criteria, reused verbatim as 20-day success
+        criteria. No second evidence taxonomy is created: the criterion_ids
+        carried here are the same ones Step 7B cites when it later records
+        evidence, which is what lets the loop close.
+        """
+        ids = [int(cid) for cid in capability_ids]
+        if not ids:
+            return {}
+        try:
+            rows = self.db.execute(_text(
+                "SELECT capability_id, criterion_id, criterion_order, criterion_text"
+                "  FROM capability_evidence_criteria WHERE capability_id = ANY(:ids)"
+                " ORDER BY capability_id, criterion_order"
+            ), {"ids": ids}).mappings().all()
+        except Exception:                                      # noqa: BLE001
+            logger.warning("capability criteria unavailable",
+                           extra={"stage": "twenty_day_target"})
+            return {}
+        by_capability: dict[int, list] = {}
+        for row in rows:
+            by_capability.setdefault(row["capability_id"], []).append(dict(row))
+        return by_capability
+
+    def intervention_steps(self, intervention_ids) -> dict[int, list]:
+        """{intervention_id: [immediate_next_steps]} in one bounded query.
+
+        Copied verbatim, exactly as the existing recommendation engine already
+        copies the same column into `Recommendation.next_actions`. Separate
+        from `interventions_for_capabilities` so Step 9B's own query and its
+        content-free candidate object stay untouched.
+        """
+        ids = [int(iid) for iid in intervention_ids]
+        if not ids:
+            return {}
+        try:
+            rows = self.db.execute(_text(
+                "SELECT intervention_id, immediate_next_steps FROM interventions"
+                " WHERE intervention_id = ANY(:ids)"
+            ), {"ids": ids}).mappings().all()
+        except Exception:                                      # noqa: BLE001
+            logger.warning("intervention steps unavailable",
+                           extra={"stage": "twenty_day_target"})
+            return {}
+        return {
+            row["intervention_id"]: [str(s) for s in (row["immediate_next_steps"] or [])]
+            for row in rows
+        }
+
+    def twenty_day_target_for_session(self, session_id: int, founder_context, target,
+                                      *, narrator=None):
+        """Step 10A: this session's diagnosis -> one 20-day execution target.
+
+        Read-only. Knows nothing about plans, tiers or prices -- entitlement is
+        a router concern in this codebase, and all paid plans consume this
+        same engine unchanged.
+        """
+        from app.api.v1.diagnosis.gap_intervention import select_interventions_for_gaps
+        from app.api.v1.diagnosis.twenty_day_target import (
+            build_twenty_day_target,
+            narrate_target,
+        )
+
+        gaps = self.prioritized_capability_gaps_for_session(
+            session_id, founder_context, target
+        )
+        capability_ids = tuple(g.capability_id for g in gaps)
+        selection = select_interventions_for_gaps(
+            gaps, self.interventions_for_capabilities(capability_ids),
+            stage_id=self.stage_id_for_stage_order(
+                getattr(founder_context, "stage_order", None)),
+            industry_code=getattr(founder_context, "industry_code", None),
+        )
+        result = build_twenty_day_target(
+            gaps, selection,
+            self.capability_detail(capability_ids),
+            self.capability_criteria(capability_ids),
+            self.intervention_steps(
+                tuple(c.intervention_id for c in selection.candidates)),
+        )
+        return narrate_target(result, narrator)
+
     def intervention_coverage_summary(self) -> list[dict]:
         """Per-capability intervention coverage, for content-gap analysis.
 
