@@ -54,6 +54,17 @@ def upgrade() -> None:
         """
     )
 
+    # Keep the interventions SERIAL sequence aligned with existing production rows.
+    bind.exec_driver_sql(
+        """
+        SELECT setval(
+            pg_get_serial_sequence('interventions', 'intervention_id'),
+            COALESCE((SELECT MAX(intervention_id) FROM interventions), 1),
+            EXISTS (SELECT 1 FROM interventions)
+        )
+        """
+    )
+
     industry_rows = [
         ('agritech', 'Agriculture & AgriTech', 'Agriculture, farm inputs, farmer services, agri marketplaces, precision farming, agri-fintech, cold-chain and post-harvest businesses.'),
         ('automotive', 'Automotive & Mobility', 'Vehicle, EV, mobility, fleet, automotive component and aftermarket businesses.'),
