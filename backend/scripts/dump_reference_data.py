@@ -113,6 +113,9 @@ _FOUNDER_DATA = frozenset({
     "daily_token_usage", "llm_call_log", "report_shares", "planning_plans",
     "planning_goals", "planning_tasks", "agent_interpretations", "subscriptions",
     "cookie_preferences", "stage_assessments", "waitlist_registrations",
+    # Step 7B: one row per founder's answer, transitively via answer_id --
+    # exactly the same reasoning that puts detected_root_causes here.
+    "capability_evidence",
 })
 
 #: Regenerable, and the bulk of the bytes. See the module docstring.

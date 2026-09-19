@@ -271,20 +271,22 @@ def test_question_capability_mapping_is_partial_by_design(db, capsys):
 
 
 # =========================================================== 11: no gap states yet
-def test_there_is_no_evidence_or_gap_table_yet(db):
-    """The boundary, moved forward exactly one step.
+def test_there_is_no_gap_table_yet(db):
+    """The boundary, moved forward exactly one step again.
 
-    Step 5 built the vocabulary and Step 6 added `capability_requirements` --
-    what a DESTINATION needs. Evidence (what the founder actually has) is Step 7
-    and the comparison between them is Step 8, so their tables must still be
-    absent. This is what stops a gap being computed before there is anything to
-    compare: you cannot join to a table that does not exist.
+    Step 6 added `capability_requirements` (what a DESTINATION needs) and Step
+    7B added `capability_evidence` (what one ANSWER observably showed). Neither
+    is a verdict: the comparison between them -- the Gap Engine -- is Step 8,
+    and its tables must still be absent. This is what stops a gap being
+    computed before there is a mechanism to compute it: you cannot join to a
+    table that does not exist.
     """
     present = {t for (t,) in db.execute(text(
         "SELECT table_name FROM information_schema.tables"
         " WHERE table_schema = 'public'")).all()}
     assert "capability_requirements" in present, "Step 6 should have added this"
-    for premature in ("capability_evidence", "detected_gaps", "target_state_profiles"):
+    assert "capability_evidence" in present, "Step 7B should have added this"
+    for premature in ("detected_gaps", "target_state_profiles", "capability_assessments"):
         assert premature not in present, f"{premature} belongs to a later step"
 
 

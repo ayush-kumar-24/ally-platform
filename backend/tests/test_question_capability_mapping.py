@@ -151,14 +151,22 @@ def test_no_question_maps_to_more_than_one_capability(db):
 
 # =========================================================== 5-8: no regressions
 def test_question_selection_does_not_read_the_mapping():
-    """Case 5. The engine must not have grown a capability axis in this step."""
-    for module in ("app/api/v1/diagnosis/engine.py",
-                   "app/api/v1/diagnosis/repository.py",
-                   "app/api/v1/diagnosis/service.py",
-                   "app/api/v1/diagnosis/advisor.py"):
+    """Case 5. The engine must not have grown a capability axis.
+
+    At Step 7A this checked FOUR modules for zero references, because nothing
+    read the mapping at all. Step 7B gives it one legitimate reader --
+    `repository.py`'s `capability_and_criteria_for_question`, called only from
+    `service.py`'s `_extract_capability_evidence`, itself called only AFTER a
+    question has already been selected, ordered and answered. So the modules
+    that decide WHICH question to ask -- `engine.py` (candidate filtering and
+    ranking) and `advisor.py` (next-question choice) -- are what this still
+    checks, and checks strictly.
+    """
+    for module in ("app/api/v1/diagnosis/engine.py", "app/api/v1/diagnosis/advisor.py"):
         source = open(module).read()
         assert "question_capabilities" not in source, (
-            f"{module} reads the mapping; Step 7A adds data, not behaviour"
+            f"{module} reads the mapping; question selection must not gain a "
+            "capability axis"
         )
 
 
@@ -192,25 +200,41 @@ def test_the_mapping_table_has_no_industry_or_stage_column(db):
 
 # =========================================================== 9-12: still absent
 def test_no_capability_score_is_computed_yet(db):
-    """Cases 10 and 11. Evidence and gaps are Steps 7B and 8."""
+    """Cases 10 and 11, at Step 7A's own boundary.
+
+    `capability_evidence` now legitimately exists (Step 7B); this file's job is
+    to confirm nothing PAST it does -- no assessment, no score, no gap.
+    """
     present = {t for (t,) in db.execute(text(
         "SELECT table_name FROM information_schema.tables"
         " WHERE table_schema = 'public'")).all()}
-    for premature in ("capability_evidence", "capability_assessments",
-                      "detected_gaps", "capability_scores"):
+    for premature in ("capability_assessments", "detected_gaps", "capability_scores"):
         assert premature not in present, f"{premature} belongs to a later step"
 
 
-def test_no_module_derives_evidence_from_the_mapping():
-    """Case 1, structurally: nothing can turn an answer into capability evidence
-    yet, because no code reads the table at all."""
+def test_only_the_named_step_7b_modules_reference_the_mapping():
+    """Case 1's boundary, moved forward for Step 7B's own reader.
+
+    At Step 7A this asserted NOTHING read the table. Step 7B adds the one
+    reader the mapping exists for: `repository.py`'s
+    `capability_and_criteria_for_question`, called from
+    `service.py`'s `_extract_capability_evidence`. Everything that must NOT
+    have grown a dependency on it -- `engine.py` (question selection),
+    `advisor.py` (next-question ranking) -- is exactly what this still checks.
+    """
     import subprocess
-    hits = subprocess.run(
+    hits = set(subprocess.run(
         ["grep", "-rl", "--include=*.py", "question_capabilities", "app/"],
-        capture_output=True, text=True).stdout.split()
-    assert hits == ["app/models/capability.py"], (
-        f"only the ORM model may reference the mapping in Step 7A; found {hits}"
-    )
+        capture_output=True, text=True).stdout.split())
+    assert hits == {
+        "app/models/capability.py",
+        "app/api/v1/diagnosis/repository.py",
+        "app/api/v1/diagnosis/capability_evidence.py",  # docstring mentions only
+    }, f"unexpected readers of the mapping: {hits}"
+    for forbidden in ("app/api/v1/diagnosis/engine.py", "app/api/v1/diagnosis/advisor.py"):
+        assert forbidden not in hits, (
+            f"{forbidden} must not depend on the capability mapping"
+        )
 
 
 def test_the_mapping_is_read_only_reference_data(db):

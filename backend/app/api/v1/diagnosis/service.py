@@ -16,6 +16,7 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.api.v1.diagnosis.advisor import AnswerInsight, NextQuestionAdvisor, resolve_next
+from app.api.v1.diagnosis.capability_evidence import CapabilityEvidenceExtractor
 from app.api.v1.diagnosis import incremental_confidence
 from app.api.v1.diagnosis.engine import QuestionSelectionEngine
 from app.api.v1.diagnosis.founder_brief import build_founder_brief
@@ -177,12 +178,24 @@ def _utcnow() -> datetime:
 
 
 class DiagnosisService:
-    def __init__(self, db: Session, *, advisor: NextQuestionAdvisor | None = None):
+    def __init__(
+        self,
+        db: Session,
+        *,
+        advisor: NextQuestionAdvisor | None = None,
+        capability_evidence_extractor: CapabilityEvidenceExtractor | None = None,
+    ):
         self.db = db
         self.repository = DiagnosisRepository(db)
         self.engine = QuestionSelectionEngine(self.repository)
         # Optional adaptive next-question advisor (Hybrid). None => deterministic.
         self.advisor = advisor
+        # Optional Step 7B evidence extractor. None (the default for every
+        # existing caller) means this class's behaviour is BYTE IDENTICAL to
+        # before Step 7B: no second LLM call, no new table write, nothing
+        # changes for diagnosis scoring, root-cause ranking, question
+        # selection or the question budget.
+        self.capability_evidence_extractor = capability_evidence_extractor
 
     # --- Public API ---
 
@@ -640,6 +653,7 @@ class DiagnosisService:
         if not needs_fallback_score(insight):
             self._apply_insight(answer, insight)
             self._learn_session_facts(session, answer, answered)
+            await self._extract_capability_evidence(session, answer, answered)
         else:
             # No USABLE score means the advisor was absent, FAILED (timeout, bad
             # reply), or returned a label outside {green, amber, red} -- advisor
@@ -907,6 +921,77 @@ class DiagnosisService:
         except Exception as exc:                               # noqa: BLE001
             logger.warning(
                 "could not record session context fact; diagnosis continues",
+                extra={"session_id": session.session_id},
+                exc_info=exc,
+            )
+
+    async def _extract_capability_evidence(
+        self, session: DiagnosisSession, answer: Answer, question: Question | None
+    ) -> None:
+        """Step 7B: preserve what this ONE answer observably said about a
+        capability, if the question is mapped to one and the extractor is wired.
+
+        A NO-OP unless BOTH are true: `capability_evidence_extractor` was
+        injected (None for every caller that does not pass one -- unchanged
+        default) and this question maps to a capability at all (44% do, per
+        Step 7A). Every other answer runs this method and returns immediately.
+
+        NOT_APPLICABLE is excluded before the extractor is ever called, not
+        filtered after: an N/A answer means the subject is not part of this
+        founder's business, which is not weak evidence for a level, it is NO
+        evidence -- the same reasoning `_learn_session_facts` already applies
+        to preconditions. `score_label is None` (fallback path never reaches
+        here; unscored rows are impossible on this branch) is excluded too, as
+        a defensive belt for the same reason.
+
+        Never raises. Evidence extraction is additive enrichment; a founder's
+        answer must be safe regardless of whether this succeeds, exactly like
+        `_learn_session_facts`.
+        """
+        if self.capability_evidence_extractor is None or question is None:
+            return
+        if (answer.score_label or "") == ScoreLabel.NOT_APPLICABLE.value:
+            return
+        if not answer.score_label:
+            return
+        try:
+            mapping = self.repository.capability_and_criteria_for_question(
+                question.question_id
+            )
+            if mapping is None:
+                return
+            observation = await self.capability_evidence_extractor.extract(
+                question_text=question.question_text,
+                answer_text=answer.answer_text or "",
+                capability_id=mapping["capability_id"],
+                capability_name=mapping["capability_name"],
+                criteria=mapping["criteria"],
+            )
+            if observation is None:
+                return
+            stored = self.repository.record_capability_evidence(
+                capability_id=observation.capability_id,
+                question_id=question.question_id,
+                answer_id=answer.answer_id,
+                observed_level=int(observation.observed_level),
+                confidence=observation.confidence,
+                evidence_text=observation.evidence_text,
+                criterion_id=observation.criterion_id,
+            )
+            if stored:
+                logger.info(
+                    "capability evidence recorded",
+                    extra={
+                        "stage": "capability_evidence",
+                        "session_id": session.session_id,
+                        "question_id": question.question_id,
+                        "capability_id": observation.capability_id,
+                        "observed_level": int(observation.observed_level),
+                    },
+                )
+        except Exception as exc:                               # noqa: BLE001
+            logger.warning(
+                "could not extract capability evidence; diagnosis continues",
                 extra={"session_id": session.session_id},
                 exc_info=exc,
             )

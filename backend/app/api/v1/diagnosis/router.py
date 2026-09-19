@@ -21,7 +21,11 @@ from app.api.v1.diagnosis.schemas import (
     SubmitAnswerResponse,
 )
 from app.api.v1.diagnosis.advisor import NextQuestionAdvisor
-from app.api.v1.diagnosis.deps import get_next_question_advisor
+from app.api.v1.diagnosis.capability_evidence import CapabilityEvidenceExtractor
+from app.api.v1.diagnosis.deps import (
+    get_capability_evidence_extractor,
+    get_next_question_advisor,
+)
 from app.api.v1.diagnosis.notifications import (
     SessionCompletionNotifier,
     get_session_completion_notifier,
@@ -158,8 +162,13 @@ async def submit_answer(
         get_session_completion_notifier
     ),
     advisor: NextQuestionAdvisor | None = Depends(get_next_question_advisor),
+    capability_evidence_extractor: CapabilityEvidenceExtractor | None = Depends(
+        get_capability_evidence_extractor
+    ),
 ) -> SubmitAnswerResponse:
-    session, next_question, reprompt = await DiagnosisService(db, advisor=advisor).submit_answer(
+    session, next_question, reprompt = await DiagnosisService(
+        db, advisor=advisor, capability_evidence_extractor=capability_evidence_extractor,
+    ).submit_answer(
         founder=founder,
         question_id=payload.question_id,
         answer_text=payload.answer_text,
