@@ -29,6 +29,7 @@ from app.models.capability import (
     Capability,
     CapabilityDomain,
     CapabilityEvidenceCriterion,
+    CapabilityRequirement,
     InterventionCapability,
     QuestionCapability,
 )

@@ -35,6 +35,8 @@ from app.schemas.founder import (  # noqa: F401 (re-exported for callers of this
     BusinessRealityCheck,
     CleanStrList,
     FounderRealityCheck,
+    TargetRevenueBand,
+    TargetTimeHorizon,
     TeamSize,
 )
 
@@ -94,6 +96,11 @@ class BusinessInfoRead(BaseModel):
     # ask" rather than as an answer. See FounderContext -- unknown fails open.
     team_size: str | None = None
     business_model: str | None = None
+    # Target state. Read back as plain strings like every other coded field
+    # here; the vocabularies are enforced on WRITE (BusinessInfoUpdate) and by
+    # the founders_target_* CHECK constraints.
+    target_revenue_band: str | None = None
+    target_time_horizon: str | None = None
 
 
 class BusinessInfoUpdate(BaseModel):
@@ -138,6 +145,17 @@ class BusinessInfoUpdate(BaseModel):
     # the column stayed NULL for every founder the application ever created.
     team_size: TeamSize | None = None
     business_model: BusinessModel | None = None
+    # Where the founder wants to be, and by when. PROFILE CONTEXT, not
+    # diagnostic evidence: these select capability requirements and are never
+    # compared against current_revenue to manufacture a finding. Both optional
+    # and both stay NULL for every founder who is not asked -- a founder with no
+    # target simply resolves to no requirements.
+    #
+    # TargetRevenueBand is NOT CurrentRevenue: that vocabulary tops out at
+    # `above_1Cr`, which cannot distinguish a 1.5Cr destination from a 10Cr one.
+    # See app/schemas/founder.py.
+    target_revenue_band: TargetRevenueBand | None = None
+    target_time_horizon: TargetTimeHorizon | None = None
     invisible_gaps: CleanStrList | None = None
 
 

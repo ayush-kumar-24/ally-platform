@@ -71,6 +71,10 @@ const BUSINESS = {
   industry: 'industry',
   teamSize: 'team_size',
   businessModel: 'business_model',
+  // Target state -- where the founder wants to be, not where they are. Owned by
+  // BUSINESS because it is profile context, not diagnostic evidence.
+  targetRevenueBand: 'target_revenue_band',
+  targetTimeHorizon: 'target_time_horizon',
   founderReality: 'founder_reality_signals',
   businessReality: 'business_reality_signals',
   invisibleGaps: 'invisible_gaps',
@@ -138,6 +142,8 @@ export function toGuidedAnswers(profile) {
     industry: profile.industry || '',
     teamSize: profile.team_size || '',
     businessModel: profile.business_model || '',
+    targetRevenueBand: profile.target_revenue_band || '',
+    targetTimeHorizon: profile.target_time_horizon || '',
     founderReality: profile.founder_reality_signals || null,
     businessReality: profile.business_reality_signals || null,
     invisibleGaps: profile.invisible_gaps || [],

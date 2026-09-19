@@ -441,6 +441,12 @@ class Founders(Base):
     team_size: Mapped[Optional[str]] = mapped_column(String(50))
     current_revenue: Mapped[Optional[str]] = mapped_column(String(50))
     business_model: Mapped[Optional[str]] = mapped_column(String(100))
+    #: Target state -- where the founder wants to be, not where they are.
+    #: Never evidence and never a diagnosis: both are lookup keys into
+    #: capability_requirements and nothing subtracts them from the current
+    #: values. NULL means the founder was never asked. Added by a8d34f7e2b91.
+    target_revenue_band: Mapped[Optional[str]] = mapped_column(String(50))
+    target_time_horizon: Mapped[Optional[str]] = mapped_column(String(30))
     website: Mapped[Optional[str]] = mapped_column(String(500))
     linkedin_url: Mapped[Optional[str]] = mapped_column(String(300))
     avatar_url: Mapped[Optional[str]] = mapped_column(String(500))

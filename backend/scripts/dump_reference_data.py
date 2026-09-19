@@ -93,6 +93,7 @@ REFERENCE_TABLES: tuple[tuple[str, str], ...] = (
     ("capabilities", "Capability taxonomy: what a business can or cannot do."),
     ("capability_evidence_criteria", "Observable statements per capability."),
     ("intervention_capabilities", "Intervention -> capability it builds."),
+    ("capability_requirements", "Target-state knowledge base: what a destination needs."),
     # question_capabilities is NOT dumped: it is deliberately empty until the
     # Step-8 curation pass, and a dump file with no rows has no `insert into`
     # line for test_every_dumped_file_leads_with_its_primary_key to check. The
