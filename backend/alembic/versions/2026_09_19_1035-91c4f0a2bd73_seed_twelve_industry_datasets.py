@@ -3677,6 +3677,12 @@ SELECT
     }
 
     for label, industry_code, prefix, sql in seeds:
+        # Normalize mojibake in supplied seed SQL before execution.
+        sql = (
+            sql.replace("\u00e2\u2020\u2019", "\u2192")
+            .replace("\u00e2\u20ac\u201d", "\u2014")
+        )
+
         result = dict(bind.exec_driver_sql(sql).mappings().one())
 
         expected = {
