@@ -25,6 +25,12 @@ from typing import Any
 from app.api.v1.reports.narrator import SectionNarrator, TemplateNarrator, ToneGuidance
 from app.core.logger import logger
 from app.api.v1.reports.payload import ReportPayload
+from app.api.v1.reports.capability_sections import (
+    STRATEGIC_DIRECTION_KEY,
+    TWENTY_DAY_TARGET_KEY,
+    strategic_direction_facts,
+    twenty_day_target_facts,
+)
 from app.api.v1.reports.variants import ReportVariant, select_variant
 
 _HEADINGS = {
@@ -42,6 +48,8 @@ _HEADINGS = {
     "support_recommendation": "A first step for you",
     "hedge": "A note on certainty",
     "discovery_cta": "Your next move with Ally",
+    TWENTY_DAY_TARGET_KEY: "Your 20-day target",
+    STRATEGIC_DIRECTION_KEY: "Where this is heading",
 }
 
 #: The free tier's "3+3 action plan" -- three lines to confirm/isolate, three
@@ -318,6 +326,15 @@ class ReportNarrativeGenerator:
             order.insert(order.index("business_dna"), "psychological_note")
         elif show_psych:
             order.insert(0, "psychological_note")
+
+        # The 20-day target and the strategic direction sit after the existing
+        # action sections and before the CTA, on every NON-distress variant
+        # only: the DISTRESS branch above deliberately carries no execution
+        # content, and a sequenced target is exactly that. Each is dropped by
+        # _slots_and_facts when its engine produced nothing, so listing them
+        # unconditionally here costs nothing.
+        order.append(TWENTY_DAY_TARGET_KEY)
+        order.append(STRATEGIC_DIRECTION_KEY)
 
         # Discovery CTA is the last section on every NON-distress variant (it is how
         # GoXL converts, and the frontend renders it last).
@@ -611,5 +628,16 @@ class ReportNarrativeGenerator:
             return {}, {"provisional": True}
         if key == "discovery_cta":
             return {"cta": True}, {"cta": True}
+
+        # Steps 10A / 10B: facts only, EMPTY slots on purpose. With no slots
+        # neither the template narrator nor an LLM narrator writes a word for
+        # these sections, so what the founder reads is the engines' own
+        # reference text -- capability names, the library's own steps, Step 5's
+        # own criteria. An engine that did not run yields {} here, which omits
+        # the section rather than inventing one.
+        if key == TWENTY_DAY_TARGET_KEY:
+            return {}, twenty_day_target_facts(p.twenty_day_target)
+        if key == STRATEGIC_DIRECTION_KEY:
+            return {}, strategic_direction_facts(p.strategic_direction)
 
         return {}, {}

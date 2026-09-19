@@ -23,7 +23,10 @@ from app.plans.catalog import Feature
 from app.api.v1.reports.document import build_report_document
 from app.api.v1.reports.dna_summaries import ensure_dna_summaries
 from app.api.v1.reports.generator import ReportNarrative, ReportNarrativeGenerator
+from app.api.v1.reports.capability_sections import STRATEGIC_DIRECTION_KEY
+from app.api.v1.reports.gotenberg import GotenbergError, render_pdf
 from app.api.v1.reports.payload import build_report_payload
+from app.api.v1.reports.print_html import build_report_html
 from app.api.v1.reports.pdf_delivery import (
     mark_pdf_requested,
     render_and_store,
@@ -194,6 +197,30 @@ def _build_narrative(db: Session, report: FounderReport):
 #: are on every tier; being TOLD WHAT TO DO about them is Feature.RECOMMENDATIONS.
 _RECOMMENDATION_SECTIONS = frozenset({"priority_actions"})
 
+#: The long-term capability trajectory (Step 10B) is a workspace-tier section.
+#: The 20-day target (Step 10A) has no entry here on purpose: it rides on
+#: REPORTS, which this whole router already requires -- every paid tier.
+_STRATEGIC_DIRECTION_SECTIONS = frozenset({STRATEGIC_DIRECTION_KEY})
+
+#: feature -> the section keys it unlocks. One table, so every founder-facing
+#: door withholds the same things for the same reason.
+_GATED_SECTIONS = (
+    (Feature.RECOMMENDATIONS, _RECOMMENDATION_SECTIONS),
+    (Feature.STRATEGIC_DIRECTION, _STRATEGIC_DIRECTION_SECTIONS),
+)
+
+
+def _withheld_sections(founder: Founder, db: Session) -> frozenset[str]:
+    """Section keys this founder's plan does not include. Empty for a founder
+    entitled to everything -- the common paid case, and the one that must cost
+    nothing beyond the feature checks themselves."""
+    entitlements = container.entitlement_service(db)
+    withheld: set[str] = set()
+    for feature, keys in _GATED_SECTIONS:
+        if not entitlements.has_feature(founder.plan_type, feature):
+            withheld |= keys
+    return frozenset(withheld)
+
 
 def _visible_to(narrative, founder: Founder, db: Session):
     """The narrative minus any section this founder's plan does not include.
@@ -212,16 +239,14 @@ def _visible_to(narrative, founder: Founder, db: Session):
     they were shown. Generation cost is unchanged by design: this is an
     entitlement boundary, not a cost control.
     """
-    if container.entitlement_service(db).has_feature(
-            founder.plan_type, Feature.RECOMMENDATIONS):
+    withheld = _withheld_sections(founder, db)
+    if not withheld:
         return narrative
     return replace(
         narrative,
-        sections=tuple(s for s in narrative.sections
-                       if s.key not in _RECOMMENDATION_SECTIONS),
+        sections=tuple(s for s in narrative.sections if s.key not in withheld),
         unpopulated_sections=tuple(
-            dict.fromkeys((*narrative.unpopulated_sections,
-                           *_RECOMMENDATION_SECTIONS))),
+            dict.fromkeys((*narrative.unpopulated_sections, *sorted(withheld)))),
     )
 
 
@@ -383,7 +408,10 @@ def business_dna(report_id: int, founder: Founder = Depends(get_founder_record),
 @router.get("/{report_id}/insights", response_model=InsightsView)
 def insights(report_id: int, founder: Founder = Depends(get_founder_record),
                    db: Session = Depends(get_db)) -> InsightsView:
-    n = _build_narrative(db, _owned_report(db, founder, report_id))
+    # Gated the same way as /reports/{id} and /document: this door returns every
+    # section inline, so leaving it ungated let a withheld section be read here
+    # that the report page itself refused to show.
+    n = _visible_to(_build_narrative(db, _owned_report(db, founder, report_id)), founder, db)
     return InsightsView(
         report_id=report_id, variant=n.variant.value,
         sections=[SectionOut(key=s.key, heading=s.heading, prose=s.prose, facts=s.facts)
@@ -446,9 +474,26 @@ def export_pdf(report_id: int, founder: Founder = Depends(get_founder_record),
     """
     report = _owned_report(db, founder, report_id)
 
-    pdf = stored_pdf(report)
-    if pdf is None:
-        pdf = render_and_store(db, report, _build_narrative(db, report))
+    if _withheld_sections(founder, db):
+        # A plan-filtered PDF is rendered for THIS download and never stored.
+        # The stored copy is per report, not per plan: the backfill sweep
+        # renders it with no founder in scope (full), and this route serves
+        # the stored copy first -- so storing a filtered one here would either
+        # hand a founder who later upgrades a stale, truncated document, or
+        # race the sweep over which version the key points at. Nothing about
+        # pending state or the storage key is touched on this path.
+        narrative = _visible_to(_build_narrative(db, report), founder, db)
+        try:
+            pdf = render_pdf(build_report_html(db, report, narrative),
+                             base_url=settings.GOTENBERG_URL)
+        except GotenbergError as exc:
+            logger.warning("gotenberg unavailable; no plan-filtered PDF produced",
+                           extra={"report_id": report.report_id}, exc_info=exc)
+            pdf = None
+    else:
+        pdf = stored_pdf(report)
+        if pdf is None:
+            pdf = render_and_store(db, report, _build_narrative(db, report))
 
     if pdf is None:
         mark_pdf_requested(db, report)

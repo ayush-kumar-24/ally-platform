@@ -158,6 +158,16 @@ class ReportPayload:
     #: page rather than a broken one.
     dimension_summaries: dict[str, tuple[str, ...]] = field(default_factory=dict)
 
+    #: Steps 10A and 10B, consumed as the engines' own result objects and
+    #: shaped into facts by reports/capability_sections.py. None when the
+    #: engine did not run (an unexpected failure, logged) -- distinct from the
+    #: engines' own domain states (NO_ACTIONABLE_TARGET, NO_TARGET_CONTEXT,
+    #: AMBIGUOUS_REQUIREMENTS), which arrive as populated results and are shown.
+    #: Defaulted so every existing caller and test is untouched. Independent of
+    #: each other by construction: neither engine reads the other's output.
+    twenty_day_target: Any = None
+    strategic_direction: Any = None
+
     # --- Current Problem (app/api/v1/current_problem/) ---
     # The founder's own words for what they think is wrong, captured BEFORE
     # the diagnosis interrogation ran. Page 3 of every example report in the
@@ -358,6 +368,8 @@ def build_report_payload(db: Session, report) -> ReportPayload:
         for r in symptom_rows if not r["is_symptom"]
     )
 
+    twenty_day_target, strategic_direction = _capability_outputs(db, report)
+
     return ReportPayload(
         report_id=report.report_id, founder_id=report.founder_id,
         session_id=report.session_id, founder_name=founder_name,
@@ -388,4 +400,55 @@ def build_report_payload(db: Session, report) -> ReportPayload:
         generate_report_min=float(thresholds.get("CONFIDENCE_GENERATE_REPORT_MIN", Decimal("80"))),
         chronic_state=chronic_state, chronic_adjustment=chronic_adjustment,
         separate_identity=separate_identity,
+        twenty_day_target=twenty_day_target,
+        strategic_direction=strategic_direction,
     )
+
+
+def _capability_outputs(db: Session, report) -> tuple[Any, Any]:
+    """Steps 10A and 10B for this report's own founder and session. Read-only.
+
+    Scoped by `report.founder_id` and `report.session_id` -- the same ids
+    `_owned_report` already checked -- so one founder's capability state can
+    never be composed into another founder's report. The contexts are built
+    exactly as the diagnosis service builds them (profile, then session-learned
+    facts layered on top), not a lesser copy.
+
+    EXPECTED DOMAIN STATE vs UNEXPECTED FAILURE: the engines already name their
+    domain states (no actionable target, no target context, ambiguous
+    requirements) inside a populated result, and those are shown. Only an
+    unexpected exception -- a programming or database error -- yields None
+    here, and it is logged as an error, not filed as a product state. Either
+    way the rest of the report is unaffected: these two sections are
+    additive, and their absence is an omitted section, never a broken report.
+    """
+    from app.api.v1.diagnosis.founder_context import FounderContext
+    from app.api.v1.diagnosis.repository import DiagnosisRepository
+    from app.api.v1.diagnosis.target_state import TargetStateContext
+    from app.core.logger import logger
+    from app.models import Founder
+
+    founder = db.get(Founder, report.founder_id)
+    if founder is None:
+        return None, None
+
+    repo = DiagnosisRepository(db)
+    context = FounderContext.from_founder(founder).with_session_facts(
+        repo.session_context_facts(report.session_id))
+    target = TargetStateContext.from_founder(founder)
+
+    twenty_day = None
+    try:
+        twenty_day = repo.twenty_day_target_for_session(report.session_id, context, target)
+    except Exception:                                          # noqa: BLE001
+        logger.exception("20-day target failed; section omitted",
+                         extra={"report_id": report.report_id, "stage": "report_composition"})
+
+    direction = None
+    try:
+        direction = repo.strategic_direction_for_session(report.session_id, context, target)
+    except Exception:                                          # noqa: BLE001
+        logger.exception("strategic direction failed; section omitted",
+                         extra={"report_id": report.report_id, "stage": "report_composition"})
+
+    return twenty_day, direction

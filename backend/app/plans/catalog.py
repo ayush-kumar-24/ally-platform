@@ -166,6 +166,10 @@ class Feature(str, Enum):
     KNOWLEDGE_CHAT = "knowledge_chat"
     EMAIL_NOTIFICATIONS = "email_notifications"
     PRIORITY_CALL = "priority_call"
+    #: The long-term capability trajectory section of the Founder Report
+    #: (Step 10B). The 20-day target needs no feature of its own: it rides on
+    #: REPORTS, which is every paid tier.
+    STRATEGIC_DIRECTION = "strategic_direction"
 
 
 #: What every tier gets. This is the Rs 199 plan's ENTIRE surface: run the
@@ -193,6 +197,7 @@ _WORKSPACE = frozenset({
     Feature.NEXT_STEPS,
     Feature.GOALS,
     Feature.PLAN_YOUR_DAY,
+    Feature.STRATEGIC_DIRECTION,
 })
 
 #: Added at Rs 999: Ally starts initiating. Everything here is Ally acting on
