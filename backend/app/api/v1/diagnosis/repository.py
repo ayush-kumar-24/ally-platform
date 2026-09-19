@@ -344,6 +344,47 @@ class DiagnosisRepository:
 
         return assess_capabilities(self.capability_evidence_for_session(session_id))
 
+    def capability_names(self) -> dict[int, str]:
+        """capability_id -> capability_name, in one bounded query.
+
+        The taxonomy is small and static (34 rows), so this is the whole
+        table, not a filtered lookup -- cheaper to fetch once per gap
+        computation than to look up per capability, and it is what keeps
+        `compute_capability_gaps` from needing a database handle at all.
+        """
+        sql = "SELECT capability_id, capability_name FROM capabilities"
+        try:
+            return dict(self.db.execute(_text(sql)).all())
+        except Exception:                                      # noqa: BLE001
+            logger.warning("capabilities unavailable; gap names will fall back "
+                           "to capability_code", extra={"stage": "gap_engine"})
+            return {}
+
+    def capability_gaps_for_session(self, session_id: int, founder_context, target):
+        """Step 8: FounderContext + TargetStateContext -> tuple[CapabilityGap, ...].
+
+        Composes three ALREADY-BOUNDED reads -- requirement rows, this
+        session's assessments, and the capability name map -- and hands them
+        to the pure comparison in `gap_engine.py`. No N+1: exactly three
+        queries regardless of how many capabilities are relevant, because both
+        `capability_requirement_rows` and `capability_names` fetch their whole
+        (small, static) table once, and `current_capability_assessments`
+        already bounds itself to one session's evidence in one query.
+
+        Neither `resolve_requirements` nor `assess_capabilities` is
+        reimplemented here -- this method's only job is fetching their inputs
+        and forwarding their outputs to the comparison.
+        """
+        from app.api.v1.diagnosis.gap_engine import compute_capability_gaps
+        from app.api.v1.diagnosis.target_state import resolve_requirements
+
+        requirements = resolve_requirements(
+            self.capability_requirement_rows(), founder_context, target
+        )
+        assessments = self.current_capability_assessments(session_id)
+        names = self.capability_names()
+        return compute_capability_gaps(requirements, assessments, names)
+
     # --- Session-learned context -------------------------------------------
 
     def session_context_facts(self, session_id: int) -> dict[str, bool]:
