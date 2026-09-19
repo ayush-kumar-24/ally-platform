@@ -33,6 +33,7 @@ from sqlalchemy.orm import Session
 
 from app.api.v1.ally.memory.schemas import MemoryType
 from app.api.v1.reasoning.config import ReasoningConfig
+from app.models.enums import ScoreLabel
 from app.api.v1.reasoning.engines.archetype import ArchetypeEngine
 from app.api.v1.diagnosis.stage_scope import resolve_scope
 from app.api.v1.reasoning.engines.business_health import BusinessHealthScorer
@@ -117,6 +118,29 @@ def category_risk_map(category_risks: Sequence) -> dict[str, str]:
     boundary value would silently flip which report variant a founder gets.
     """
     return {c.category: str(c.normalised_risk) for c in category_risks}
+
+
+def diagnostic_answer_count(answers) -> int:
+    """How many answers actually carry evidence -- NOT_APPLICABLE excluded.
+
+    This is the coverage denominator's numerator, and it is NOT the same number
+    as "how many questions were asked". An N/A answer means the subject is not
+    part of this business: it is excluded from the category-risk numerator and
+    denominator (diagnostic.py), refused as a symptom (symptom_detection.py) and
+    refused as root-cause evidence (root_cause.py). Counting it here would be
+    the one place it still moved the diagnosis -- coverage is 25% of the
+    confidence score, so a founder whose questions largely did not apply would
+    climb toward "confident" on evidence that was explicitly excluded from every
+    engine that produces findings.
+
+    A NULL label counts. That is an answer whose classification failed or has not
+    run yet -- unmeasured, not inapplicable -- and treating it as N/A would
+    silently shrink coverage every time the classifier errored.
+    """
+    return sum(
+        1 for a in answers
+        if (getattr(a, "score_label", None) or "") != ScoreLabel.NOT_APPLICABLE.value
+    )
 
 
 class ReasoningService:
@@ -293,10 +317,11 @@ class ReasoningService:
         # already excludes an unavailable signal and renormalises the rest, so
         # omitting it shifts weight to the measured signals rather than scoring
         # a zero it never earned. The full pipeline measures it once at the end.
+        diagnostic_answers = diagnostic_answer_count(answers)
         inputs = self.confidence_model.build_confidence_inputs(
             diagnosis=diagnosis,
             scored=scored,
-            questions_answered=len(answers),
+            questions_answered=diagnostic_answers,
             context=context,
             consistency=None,
         )
@@ -306,7 +331,7 @@ class ReasoningService:
         return SessionAssessment(
             score=score,
             any_category_flagged=inputs.any_category_flagged,
-            questions_answered=len(answers),
+            questions_answered=diagnostic_answers,
         )
 
     async def score_only(self, session, founder: Founder) -> Decimal | None:
@@ -438,10 +463,11 @@ class ReasoningService:
                 score=(str(consistency.score) if consistency.score is not None else None),
                 contradictions=len(consistency.contradictions),
             )
+        diagnostic_answers = diagnostic_answer_count(answers)
         confidence_inputs = self.confidence_model.build_confidence_inputs(
             diagnosis=diagnosis,
             scored=scored,
-            questions_answered=len(answers),
+            questions_answered=diagnostic_answers,
             context=context,
             consistency=consistency,
         )
@@ -455,7 +481,7 @@ class ReasoningService:
         # than nothing has been found YET. Without this the in-loop decision that
         # completed the session is silently relabelled here, moments later, by
         # this pipeline recomputing from the same low number.
-        if self._monitor_eligible(confidence_inputs, context, len(answers)):
+        if self._monitor_eligible(confidence_inputs, context, diagnostic_answers):
             routing_state = RoutingState.MONITOR.value
         # Distress overrides routing entirely: wellbeing before diagnostic
         # completeness. The session leaves the confidence loop for a support path

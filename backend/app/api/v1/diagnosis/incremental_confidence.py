@@ -85,7 +85,22 @@ async def recompute(
     score = assessment.score
     session.overall_confidence_score = score
 
-    answered = session.questions_answered_count or 0
+    # NOT `session.questions_answered_count`. That column counts every answer
+    # row because it also meters the question BUDGET -- an N/A question was
+    # still asked and still cost a turn. Completion is a different claim: "we
+    # know enough about this business to stop". An N/A answer establishes
+    # nothing about the business (it is excluded from category risk, symptoms
+    # and root-cause evidence), so counting it here would let a founder whose
+    # questions largely did not apply cross MIN_ANSWERS_BEFORE_COMPLETION and
+    # the monitor coverage bar on evidence every other engine refused.
+    #
+    # `assessment.questions_answered` is that same diagnostic count, already
+    # computed by the reasoning service from the loaded rows, so this agrees
+    # with the coverage signal inside the score by construction rather than by
+    # two places happening to filter the same way.
+    answered = getattr(assessment, "questions_answered", None)
+    if answered is None:
+        answered = session.questions_answered_count or 0
     report_min, validate_min = _thresholds(db)
 
     if score >= report_min and answered >= MIN_ANSWERS_BEFORE_COMPLETION:

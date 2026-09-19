@@ -14,6 +14,12 @@ and inventing a trigger rule now would bake in behaviour the scoring engine
 would have to unpick later.
 """
 
+from app.core.config import settings
+from app.api.v1.diagnosis.applicability import (
+    RELAXATION_LADDER,
+    filter_by_applicability,
+    relax_to_floor,
+)
 from app.api.v1.diagnosis.founder_context import FounderContext
 from app.api.v1.diagnosis.industry_scope import (
     filter_by_industry,
@@ -317,13 +323,124 @@ class QuestionSelectionEngine:
         # own so a context enriched during the session (Step 4's learned facts)
         # reaches the gates rather than being rebuilt from the row each turn.
         context = context if context is not None else FounderContext.from_founder(founder)
-        return self._in_scope(candidates, founder, context)
+
+        # APPLICABILITY IS APPLIED ONCE, UP FRONT, AND NEVER UNDONE. It is the
+        # only gate whose removals are hard contradictions of something the
+        # founder told us, so it sits outside the relaxation ladder below --
+        # every rung re-filters THIS set, not the raw bank.
+        applicable = self._applicability_gated(candidates, context)
+
+        strict = self._in_scope(applicable, founder, context)
+        floor = settings.ADAPTIVE_SHORTLIST_SIZE
+
+        # `applicable` is the CEILING for every rung -- applicability is never
+        # relaxed, and no rung adds a question that is not in this set. So when
+        # it is already under the floor, relaxation cannot reach the floor and
+        # giving up scope would buy nothing but out-of-stage questions.
+        #
+        # That is the common case at the tail of a long session and at the end
+        # of the bank: four questions left is four questions left, and asking a
+        # Stage 0 founder about scaling because the pool ran low would trade a
+        # short shortlist for a question they cannot answer. A short shortlist
+        # is the honest outcome; `service.select_next` already completes the
+        # session when the pool empties.
+        if len(strict) >= floor or len(applicable) < floor:
+            return strict
+
+        # Under the floor: give up soft scope, one rung at a time, and say so.
+        # Each rung is CUMULATIVE and re-runs the same filters with one more
+        # disabled, so a rung can only ever widen the pool.
+        rungs = [
+            (name, self._in_scope(applicable, founder, context, relax=relax))
+            for name, relax in self._relaxation_rungs()
+        ]
+        return list(relax_to_floor(strict, rungs, floor).candidates)
+
+    @staticmethod
+    def _relaxation_rungs() -> list[tuple[str, frozenset[str]]]:
+        """The ladder as (rung name, filters disabled AT AND BEFORE this rung).
+
+        Cumulative by construction: rung two disables everything rung one did
+        plus its own. Built from `RELAXATION_LADDER` so the order lives in one
+        place, next to the prose explaining why applicability is not in it.
+
+        `context_scope` is absent on purpose. Its removals are contradictions
+        too -- a founder who answered the challenges question and did not tick
+        Fundraising has denied fundraising intent -- so relaxing it would
+        re-admit the FND-005 investor questions to a founder who is not raising,
+        which is the exact defect that gate was built to fix.
+        """
+        disabled: set[str] = set()
+        rungs: list[tuple[str, frozenset[str]]] = []
+        for rung in RELAXATION_LADDER:
+            disabled.add(rung)
+            if rung == "pillar_scope":
+                # The pillar and dimension tests are two halves of one stage-
+                # scope judgement; giving up one while keeping the other leaves
+                # an incoherent filter rather than a wider pool.
+                disabled.add("dimension_scope")
+            rungs.append((rung, frozenset(disabled)))
+        return rungs
+
+    def _applicability_gated(
+        self, candidates: list[Question], context: FounderContext
+    ) -> list[Question]:
+        """Drop questions whose preconditions this founder CONTRADICTS.
+
+        Unlike every other gate in this class, this one does NOT fail open on a
+        would-empty pool. A gate that re-admits what it just removed in order to
+        keep talking would ask a solo founder how their managers hire -- and an
+        empty pool here is the honest answer that nothing further can legitimately
+        be asked, which `service.select_next` already completes the session on.
+
+        It still fails open on MISSING DATA: no `precondition_token` column, or
+        no curated tags, means an empty map and no gating at all.
+        """
+        if not candidates:
+            return candidates
+        try:
+            preconditions = self.repository.precondition_tokens_by_question(
+                [q.question_id for q in candidates]
+            )
+        except Exception:                                      # noqa: BLE001
+            logger.warning(
+                "Applicability preconditions unavailable; leaving the set ungated",
+                extra={"stage": "applicability"},
+            )
+            return candidates
+
+        result = filter_by_applicability(candidates, context, preconditions)
+        if not result.removed:
+            return candidates
+
+        if not result.kept:
+            logger.warning(
+                "Applicability removed every candidate; the remaining bank "
+                "presupposes something this founder has denied",
+                extra={**result.log_extra(), "reason": "pool_emptied_by_contradiction",
+                       **context.describe()},
+            )
+        return list(result.kept)
+
+    def applicability_report(self, candidates: list[Question], context: FounderContext):
+        """The gate's full result, for callers that need the uncertain set.
+
+        `candidate_questions` returns a plain list because that is its contract
+        with the service; the ids kept only because a family is UNKNOWN are what
+        a later step marks `applicability_uncertain` for the advisor, and this
+        is how they are reached without making the engine stateful.
+        """
+        preconditions = self.repository.precondition_tokens_by_question(
+            [q.question_id for q in candidates]
+        )
+        return filter_by_applicability(candidates, context, preconditions)
 
     def _in_scope(
         self,
         candidates: list[Question],
         founder: Founder,
         context: FounderContext | None = None,
+        relax: frozenset[str] = frozenset(),
     ) -> list[Question]:
         """Drop questions this founder should not be asked.
 
@@ -377,7 +494,7 @@ class QuestionSelectionEngine:
         # down returns this name, so a stage-scope data problem re-admits the
         # stage filters and never re-admits a gated problem.
         context = context if context is not None else FounderContext.from_founder(founder)
-        candidates = self._context_gated(candidates, founder, context)
+        candidates = self._context_gated(candidates, founder, context, relax=relax)
 
         scope = resolve_scope(founder)
         if scope is None or scope.withholds_nothing:
@@ -386,11 +503,11 @@ class QuestionSelectionEngine:
         scoped = candidates
         applied: list[str] = []
 
-        if scope.withheld_categories:
+        if scope.withheld_categories and "category_scope" not in relax:
             scoped = [q for q in scoped if q.category not in scope.withheld_categories]
             applied.append("category")
 
-        if not scope.covers_all_pillars:
+        if not scope.covers_all_pillars and "pillar_scope" not in relax:
             problem_to_pillar = self._pillar_map_or_none(scope)
             if problem_to_pillar:
                 scoped = [
@@ -399,7 +516,7 @@ class QuestionSelectionEngine:
                 ]
                 applied.append("pillar")
 
-        if scope.excluded_dimensions:
+        if scope.excluded_dimensions and "dimension_scope" not in relax:
             problem_to_dimension = self._dimension_map_or_none(scope)
             if problem_to_dimension:
                 # `.get() not in` and not `.get() in scope.dimensions`: a
@@ -450,6 +567,7 @@ class QuestionSelectionEngine:
         candidates: list[Question],
         founder: Founder,
         context: FounderContext | None = None,
+        relax: frozenset[str] = frozenset(),
     ) -> list[Question]:
         """Drop questions whose problem presupposes something this founder
         has not told us is true. See `context_scope`.
@@ -472,7 +590,8 @@ class QuestionSelectionEngine:
         # degradable -- the property the pillar and dimension tests already rely
         # on. Later axes (business model, team, tag preconditions) compose here
         # the same way, against the same FounderContext.
-        candidates = self._industry_gated(candidates, context)
+        if "industry_scope" not in relax:
+            candidates = self._industry_gated(candidates, context)
 
         tokens = context_tokens(founder)
         gated = gated_problem_codes(tokens)

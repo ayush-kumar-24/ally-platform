@@ -6,13 +6,18 @@ service so that a single request stays atomic.
 """
 
 from datetime import datetime
+from typing import Iterable
 
 from sqlalchemy import Select, func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy import text as _text
 from sqlalchemy.orm import Session
 
+from app.core.logger import logger
 from app.models import Answer, DiagnosisSession, Question, SessionStatus
+from app.models.enums import ScoreLabel
 from app.models.schema import FounderDnaAnswers, FounderDnaQuestions
+from app.models.session_context import SessionContextFact
 
 
 class DiagnosisRepository:
@@ -157,6 +162,111 @@ class DiagnosisRepository:
     def get_answered_question_ids(self, session_id: int) -> set[int]:
         stmt = select(Answer.question_id).where(Answer.session_id == session_id)
         return set(self.db.execute(stmt).scalars().all())
+
+    def count_scored_answers(self, session_id: int) -> int:
+        """Answers that carry diagnostic weight -- NOT_APPLICABLE excluded.
+
+        `questions_answered_count` counts every answer row, because it also
+        meters the question BUDGET and an N/A question was still asked. Coverage
+        and completion are a different question: "how much do we know", not "how
+        many turns have we spent". An N/A answer establishes nothing about the
+        business, so counting it there lets a founder whose questions mostly did
+        not apply cross the completion threshold on empty evidence.
+
+        NULL counts as scored. A row is NULL-labelled when classification failed
+        or has not run, which is an unmeasured answer rather than an inapplicable
+        one -- treating it as N/A would quietly shrink coverage every time the
+        classifier erred.
+        """
+        stmt = select(func.count()).select_from(Answer).where(
+            Answer.session_id == session_id,
+            func.coalesce(Answer.score_label, "") != ScoreLabel.NOT_APPLICABLE.value,
+        )
+        return int(self.db.execute(stmt).scalar() or 0)
+
+    # --- Session-learned context -------------------------------------------
+
+    def session_context_facts(self, session_id: int) -> dict[str, bool]:
+        """token -> value for everything THIS session established.
+
+        The shape `FounderContext.with_session_facts` takes. Absent tokens are
+        UNKNOWN; there is no third value to read back because "we do not know"
+        is never written down.
+        """
+        stmt = select(SessionContextFact.token, SessionContextFact.value).where(
+            SessionContextFact.session_id == session_id
+        )
+        return {token: bool(value) for token, value in self.db.execute(stmt).all()}
+
+    def record_session_fact(
+        self, session_id: int, token: str, value: bool, answer_id: int | None = None
+    ) -> None:
+        """Upsert one fact. Session-scoped; `founders` is never touched.
+
+        Upsert rather than insert because a later answer about the same subject
+        should REPLACE the earlier reading, not sit beside it contradicting it.
+        The unique constraint on (session_id, token) is what makes that atomic.
+
+        Does not commit -- transaction boundaries belong to the service, as for
+        every other write in this class.
+        """
+        stmt = (
+            pg_insert(SessionContextFact)
+            .values(
+                session_id=session_id,
+                token=token,
+                value=value,
+                learned_from_answer_id=answer_id,
+            )
+            .on_conflict_do_update(
+                constraint="uq_session_context_facts",
+                set_={"value": value, "learned_from_answer_id": answer_id},
+            )
+        )
+        self.db.execute(stmt)
+
+    def precondition_tokens_by_question(
+        self, question_ids: Iterable[int] | None = None
+    ) -> dict[int, frozenset[str]]:
+        """question_id -> the precondition tokens it carries, for tagged rows only.
+
+        Questions with no precondition are ABSENT from the map rather than
+        present with an empty set; that is what lets the gate treat a missing
+        key as unconditional without a second lookup. 91 of 3,460 rows are in
+        here today, so the map is small even unfiltered.
+
+        Returns {} when `question_tags.precondition_token` does not exist -- any
+        database that has not run b7c2d94e5f10 -- so the gate degrades to "ask
+        everything" rather than raising. Same fail-open as every other optional
+        map in this package.
+        """
+        sql = (
+            "SELECT m.question_id, t.precondition_token"
+            "  FROM question_tag_mapping m"
+            "  JOIN question_tags t ON t.tag_id = m.tag_id"
+            " WHERE t.precondition_token IS NOT NULL"
+        )
+        params: dict = {}
+        ids = list(question_ids) if question_ids is not None else None
+        if ids is not None:
+            if not ids:
+                return {}
+            sql += " AND m.question_id = ANY(:ids)"
+            params["ids"] = ids
+        try:
+            rows = self.db.execute(_text(sql), params).all()
+        except Exception:                                      # noqa: BLE001
+            logger.warning(
+                "precondition_token unavailable; applicability gate disabled",
+                extra={"stage": "applicability"},
+            )
+            return {}
+
+        out: dict[int, set[str]] = {}
+        for question_id, token in rows:
+            if token:
+                out.setdefault(question_id, set()).add(token.strip())
+        return {qid: frozenset(tokens) for qid, tokens in out.items()}
 
     def list_candidate_questions(
         self,

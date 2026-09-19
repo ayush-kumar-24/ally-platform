@@ -233,6 +233,12 @@ class QuestionTags(Base):
     tag_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     tag_name: Mapped[str] = mapped_column(String(100), nullable=False)
     tag_description: Mapped[Optional[str]] = mapped_column(Text)
+    #: The applicability precondition every question carrying this tag inherits,
+    #: e.g. 'has_team'. NULL -- the overwhelming majority -- means the tag says
+    #: nothing about applicability. Read by app/api/v1/diagnosis/applicability.py
+    #: and resolved three-valued through FounderContext.verdict, so a token whose
+    #: family has no data keeps the question. Added by b7c2d94e5f10.
+    precondition_token: Mapped[Optional[str]] = mapped_column(String(64))
     created_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True), server_default=text('now()'))
 
     question_tag_mapping: Mapped[list['QuestionTagMapping']] = relationship('QuestionTagMapping', back_populates='tag')

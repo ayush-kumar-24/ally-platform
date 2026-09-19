@@ -31,7 +31,16 @@ from app.services.llm import (
     LLMRole,
 )
 
-_VALID_LABELS = {"green", "amber", "red"}
+#: NOT_APPLICABLE is in here because in the SHIPPED configuration this advisor
+#: IS the classifier: ANSWER_CLASSIFIER=stored makes StoredFirstAnswerClassifier
+#: reuse the label this call produced rather than re-classifying. Every
+#: reasoning engine already handles ScoreLabel.NOT_APPLICABLE correctly --
+#: diagnostic.py excludes it from the risk numerator AND denominator,
+#: symptom_detection.py refuses it as a symptom, root_cause.py refuses it as
+#: evidence -- and the answers.score_label CHECK has allowed it since
+#: c7d18a3f420b. This set was the one place still unable to produce it, which
+#: made the whole state unreachable in production.
+_VALID_LABELS = {"green", "amber", "red", "not_applicable"}
 #: answers.score is a 0/1/2 CHECK carrying RISK, not health: HIGHER IS WORSE.
 #:
 #: This is not a local convention -- it is the scoring schema, stored in
@@ -49,6 +58,10 @@ _VALID_LABELS = {"green", "amber", "red"}
 #: who had never spoken to a customer was told all six pillars were "Strong".
 #: business_health.py's own docstring names the failure exactly: "an
 #: exactly-backwards score that still looks plausible".
+#: NOT_APPLICABLE is deliberately absent rather than mapped to a number. `.get`
+#: returns None for it, which is the unscored state: `answers.score` is nullable
+#: and zero is Green's band -- positive evidence that the thing asked about is
+#: healthy. "The question does not apply" is not evidence either way.
 _LABEL_TO_SCORE = {"green": 0, "amber": 1, "red": 2}
 
 
@@ -175,8 +188,17 @@ class LLMNextQuestionAdvisor(NextQuestionAdvisor):
             "and an explicit \"I don't know\" are all responsive, and belong in "
             "score_label rather than here. Set responsive=false ONLY when the "
             "answer does not engage with what was asked. When in doubt, true.\n"
+            "One label is NOT a severity: use not_applicable when the subject "
+            "genuinely is not part of how this founder's business works -- a "
+            "solo founder asked about their managers, a services business asked "
+            "about inventory. It is NOT for a founder who is doing the thing "
+            "badly, does not know, or does not want to answer; those are "
+            "red/amber and a red read is the whole point of asking. "
+            "not_applicable carries no score and is excluded from risk, so "
+            "reaching for it when unsure DELETES evidence. When in doubt, score "
+            "the answer.\n"
             "Respond with a single JSON object and nothing else: "
-            '{"score_label":"green|amber|red","confidence":0.0-1.0,'
+            '{"score_label":"green|amber|red|not_applicable","confidence":0.0-1.0,'
             '"next_question_id":<candidate id>,"rationale":"one sentence",'
             '"responsive":true|false}'
         )
