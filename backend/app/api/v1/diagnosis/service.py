@@ -639,6 +639,7 @@ class DiagnosisService:
         # burnout and isolation appeared to be active blockers.
         if not needs_fallback_score(insight):
             self._apply_insight(answer, insight)
+            self._learn_session_facts(session, answer, answered)
         else:
             # No USABLE score means the advisor was absent, FAILED (timeout, bad
             # reply), or returned a label outside {green, amber, red} -- advisor
@@ -758,8 +759,13 @@ class DiagnosisService:
         responsiveness verdict; None when no advisor ran or it failed.
         """
         # Built once per turn and handed down, so the gates, the brief and
-        # (from Step 4) anything the session learns all read one object.
-        context = FounderContext.from_founder(founder)
+        # anything the session learned all read one object. Session facts are
+        # layered ON TOP of the profile and never replace it -- see
+        # FounderContext.with_session_facts: a stated team_size always wins over
+        # an inference drawn from a sentence.
+        context = FounderContext.from_founder(founder).with_session_facts(
+            self.repository.session_context_facts(session.session_id)
+        )
         candidates = self.engine.candidate_questions(session, founder, context)
         if not candidates:
             return None, None  # bank exhausted -> completion
@@ -849,6 +855,61 @@ class DiagnosisService:
         if insight.score_label is not None:
             answer.score_label = insight.score_label
             answer.score = insight.score
+
+    def _learn_session_facts(
+        self, session: DiagnosisSession, answer: Answer, question: Question | None
+    ) -> None:
+        """Record what an N/A answer settled, for THIS session only.
+
+        THE INFERENCE, stated exactly: the founder was asked a question whose
+        tag declares a precondition, and they answered "this does not apply to
+        my business". The precondition is therefore false for them. A question
+        tagged `hr-tooling` presupposes `has_team`; N/A on it establishes
+        `has_team = false` until this session ends.
+
+        Only N/A does this. A red answer to an HR question means the founder HAS
+        a team and it is going badly -- the strongest possible evidence FOR the
+        precondition -- so scoring bands say nothing about applicability and are
+        deliberately ignored here.
+
+        Nothing is written to `founders`. The fact tightens eligibility for the
+        rest of this session; the founder's stated profile is untouched, and the
+        next session starts from the profile again. If they later state a team
+        size that contradicts this, the profile wins (with_session_facts only
+        settles families the profile left UNKNOWN).
+
+        Never raises. A fact is an optimisation of what to ask next; failing to
+        record one must not cost the founder their answer.
+        """
+        if question is None:
+            return
+        if (answer.score_label or "") != ScoreLabel.NOT_APPLICABLE.value:
+            return
+        try:
+            tokens = self.repository.precondition_tokens_by_question(
+                [question.question_id]
+            ).get(question.question_id)
+            if not tokens:
+                return
+            for token in sorted(tokens):
+                self.repository.record_session_fact(
+                    session.session_id, token, False, answer.answer_id
+                )
+            logger.info(
+                "session context learned from a not-applicable answer",
+                extra={
+                    "stage": "session_context",
+                    "session_id": session.session_id,
+                    "question_id": question.question_id,
+                    "tokens_denied": sorted(tokens),
+                },
+            )
+        except Exception as exc:                               # noqa: BLE001
+            logger.warning(
+                "could not record session context fact; diagnosis continues",
+                extra={"session_id": session.session_id},
+                exc_info=exc,
+            )
 
     # --- Internals ---
 
