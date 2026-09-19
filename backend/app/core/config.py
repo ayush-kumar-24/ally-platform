@@ -771,6 +771,14 @@ class Settings(BaseSettings):
     # informative next question. Falls back to the deterministic pick if the LLM is
     # off, errors, or returns an out-of-shortlist id. Uses LLM_PROVIDER / LLM_MODEL.
     ADAPTIVE_QUESTIONS: bool = False
+    # Step 7B: an optional second LLM read per mapped answer (44% of questions,
+    # per Step 7A) that preserves capability evidence -- an observation, never a
+    # score. Off by default so no existing deployment's cost or latency changes
+    # without an operator turning it on. Uses LLM_PROVIDER / LLM_MODEL directly
+    # (see get_capability_evidence_extractor) rather than the model_task_routing
+    # table: this is a new, separate concern from next-question selection and
+    # answer classification, and does not share their routing row.
+    CAPABILITY_EVIDENCE_EXTRACTION: bool = False
     # Five, not eight. The advisor's job is to pick the most informative next
     # probe from a set the deterministic layer has already established is
     # eligible -- a longer list does not make that choice better, it makes each

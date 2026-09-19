@@ -14,7 +14,13 @@ from sqlalchemy import text as _text
 from sqlalchemy.orm import Session
 
 from app.core.logger import logger
-from app.models import Answer, DiagnosisSession, Question, SessionStatus
+from app.models import (
+    Answer,
+    CapabilityEvidence,
+    DiagnosisSession,
+    Question,
+    SessionStatus,
+)
 from app.models.enums import ScoreLabel
 from app.models.schema import FounderDnaAnswers, FounderDnaQuestions
 from app.models.session_context import SessionContextFact
@@ -215,6 +221,116 @@ class DiagnosisRepository:
                 extra={"stage": "target_state"},
             )
             return []
+
+    # --- Capability evidence -------------------------------------------------
+
+    def capability_and_criteria_for_question(self, question_id: int) -> dict | None:
+        """The one capability this question maps to, plus its evidence criteria.
+
+        Returns None when the question is unmapped -- the 1,874 questions Step
+        7A left untouched -- which is the caller's signal to attempt no
+        extraction at all rather than extracting against nothing.
+
+        `question_capabilities` is Step 7A's invariant: at most one capability
+        per question. `LIMIT 1` is a safety net for that invariant, not a design
+        choice -- if it ever fired on real data, that would itself be the bug.
+
+        Returns {} (falls back to None-like) when the tables do not exist -- any
+        database that has not run Steps 5-7B -- so evidence extraction degrades
+        to "off" rather than raising.
+        """
+        sql = (
+            "SELECT c.capability_id, c.capability_code, c.capability_name,"
+            "       e.criterion_id, e.criterion_text"
+            "  FROM question_capabilities qc"
+            "  JOIN capabilities c ON c.capability_id = qc.capability_id"
+            "  LEFT JOIN capability_evidence_criteria e"
+            "         ON e.capability_id = c.capability_id"
+            " WHERE qc.question_id = :qid"
+            " ORDER BY e.criterion_order"
+        )
+        try:
+            rows = self.db.execute(_text(sql), {"qid": question_id}).all()
+        except Exception:                                       # noqa: BLE001
+            logger.warning(
+                "capability mapping unavailable; no evidence extraction",
+                extra={"stage": "capability_evidence", "question_id": question_id},
+            )
+            return None
+        if not rows:
+            return None
+        capability_id, capability_code, capability_name = rows[0][:3]
+        criteria = [
+            {"criterion_id": cid, "criterion_text": ctext}
+            for _cap, _code, _name, cid, ctext in rows if cid is not None
+        ]
+        return {
+            "capability_id": capability_id,
+            "capability_code": capability_code,
+            "capability_name": capability_name,
+            "criteria": criteria,
+        }
+
+    def record_capability_evidence(
+        self,
+        *,
+        capability_id: int,
+        question_id: int,
+        answer_id: int,
+        observed_level: int,
+        confidence: float,
+        evidence_text: str,
+        criterion_id: int | None = None,
+    ) -> bool:
+        """Persist one observation. Returns False, not an error, on a repeat.
+
+        `ON CONFLICT (answer_id) DO NOTHING` is the idempotency guard from a
+        UNIQUE constraint, not application logic: reprocessing the same answer
+        -- a retried request, a replayed webhook -- must never create a second
+        observation, and the database refuses it unconditionally rather than
+        this method having to notice and skip.
+
+        Does not commit; the caller's transaction boundary owns that, as for
+        every other write in this class.
+        """
+        # `.returning(...)` and a row-count check, NOT `result.rowcount`: SQLAlchemy
+        # attaches an implicit RETURNING to an ORM-targeted insert (to populate
+        # the identity map), and that makes the DBAPI-level rowcount unreliable
+        # with ON CONFLICT DO NOTHING -- verified directly against this driver,
+        # where it read -1 on a real, successful insert. Checking whether a row
+        # came back is unambiguous regardless of driver rowcount quirks.
+        stmt = (
+            pg_insert(CapabilityEvidence)
+            .values(
+                capability_id=capability_id,
+                question_id=question_id,
+                answer_id=answer_id,
+                criterion_id=criterion_id,
+                observed_level=observed_level,
+                confidence=confidence,
+                evidence_text=evidence_text,
+            )
+            .on_conflict_do_nothing(constraint="uq_capability_evidence_answer")
+            .returning(CapabilityEvidence.evidence_id)
+        )
+        return self.db.execute(stmt).first() is not None
+
+    def capability_evidence_for_session(self, session_id: int) -> list[dict]:
+        """Every observation recorded so far in one session. Read-only, for
+        debugging and for Step 7C's future aggregation -- not consumed by
+        anything in Step 7B itself."""
+        sql = (
+            "SELECT ev.evidence_id, ev.capability_id, c.capability_code,"
+            "       ev.question_id, ev.answer_id, ev.criterion_id,"
+            "       ev.observed_level, ev.confidence, ev.evidence_text,"
+            "       ev.created_at"
+            "  FROM capability_evidence ev"
+            "  JOIN capabilities c ON c.capability_id = ev.capability_id"
+            "  JOIN answers a ON a.answer_id = ev.answer_id"
+            " WHERE a.session_id = :sid"
+            " ORDER BY ev.created_at"
+        )
+        return [dict(r) for r in self.db.execute(_text(sql), {"sid": session_id}).mappings().all()]
 
     # --- Session-learned context -------------------------------------------
 

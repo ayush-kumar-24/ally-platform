@@ -28,6 +28,7 @@ from app.models.partitioned import AnalyticsEvent, AuditLog, Message
 from app.models.capability import (
     Capability,
     CapabilityDomain,
+    CapabilityEvidence,
     CapabilityEvidenceCriterion,
     CapabilityRequirement,
     InterventionCapability,

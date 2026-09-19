@@ -1562,7 +1562,10 @@ class Answers(Base):
     answered_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
     score: Mapped[Optional[decimal.Decimal]] = mapped_column(Numeric(3, 1))
-    score_label: Mapped[Optional[str]] = mapped_column(String(10))
+    #: varchar(20), not (10): widened by d1a4c8e2f907 so 'not_applicable'
+    #: (14 chars) fits. The CHECK constraint allowed the value since
+    #: c7d18a3f420b; the column did not, until this.
+    score_label: Mapped[Optional[str]] = mapped_column(String(20))
     triggered_follow_up_id: Mapped[Optional[int]] = mapped_column(Integer)
     root_cause_hypothesis_id: Mapped[Optional[int]] = mapped_column(Integer)
     confirmation_status: Mapped[Optional[str]] = mapped_column(String(15), server_default=text("'not_tested'::character varying"))

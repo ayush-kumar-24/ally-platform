@@ -17,7 +17,7 @@ a reviewed vocabulary rather than inventing one under deadline.
 from __future__ import annotations
 
 import datetime
-from typing import Optional
+from typing import Any, Optional
 
 from sqlalchemy import (
     CheckConstraint,
@@ -26,6 +26,7 @@ from sqlalchemy import (
     Index,
     Integer,
     PrimaryKeyConstraint,
+    Numeric,
     SmallInteger,
     String,
     Text,
@@ -248,4 +249,72 @@ class CapabilityRequirement(Base):
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(True), nullable=False, server_default=text("now()"))
     updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(True), nullable=False, server_default=text("now()"))
+
+
+class CapabilityEvidence(Base):
+    """One OBSERVATION, never an assessment. See migration e6b3f92a1c48.
+
+    UNASSESSED is represented by the ABSENCE of a row, not a value in one --
+    there is no NULL `observed_level` and no sentinel row. Every row that
+    exists here passed the extractor's own bar for "this answer confidently
+    supports a specific level"; a hedge or a failed extraction produces no row
+    at all rather than one with a low confidence and a guessed level.
+
+    One row per answer (UNIQUE on answer_id), because question_capabilities
+    already guarantees a question maps to at most one capability. Multiple
+    observations about the SAME capability from DIFFERENT answers are
+    independent rows -- aggregating them into one current-state reading is
+    Step 7C, and it is designed to need exactly these rows, unmodified, to do
+    it conservatively later.
+    """
+
+    __tablename__ = "capability_evidence"
+    __table_args__ = (
+        PrimaryKeyConstraint("evidence_id", name="capability_evidence_pkey"),
+        ForeignKeyConstraint(["capability_id"], ["capabilities.capability_id"],
+                             ondelete="CASCADE",
+                             name="capability_evidence_capability_id_fkey"),
+        ForeignKeyConstraint(["question_id"], ["questions.question_id"],
+                             ondelete="CASCADE",
+                             name="capability_evidence_question_id_fkey"),
+        ForeignKeyConstraint(["answer_id"], ["answers.answer_id"],
+                             ondelete="CASCADE",
+                             name="capability_evidence_answer_id_fkey"),
+        # Composite: a stored criterion_id must belong to the SAME capability_id
+        # on this row. MATCH SIMPLE (Postgres default) means a NULL criterion_id
+        # always satisfies this -- only a non-NULL, cross-capability value is
+        # ever rejected.
+        ForeignKeyConstraint(
+            ["capability_id", "criterion_id"],
+            ["capability_evidence_criteria.capability_id",
+             "capability_evidence_criteria.criterion_id"],
+            ondelete="SET NULL", name="capability_evidence_criterion_fkey",
+        ),
+        CheckConstraint("observed_level BETWEEN 0 AND 3",
+                        name="capability_evidence_observed_level_check"),
+        CheckConstraint("confidence >= 0 AND confidence <= 1",
+                        name="capability_evidence_confidence_check"),
+        UniqueConstraint("answer_id", name="uq_capability_evidence_answer"),
+        Index("idx_capability_evidence_capability", "capability_id"),
+        Index("idx_capability_evidence_question", "question_id"),
+    )
+
+    evidence_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    capability_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    question_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    answer_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    #: Nullable: confident THAT a capability was evidenced without being
+    #: confident WHICH of its four criteria the answer specifically speaks to
+    #: is still a real, storable observation.
+    criterion_id: Mapped[Optional[int]] = mapped_column(Integer)
+    #: CapabilityLevel 0-3 (app/api/v1/diagnosis/capability_levels.py). Never
+    #: NULL -- see the class docstring.
+    observed_level: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    #: Confidence in THIS OBSERVATION, not founder risk, not diagnosis
+    #: confidence, not root-cause confidence. A different number for a
+    #: different question.
+    confidence: Mapped[Any] = mapped_column(Numeric(3, 2), nullable=False)
+    evidence_text: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(True), nullable=False, server_default=text("now()"))

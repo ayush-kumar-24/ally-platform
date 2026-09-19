@@ -27,6 +27,10 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_founder_record
 from app.api.v1.diagnosis.advisor import LLMNextQuestionAdvisor, NextQuestionAdvisor
+from app.api.v1.diagnosis.capability_evidence import (
+    CapabilityEvidenceExtractor,
+    LLMCapabilityEvidenceExtractor,
+)
 from app.core.config import settings
 from app.db.session import get_db
 from app.models import Founder
@@ -46,3 +50,24 @@ def get_next_question_advisor(
         provider_for_task(db, NEXT_QUESTION_TASK, founder_id=founder.founder_id),
         timeout_seconds=settings.ADAPTIVE_TIMEOUT_SECONDS,
     )
+
+
+def get_capability_evidence_extractor(
+    founder: Founder = Depends(get_founder_record),
+) -> CapabilityEvidenceExtractor | None:
+    """Step 7B's optional evidence extractor. Off unless CAPABILITY_EVIDENCE_
+    EXTRACTION is explicitly enabled -- see the setting's own comment for why
+    this does not go through `provider_for_task` / `model_task_routing` the way
+    `get_next_question_advisor` does: it is a new, separate concern, not a
+    variant of next-question selection or answer classification, and does not
+    want to share their routing rows or their telemetry task key.
+
+    `founder` is accepted (unused directly) only to keep this dependency's
+    shape consistent with `get_next_question_advisor` for callers that resolve
+    both from the same request; it is not read.
+    """
+    if not settings.CAPABILITY_EVIDENCE_EXTRACTION:
+        return None
+    from app.services.llm.registry import get_provider
+
+    return LLMCapabilityEvidenceExtractor(get_provider(settings.LLM_PROVIDER))
