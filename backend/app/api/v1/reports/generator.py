@@ -26,6 +26,7 @@ from app.api.v1.reports.narrator import SectionNarrator, TemplateNarrator, ToneG
 from app.core.logger import logger
 from app.api.v1.reports.payload import ReportPayload
 from app.api.v1.reports.capability_sections import (
+    ENGINE_SECTION_KEYS,
     STRATEGIC_DIRECTION_KEY,
     TWENTY_DAY_TARGET_KEY,
     strategic_direction_facts,
@@ -188,6 +189,10 @@ class ReportNarrativeGenerator:
         # classification -- see DiagnosticEngine.classify_answers.
         sections: list[Section] = []
         sources: list[str] = []
+        #: Engine-backed sections this report did not get, so the renderers can
+        #: name them ("Not included in this report: ...") rather than leave a
+        #: silent hole -- the same honesty expected_impact already gets.
+        omitted_engine_sections: list[str] = []
         for key in order:
             slots, facts = self._slots_and_facts(key, payload, sep_identity)
             if key == "founder_dna":
@@ -198,6 +203,8 @@ class ReportNarrativeGenerator:
                 slots = {**slots, "brief": True}  # de-prioritise business under distress
             prose, source = self._narrate(key, slots, tone)
             if not prose and not facts:
+                if key in ENGINE_SECTION_KEYS:
+                    omitted_engine_sections.append(key)
                 continue  # missing value -> omit the section, never guess
             if prose:
                 sources.append(source)
@@ -223,6 +230,8 @@ class ReportNarrativeGenerator:
         return ReportNarrative(
             report_id=payload.report_id, variant=variant,
             tone_persona=payload.tone_persona, sections=tuple(sections),
+            unpopulated_sections=tuple(dict.fromkeys(
+                (*UNPOPULATED_SECTIONS, *omitted_engine_sections))),
             narrator_provenance=provenance,
         )
 
@@ -636,7 +645,7 @@ class ReportNarrativeGenerator:
         # own criteria. An engine that did not run yields {} here, which omits
         # the section rather than inventing one.
         if key == TWENTY_DAY_TARGET_KEY:
-            return {}, twenty_day_target_facts(p.twenty_day_target)
+            return {}, twenty_day_target_facts(p.twenty_day_target, p.capability_names)
         if key == STRATEGIC_DIRECTION_KEY:
             return {}, strategic_direction_facts(p.strategic_direction)
 

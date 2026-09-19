@@ -167,6 +167,10 @@ class ReportPayload:
     #: each other by construction: neither engine reads the other's output.
     twenty_day_target: Any = None
     strategic_direction: Any = None
+    #: {capability_id: capability_name}, the taxonomy's own 34 names, so a gap
+    #: the library cannot yet serve is shown to the founder by name rather
+    #: than by internal code. Empty when the engines did not run.
+    capability_names: dict[int, str] = field(default_factory=dict)
 
     # --- Current Problem (app/api/v1/current_problem/) ---
     # The founder's own words for what they think is wrong, captured BEFORE
@@ -368,7 +372,7 @@ def build_report_payload(db: Session, report) -> ReportPayload:
         for r in symptom_rows if not r["is_symptom"]
     )
 
-    twenty_day_target, strategic_direction = _capability_outputs(db, report)
+    twenty_day_target, strategic_direction, capability_names = _capability_outputs(db, report)
 
     return ReportPayload(
         report_id=report.report_id, founder_id=report.founder_id,
@@ -402,10 +406,11 @@ def build_report_payload(db: Session, report) -> ReportPayload:
         separate_identity=separate_identity,
         twenty_day_target=twenty_day_target,
         strategic_direction=strategic_direction,
+        capability_names=capability_names,
     )
 
 
-def _capability_outputs(db: Session, report) -> tuple[Any, Any]:
+def _capability_outputs(db: Session, report) -> tuple[Any, Any, dict[int, str]]:
     """Steps 10A and 10B for this report's own founder and session. Read-only.
 
     Scoped by `report.founder_id` and `report.session_id` -- the same ids
@@ -430,7 +435,7 @@ def _capability_outputs(db: Session, report) -> tuple[Any, Any]:
 
     founder = db.get(Founder, report.founder_id)
     if founder is None:
-        return None, None
+        return None, None, {}
 
     repo = DiagnosisRepository(db)
     context = FounderContext.from_founder(founder).with_session_facts(
@@ -451,4 +456,4 @@ def _capability_outputs(db: Session, report) -> tuple[Any, Any]:
         logger.exception("strategic direction failed; section omitted",
                          extra={"report_id": report.report_id, "stage": "report_composition"})
 
-    return twenty_day, direction
+    return twenty_day, direction, repo.capability_names()
