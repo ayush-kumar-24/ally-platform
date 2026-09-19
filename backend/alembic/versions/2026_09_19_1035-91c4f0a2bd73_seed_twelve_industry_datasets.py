@@ -71,7 +71,7 @@ def upgrade() -> None:
                     :industry_code,
                     :industry_name,
                     :description,
-                    :description
+                    :industry_subtitle
                 )
                 ON CONFLICT (industry_code) DO NOTHING
                 """
@@ -80,6 +80,7 @@ def upgrade() -> None:
                 "industry_code": industry_code,
                 "industry_name": industry_name,
                 "description": description,
+                "industry_subtitle": description,
             },
         )
 
