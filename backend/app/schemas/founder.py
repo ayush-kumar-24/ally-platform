@@ -35,6 +35,49 @@ ExperienceLevel = Literal[
     "first_time", "one_company", "serial", "investor", "mentor", "executive",
 ]
 TeamSize = Literal["solo", "2_5", "6_10", "11_25", "26_50", "50_plus"]
+
+#: Where the founder wants monthly revenue to BE. A destination, never a
+#: diagnosis -- see app/api/v1/diagnosis/target_state.py.
+#:
+#: NOT `CurrentRevenue`, deliberately, and this is the one place the two
+#: vocabularies are allowed to differ. `CurrentRevenue` tops out at
+#: `above_1Cr`, which is fine for describing where a founder IS and useless for
+#: describing where they are GOING: a 1.5Cr target and a 10Cr target would be
+#: the same band, so the field could not select different capability
+#: requirements, which is its only job.
+#:
+#: The lower four names are IDENTICAL to CurrentRevenue's on purpose, so the two
+#: sit on one ordered ladder (see REVENUE_LADDER) and "how far is the
+#: destination" is a subtraction rather than a mapping table. `pre_revenue` is
+#: absent because nobody targets it.
+TargetRevenueBand = Literal[
+    "under_1L", "1L_5L", "5L_25L", "25L_1Cr", "1Cr_5Cr", "5Cr_25Cr", "above_25Cr",
+]
+
+#: When the founder wants to be there. No existing convention in the codebase;
+#: four values, chosen to be coarse enough that a founder can answer honestly.
+#: It expresses urgency of the DESTINATION and carries no severity: a six-month
+#: horizon is not a worse diagnosis than a two-year one, it selects different
+#: requirements.
+TargetTimeHorizon = Literal["6_months", "12_months", "24_months", "36_months_plus"]
+
+#: Both revenue vocabularies on ONE ordered scale, lowest first.
+#:
+#: `CurrentRevenue.above_1Cr` and `TargetRevenueBand.1Cr_5Cr` deliberately share
+#: a rung: "above 1Cr" is everything from 1Cr upward, so the most a current
+#: reading can tell us is that the founder has reached that rung. Anything more
+#: precise would be invented. Step 7+ uses this to say how many rungs a target
+#: is away; nothing in Step 6 needs it, and it is defined here so the two
+#: vocabularies cannot drift apart unnoticed.
+REVENUE_LADDER: tuple[str, ...] = (
+    "pre_revenue", "under_1L", "1L_5L", "5L_25L", "25L_1Cr", "1Cr_5Cr",
+    "5Cr_25Cr", "above_25Cr",
+)
+
+#: What `CurrentRevenue.above_1Cr` means on REVENUE_LADDER. Held apart from the
+#: ladder itself because it is an approximation, and approximations should be
+#: named.
+CURRENT_REVENUE_LADDER_ALIASES = {"above_1Cr": "1Cr_5Cr"}
 WorkingRelationship = Literal[
     "coach", "cofounder", "strategist", "accountability", "brainstorm", "research",
 ]

@@ -310,6 +310,75 @@ export const QUESTIONS = [
     ],
   },
 
+  /* Q3b -- where the founder wants to BE, and by when.
+
+     Kept apart from Q3 deliberately. Q3 records the current state; this records
+     a destination, and the two must never be read as one number. Nothing
+     subtracts target revenue from current revenue anywhere in the product --
+     the target selects which capability requirements apply (see
+     backend/app/api/v1/diagnosis/target_state.py) and produces no finding on
+     its own. A founder who states a 10x ambition and answers nothing else is
+     told about no gaps at all.
+
+     BOTH optional. A skipped target is UNKNOWN, which resolves to the generic
+     requirement set rather than to nothing, so skipping costs the founder the
+     future-state layer and nothing else. */
+  {
+    key: 'targetState',
+    section: 'personal',
+    label: 'Where You Want To Be',
+    type: 'group',
+    paths: BOTH,
+    optional: true,
+    q: 'And where do you want the business to be?',
+    parts: [
+      {
+        key: 'targetRevenueBand',
+        field: 'target_revenue_band',
+        label: 'Target Revenue',
+        type: 'single',
+        paths: BOTH,
+        optional: true,
+        q: 'What monthly revenue are you aiming for?',
+        // NOT the current_revenue bands. That vocabulary stops at "₹1 crore+",
+        // which cannot tell a ₹1.5 crore destination from a ₹10 crore one --
+        // and the whole job of this field is to select different requirements
+        // for those two founders. The lower four values match current_revenue
+        // exactly so the two sit on one ladder. See TargetRevenueBand in
+        // backend/app/schemas/founder.py.
+        options: [
+          { label: 'Under ₹1 lakh/month', value: 'under_1L' },
+          { label: '₹1 lakh – ₹5 lakh/month', value: '1L_5L' },
+          { label: '₹5 lakh – ₹25 lakh/month', value: '5L_25L' },
+          { label: '₹25 lakh – ₹1 crore/month', value: '25L_1Cr' },
+          { label: '₹1 crore – ₹5 crore/month', value: '1Cr_5Cr' },
+          { label: '₹5 crore – ₹25 crore/month', value: '5Cr_25Cr' },
+          { label: '₹25 crore+/month', value: 'above_25Cr' },
+        ],
+      },
+      {
+        key: 'targetTimeHorizon',
+        field: 'target_time_horizon',
+        label: 'Target Horizon',
+        type: 'single',
+        paths: BOTH,
+        optional: true,
+        q: 'By when?',
+        // Coarse on purpose, so the answer can be honest. The horizon changes
+        // which capabilities must ALREADY be in place -- six months is not long
+        // enough to build founder independence from scratch -- and carries no
+        // severity of its own. Mirrors TargetTimeHorizon in
+        // backend/app/schemas/founder.py.
+        options: [
+          { label: 'Within 6 months', value: '6_months' },
+          { label: 'Within a year', value: '12_months' },
+          { label: 'Within 2 years', value: '24_months' },
+          { label: 'Longer than that', value: '36_months_plus' },
+        ],
+      },
+    ],
+  },
+
   /* === Section 2 — Understanding Where You Are ========================== */
 
   /* Q4 -- the name and the one-line description, as one question. The two

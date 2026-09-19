@@ -20,11 +20,13 @@ import datetime
 from typing import Optional
 
 from sqlalchemy import (
+    CheckConstraint,
     DateTime,
     ForeignKeyConstraint,
     Index,
     Integer,
     PrimaryKeyConstraint,
+    SmallInteger,
     String,
     Text,
     UniqueConstraint,
@@ -183,4 +185,67 @@ class QuestionCapability(Base):
     question_id: Mapped[int] = mapped_column(Integer, primary_key=True)
     capability_id: Mapped[int] = mapped_column(Integer, primary_key=True)
     created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(True), nullable=False, server_default=text("now()"))
+
+
+class CapabilityRequirement(Base):
+    """What a destination requires -- the Target-State Knowledge Base.
+
+    CURATED REFERENCE DATA. Seeded by migration a8d34f7e2b91 and dumped like the
+    question bank; nothing generates a row at runtime and nothing may. Letting
+    an LLM invent requirements would make the destination's demands depend on a
+    sampling temperature, and a founder could not be shown why.
+
+    Every context dimension is nullable and NULL means WILDCARD -- "applies
+    whatever this founder's value is". It does NOT mean "applies when unknown":
+    a founder whose industry we never asked about matches the NULL-industry rows
+    and none of the specific ones, so an incomplete profile yields a more
+    generic requirement set, never an empty one.
+
+    `from_stage_order` is an inclusive LOWER BOUND rather than an exact match,
+    so the table needs no row per stage. The resolver breaks a specificity tie
+    on the tightest bound -- see app/api/v1/diagnosis/target_state.py, which
+    owns the cascade.
+    """
+
+    __tablename__ = "capability_requirements"
+    __table_args__ = (
+        PrimaryKeyConstraint("requirement_id", name="capability_requirements_pkey"),
+        ForeignKeyConstraint(["capability_id"], ["capabilities.capability_id"],
+                             ondelete="CASCADE",
+                             name="capability_requirements_capability_id_fkey"),
+        CheckConstraint("required_level BETWEEN 0 AND 3",
+                        name="capability_requirements_required_level_check"),
+        CheckConstraint("necessity IN ('core', 'contextual')",
+                        name="capability_requirements_necessity_check"),
+        CheckConstraint("from_stage_order IS NULL OR from_stage_order BETWEEN 1 AND 8",
+                        name="capability_requirements_from_stage_order_check"),
+        UniqueConstraint(
+            "capability_id", "industry_code", "business_model", "from_stage_order",
+            "target_revenue_band", "target_time_horizon",
+            name="uq_capability_requirements_context",
+            postgresql_nulls_not_distinct=True,
+        ),
+        Index("idx_capability_requirements_capability", "capability_id"),
+        Index("idx_capability_requirements_band", "target_revenue_band"),
+    )
+
+    requirement_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    capability_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    industry_code: Mapped[Optional[str]] = mapped_column(String(20))
+    business_model: Mapped[Optional[str]] = mapped_column(String(100))
+    from_stage_order: Mapped[Optional[int]] = mapped_column(Integer)
+    target_revenue_band: Mapped[Optional[str]] = mapped_column(String(50))
+    target_time_horizon: Mapped[Optional[str]] = mapped_column(String(30))
+    #: CapabilityLevel 0-3. Stored as a small int rather than an enum type so
+    #: the scale lives in exactly one place (capability_levels.py).
+    required_level: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    necessity: Mapped[str] = mapped_column(String(16), nullable=False)
+    #: Shown to the founder. NOT NULL: a requirement nobody can explain is a
+    #: rule nobody can challenge.
+    rationale: Mapped[str] = mapped_column(Text, nullable=False)
+    source_document: Mapped[Optional[str]] = mapped_column(Text)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(True), nullable=False, server_default=text("now()"))
+    updated_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(True), nullable=False, server_default=text("now()"))

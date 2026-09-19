@@ -262,13 +262,20 @@ def test_question_capability_infrastructure_exists_and_is_empty(db, capsys):
 
 
 # =========================================================== 11: no gap states yet
-def test_there_is_no_gap_or_requirement_table_yet(db):
-    """Step 5 is the vocabulary. Requirements, evidence and gaps are Steps 6-9."""
+def test_there_is_no_evidence_or_gap_table_yet(db):
+    """The boundary, moved forward exactly one step.
+
+    Step 5 built the vocabulary and Step 6 added `capability_requirements` --
+    what a DESTINATION needs. Evidence (what the founder actually has) is Step 7
+    and the comparison between them is Step 8, so their tables must still be
+    absent. This is what stops a gap being computed before there is anything to
+    compare: you cannot join to a table that does not exist.
+    """
     present = {t for (t,) in db.execute(text(
         "SELECT table_name FROM information_schema.tables"
         " WHERE table_schema = 'public'")).all()}
-    for premature in ("capability_requirements", "capability_evidence",
-                      "detected_gaps", "target_state_profiles"):
+    assert "capability_requirements" in present, "Step 6 should have added this"
+    for premature in ("capability_evidence", "detected_gaps", "target_state_profiles"):
         assert premature not in present, f"{premature} belongs to a later step"
 
 

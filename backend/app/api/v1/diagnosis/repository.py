@@ -184,6 +184,38 @@ class DiagnosisRepository:
         )
         return int(self.db.execute(stmt).scalar() or 0)
 
+    # --- Target-state knowledge base ---------------------------------------
+
+    def capability_requirement_rows(self) -> list:
+        """Every capability_requirements row, joined to its capability code.
+
+        Returned WHOLE and unfiltered on purpose. The table is curated reference
+        data -- 54 rows today, a few hundred at most -- and the specificity
+        cascade is easier to read, test and explain in one Python function than
+        as a window query nobody dares change. Filtering here would also split
+        the rule across two places, which is how the two stop agreeing.
+
+        Returns [] when the table does not exist -- any database that has not
+        run a8d34f7e2b91 -- so a caller degrades to "no requirements" rather
+        than raising. Same fail-open as every other optional map in this module.
+        """
+        sql = (
+            "SELECT r.requirement_id, r.capability_id, c.capability_code,"
+            "       r.industry_code, r.business_model, r.from_stage_order,"
+            "       r.target_revenue_band, r.target_time_horizon,"
+            "       r.required_level, r.necessity, r.rationale"
+            "  FROM capability_requirements r"
+            "  JOIN capabilities c ON c.capability_id = r.capability_id"
+        )
+        try:
+            return list(self.db.execute(_text(sql)).mappings().all())
+        except Exception:                                      # noqa: BLE001
+            logger.warning(
+                "capability_requirements unavailable; no target-state requirements",
+                extra={"stage": "target_state"},
+            )
+            return []
+
     # --- Session-learned context -------------------------------------------
 
     def session_context_facts(self, session_id: int) -> dict[str, bool]:
