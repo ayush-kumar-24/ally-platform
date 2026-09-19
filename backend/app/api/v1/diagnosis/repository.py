@@ -567,6 +567,41 @@ class DiagnosisRepository:
         )
         return narrate_target(result, narrator)
 
+    def strategic_direction_for_session(self, session_id: int, founder_context, target,
+                                        *, narrator=None):
+        """Step 10B: this session's capability state + the founder's destination
+        -> an ordered capability trajectory.
+
+        Read-only, and independent of Step 10A: nothing here reads or waits on a
+        20-day target. Step 6's ambiguity is CAUGHT and reported rather than
+        allowed to abort a founder's diagnosis or be silently guessed past --
+        `resolve_requirements` raises for one undecidable capability, which
+        would otherwise take the whole direction down with it.
+        """
+        from app.api.v1.diagnosis.strategic_direction import (
+            ambiguous_direction,
+            build_strategic_direction,
+            narrate_direction,
+        )
+        from app.api.v1.diagnosis.target_state import (
+            AmbiguousRequirementError,
+            resolve_requirements,
+        )
+
+        try:
+            requirements = resolve_requirements(
+                self.capability_requirement_rows(), founder_context, target)
+            gaps = self.capability_gaps_for_session(session_id, founder_context, target)
+        except AmbiguousRequirementError as exc:
+            return ambiguous_direction(target, str(exc))
+
+        direction = build_strategic_direction(
+            gaps, requirements,
+            self.capability_detail(tuple(g.capability_id for g in gaps)),
+            target,
+        )
+        return narrate_direction(direction, narrator)
+
     def intervention_coverage_summary(self) -> list[dict]:
         """Per-capability intervention coverage, for content-gap analysis.
 
