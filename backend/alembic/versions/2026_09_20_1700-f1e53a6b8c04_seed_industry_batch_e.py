@@ -85,7 +85,7 @@ def upgrade() -> None:
                     industry_code, industry_name, description, industry_subtitle
                 )
                 VALUES (
-                    :industry_code, :industry_name, :description, :description
+                    :industry_code, :industry_name, :description, :industry_subtitle
                 )
                 ON CONFLICT (industry_code) DO UPDATE SET
                     industry_name = EXCLUDED.industry_name,
@@ -99,6 +99,7 @@ def upgrade() -> None:
                 "industry_code": industry_code,
                 "industry_name": industry_name,
                 "description": description,
+                "industry_subtitle": description,
             },
         )
 
