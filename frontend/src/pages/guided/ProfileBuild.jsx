@@ -1,7 +1,12 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
-import { getProfile, saveOnboardingProfile, toGuidedAnswers } from '../../services/profile';
+import {
+  clearOnboardingAnswers,
+  getProfile,
+  saveOnboardingProfile,
+  toGuidedAnswers,
+} from '../../services/profile';
 import { readable } from '../../utils/profileDisplay';
 import { useVoiceInput } from '../../hooks/useVoiceInput';
 import useAutoScroll from '../../hooks/useAutoScroll';
@@ -77,8 +82,82 @@ function panelRowsFor(questions, path) {
 /** What the founder sees in the DNA panel and in their own chat bubble. */
 const displayOf = (value) => (Array.isArray(value) ? value.join(', ') : String(value ?? ''));
 
+/* The bubbles for a set of already-answered rows, in question order: Ally's
+   question (and its prompt), then the founder's own answer.
+
+   Every 'me' bubble carries the KEY of the fact it answers. That is what makes
+   an answer editable afterwards -- without it a bubble is just text, and there
+   is no way back from "the founder tapped Edit on this line" to "this is their
+   monthly revenue". The live flow tags its bubbles the same way as it goes.
+
+   Used on resume and again when a changed stage re-plans the flow, because
+   there is no per-turn log to replay: onboarding answers are flat columns on
+   founders, not a turn log the way diagnosis answers are. */
+function transcriptFor(rows, displays) {
+  return rows.flatMap((x) => {
+    const turn = [{ who: 'ally', text: x.q }];
+    if (x.prompt) turn.push({ who: 'ally', text: x.prompt });
+    turn.push({ who: 'me', text: displays[x.key], key: x.key });
+    return turn;
+  });
+}
+
+/* The index of the first question on `path` that still needs an answer, or -1
+   when every one of them is resolved.
+
+   Live-reproduced: an optional question (currently just the social handle)
+   that was genuinely skipped is indistinguishable from "never reached" by
+   isFilled() alone -- both read as null, forever. Without the second clause a
+   founder who skipped it got stuck being re-asked it on every single reload.
+   The fix needs no new persisted state: if ANY later question already has an
+   answer, this one can only have been passed through already (skipped or
+   answered) -- the founder could not have reached that later question
+   otherwise. An optional question with nothing later filled either has
+   genuinely not been reached yet, and is correctly asked.
+
+   `from` skips questions the flow is already past. In a first run through
+   that changes nothing -- nothing ahead of the frontier is ever answered --
+   but it stops being the same thing once a changed stage has re-planned the
+   flow: the founder is put back at the first gap, and questions AFTER that
+   gap that survived the re-plan already have answers. Marching blindly on
+   asked those again, and left two contradictory bubbles standing for the one
+   question. */
+function firstUnresolved(active, path, answers, from = 0) {
+  const anyFilled = (x) => questionKeys(x, path).some((k) => isFilled(answers[k]));
+  const allFilled = (x) => questionKeys(x, path).every((k) => isFilled(answers[k]));
+  return active.findIndex((x, i) => i >= from && !(
+    allFilled(x) || (x.optional && active.slice(i + 1).some(anyFilled))
+  ));
+}
+
+/* Where to pick the flow back up: which question, which part of it, and the
+   parts of that question already answered -- seeded back into the group's
+   buffer so the group still commits whole. A founder who answered the stage
+   but left before the experience card must not be asked their stage again.
+   startAt === active.length means there is nothing left to ask. */
+function resumePoint(active, path, answers) {
+  const found = firstUnresolved(active, path, answers);
+  const startAt = found === -1 ? active.length : found;
+  const question = active[startAt];
+  const parts = question && question.type === 'group' ? activeParts(question, path) : [];
+  const startPart = Math.max(0, parts.findIndex((pt) => !isFilled(answers[pt.key])));
+  const buf = Object.fromEntries(
+    parts.slice(0, startPart)
+      .filter((pt) => isFilled(answers[pt.key]))
+      .map((pt) => [pt.key, answers[pt.key]]),
+  );
+  return { startAt, startPart, buf };
+}
+
 export default function ProfileBuild() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  /* Arrived from the profile page's completeness ring rather than from
+     onboarding itself -- see FounderProfile. Same screen, same answers, same
+     edit affordance; it only changes what Ally says at the end and where the
+     Continue button goes, because a founder who came here to check something
+     is not partway through signing up. */
+  const review = searchParams.get('review') === '1';
   const { user, setUser, showToast } = useApp();
   const first = user?.name ? user.name.split(' ')[0] : 'there';
   const initial = (user?.initials || first).charAt(0).toUpperCase();
@@ -104,6 +183,15 @@ export default function ProfileBuild() {
   const [otherText, setOtherText] = useState('');
   const [search, setSearch] = useState('');
   const [yesNo, setYesNo] = useState({});      // 'yesno' type: {itemKey: true|false}
+  /* The answer currently being CHANGED, if any: { key, q, label }. State, not
+     just a ref, because the banner above the control and the per-bubble Edit
+     buttons both render from it. editRef holds the flow position to return to
+     once the edit is committed or cancelled, for the same reason partIdxRef
+     shadows partIdx -- commitEdit reads it inside a useCallback, where the
+     state value would be a stale capture. */
+  const [editing, setEditing] = useState(null);
+  const editRef = useRef(null);
+
   /* Which part of a `group` question is being asked. A ref shadows it because
      answer() reads it inside a useCallback, where the state value would be a
      stale capture; the state copy exists only so the control re-renders. */
@@ -192,7 +280,9 @@ export default function ProfileBuild() {
   }, [undTarget]);
 
   const addAlly = useCallback((text) => setMessages((m) => [...m, { who: 'ally', text }]), []);
-  const addMe = useCallback((text) => setMessages((m) => [...m, { who: 'me', text }]), []);
+  /* `key` is the fact this bubble answers -- see transcriptFor. Every founder
+     bubble carries one so the Edit button under it knows what it is editing. */
+  const addMe = useCallback((text, key) => setMessages((m) => [...m, { who: 'me', text, key }]), []);
 
   const bumpUnd = useCallback((target, note) => {
     setUndTarget(target);
@@ -290,9 +380,11 @@ export default function ProfileBuild() {
         ...profileRef.current,
       },
     }));
-    addAlly(`That's everything I need, ${first}. I've got a clear read on you now — give me a moment to form a first impression.`);
+    addAlly(review
+      ? `That's everything you've told me, ${first}. Tap Edit under any answer to change it — I'll save it as you go.`
+      : `That's everything I need, ${first}. I've got a clear read on you now — give me a moment to form a first impression.`);
     setShowBar(true);
-  }, [addAlly, bumpUnd, first, setUser]);
+  }, [addAlly, bumpUnd, first, setUser, review]);
 
   const askQ = useCallback(async (i, startPart = 0, buf = {}) => {
     if (i >= questionsRef.current.length) { finish(); return; }
@@ -320,6 +412,240 @@ export default function ProfileBuild() {
     present(i, startPart, buf);
   }, [addAlly, present, finish]);
 
+  /* --- changing an answer already given -------------------------------------
+     Live-reported, and the reason this exists at all: a founder who picked the
+     wrong option had no way back. Onboarding wrote the answer straight to the
+     profile and moved on, and the only bubble actions were Copy. "If any user
+     selected something wrong then there's no chance they can change it."
+
+     Deliberately NOT folded into answer(). answer() is flow control: it
+     advances the part, the question index, the progress bar and the reply Ally
+     gives next. An edit changes one fact and puts the founder back exactly
+     where they were, which is the opposite of all of that. */
+
+  /**
+   * Commit an edit, in place of the bubble it belongs to.
+   *
+   * `opts.clear` is the optional-question case (currently just the social
+   * handle): the founder used Skip while editing, which means "take what I
+   * said before back off my profile", not "store an empty string".
+   */
+  const commitEdit = useCallback(async (value, extra, display, opts = {}) => {
+    const ed = editRef.current;
+    if (!ed) return;
+    editRef.current = null;
+    setEditing(null);
+    awaitingRef.current = false;
+    setActiveQ(-1);
+    resetControls();
+
+    const ctl = ed.ctl;
+    const isObj = typeof value === 'object' && value !== null && !Array.isArray(value);
+    const stored = opts.clear ? null
+      : (Array.isArray(value) || isObj) ? value : String(value).trim();
+    const shown = opts.clear ? 'Skipped' : (display || displayOf(stored));
+
+    if (opts.clear) {
+      delete profileRef.current[ctl.key];
+    } else {
+      profileRef.current = { ...profileRef.current, [ctl.key]: stored, ...(extra || {}) };
+    }
+    displayRef.current = { ...displayRef.current, [ctl.key]: shown };
+    /* No build animation on an edit: that row is already on the panel, and
+       sending it back through "Building…" reads as though Ally were learning
+       it for the first time. */
+    confirmField(ctl.key, shown, false);
+    /* The founder's own bubble is REWRITTEN rather than a second one appended.
+       Two bubbles answering the same question, one of them no longer true, is
+       exactly the confusion an edit is supposed to remove. */
+    setMessages((ms) => ms.map((m) => (
+      m.who === 'me' && m.key === ctl.key ? { ...m, text: shown } : m
+    )));
+
+    /* Unlike a mid-flow answer, an edit is told whether it saved. Mid-flow a
+       dropped PATCH costs nothing a founder would notice -- finish() resends
+       everything, and resume covers the rest. An edit is a deliberate act with
+       a specific expectation, so silently not saving it is the one outcome
+       worth interrupting for. */
+    const saved = opts.clear
+      ? clearOnboardingAnswers([ctl.key])
+      : saveOnboardingProfile({ [ctl.key]: stored, ...(extra || {}) })
+        .then((result) => { if (!result.ok) throw new Error(result.failed.join(', ')); });
+    saved
+      .then(() => showToast('Updated.'))
+      .catch(() => showToast("That didn't save — check your connection and try again."));
+
+    /* Changing the STAGE re-plans the rest of the flow, because the stage is
+       the only answer either path branches on. The founder chose this
+       deliberately, so the honest response is to keep every answer that still
+       applies, let go of the ones that cannot apply any more, and ask whatever
+       the new stage newly makes relevant. */
+    let cleared = null;
+    if (ctl.type === 'stage' && !opts.clear) {
+      const path = STAGE_BY_NAME[stored]?.path || null;
+      if (path !== pathRef.current) {
+        const before = panelRowsFor(questionsRef.current, pathRef.current);
+        pathRef.current = path;
+        questionsRef.current = effectiveQuestions(path);
+        profileRef.current.path = path;
+        const after = panelRowsFor(questionsRef.current, path);
+        const live = new Set(after.map((x) => x.key));
+
+        // Whole answers with no question behind them on the new path.
+        const gone = before.filter((x) => !live.has(x.key) && x.key in profileRef.current);
+        /* ...and single OPTIONS that presuppose an operating business, inside
+           answers whose question itself survived. Leaving "Cash flow" in the
+           challenges of a founder who has moved back to exploring an idea is
+           not a harmless leftover: the diagnosis reads it as a real signal.
+           Same rule the option-level `paths` filter applies when asking. */
+        const trimmed = [];
+        after.forEach((row) => {
+          if (row.type !== 'chips' && row.type !== 'multi') return;
+          const current = profileRef.current[row.key];
+          if (!Array.isArray(current) || current.length === 0) return;
+          const allowed = new Set(activeOptions(row, path).map(optValue));
+          /* Only a value this question KNOWS and no longer offers is dropped.
+             Anything unrecognised is left exactly where it is: a value can
+             reach this row from somewhere other than these chips (a founder's
+             own words through the summary screen, a column filled before an
+             option list was last edited), and silently deleting a founder's
+             answer because it is not on a list we recognise would be a far
+             worse bug than the leftover this is here to clean up. */
+          const known = new Set((row.options || []).map(optValue));
+          const kept = current.filter((v) => allowed.has(v) || !known.has(v));
+          if (kept.length !== current.length) trimmed.push([row, kept]);
+        });
+
+        const emptied = trimmed.filter(([, kept]) => kept.length === 0).map(([row]) => row);
+        const clearKeys = gone.concat(emptied).map((x) => x.key);
+        gone.concat(emptied).forEach((x) => {
+          delete profileRef.current[x.key];
+          delete displayRef.current[x.key];
+        });
+        trimmed.filter(([, kept]) => kept.length > 0).forEach(([row, kept]) => {
+          profileRef.current[row.key] = kept;
+          displayRef.current[row.key] = displayOf(kept);
+        });
+
+        if (clearKeys.length) {
+          clearOnboardingAnswers(clearKeys).catch(() => showToast(
+            "Your stage is saved, but clearing the answers it replaced didn't go through.",
+          ));
+        }
+        const rewrites = Object.fromEntries(
+          trimmed.filter(([, kept]) => kept.length > 0).map(([row, kept]) => [row.key, kept]),
+        );
+        if (Object.keys(rewrites).length) saveOnboardingProfile(rewrites).catch(() => {});
+
+        /* Repaint the panel and the transcript against the NEW question list,
+           rather than leaving rows and bubbles standing for questions this
+           founder is no longer asked. */
+        const standing = after.filter((x) => displayRef.current[x.key] !== undefined);
+        setFields(Object.fromEntries(
+          standing.map((x) => [x.key, { status: 'on', text: displayRef.current[x.key] }]),
+        ));
+        setSectionsOpen(Object.fromEntries(standing.map((x) => [x.section, true])));
+        setMessages(transcriptFor(standing, displayRef.current));
+        cleared = gone.concat(emptied).map((x) => x.label);
+      }
+    }
+
+    const active = questionsRef.current;
+    const answered = active.filter(
+      (x) => questionKeys(x, pathRef.current).every((k) => isFilled(profileRef.current[k])),
+    ).length;
+    bumpUnd(Math.round((answered / questionCount(pathRef.current)) * 100), 'Answer updated');
+
+    if (cleared) {
+      await sleep(600); if (!alive.current) return;
+      addAlly("Got it — that changes where you are, so let me re-plan the rest.");
+      if (cleared.length) {
+        addAlly(`These don't apply at your new stage, so I've taken them off your profile: ${cleared.join(', ')}.`);
+      }
+      const { startAt, startPart, buf } = resumePoint(active, pathRef.current, profileRef.current);
+      if (startAt < active.length) {
+        qiRef.current = startAt;
+        askQ(startAt, startPart, buf);
+        return;
+      }
+      addAlly('Everything else you told me still applies — there is nothing new to ask.');
+      if (!complete) finish();
+      return;
+    }
+
+    /* No re-plan: put them back exactly where the edit interrupted them. A
+       founder editing question 2 mid-flow returns to question 7, still
+       awaiting the same answer, with the group's buffer intact. */
+    if (ed.wasAwaiting && ed.wasActiveQ >= 0) {
+      groupBufRef.current = ed.returnBuf;
+      partIdxRef.current = ed.returnPart;
+      setPartIdx(ed.returnPart);
+      awaitingRef.current = true;
+      setActiveQ(ed.wasActiveQ);
+    }
+  }, [addAlly, askQ, bumpUnd, complete, confirmField, finish, resetControls, showToast]);
+
+  /** Open the control for an answer already given, seeded with it. */
+  const startEdit = useCallback((key) => {
+    if (!key || editRef.current) return;
+    const active = questionsRef.current;
+    let qi = -1;
+    let pi = 0;
+    for (let i = 0; i < active.length; i += 1) {
+      const x = active[i];
+      if (x.type === 'group') {
+        const at = activeParts(x, pathRef.current).findIndex((pt) => pt.key === key);
+        if (at >= 0) { qi = i; pi = at; break; }
+      } else if (x.key === key) { qi = i; break; }
+    }
+    // Not a question this founder is asked any more (their stage changed since
+    // the bubble was written). Nothing to edit; the bubble is already gone.
+    if (qi < 0) return;
+    const ctl = controlFor(active[qi], pathRef.current, pi);
+    if (!ctl) return;
+
+    editRef.current = {
+      ctl,
+      returnPart: partIdxRef.current,
+      returnBuf: groupBufRef.current,
+      wasAwaiting: awaitingRef.current,
+      wasActiveQ: activeQ,
+    };
+    setEditing({ key, q: ctl.q, label: ctl.label });
+
+    resetControls();
+    // Seeded with what they said before, so an edit is a correction rather
+    // than answering the question again from nothing.
+    const previous = profileRef.current[ctl.key];
+    if (ctl.type === 'chips' || ctl.type === 'multi') {
+      setPicked(Array.isArray(previous) ? previous : (previous ? [previous] : []));
+      if (ctl.otherField) setOtherText(profileRef.current[ctl.otherField] || '');
+    } else if (ctl.type === 'yesno') {
+      if (previous && typeof previous === 'object') setYesNo(previous);
+    } else if (ctl.type === 'short' || ctl.type === 'long' || ctl.type === 'url') {
+      setInput(typeof previous === 'string' ? previous : '');
+    }
+
+    partIdxRef.current = pi;
+    setPartIdx(pi);
+    awaitingRef.current = true;
+    setActiveQ(qi);
+  }, [activeQ, resetControls]);
+
+  /** Leave the answer as it was and go back to the flow. */
+  const cancelEdit = useCallback(() => {
+    const ed = editRef.current;
+    if (!ed) return;
+    editRef.current = null;
+    setEditing(null);
+    resetControls();
+    groupBufRef.current = ed.returnBuf;
+    partIdxRef.current = ed.returnPart;
+    setPartIdx(ed.returnPart);
+    awaitingRef.current = ed.wasAwaiting;
+    setActiveQ(ed.wasActiveQ);
+  }, [resetControls]);
+
   /**
    * Commit an answer.
    * `value`   what gets stored (string, or array for multi-selects)
@@ -333,6 +659,11 @@ export default function ProfileBuild() {
       : isObj ? Object.keys(value).length === 0
       : !String(value ?? '').trim();
     if (empty) return;
+
+    /* An edit changes one fact and returns; it does not advance the flow.
+       Dispatched here rather than in each of the eight controls, so every
+       control is editable by construction and none of them has to know. */
+    if (editRef.current) { await commitEdit(value, extra, display); return; }
 
     awaitingRef.current = false;
     setActiveQ(-1);
@@ -368,7 +699,7 @@ export default function ProfileBuild() {
     // them with "and"); everything else replies against what was actually shown.
     const replyInput = Array.isArray(stored) ? stored : shown;
 
-    addMe(shown);
+    addMe(shown, ctl.key);
     setInput('');
     if (taRef.current) taRef.current.style.height = 'auto';
 
@@ -445,8 +776,11 @@ export default function ProfileBuild() {
     // its own, and its last part is what the founder actually just said.
     addAlly(replyRef.current(ctl.key, replyInput, { first }));
     await sleep(640); if (!alive.current) return;
-    if (nextQi < questionsRef.current.length) askQ(nextQi); else finish();
-  }, [addMe, confirmField, bumpUnd, addAlly, askQ, finish, first, resetControls]);
+    const ahead = firstUnresolved(questionsRef.current, pathRef.current, profileRef.current, nextQi);
+    if (ahead === -1) { finish(); return; }
+    qiRef.current = ahead;
+    askQ(ahead);
+  }, [addMe, confirmField, bumpUnd, addAlly, askQ, finish, first, resetControls, commitEdit]);
 
   /** Only reachable on a control marked `optional` (currently just the social
    * handle) -- skips without storing anything, so the field simply stays null
@@ -458,16 +792,23 @@ export default function ProfileBuild() {
    * one optional later is a one-line change rather than a silent bug. */
   const skip = useCallback(async () => {
     if (!awaitingRef.current) return;
+    /* Skipping while EDITING means "take what I said before back off my
+       profile", not "move past this question" -- there is no flow to move
+       past. commitEdit clears the stored answer instead. */
+    if (editRef.current) { await commitEdit(null, undefined, undefined, { clear: true }); return; }
     awaitingRef.current = false;
     setActiveQ(-1);
     const i = qiRef.current;
     const q = questionsRef.current[i];
+    // Captured before the part index advances below, so a skipped answer's
+    // bubble still names the fact it stands for and stays editable.
+    const ctl = controlFor(q, pathRef.current, partIdxRef.current);
 
     if (q.type === 'group') {
       const parts = activeParts(q, pathRef.current);
       const nextPart = partIdxRef.current + 1;
       if (nextPart < parts.length) {
-        addMe('Skipped');
+        addMe('Skipped', ctl?.key);
         partIdxRef.current = nextPart;
         setPartIdx(nextPart);
         resetControls();
@@ -484,12 +825,15 @@ export default function ProfileBuild() {
 
     const nextQi = i + 1;
     qiRef.current = nextQi;
-    addMe('Skipped');
+    addMe('Skipped', ctl?.key);
     setTyping(true);
     await sleep(500); if (!alive.current) return;
     setTyping(false);
-    if (nextQi < questionsRef.current.length) askQ(nextQi); else finish();
-  }, [addMe, addAlly, askQ, finish, resetControls]);
+    const ahead = firstUnresolved(questionsRef.current, pathRef.current, profileRef.current, nextQi);
+    if (ahead === -1) { finish(); return; }
+    qiRef.current = ahead;
+    askQ(ahead);
+  }, [addMe, addAlly, askQ, finish, resetControls, commitEdit]);
 
   /* The founder's name arrives from GET /profile *after* mount -- AppContext
      hydrates identity asynchronously. Greeting someone as "there" while their
@@ -534,43 +878,17 @@ export default function ProfileBuild() {
       // rolls up to questions when deciding where to restart.
       const rows = panelRowsFor(active, path);
 
-      // Live-reproduced: an optional question (currently just the social
-      // handle) that was genuinely skipped is indistinguishable from "never
-      // reached" by isFilled() alone -- both read as null, forever. Without
-      // this, a founder who skipped it got stuck being re-asked it on every
-      // single reload, with progress pinned at whatever index it sits at.
-      // The fix needs no new persisted state: if ANY later question already
-      // has an answer, this one can only have been passed through already
-      // (skipped or answered) -- the founder could not have reached that
-      // later question otherwise. An optional question with nothing later
-      // filled either has genuinely not been reached yet, and is correctly
-      // asked.
-      const anyFilled = (x) => questionKeys(x, path).some((k) => isFilled(answers[k]));
-      const allFilled = (x) => questionKeys(x, path).every((k) => isFilled(answers[k]));
-      const isResolved = (x, i) =>
-        allFilled(x) ||
-        (x.optional && active.slice(i + 1).some(anyFilled));
-
-      const firstUnanswered = active.findIndex((x, i) => !isResolved(x, i));
-      // -1 means every mapped field is already filled/resolved -- treat as
-      // done rather than looping past the end of the list. GuidedLayout/Login
-      // already redirect a founder whose profile is fully complete straight
-      // to /app, so reaching this component at all should mean there's a
-      // real gap; this only guards the rare edge where that check raced this
-      // fetch.
-      const startAt = firstUnanswered === -1 ? active.length : firstUnanswered;
-
-      // Where inside a group to pick up. A founder who answered the stage but
-      // left before the experience card must not be asked their stage again.
-      const resumeQ = active[startAt];
-      const resumeParts = resumeQ && resumeQ.type === 'group'
-        ? activeParts(resumeQ, path) : [];
-      const startPart = Math.max(0, resumeParts.findIndex((pt) => !isFilled(answers[pt.key])));
-      const resumeBuf = Object.fromEntries(
-        resumeParts.slice(0, startPart)
-          .filter((pt) => isFilled(answers[pt.key]))
-          .map((pt) => [pt.key, answers[pt.key]]),
-      );
+      // startAt === active.length means every mapped field is already
+      // filled/resolved -- treated as done rather than looping past the end of
+      // the list. Reaching this component at all used to mean there was a real
+      // gap (GuidedLayout redirects a completed profile to /app), but a
+      // founder arriving from the profile page's completeness ring is exempt
+      // from that redirect on purpose: for them this is the normal case, and
+      // the whole transcript below is what they came to read.
+      //
+      // firstUnresolved/resumePoint are shared with commitEdit, which needs
+      // exactly the same answer after a changed stage re-plans the flow.
+      const { startAt, startPart, buf: resumeBuf } = resumePoint(active, path, answers);
 
       if (startAt > 0 || startPart > 0) {
         const filled = rows.filter((x) => isFilled(answers[x.key]));
@@ -600,20 +918,20 @@ export default function ProfileBuild() {
         // reads the founder's real answers), but the actual conversation
         // never did -- a reload showed only the two generic "welcome back"
         // messages with no sign the prior conversation had happened at all.
-        // Synthesises the same alternating ally-question/founder-answer
-        // bubbles the live flow itself builds, in `active`'s fixed order --
-        // there is no per-turn timestamp to replay against (onboarding
-        // answers are flat columns on founders, not a turn log the way
-        // diagnosis answers are), so this reconstructs what was asked and
-        // said, not a literal scrollback.
-        setMessages(filled.flatMap((x) => {
-          const turn = [{ who: 'ally', text: x.q }];
-          if (x.prompt) turn.push({ who: 'ally', text: x.prompt });
-          turn.push({ who: 'me', text: displayRef.current[x.key] });
-          return turn;
-        }));
+        // transcriptFor synthesises the same alternating ally-question/
+        // founder-answer bubbles the live flow itself builds, in `active`'s
+        // fixed order -- there is no per-turn timestamp to replay against, so
+        // this reconstructs what was asked and said, not a literal scrollback.
+        setMessages(transcriptFor(filled, displayRef.current));
 
-        addAlly(`Welcome back, ${first} — picking up right where we left off.`);
+        /* In review mode with nothing left to ask, finish() is a beat away and
+           says "tap Edit under any answer" itself -- saying it here too put
+           the same instruction in two consecutive bubbles. */
+        addAlly(review
+          ? (startAt >= active.length
+            ? `Here's everything you've told me so far, ${first}.`
+            : `Here's everything you've told me so far, ${first} — tap Edit under any answer to change it. Let's fill in the rest.`)
+          : `Welcome back, ${first} — picking up right where we left off.`);
         await sleep(700);
         askQ(startAt, startPart, resumeBuf);
         return;
@@ -625,6 +943,7 @@ export default function ProfileBuild() {
       await sleep(900); if (!alive.current) return;
       askQ(0);
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [introReady]);
 
   const q = activeQ >= 0 ? questionsRef.current[activeQ] : null;
@@ -749,16 +1068,30 @@ export default function ProfileBuild() {
      section boundary so four sections read as one continuous conversation
      rather than four stapled-together blocks, and the step counter is in
      QUESTIONS -- a group counts once, however many parts it asks. */
-  const chapter = q ? SECTIONS.find((sec) => sec.key === q.section) : null;
+  /* The flow's own position, which is not activeQ while an earlier answer is
+     being edited -- the eyebrow and the step counter must not jump back to
+     "Question 3 of 11" because the founder is fixing their stage from
+     question 9. */
+  const flowQi = editing && editRef.current ? editRef.current.wasActiveQ : activeQ;
+  const flowQ = flowQi >= 0 ? questionsRef.current[flowQi] : null;
+  const chapter = flowQ ? SECTIONS.find((sec) => sec.key === flowQ.section) : null;
   // questionCount(), not questionsRef.current.length -- before the stage answer
   // that list is the superset of both paths, and showing its length made the
   // total drop from 12 to 11 mid-flow. Indices are safe to read directly: every
   // question at or before the stage part is on both paths, so position 1-3
   // means the same thing either way.
   const totalQs = questionCount(pathRef.current);
-  const stepNo = activeQ >= 0 ? activeQ + 1 : 0;
+  const stepNo = flowQi >= 0 ? flowQi + 1 : 0;
   const sectionCount = (key) =>
     panelRows.filter((x) => x.section === key && fields[x.key]?.status === 'on').length;
+
+  /* Edits are offered only when the founder is actually being asked something
+     (the flow is parked on a control) or the flow is finished. In between --
+     while Ally is typing its reply and the next question is queued behind an
+     await -- an edit would be clobbered a moment later by the askQ() that
+     continuation is about to run. One edit at a time, too: the banner's Cancel
+     is the way out of the one already open. */
+  const canEdit = !editing && (activeQ >= 0 || complete);
 
   const needsOther = (ctrl?.type === 'chips' || ctrl?.type === 'multi') && !!ctrl?.otherValue && picked.includes(ctrl.otherValue);
   const atMax = ctrl?.max ? picked.length >= ctrl.max : false;
@@ -1064,7 +1397,14 @@ export default function ProfileBuild() {
   }
 
   return (
-    <section className="view chat-view active" id="v-profile">
+    /* has-jbar: the closing bar is position:fixed over the bottom of the
+       viewport (see the inline style on it below), which used to be harmless
+       because it only appeared once the flow was over and no answer control
+       was left on screen. Editing an answer after that -- the whole point of
+       review mode -- puts a control back underneath it, with its last row of
+       options and its Continue button sitting under the bar and unclickable.
+       The padding gives the control somewhere to be. */
+    <section className={`view chat-view active${showBar ? ' has-jbar' : ''}`} id="v-profile">
       {/* This step had no h1 at all — every sibling guided page has one, so a
           screen-reader user landing here got no page title. */}
       <h1 className="sr-only">Building your founder profile</h1>
@@ -1099,12 +1439,12 @@ export default function ProfileBuild() {
                 </span>
                 <div>
                   <div className="bubble">{m.text}</div>
-                  {/* Copy only: these answers are written straight into the
-                      founder's profile, and the profile page is where they are
-                      edited afterwards. */}
+                  {/* The founder's own answers are editable in place; Ally's
+                      questions are not, so they get Copy alone. */}
                   <MessageActions
                     text={m.text}
                     what={m.who === 'me' ? 'your answer' : "Ally's question"}
+                    onEdit={m.who === 'me' && m.key && canEdit ? () => startEdit(m.key) : undefined}
                   />
                 </div>
               </div>
@@ -1117,6 +1457,17 @@ export default function ProfileBuild() {
             )}
           </div>
 
+          {editing && (
+            <div className="ob-editing">
+              <span className="ob-editing-t">
+                <span className="ob-editing-tag">Editing</span>
+                {editing.q}
+              </span>
+              <button type="button" className="ob-back ob-editing-x" onClick={cancelEdit}>
+                Cancel
+              </button>
+            </div>
+          )}
           {renderControl()}
           {!isText && q && (
             <p className="ci-hint ob-standalone-hint">Ally is building your founder profile as you talk</p>
@@ -1184,10 +1535,20 @@ export default function ProfileBuild() {
 
       {showBar && (
         <div className="j-bar on" style={{ position: 'fixed', bottom: 0, left: 0, width: '100%', zIndex: 100 }}>
-          <span className="jb-note">Your Founder DNA is ready.</span>
+          <span className="jb-note">
+            {review ? 'Every change is saved as you make it.' : 'Your Founder DNA is ready.'}
+          </span>
           <div className="spacer" />
-          <button className="btn btn-em cta-pulse" type="button" onClick={() => navigate('/guided/tour')}>
-            Continue <svg viewBox="0 0 24 24" className="w-4 h-4 inline-block ml-1" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          {/* A founder who came from the profile page's ring came to check
+              something, not to be walked through the rest of onboarding --
+              sending them on to /guided/tour from here would restart a
+              sequence they finished weeks ago. */}
+          <button
+            className="btn btn-em cta-pulse"
+            type="button"
+            onClick={() => navigate(review ? '/app/profile' : '/guided/tour')}
+          >
+            {review ? 'Back to my profile' : 'Continue'} <svg viewBox="0 0 24 24" className="w-4 h-4 inline-block ml-1" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
           </button>
         </div>
       )}

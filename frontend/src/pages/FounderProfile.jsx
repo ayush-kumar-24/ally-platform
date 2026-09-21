@@ -889,7 +889,25 @@ export default function FounderProfile() {
         {/* Ring Score -- real /profile/progress percent, not a fixed 100%.
             circumference = 2*pi*r(44) =~ 276.46; offset 0 is a full ring, so
             an EMPTY profile needs the full circumference as its offset, not 0. */}
-        <div style={{ flexShrink: 0, textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
+        {/* The ring is the way back into the answers behind it.
+            Live-reported: a founder who picked something wrong during
+            onboarding had nowhere to go -- the number told them their profile
+            was incomplete and then did nothing about it, and the onboarding
+            chat itself is unreachable from the app (GuidedLayout redirects a
+            completed profile straight back here). ?review=1 is what exempts
+            them from that redirect; ProfileBuild resumes at the first
+            unanswered question, or replays the whole conversation with an
+            Edit under every answer when there is nothing left to ask. Never a
+            dead click, at any percentage. */}
+        <button
+          type="button"
+          className="fd-ring-btn"
+          onClick={() => navigate('/guided/profile?review=1')}
+          aria-label={progressPct != null
+            ? `Profile ${progressPct}% complete — review and edit your answers`
+            : 'Review and edit your answers'}
+          title="Review and edit your answers"
+        >
           <div className="rep-ring" style={{ width: '74px', height: '74px' }}>
             <svg viewBox="0 0 100 100">
               <circle className="bg" cx="50" cy="50" r="44" strokeWidth="8" />
@@ -921,7 +939,8 @@ export default function FounderProfile() {
           <div className="fd-hero-label" style={{ fontSize: '9px', color: 'var(--on-dark-muted)', maxWidth: '90px', lineHeight: 1.2 }}>
             Profile complete
           </div>
-        </div>
+          <span className="fd-ring-cta">Review answers</span>
+        </button>
       </div>
 
       {/* ── Founder Identity ── */}
