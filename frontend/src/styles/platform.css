@@ -2170,7 +2170,21 @@ body.lp-done #landing-page { display:none; }
 .topbar .tb-title .ey{font-size:11px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:#10B981}
 .topbar .tb-title h1{font-family:var(--display-tight);font-size:20px;font-weight:700;letter-spacing:-.02em;color:#1B4332;margin:2px 0 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .topbar .tb-pill{display:inline-flex;align-items:center;gap:8px;height:38px;padding:0 14px;border-radius:999px;border:1px solid #d7ccb8;background:#f7f1e2;color:#6d6041;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,.03)}
-.topbar .tb-pill-dot{width:8px;height:8px;border-radius:50%;background:#8d9167;box-shadow:0 0 0 3px rgba(141,145,103,.12)}
+/* The plan dot reads as a live status light, not a bullet: an active plan is
+   the thing it reports, so it is emerald and it pulses. Reuses the sidebar
+   badge's ab-dot/ab-ring cycle rather than inventing a second blink -- one
+   heartbeat across the app, and the same staggered double ping that spends
+   its expansion in the first 38% so most of the cycle is rest. Emerald #10B981
+   rather than the sidebar's pale #6ee7b7: this pill sits on cream, where the
+   lighter green washes out. */
+.topbar .tb-pill-dot{position:relative;width:8px;height:8px;border-radius:50%;background:#10B981;box-shadow:0 0 0 3px rgba(16,185,129,.14),0 0 8px rgba(16,185,129,.55);animation:ab-dot 4.5s ease-in-out infinite}
+.topbar .tb-pill-dot::before,
+.topbar .tb-pill-dot::after{content:"";position:absolute;inset:0;border-radius:50%;border:1px solid rgba(16,185,129,.9);opacity:0;animation:ab-ring 4.5s cubic-bezier(.22,.61,.36,1) infinite}
+.topbar .tb-pill-dot::after{animation-delay:2.25s}
+@media(prefers-reduced-motion:reduce){
+  .topbar .tb-pill-dot{animation:none}
+  .topbar .tb-pill-dot::before,.topbar .tb-pill-dot::after{display:none}
+}
 .topbar .tb-cta{height:40px;border-radius:12px;padding:0 16px;font-size:13.5px;box-shadow:0 10px 20px -10px rgba(14,42,28,.45)}
 .topbar .tb-cta svg{width:15px;height:15px}
 .topbar .tb-right{gap:8px}
