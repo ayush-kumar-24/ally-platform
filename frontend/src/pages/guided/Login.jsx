@@ -455,8 +455,13 @@ export default function Login() {
     </div>
   );
 
+  /* No `auth-active` here. It looked like it pinned this screen to the ivory
+     canvas and never did: every rule for that theme is written as
+     `body.auth-active ...`, so a copy of the class on this section matched
+     nothing. The canvas is decided in GuidedLayout, and this screen is the
+     dark one -- see the note there. */
   return (
-    <section className="view j-stage active auth-active" id="v-login">
+    <section className="view j-stage active" id="v-login">
       {showAuthTransition && (
         <AuthTransition
           // RequireAuth records where the founder was heading when their

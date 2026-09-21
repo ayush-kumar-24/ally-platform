@@ -1571,6 +1571,50 @@ body.auth-active .auth-btn.auth-submit:disabled{opacity:.65;transform:none;curso
 .auth-link-btn:disabled{opacity:.5;cursor:default}
 .auth-resend-wait{color:var(--auth-muted-2)}
 .auth-notice{max-width:380px;margin:16px auto -8px;background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.28);color:var(--auth-primary-strong);padding:10px 14px;border-radius:10px;font-size:12.5px;text-align:center}
+
+/* ============================================================
+   The same sign-in screen, on the DARK canvas.
+
+   Every .auth-* rule above is written for the ivory canvas and reaches for the
+   light-ink tokens (--auth-muted #586a5d, --auth-primary-strong #0c7a54)
+   without scoping itself to body.auth-active. That holds only while the body
+   class is there. It is applied by a useEffect in GuidedLayout keyed on the
+   pathname, with a cleanup that removes it -- so any render of this screen
+   without it falls back to the guided flow's dark green backdrop while the
+   text keeps its light-canvas ink. Live-reported: dark grey-green labels on
+   dark green. "Email", "Password", "First time here..." and "Email me a code"
+   were all but invisible.
+
+   Ivory defaults here for that state, with the light values reasserted under
+   body.auth-active below -- so the cream screen renders exactly as it did and
+   only the dark one changes. Ivory rather than a brighter green, deliberately:
+   green-on-green is what failed, and #f4ede3 is the same warm ivory the light
+   canvas is built from (--auth-bg), so the two screens stay one family.
+   ============================================================ */
+.auth-label{color:#f4ede3}
+.auth-alt{color:#e4dcd0}
+.auth-link-btn{color:#6ee7b7}
+.auth-link-btn:hover:not(:disabled){color:#a7f3d0}
+.auth-resend-wait{color:#bdccc2}
+.auth-input::placeholder{color:#9db0a4}
+.auth-notice{color:#a7f3d0}
+/* Scoped to the login section, not .j-sub/.j-fine at large: those two carry
+   the whole guided flow's body and fine print, and this is a fix for one
+   screen, not a restyle of onboarding. */
+#v-login .j-sub{color:#e4dcd0}
+#v-login .j-fine{color:#c3d2c8}
+
+/* The ivory canvas, unchanged -- these restate the values the rules above
+   used to give it, at a specificity that wins over the dark defaults. */
+body.auth-active .auth-label{color:var(--auth-muted)}
+body.auth-active .auth-alt{color:var(--auth-muted)}
+body.auth-active .auth-link-btn{color:var(--auth-primary-strong)}
+body.auth-active .auth-link-btn:hover:not(:disabled){color:var(--auth-primary)}
+body.auth-active .auth-resend-wait{color:var(--auth-muted-2)}
+body.auth-active .auth-input::placeholder{color:var(--auth-muted-2)}
+body.auth-active .auth-notice{color:var(--auth-primary-strong)}
+body.auth-active #v-login .j-sub{color:var(--auth-muted)}
+body.auth-active #v-login .j-fine{color:var(--auth-muted-2)}
 /* the consent gate sits inside the form on the code-request step */
 .auth-form .consent-container{margin:4px 0}
 /* secondary (ghost) buttons â†’ soft white with subtle border */
