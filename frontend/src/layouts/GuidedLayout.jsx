@@ -1,6 +1,6 @@
 import { Navigate, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
-import { useEffect } from 'react';
+import { useEffect, useLayoutEffect } from 'react';
 import { getAccessToken } from '../services/api';
 import { getProfile } from '../services/profile';
 
@@ -54,9 +54,26 @@ export default function GuidedLayout() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    const isAuth = location.pathname === '/guided/login' || location.pathname === '/guided/welcome';
-    if (isAuth) {
+  /* The ivory auth canvas, and which screens get it.
+   *
+   * /guided/login is deliberately NOT on this list any more. It used to be,
+   * which meant the sign-in screen rendered ivory -- but only while this class
+   * was actually on the body. It is added here, from a layout effect keyed on
+   * the pathname, and removed again on every route change and unmount, so the
+   * SAME sign-in screen could appear ivory or on the guided flow's dark green
+   * depending on timing. Founders reported that as "a second, different login
+   * screen", and reasonably: it is the only screen in the product that could
+   * show up in two skins. It is the dark one now, always, whatever the body
+   * class says, because it is no longer asked for here.
+   *
+   * useLayoutEffect, not useEffect: a passive effect runs AFTER paint, so the
+   * browser could show one frame of the previous screen's theme before this
+   * corrected it -- exactly the flicker between the two skins that made this
+   * look like two screens. A layout effect runs before paint, so no frame can
+   * ever carry the wrong theme.
+   */
+  useLayoutEffect(() => {
+    if (location.pathname === '/guided/welcome') {
       document.body.classList.add('auth-active');
     } else {
       document.body.classList.remove('auth-active');
