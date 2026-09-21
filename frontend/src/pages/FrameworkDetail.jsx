@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
+import { usePlan } from '../components/PlanGate';
+import { can, FEATURES } from '../services/plans';
 import { getFramework } from '../data/frameworks';
 import {
   FirstPrinciples, EightyTwenty, EisenhowerMatrix, DecisionMatrix, Swot,
@@ -27,6 +29,10 @@ export default function FrameworkDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { showToast } = useApp();
+  /* Whether this founder can actually open Ally Chat -- see the CTA at the
+     bottom of the page. */
+  const { plan } = usePlan();
+  const canChat = !plan || can(plan, FEATURES.ALLY_CHAT);
   const framework = getFramework(id);
 
   const [status, setStatus] = useState('loading'); // 'loading' | 'ready' | 'error'
@@ -146,15 +152,27 @@ export default function FrameworkDetail() {
         )}
       </section>
 
+      {/* Reading a framework is free on every plan; TALKING to Ally about it is
+          not. This page became reachable without a plan when the Knowledge
+          library was exempted from PlanRequiredGate, so for a founder with no
+          entitlements this button used to promise a conversation and deliver
+          the plans page. It says which one it is doing now. Optimistic while
+          the plan is still loading, the same convention PlanGate uses: the
+          common case is that they can, and flashing an upsell at a paying
+          founder is the worse failure. */}
       <div className="fwd-cta">
         <button
           type="button"
           className="btn btn-em"
-          onClick={() => navigate('/app/ally-chat', {
-            state: { prefill: `I want to apply the ${framework.title} framework to something I'm working through right now.` },
-          })}
+          onClick={() => (canChat
+            ? navigate('/app/ally-chat', {
+              state: { prefill: `I want to apply the ${framework.title} framework to something I'm working through right now.` },
+            })
+            : navigate('/app/billing'))}
         >
-          <IconChat /> Talk to Ally about applying this
+          <IconChat /> {canChat
+            ? 'Talk to Ally about applying this'
+            : 'Talk to Ally about applying this — see plans'}
         </button>
       </div>
     </div>

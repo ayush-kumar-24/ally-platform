@@ -38,10 +38,34 @@ import { getMyPlan } from '../services/plans';
  * "contact us" answers a founder's question with the thing they were trying to
  * ask about.
  *
+ * The Knowledge library -- Frameworks and the read/watch/learn lists -- is here
+ * because it is open to every founder on every plan, which is a product
+ * decision and not an oversight. Nothing else gates it: the KNOWLEDGE group in
+ * PlatformLayout carries no feature check, the pages are static content
+ * imported at build time, and app/plans/catalog.py has no Feature covering
+ * them. This gate was the one thing that did, and it was invisible from all of
+ * those places -- the sidebar rows show no padlock and look open, and then
+ * every click on one landed on the plans page instead. Live-reported three
+ * times as "the knowledge section is still not accessible", and the plans page
+ * now says in as many words that the library is free for everyone, so leaving
+ * this out would have made that a false promise in our own UI.
+ *
+ * (Feature.KNOWLEDGE_CHAT is a different thing and stays gated: Ally REASONING
+ * over this material is the Rs 999 tier's "Work a framework with Ally". Reading
+ * the material is what is free.)
+ *
  * Anything added here must be genuinely free of plan-gated content, since the
  * gate is the only thing standing between it and a founder with no entitlements.
  */
-const ALWAYS_REACHABLE = ['/app/billing', '/app/profile', '/app/help'];
+const ALWAYS_REACHABLE = [
+  '/app/billing',
+  '/app/profile',
+  '/app/help',
+  // Covers /app/frameworks and /app/frameworks/:id.
+  '/app/frameworks',
+  // Covers all three of /app/knowledge/read | watch | learn.
+  '/app/knowledge',
+];
 
 export default function PlanRequiredGate() {
   const navigate = useNavigate();
