@@ -23,7 +23,16 @@ export default function GuidedLayout() {
   const { exitGuided, setIsGuided } = useApp();
   const navigate = useNavigate();
   const location = useLocation();
-  const meta = STEP_LABELS[location.pathname] || { stage: 'Getting Started', step: '1 / 14', pct: 7 };
+  /* Read once, at mount, for the same reason the completion check below only
+     runs once: it decides whether that check runs at all, and a value that
+     changed underneath it afterwards would have nothing left to affect. */
+  const reviewing = location.pathname === '/guided/profile'
+    && new URLSearchParams(location.search).get('review') === '1';
+  /* A founder rereading their answers is not on step 3 of signing up, so the
+     header does not tell them they are. */
+  const meta = reviewing
+    ? { stage: 'Your answers', step: 'Review', pct: 100 }
+    : (STEP_LABELS[location.pathname] || { stage: 'Getting Started', step: '1 / 14', pct: 7 });
 
   useEffect(() => {
     setIsGuided(true);
@@ -40,7 +49,15 @@ export default function GuidedLayout() {
    * returning to /guided/* after already completing it.
    */
   useEffect(() => {
-    if (!getAccessToken()) return;
+    if (!getAccessToken()) return undefined;
+    /* ...unless they asked to come back and look. The profile page's
+       completeness ring links here as /guided/profile?review=1 so a founder
+       can reread what they told Ally and change any of it (see ProfileBuild's
+       edit affordance). Without this exemption that link was a dead click for
+       exactly the founders most likely to use it: the redirect below fires on
+       mount and bounces a COMPLETED profile straight back to /app, which is
+       the only state in which "review my answers" means anything at all. */
+    if (reviewing) return undefined;
     let cancelled = false;
     getProfile()
       .then((p) => {

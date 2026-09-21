@@ -177,6 +177,39 @@ export async function saveProfileEdits(changes) {
   await Promise.all(calls);
 }
 
+/** Guided-flow key -> canonical field, across every section that owns one. */
+const FIELD_BY_KEY = { ...BUSINESS, ...FOUNDER, ...GOALS, ...PROFILE };
+
+/**
+ * Clear answers that no longer apply.
+ *
+ * saveOnboardingProfile() cannot do this: section() deliberately skips null
+ * and '' so a half-filled turn never blanks a column that already holds a
+ * real answer. Changing your stage is the one case where blanking IS the
+ * intent -- a founder who moves back to "just exploring ideas" has no monthly
+ * revenue and no business-reality answers any more, and leaving the old ones
+ * on the row means the diagnosis keeps reading signals from a business that
+ * no longer describes them.
+ *
+ * The section PATCHes use model_dump(exclude_unset=True), so an explicit null
+ * in the body IS set and does clear the column -- an omitted key is what
+ * leaves it alone.
+ *
+ * `stage` is never cleared, whatever is passed: the route resolves a stage
+ * name to stage_id and drops a null outright, and a founder always has a
+ * stage. Throws if a section rejects the write, like saveProfileEdits.
+ */
+export async function clearOnboardingAnswers(keys) {
+  const changes = {};
+  for (const key of keys) {
+    const field = FIELD_BY_KEY[key];
+    if (!field || field === 'stage') continue;
+    changes[field] = null;
+  }
+  if (Object.keys(changes).length === 0) return;
+  await saveProfileEdits(changes);
+}
+
 /**
  * Persist everything the guided flow collected.
  *

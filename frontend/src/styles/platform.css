@@ -2738,3 +2738,21 @@ body.lp-done #landing-page { display:none; }
   .ac-main{min-width:0}
   .ac-scrim,.ac.open .ac-scrim{display:none}
 }
+
+/* ---- The profile page's completeness ring, as a way in ------------------
+   It reports the share of onboarding answers on file, so the thing it should
+   do when tapped is open those answers (/guided/profile?review=1). A button
+   rather than a link-styled div: it is a real control, so it must be
+   reachable by keyboard and announce itself as one. The reset below keeps the
+   ring looking exactly as it did inside its old <div>. */
+.fd-ring-btn{flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px 10px;margin:-8px -10px;border:1px solid transparent;border-radius:16px;background:none;color:inherit;font:inherit;text-align:center;cursor:pointer;transition:background .18s ease,border-color .18s ease}
+.fd-ring-btn:hover{background:rgba(255,255,255,.05);border-color:rgba(16,185,129,.28)}
+.fd-ring-btn:focus-visible{outline:2px solid rgba(16,185,129,.6);outline-offset:2px}
+/* The affordance in words. The ring alone reads as a chart, not a control --
+   the hint is what says it can be opened, so it is always on rather than
+   revealed on hover (there is no hover on a phone). */
+.fd-ring-cta{font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#34d399}
+.fd-ring-btn:hover .fd-ring-cta{color:#6ee7b7}
+/* Room for the fixed closing bar, so an answer control shown while it is up
+   (editing an answer in review mode) is never partly underneath it. */
+.chat-view.has-jbar .chat-main{padding-bottom:64px}

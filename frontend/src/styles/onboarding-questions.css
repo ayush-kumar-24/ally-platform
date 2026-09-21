@@ -214,6 +214,46 @@
 }
 .ob-skip:hover { color: #34d399; }
 
+/* --- editing an answer already given ---------------------------------------
+   Sits directly above the control so the question being changed, and the way
+   out of it, are both in the same place the founder is about to answer. */
+.ob-editing {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 26px;
+  padding: 9px 14px;
+  border: 1px solid rgba(16, 185, 129, .3);
+  border-radius: 14px;
+  background: rgba(16, 185, 129, .08);
+}
+.ob-editing-t {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  font-size: 13px;
+  color: #eaf3ee;
+}
+.ob-editing-tag {
+  flex-shrink: 0;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: #34d399;
+  background: rgba(16, 185, 129, .14);
+  border: 1px solid rgba(16, 185, 129, .3);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+.ob-editing-x {
+  align-self: center;
+  flex-shrink: 0;
+  padding: 0;
+}
+
 /* --- summary: answers chosen from a fixed set, shown rather than edited ----- */
 .sc-f-static {
   margin: 0;
