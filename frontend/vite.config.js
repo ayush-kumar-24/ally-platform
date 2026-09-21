@@ -25,8 +25,82 @@ import tailwindcss from '@tailwindcss/vite'
  */
 const deploymentId = process.env.VERCEL_DEPLOYMENT_ID
 
+/**
+ * Stamp the chunk-to-chunk import specifiers too.
+ *
+ * `renderBuiltUrl` below does NOT reach these, and that gap is the whole
+ * reason this plugin exists. Vite routes ASSET references through it -- the
+ * <script> in index.html, url() in CSS, and the preload list inside
+ * __vite__mapDeps -- but the ES module specifier that actually fetches a lazy
+ * chunk is emitted by Rollup as a plain relative path and never passes
+ * through. A production build therefore came out mixed:
+ *
+ *     <script src="/assets/index-Cyqje68V.js?dpl=dpl_8FePn...">   stamped
+ *     import("./PlatformLayout-DfhBTNec.js")                       NOT stamped
+ *
+ * which is exactly what a founder's crash report showed. Two consequences,
+ * both bad:
+ *
+ * 1. SKEW. The stamp is what pins a request to the deployment the tab was
+ *    loaded from. Unstamped, every lazily-loaded chunk is served by whatever
+ *    deployment is CURRENT instead -- so a tab opened before a deploy runs
+ *    the old entry bundle and then pulls new chunks into it. Two builds in
+ *    one page, which breaks in whatever way their differences happen to
+ *    break. The entry point was pinned and everything behind it was not,
+ *    which is close to the worst of both: the failure only appears after a
+ *    deploy, on pages a founder had already opened.
+ *
+ * 2. DOUBLE FETCH. The preload says /assets/X.js?dpl=... and the import says
+ *    ./X.js. Different URLs, so the browser never matches them up: the
+ *    modulepreload is wasted and the chunk is fetched a second time. Every
+ *    lazy chunk, every navigation.
+ *
+ * Rewriting is deliberately conservative: a specifier is only touched when
+ * the file it names is actually a chunk in this bundle. The names carry a
+ * content hash, so matching one by accident inside unrelated string data is
+ * not a realistic risk, and anything already stamped cannot match (the
+ * pattern requires the closing quote immediately after `.js`).
+ *
+ * generateBundle rather than renderChunk: every filename is final by then, so
+ * the set of real chunk names is exact. No sourcemaps are emitted in this
+ * build, so editing the code here invalidates nothing.
+ */
+function stampChunkImports(id) {
+  return {
+    name: 'ally-stamp-chunk-imports',
+    enforce: 'post',
+    generateBundle(_options, bundle) {
+      const chunkNames = new Set(
+        Object.keys(bundle)
+          .filter((file) => file.endsWith('.js'))
+          .map((file) => file.split('/').pop()),
+      )
+      let stamped = 0
+      for (const file of Object.values(bundle)) {
+        if (file.type !== 'chunk') continue
+        file.code = file.code.replace(
+          /(["'`])(\.{1,2}\/)([A-Za-z0-9_.-]+\.js)\1/g,
+          (whole, quote, prefix, name) => {
+            if (!chunkNames.has(name)) return whole
+            stamped += 1
+            return `${quote}${prefix}${name}?dpl=${id}${quote}`
+          },
+        )
+      }
+      this.info(`stamped ${stamped} chunk import specifiers with ?dpl=${id}`)
+    },
+  }
+}
+
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [
+    react(),
+    tailwindcss(),
+    // Only when Vercel gives us a deployment id -- same condition as the
+    // `experimental` block below, so a local build stays byte-for-byte what
+    // it is today.
+    ...(deploymentId ? [stampChunkImports(deploymentId)] : []),
+  ],
   ...(deploymentId
     ? {
         experimental: {
