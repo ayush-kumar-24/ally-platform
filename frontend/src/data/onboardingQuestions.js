@@ -336,12 +336,67 @@ export const QUESTIONS = [
     paths: BOTH,
     q: 'Which industry best describes your business?',
     prompt: 'Start typing to search.',
-    // D2C and Services are separate industries, not one "D2C Services" -- a
-    // services business is not a direct-to-consumer one. Stage-agnostic: an
-    // industry is just as true of an idea as of a running company.
+    /* The thirty industries the product actually has data for.
+     *
+     * Every VALUE below is an `industries.industry_name` from the seed
+     * migrations (backend/alembic/versions/*seed*industry*), which is the
+     * taxonomy the diagnosis content is built on: each of these thirty has its
+     * own problems, root causes, question bank and interventions seeded against
+     * its industry_code. The old twelve ('AI', 'SaaS', 'D2C', 'Real Estate'...)
+     * were written before that content existed and match none of them, so an
+     * answer here named an industry the rest of the system had never heard of.
+     *
+     * Values must keep matching that table character for character. Anything
+     * that later resolves founders.industry to founders.industry_mapped_id --
+     * which is what the diagnosis engine, the reasoning service and the Ally
+     * context builder all read to pick an industry's dataset -- does it by
+     * name, so a wording change here without one there silently unmaps every
+     * founder who picked it. (Nothing writes industry_mapped_id today; see the
+     * note in backend/app/api/v1/profile/routes.py.)
+     *
+     * LABELS are the fuller, more searchable wording where the stored name is
+     * an abbreviation or a shorthand: this control filters on the label as the
+     * founder types, so a founder searching "Banking" finds BFSI / FinTech and
+     * one searching "Information Technology" finds Technology & SaaS. Where the
+     * two agree the option stays a plain string. labelFor() in
+     * utils/profileDisplay.js reads these back, so the panel, the summary and
+     * the transcript all show the founder's wording rather than the stored one.
+     *
+     * Stage-agnostic: an industry is just as true of an idea as of a running
+     * company, so this is on both paths. A–Z by label.
+     */
     options: [
-      'AI', 'SaaS', 'Fintech', 'Manufacturing', 'Healthcare', 'Education',
-      'D2C', 'Services', 'Logistics', 'Real Estate', 'Agriculture', 'Other',
+      'Agriculture & AgriTech',
+      'Automotive & Mobility',
+      { label: 'Banking, Financial Services & Insurance (BFSI) / FinTech', value: 'BFSI / FinTech' },
+      'Beauty & Personal Care',
+      'Construction & Real Estate / PropTech',
+      'Consumer Electronics',
+      { label: 'E-commerce & D2C', value: 'E-Commerce & D2C' },
+      'Education & EdTech',
+      'Energy, CleanTech & Renewables',
+      'Entertainment & Media',
+      'Fashion & Apparel',
+      'Food & Beverage / FoodTech',
+      'Gaming',
+      'Healthcare & HealthTech / MedTech',
+      'Hospitality, Travel & Tourism',
+      'Human Resources & HRTech',
+      { label: 'Import/Export & Trade', value: 'Import / Export & Trade' },
+      { label: 'Industrial & Manufacturing (heavy/light)', value: 'Industrial & Manufacturing' },
+      { label: 'Information Technology & Software (SaaS)', value: 'Technology & SaaS' },
+      'Legal & LegalTech',
+      'Logistics & Supply Chain',
+      'Marketing, Advertising & AdTech',
+      'Non-Profit, Social Impact & NGO',
+      'Pharmaceuticals & Biotech',
+      { label: 'Professional Services & Consulting', value: 'Services & Consulting' },
+      { label: 'Retail (offline & online)', value: 'Retail' },
+      'Sports, Fitness & Wellness',
+      'Telecommunications',
+      'Textiles',
+      'Transportation & Delivery',
+      'Other',
     ],
     otherValue: 'Other',
     placeholder: 'Search industries…',

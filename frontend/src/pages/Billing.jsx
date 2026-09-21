@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { MOCK_PLANS } from '../data/mockData';
 import { getProfile } from '../services/profile';
 import { getCatalog, getMyPlan } from '../services/plans';
@@ -8,15 +8,25 @@ import { confirmPayment, openCheckout, startCheckout, validateCoupon, waitForPla
 
 /** The Knowledge libraries, in the order the sidebar lists them.
  *
- *  Shared by the live catalog mapping and the MOCK_PLANS fallback so the two
- *  cannot drift -- which is the whole reason the rest of this list is derived
- *  from the server rather than written twice.
+ *  NOT a per-plan feature, and no longer listed as one. Nothing gates these:
+ *  the KNOWLEDGE group in PlatformLayout carries no feature check and no plan
+ *  lock, the pages are static content imported at build time, and there is no
+ *  Feature in app/plans/catalog.py that covers them -- so a founder on Free has
+ *  exactly the same access as one on Rs 999. (Feature.KNOWLEDGE_CHAT is a
+ *  different thing: Ally REASONING over this material, which is the Rs 999
+ *  "Work a framework with Ally" row.)
+ *
+ *  They used to be appended to every paid tier's bullet list, which read as
+ *  four things you get by paying. GET /plans returns only the tiers on sale, so
+ *  there is no Free card to balance that -- a founder on Free saw the whole
+ *  Knowledge section priced at Rs 199 and up, and was being asked to buy what
+ *  they already had. Stated once below instead, as open to everyone.
  */
-const KNOWLEDGE_FEATURES = [
-  'Frameworks',
-  'Things to read',
-  'Things to watch',
-  'Things to learn',
+const KNOWLEDGE_LIBRARIES = [
+  { label: 'Frameworks', to: '/app/frameworks' },
+  { label: 'Things to read', to: '/app/knowledge/read' },
+  { label: 'Things to watch', to: '/app/knowledge/watch' },
+  { label: 'Things to learn', to: '/app/knowledge/learn' },
 ];
 
 /** A renewal date as a founder reads it. Empty for anything unparseable, so a
@@ -70,6 +80,12 @@ const COMPARE_ROWS = [
   { label: 'Build your Vision Board', basic: false, starter: false, pro: true },
   { label: 'Work a framework with Ally', basic: false, starter: false, pro: true },
   { label: 'Email reminders from Ally', basic: false, starter: false, pro: true },
+  /* Open on every plan, and on Free too -- there is no Free column here
+     because GET /plans lists only the tiers on sale. The band above the table
+     is what says so for Free; this row is so the comparison does not imply,
+     by omitting them, that they belong to some tier and not another. */
+  { label: 'Frameworks', basic: true, starter: true, pro: true },
+  { label: 'Things to read · watch · learn', basic: true, starter: true, pro: true },
   { label: 'Book a discovery call', basic: true, starter: true, pro: true },
   { label: 'Call price', basic: '₹300 / 30 min', starter: '₹300 / 30 min', pro: '₹300 / 30 min' },
   { label: 'Priority call booking', basic: false, starter: false, pro: true },
@@ -157,13 +173,9 @@ function useCatalog() {
               ...(p.features.includes('vision') ? ['Vision'] : []),
               ...(p.features.includes('knowledge_chat') ? ['Work a framework with Ally'] : []),
               ...(p.features.includes('email_notifications') ? ['Email reminders from Ally'] : []),
-              // The four Knowledge libraries, on every tier and unconditional
-              // because they are genuinely ungated: the KNOWLEDGE group in
-              // PlatformLayout carries no feature check and no plan lock, so a
-              // founder on Rs 199 has the same access as one on Rs 999. Listed
-              // rather than assumed -- a founder cannot value what the pricing
-              // page never told them they were getting.
-              ...KNOWLEDGE_FEATURES,
+              // The Knowledge libraries are deliberately absent -- see
+              // KNOWLEDGE_LIBRARIES. They are open on every plan, so a bullet
+              // under a price is the wrong place to say so.
               `Book a call · ₹${callPrice} / ${callMins} min`,
               ...(p.features.includes('priority_call') ? ['Priority call booking'] : []),
             ],
@@ -248,6 +260,25 @@ function PlansView({ onSelectPlan, currentPlan }) {
             </div>
           );
         })}
+      </div>
+
+      {/* Open to everyone -- stated once, rather than repeated under each
+          price as though it were something a plan buys. */}
+      <div className="pr-open stagger d3">
+        <div className="pr-open-t">
+          <span className="pr-open-tag">Free for everyone</span>
+          The Knowledge library is open on every plan — including Free.
+        </div>
+        <ul className="pr-open-list">
+          {KNOWLEDGE_LIBRARIES.map(({ label, to }) => (
+            <li key={to}>
+              <Link to={to}>
+                <CheckIcon size={14} />
+                {label}
+              </Link>
+            </li>
+          ))}
+        </ul>
       </div>
 
       {/* Trust strip */}

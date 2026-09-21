@@ -36,7 +36,12 @@ function buildFirstImpression(profile) {
   // renamed it to 'biggestChallenge' -- fell through to profile.problem (or
   // the literal word "focus") for every founder until this was caught live.
   const challenge = readable('biggestChallenge', profile.biggestChallenge) || profile.problem || 'focus';
-  const industry = profile.industry || 'your market';
+  /* readable(), not the raw column: industry stores the canonical
+     industries.industry_name, which for several of the thirty is an
+     abbreviation or a shorthand of what the founder actually picked
+     ('BFSI / FinTech' for "Banking, Financial Services & Insurance"). Every
+     other line here already reads its answer back through this. */
+  const industry = readable('industry', profile.industry) || 'your market';
   const pace = realityPaceLabel(profile.founderReality);
 
   return [

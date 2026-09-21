@@ -1203,7 +1203,17 @@ export default function ProfileBuild() {
                     role="option"
                     aria-selected="false"
                     className="ob-drop-opt"
-                    onClick={() => (ctrl.otherValue && v === ctrl.otherValue ? setPicked([v]) : answer(v))}
+                    /* optLabel as the display, the same way the single-select
+                       cards above already do it. Industry stores the canonical
+                       industries.industry_name ('BFSI / FinTech') while the
+                       founder picked a fuller label ('Banking, Financial
+                       Services & Insurance (BFSI) / FinTech') -- without this
+                       their own bubble read back the abbreviation they had not
+                       chosen. The panel and the summary were already right:
+                       both go through labelFor(). */
+                    onClick={() => (ctrl.otherValue && v === ctrl.otherValue
+                      ? setPicked([v])
+                      : answer(v, undefined, optLabel(o)))}
                   >
                     {optLabel(o)}
                   </button>

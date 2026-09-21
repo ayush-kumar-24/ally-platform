@@ -903,6 +903,19 @@ body.sb-collapsed .sb-toggle .ic{transform:rotate(180deg)}
 .pc-feats .fk{width:16px;height:16px;flex-shrink:0;margin-top:1px;border-radius:50%;display:grid;place-items:center;background:rgba(16,185,129,.14);color:#10B981}
 .plan-card.popular .pc-feats .fk{background:rgba(52,211,153,.2);color:#34d399}
 .pc-feats .fk svg{width:10px;height:10px;fill:none;stroke:currentColor;stroke-width:3}
+/* The Knowledge libraries, stated once as open to everyone rather than
+   repeated under each price. Emerald-tinted so it reads as an inclusion, not
+   as another paid row, and the four are links because the whole point is that
+   the founder reading this can already open them. */
+.pr-open{margin:26px 0 8px;padding:18px 20px;border-radius:16px;background:rgba(16,185,129,.06);border:1px solid rgba(16,185,129,.25)}
+.pr-open-t{display:flex;flex-wrap:wrap;align-items:center;gap:10px;font-size:13.5px;font-weight:600;color:#16241c}
+.pr-open-tag{flex-shrink:0;font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#0b7a56;background:rgba(16,185,129,.14);border:1px solid rgba(16,185,129,.3);border-radius:999px;padding:3px 9px}
+.pr-open-list{display:flex;flex-wrap:wrap;gap:8px 22px;margin:12px 0 0;padding:0;list-style:none}
+.pr-open-list a{display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:600;color:#0b7a56;text-decoration:none;border-bottom:1px solid transparent}
+.pr-open-list a:hover{border-bottom-color:currentColor}
+.pr-open-list a:focus-visible{outline:2px solid rgba(16,185,129,.55);outline-offset:3px;border-radius:4px}
+.pr-open-list svg{flex-shrink:0}
+@media (max-width:560px){.pr-open-list{gap:8px 16px}}
 .pr-trust{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:10px 26px;margin:26px 0 8px;padding:16px;border-radius:16px;background:#fbf7f2;border:1px solid #e7e0d6}
 .pr-trust span{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;color:#556458}
 .pr-trust svg{width:15px;height:15px;fill:none;stroke:#10B981;stroke-width:2}
