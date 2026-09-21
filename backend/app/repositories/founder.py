@@ -30,7 +30,17 @@ class FounderRepository(BaseRepository[Founder]):
         a returning, already-onboarded founder apart from a brand-new one.
         Recomputing it here, on every write through this repository (which is
         every PATCH /profile/* endpoint), means it can never go stale.
+
+        `industry_mapped_id` is kept in step with `industry` for the same
+        reason and at the same level. Two endpoints write the industry name --
+        PATCH /profile/business and the generic PATCH /profile -- so resolving
+        the link in either one of them would let the two columns drift apart
+        depending on which door the founder came through. Here, there is only
+        one door. Clearing the name clears the link, since a stale FK would
+        keep feeding the diagnosis an industry the founder has removed.
         """
+        if "industry" in data:
+            data = {**data, "industry_mapped_id": self.resolve_industry_id(db, data["industry"])}
         obj = super().update(db, obj, data, commit=False)
         completed = validate_profile(obj)["valid"]
         if obj.profile_completed != completed:
@@ -67,6 +77,43 @@ class FounderRepository(BaseRepository[Founder]):
         if row is None and stage.strip().isdigit():
             return int(stage.strip())
         return row
+
+    def resolve_industry_id(self, db: Session, industry: str) -> int | None:
+        """Turn an industry name ('BFSI / FinTech') into an industries.industry_id.
+
+        The counterpart of resolve_stage_id, and it exists for the same reason:
+        onboarding sends the founder-facing name and the diagnosis reads the id.
+
+        `founders.industry` (free text) and `founders.industry_mapped_id` (the
+        FK) have coexisted since the table was written, and NOTHING has ever
+        written the FK -- the only code that could was an RDS function
+        (complete_onboarding) the application stopped calling. So it has been
+        NULL for every founder, while the diagnosis engine, the reasoning
+        service and the Ally context builder all read it to choose an
+        industry's dataset. Thirty industries' worth of seeded problems, root
+        causes, question banks and interventions were therefore unreachable,
+        and every founder got the generic bank.
+
+        Matching is on industry_name, which is exactly what the onboarding
+        dropdown now stores (see the industry question in
+        data/onboardingQuestions.js -- its values are these names character for
+        character). industry_code is accepted too so an API client that knows
+        the short code is not forced to send prose.
+
+        Returns None when nothing matches, which is the honest answer for
+        'Other' and for the free-text industries founders were storing before
+        the dropdown was aligned. The caller leaves the FK alone in that case
+        rather than guessing.
+        """
+        return db.execute(
+            text(
+                "SELECT industry_id FROM industries "
+                "WHERE lower(industry_name) = lower(btrim(:s)) "
+                "   OR lower(industry_code) = lower(btrim(:s)) "
+                "ORDER BY industry_id LIMIT 1"
+            ),
+            {"s": industry},
+        ).scalar()
 
 
 # Repositories are stateless -- one shared instance is fine.

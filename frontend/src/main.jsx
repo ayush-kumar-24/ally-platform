@@ -12,6 +12,7 @@ import '@fontsource-variable/fraunces/wght-italic.css';    // serif hero <em> it
 import { AppProvider } from './context/AppContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import { reportError } from './services/errorReporting';
+import { installDomResilience } from './utils/domResilience';
 import App from './App';
 import './index.css';
 import './styles/onboarding-supplement.css';
@@ -31,6 +32,16 @@ window.addEventListener('error', (event) => {
 window.addEventListener('unhandledrejection', (event) => {
   reportError(event.reason, { source: 'unhandled_rejection' });
 });
+
+/* Before the first render, deliberately. This makes React's own DOM writes
+   survive another piece of software -- Chrome's page translation, an AI side
+   panel, a password manager, any extension that rewrites text -- having moved
+   or deleted a node React still expects to find. Without it, that collision
+   throws inside React's commit phase, React tears the whole tree down, and the
+   founder gets a full-page "This page needs a refresh" card on whatever screen
+   they were using. See utils/domResilience.js. Installing it after createRoot
+   would leave the first commit unprotected. */
+installDomResilience();
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

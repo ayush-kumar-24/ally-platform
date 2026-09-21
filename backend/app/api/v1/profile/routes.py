@@ -349,6 +349,11 @@ def update_business_info(
                 raise UnknownStageError(stage)
             changes["stage_id"] = stage_id
 
+    # `industry` needs no handling here: FounderRepository.update() keeps
+    # industry_mapped_id in step with it on every write path, the same way it
+    # keeps profile_completed truthful. Doing it here instead would leave
+    # PATCH /profile -- which also accepts `industry` -- writing the name
+    # without the link.
     return founder_repository.update(db, founder, changes)
 
 
