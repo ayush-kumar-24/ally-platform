@@ -95,7 +95,26 @@ export function installDomResilience() {
 
   Node.prototype.removeChild = function removeChild(child) {
     if (child && child.parentNode !== this) {
-      reportOnce('removeChild', 'node already detached or reparented');
+      /* REPARENTED, not gone. The node still exists, just somewhere else --
+         an extension or an AI side panel wrapped it in a container of its own,
+         so it moved out from under the parent React remembers.
+
+         Returning here (what this did at first) left the node ON THE PAGE.
+         That is how a founder ended up looking at two stacked pages and two
+         scrollbars: React unmounted the whole platform to show an error card,
+         could not detach the old tree, and mounted the card BELOW it. The old
+         sidebar and content stayed, inert, above an error about a page that
+         was still visibly there. Live-reported, and reproducible with or
+         without this patch -- React's own removeChild strands it the same way,
+         it just throws on the way out.
+
+         So honour the intent instead of the address: the caller wants this
+         node off the page, and its real parent is where that has to happen. */
+      if (child.parentNode) {
+        reportOnce('removeChild', 'node reparented; detached from its actual parent');
+        return realRemoveChild.call(child.parentNode, child);
+      }
+      reportOnce('removeChild', 'node already detached');
       return child;
     }
     return realRemoveChild.apply(this, arguments);
