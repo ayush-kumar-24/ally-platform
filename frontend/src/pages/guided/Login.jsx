@@ -72,6 +72,9 @@ export default function Login() {
   const [confirmPassword, setConfirmPassword] = useState('');
 
   const [showAuthTransition, setShowAuthTransition] = useState(false);
+  /* Sign-in has succeeded and the route change is in flight. The form must not
+     come back on screen while that is pending -- see the note on the render. */
+  const [signedIn, setSignedIn] = useState(false);
   const [agreeTerms, setAgreeTerms] = useState(false);
   const [agreeDiagnosis, setAgreeDiagnosis] = useState(false);
   // The Terms already say "you confirm you are at least 18" -- this is what
@@ -127,6 +130,26 @@ export default function Login() {
     // fragment-only navigation does not remount the component.
     window.addEventListener('hashchange', applyEmailFromHash);
     return () => window.removeEventListener('hashchange', applyEmailFromHash);
+  }, []);
+
+  /* Warm the screen this hand-off lands on, while the founder is still typing.
+     /guided/welcome is a lazy route, so it is a separate chunk that only starts
+     downloading when the navigation happens -- and react-router applies that
+     navigation inside a transition, which tells React to KEEP THE CURRENT UI on
+     screen rather than show the Suspense fallback. The URL therefore flips to
+     /guided/welcome while this screen is still mounted, and when the sign-in
+     overlay fades out it reveals the login form again, at the Welcome URL.
+     Founders read that as a second login and signed in twice. Reproduced by
+     holding the Welcome chunk for 6s: url=/guided/welcome with the password
+     field still on screen and interactive for the whole stall.
+
+     Prefetching resolves the chunk long before it is needed, so the route swap
+     is instant and the overlay fades onto the real Welcome screen. Same module
+     specifier as App.jsx's lazy import resolves to, so this warms that exact
+     chunk rather than duplicating it. Failure is ignored on purpose: this is an
+     optimisation, and React.lazy will ask for it again for real. */
+  useEffect(() => {
+    import('./Welcome').catch(() => {});
   }, []);
 
   const release = () => {
@@ -201,6 +224,7 @@ export default function Login() {
       } : prev?.consents,
     }));
     setSubmitting(false);
+    setSignedIn(true);
     setShowAuthTransition(true);
   };
 
@@ -478,6 +502,15 @@ export default function Login() {
         <h1 className="j-title">Meet Ally, your <em>Founder&rsquo;s Compass</em>.</h1>
         <p className="j-sub">Your founder journey starts here &mdash; sign in, and Ally will find your next move.</p>
 
+        {/* Everything below is hidden the moment sign-in succeeds, and stays
+            hidden until this screen unmounts. The overlay above fades out to
+            reveal whatever is underneath, and if the Welcome chunk has not
+            arrived yet that is this form -- live, interactive, at the
+            /guided/welcome URL. A founder who has just signed in successfully
+            must never be shown a sign-in form again: the hero stays, so the
+            screen still reads as Ally, but there is nothing left to submit. */}
+        {!signedIn && (
+        <>
         {validationError && (
           <div className="consent-error" role="alert" id="consent-error">
             {validationError}
@@ -623,6 +656,8 @@ export default function Login() {
               </button>
             </p>
           </form>
+        )}
+        </>
         )}
 
         <p className="j-fine">
