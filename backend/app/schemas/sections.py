@@ -102,7 +102,10 @@ class BusinessInfoUpdate(BaseModel):
     customer_segment: CleanStrList | None = None            # multi-select chips
     customer_segment_other: str | None = Field(default=None, max_length=200)
     # Bounded to match the String(30) column rather than overshooting it.
-    industry: str | None = Field(default=None, max_length=30)
+    # 100 to match founders.industry and industries.industry_name. At 30 this
+    # refused eight of the thirty industries onboarding now offers, with a 422
+    # the founder saw as nothing happening. See alembic a3f7d92c1e58.
+    industry: str | None = Field(default=None, max_length=100)
     # Capped at 3, per spec v2.4 Q10 ("Pick up to three"). The control bumps
     # the oldest pick when a 4th is tapped, so a founder never hits this -- it
     # bounds a hand-rolled request instead. Bounding matters beyond tidiness:

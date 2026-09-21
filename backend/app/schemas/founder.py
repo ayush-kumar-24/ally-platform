@@ -61,7 +61,7 @@ def _clean_str_list(v: list[str] | None) -> list[str] | None:
 
 # founders.linkedin_url is String(300). Bounding at the column's own width
 # means an over-long link is a clean 422 here instead of a DataError at the
-# INSERT -- the same reasoning as `industry`'s max_length=30 below.
+# INSERT -- the same reasoning as `industry`'s max_length=100 below.
 _SOCIAL_URL_MAX_LENGTH = 300
 
 
@@ -281,7 +281,9 @@ class FounderUpdate(BaseModel):
     customer_segment_other: str | None = Field(default=None, max_length=200)
     # industry is String(30) in the database. Bounding it at 100 here let a
     # 31-100 character value pass validation and then fail at the insert.
-    industry: str | None = Field(default=None, max_length=30)
+    # 100, for the same reason BusinessInfoUpdate.industry is -- the two write
+    # the same column. See alembic a3f7d92c1e58.
+    industry: str | None = Field(default=None, max_length=100)
     current_challenges: CleanStrList | None = None          # uncapped, see above
     current_challenges_other: str | None = Field(default=None, max_length=200)
     product_description: str | None = Field(default=None, max_length=5000)

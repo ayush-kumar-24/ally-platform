@@ -137,6 +137,12 @@ export const LANDING_NAV_ITEMS = [
  *
  * Free grants credits ONCE, not monthly: a renewing free tier is an unbounded
  * recurring cost per signup. It's a one-month trial ending in a top-up decision.
+ *
+ * The four Knowledge libraries (Frameworks, Things to read / watch / learn) are
+ * deliberately NOT listed per tier here, or in Billing's mapping of the live
+ * catalog. They are open on every plan -- including Free -- so listing them as
+ * something each paid tier includes told a founder on Free they had to buy what
+ * they already had. Billing states them once instead, as open to everyone.
  */
 export const MOCK_PLANS = [
   {
@@ -147,10 +153,6 @@ export const MOCK_PLANS = [
       'One adaptive diagnosis',
       'Your Clarity Report',
       'Speak your answers',
-      'Frameworks',
-      'Things to read',
-      'Things to watch',
-      'Things to learn',
       'Book a call · ₹300 / 30 min',
     ],
   },
@@ -164,10 +166,6 @@ export const MOCK_PLANS = [
       'Your Next Critical Steps',
       'Goals',
       'Plan Your Day',
-      'Frameworks',
-      'Things to read',
-      'Things to watch',
-      'Things to learn',
       'Book a call · ₹300 / 30 min',
     ],
   },
@@ -185,10 +183,6 @@ export const MOCK_PLANS = [
       'Vision',
       'Work a framework with Ally',
       'Email reminders from Ally',
-      'Frameworks',
-      'Things to read',
-      'Things to watch',
-      'Things to learn',
       'Book a call · ₹300 / 30 min',
       'Priority call booking',
     ],

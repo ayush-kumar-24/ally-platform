@@ -411,7 +411,10 @@ class Founders(Base):
     # customer_segment_other holds the free text behind the "Other" chip.
     customer_segment: Mapped[Optional[dict]] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
     customer_segment_other: Mapped[Optional[str]] = mapped_column(String(200))
-    industry: Mapped[Optional[str]] = mapped_column(String(30))
+    # 100, matching industries.industry_name: onboarding stores one of those
+    # thirty names verbatim and eight of them are longer than the old 30.
+    # See alembic a3f7d92c1e58.
+    industry: Mapped[Optional[str]] = mapped_column(String(100))
     industry_mapped_id: Mapped[Optional[int]] = mapped_column(Integer)
     current_challenges: Mapped[Optional[dict]] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
     # Free text behind an "Other" pick on current_challenges -- same convention
