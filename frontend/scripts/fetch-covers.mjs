@@ -15,7 +15,7 @@
  * RUN IT WHERE THERE IS NETWORK:
  *
  *     node scripts/fetch-covers.mjs            # fill in the gaps
- *     node scripts/fetch-covers.mjs --refresh  # re-look-up everything
+ *     node scripts/fetch-covers.mjs --refresh  # re-look-up the books
  *
  * It is incremental by default, so a run that is interrupted or rate-limited
  * can simply be run again -- it only asks about ids it has no answer for.
@@ -126,7 +126,7 @@ function localCover(id) {
 }
 
 const refresh = process.argv.includes('--refresh');
-const existing = refresh ? {} : JSON.parse(readFileSync(OUT, 'utf8'));
+const existing = JSON.parse(readFileSync(OUT, 'utf8'));
 
 /* BOOKS ONLY, deliberately.
 
@@ -143,6 +143,12 @@ const existing = refresh ? {} : JSON.parse(readFileSync(OUT, 'utf8'));
 const { BOOKS } = await import('../src/data/read.js');
 
 const items = BOOKS;
+
+/* --refresh forgets what THIS run is about to look up, and nothing else.
+   Starting from an empty object instead would drop every cover the other
+   scripts filled in: covers.json is one shared map, and each script only ever
+   writes its own keys back into it. */
+if (refresh) for (const item of items) delete existing[item.id];
 let found = 0, missed = 0, skipped = 0;
 
 for (const item of items) {

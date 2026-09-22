@@ -27,7 +27,7 @@
  *
  *     node scripts/fetch-poster-art.mjs           # series (the default)
  *     node scripts/fetch-poster-art.mjs movies    # the films
- *     node scripts/fetch-poster-art.mjs --refresh # re-look-up everything
+ *     node scripts/fetch-poster-art.mjs --refresh # re-look-up the series
  *
  * Incremental like its siblings: only ids with no answer are asked about,
  * nothing it cannot find is written, and a tile with no poster renders exactly
@@ -81,7 +81,7 @@ const squash = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 /* Where one title is allowed to continue past the other: a subtitle, a season
    suffix, a parenthetical. A SPACE IS NOT IN THIS SET, and that is the whole
    point of it. */
-const CONTINUES = /^[\s]*[,:\-–—(\[|/]/;
+const CONTINUES = /^\s*[,:\-–—([|/]/;
 
 /* A WRONG POSTER IS WORSE THAN NONE. Nobody reports a missing picture;
    everybody notices Panchayat wearing some other show's artwork.
@@ -203,11 +203,17 @@ function localCover(id) {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const refresh = process.argv.includes('--refresh');
   const wantMovies = process.argv.includes('movies');
-  const existing = refresh ? {} : JSON.parse(readFileSync(OUT, 'utf8'));
+  const existing = JSON.parse(readFileSync(OUT, 'utf8'));
 
   const { SERIES, MOVIES } = await import('../src/data/watch.js');
   const items = wantMovies ? MOVIES : SERIES;
   const artworkFor = wantMovies ? movieArtwork : seriesArtwork;
+
+  /* --refresh forgets what THIS run is about to look up, and nothing else.
+     Starting from an empty object instead would drop every book and podcast
+     cover on the floor: the file is one shared map, and a series run only ever
+     writes series keys back into it. */
+  if (refresh) for (const item of items) delete existing[item.id];
 
   let found = 0, missed = 0, skipped = 0;
   const gaps = [];
