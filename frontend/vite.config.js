@@ -63,31 +63,45 @@ const deploymentId = process.env.VERCEL_DEPLOYMENT_ID
  *
  * generateBundle rather than renderChunk: every filename is final by then, so
  * the set of real chunk names is exact. No sourcemaps are emitted in this
- * build, so editing the code here invalidates nothing.
+ * build, so editing the code here invalidates nothing. It has to be the LAST
+ * generateBundle to run, though -- see the hook below.
  */
 function stampChunkImports(id) {
   return {
     name: 'ally-stamp-chunk-imports',
     enforce: 'post',
-    generateBundle(_options, bundle) {
-      const chunkNames = new Set(
-        Object.keys(bundle)
-          .filter((file) => file.endsWith('.js'))
-          .map((file) => file.split('/').pop()),
-      )
-      let stamped = 0
-      for (const file of Object.values(bundle)) {
-        if (file.type !== 'chunk') continue
-        file.code = file.code.replace(
-          /(["'`])(\.{1,2}\/)([A-Za-z0-9_.-]+\.js)\1/g,
-          (whole, quote, prefix, name) => {
-            if (!chunkNames.has(name)) return whole
-            stamped += 1
-            return `${quote}${prefix}${name}?dpl=${id}${quote}`
-          },
+    // `order: 'post'` is load-bearing, not tidiness. Vite's own
+    // build-import-analysis rewrites the `__vite__preload` markers in
+    // generateBundle too, and it resolves each lazy chunk's dependency list --
+    // crucially the CSS it imports -- by looking the import specifier up in the
+    // bundle by name. Stamp the specifiers before it runs and every lookup
+    // misses: `assets/AdminLayout-BR6WVO2B.js?dpl=...` is not a key in the
+    // bundle, so the dep list comes out `[]` and the route's stylesheet is
+    // never emitted into the page. That is what took the admin panel down to
+    // unstyled HTML in production while it looked perfect locally, where no
+    // deployment id is set and this plugin never loads.
+    generateBundle: {
+      order: 'post',
+      handler(_options, bundle) {
+        const chunkNames = new Set(
+          Object.keys(bundle)
+            .filter((file) => file.endsWith('.js'))
+            .map((file) => file.split('/').pop()),
         )
-      }
-      this.info(`stamped ${stamped} chunk import specifiers with ?dpl=${id}`)
+        let stamped = 0
+        for (const file of Object.values(bundle)) {
+          if (file.type !== 'chunk') continue
+          file.code = file.code.replace(
+            /(["'`])(\.{1,2}\/)([A-Za-z0-9_.-]+\.js)\1/g,
+            (whole, quote, prefix, name) => {
+              if (!chunkNames.has(name)) return whole
+              stamped += 1
+              return `${quote}${prefix}${name}?dpl=${id}${quote}`
+            },
+          )
+        }
+        this.info(`stamped ${stamped} chunk import specifiers with ?dpl=${id}`)
+      },
     },
   }
 }
