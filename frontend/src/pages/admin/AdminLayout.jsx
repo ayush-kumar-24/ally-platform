@@ -10,7 +10,6 @@ import { useEffect, useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { getMe } from '../../services/admin';
 import { ErrorState, Loading } from './AdminUI';
-import '../../styles/admin.css';
 
 const LINKS = [
   { to: '/admin', label: 'Dashboard', end: true, capability: 'view_users' },
