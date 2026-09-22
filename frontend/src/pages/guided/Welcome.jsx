@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
+import { CURRENT_VERSIONS } from '../../services/consents';
 
 export default function Welcome() {
   const navigate = useNavigate();
@@ -35,8 +36,11 @@ export default function Welcome() {
       consents: {
         ...prev?.consents,
         termsAccepted: prev?.consents?.termsAccepted ?? true,
-        termsVersion: prev?.consents?.termsVersion ?? '1.0',
-        privacyVersion: prev?.consents?.privacyVersion ?? '1.0',
+        // From the constants, never a literal: a hardcoded version here stamps
+        // the consent with a document the founder was not shown the moment the
+        // policy is bumped, which is the one thing a consent record must not do.
+        termsVersion: prev?.consents?.termsVersion ?? CURRENT_VERSIONS.terms,
+        privacyVersion: prev?.consents?.privacyVersion ?? CURRENT_VERSIONS.privacy,
         diagnosisConsent: true,
         consentedAt: new Date().toISOString()
       }

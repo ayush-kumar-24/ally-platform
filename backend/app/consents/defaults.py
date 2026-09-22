@@ -9,5 +9,5 @@ Keep these in lockstep with the frontend's `CURRENT_VERSIONS` in
 `src/services/consents.js` and the version tag rendered on the Login screen.
 """
 
-CURRENT_TERMS_VERSION = "1.0"
-CURRENT_PRIVACY_VERSION = "1.0"
+CURRENT_TERMS_VERSION = "1.1"
+CURRENT_PRIVACY_VERSION = "1.1"

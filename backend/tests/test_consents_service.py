@@ -6,6 +6,7 @@ from itertools import count
 
 import pytest
 
+from app.consents.defaults import CURRENT_PRIVACY_VERSION, CURRENT_TERMS_VERSION
 from app.consents import (
     InvalidConsentInputError,
     TermsNotAcceptedError,
@@ -13,7 +14,9 @@ from app.consents import (
 )
 
 T0 = datetime(2026, 8, 2, 12, 0, 0, tzinfo=timezone.utc)
-V = {"terms_version": "1.0", "privacy_version": "1.0"}
+# The CURRENT versions, from the constants -- see the note in
+# test_api_consents.py. Tests that need a STALE version still spell one out.
+V = {"terms_version": CURRENT_TERMS_VERSION, "privacy_version": CURRENT_PRIVACY_VERSION}
 
 
 class StepClock:
@@ -39,7 +42,7 @@ def test_record_consent_stores_all_fields():
     record, created = s.record_consent(1, agree_terms=True, agree_diagnosis=True, **V)
     assert created is True
     assert record.founder_id == 1
-    assert record.terms_version == "1.0" and record.privacy_version == "1.0"
+    assert record.terms_version == CURRENT_TERMS_VERSION and record.privacy_version == CURRENT_PRIVACY_VERSION
     assert record.agree_terms is True and record.agree_diagnosis is True
     assert record.consented_at == T0
 
@@ -132,7 +135,8 @@ def test_may_process_diagnosis_data_fails_closed():
 def test_needs_reconsent_on_missing_or_superseded_version():
     s = svc()
     assert s.needs_reconsent(1) is True                    # never consented
-    s.record_consent(1, agree_terms=True, terms_version="0.9", privacy_version="1.0")
+    s.record_consent(1, agree_terms=True, terms_version="0.9",
+                     privacy_version=CURRENT_PRIVACY_VERSION)
     assert s.needs_reconsent(1) is True                    # stale terms
     s.record_consent(1, agree_terms=True, **V)
     assert s.needs_reconsent(1) is False

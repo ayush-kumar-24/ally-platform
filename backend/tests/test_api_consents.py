@@ -8,13 +8,19 @@ from types import SimpleNamespace
 import pytest
 from fastapi.testclient import TestClient
 
+from app.consents.defaults import CURRENT_PRIVACY_VERSION, CURRENT_TERMS_VERSION
 from app.api.v1.consents.dependencies import get_consent_service, get_current_founder_id
 from app.consents import build_consent_service
 from app.main import app
 
 BASE = "/api/v1/consents"
 T0 = datetime(2026, 8, 2, 12, 0, 0, tzinfo=timezone.utc)
-BODY = {"terms_version": "1.0", "privacy_version": "1.0", "agree_terms": True}
+# Read from the constants, never hardcoded: these two assert what the CURRENT
+# version is, so a literal here turns every future policy bump into a test
+# failure that says nothing about whether consent still works.
+BODY = {"terms_version": CURRENT_TERMS_VERSION,
+        "privacy_version": CURRENT_PRIVACY_VERSION,
+        "agree_terms": True}
 
 
 class StepClock:
@@ -47,7 +53,7 @@ def test_record_consent_201(client):
     assert r.status_code == 201
     body = r.json()
     assert body["agree_terms"] is True and body["agree_diagnosis"] is True
-    assert body["terms_version"] == "1.0" and body["founder_id"] == 1
+    assert body["terms_version"] == CURRENT_TERMS_VERSION and body["founder_id"] == 1
     assert body["consented_at"].startswith("2026-08-02T12:00:00")
 
 
@@ -81,7 +87,7 @@ def test_invalid_version_422(client):
 
 
 def test_missing_field_422(client):
-    assert client.http.post(BASE, json={"terms_version": "1.0", "agree_terms": True}).status_code == 422
+    assert client.http.post(BASE, json={"terms_version": CURRENT_TERMS_VERSION, "agree_terms": True}).status_code == 422
 
 
 def test_unknown_field_rejected(client):
@@ -108,11 +114,11 @@ def test_get_returns_current_and_history_newest_first(client):
     assert body["has_consented"] is True and body["needs_reconsent"] is False
     assert body["current"]["agree_diagnosis"] is False
     assert [h["agree_diagnosis"] for h in body["history"]] == [False, True]
-    assert body["current_terms_version"] == "1.0"
+    assert body["current_terms_version"] == CURRENT_TERMS_VERSION
 
 
 def test_stale_version_needs_reconsent(client):
-    client.http.post(BASE, json={"terms_version": "0.9", "privacy_version": "1.0", "agree_terms": True})
+    client.http.post(BASE, json={"terms_version": "0.9", "privacy_version": CURRENT_PRIVACY_VERSION, "agree_terms": True})
     body = client.http.get(BASE).json()
     assert body["has_consented"] is True and body["needs_reconsent"] is True
 

@@ -13,8 +13,8 @@
 import { get, post } from './api';
 
 export const CURRENT_VERSIONS = {
-  terms: '1.0',
-  privacy: '1.0',
+  terms: '1.1',
+  privacy: '1.1',
 };
 
 /** Consent captured before an authenticated identity exists, awaiting flush. */
