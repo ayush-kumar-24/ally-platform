@@ -5,8 +5,15 @@
  * catalogue and has no idea what Mad Men is. This asks Apple, which carries TV
  * shows and films -- the same free, keyless endpoint the podcast artwork
  * already comes from, so there is no account to create and no key to rotate.
- * TMDB would also work and wants an API key, which is the only reason it is not
- * used here.
+ *
+ * APPLE FIRST, TMDB FOR THE REST. Apple only lists what Apple SELLS, so a
+ * streaming exclusive is simply absent from it: Panchayat, Scam 1992 and TVF
+ * Pitchers are not there, and neither are WeCrashed or The Playlist, which are
+ * Apple's and Netflix's own originals. That is nine of our thirteen series.
+ * TMDB has all of them, and wants a free key. So Apple is still asked first --
+ * it needs no key and covers the films well -- and TMDB is asked only about
+ * what Apple could not answer, and only when a key is present. With no key the
+ * script behaves exactly as it did before and says what it skipped.
  *
  * SERIES TAKE TWO REQUESTS, AND THAT IS NOT AN OVERSIGHT. `entity=tvSeason` on
  * the search endpoint returns resultCount 0 for everything, with or without
@@ -29,14 +36,19 @@
  *     node scripts/fetch-poster-art.mjs movies    # the films
  *     node scripts/fetch-poster-art.mjs --refresh # re-look-up the series
  *
+ * For the TMDB half, put your key in the environment FIRST -- never in a file
+ * in this repo, which is why it is read from here and not from src/:
+ *
+ *     $env:TMDB_API_KEY = "..."      # PowerShell, this terminal only
+ *     export TMDB_API_KEY=...        # bash / zsh
+ *
  * Incremental like its siblings: only ids with no answer are asked about,
  * nothing it cannot find is written, and a tile with no poster renders exactly
  * as it does today. A partial run is shippable.
  *
- * EXPECT THE INDIAN TITLES TO BE THE HARD ONES. Apple's catalogue is thin on
- * shows that live on SonyLIV, JioCinema and Prime India, so Panchayat and Scam
- * 1992 may well come back empty where Mad Men does not. That is what
- * public/covers/ is for -- see its README.
+ * IF BOTH SOURCES COME BACK EMPTY, the id is printed and public/covers/<id>.jpg
+ * is the escape hatch -- see that folder's README. A tile with no poster
+ * renders exactly as it does today, so a gap is never a broken page.
  */
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
@@ -49,6 +61,23 @@ const LOCAL_DIR = resolve(HERE, '../public/covers');
 
 const SEARCH = 'https://itunes.apple.com/search';
 const LOOKUP = 'https://itunes.apple.com/lookup';
+
+const TMDB = 'https://api.themoviedb.org/3';
+/* w500 is TMDB's 500px-wide poster. The tiles render far smaller than that, and
+   the next size up is the full-resolution original, which is several megabytes
+   for no visible gain. */
+const TMDB_IMAGE = 'https://image.tmdb.org/t/p/w500';
+/* Read from the environment on purpose. A key in the repo is a key in every
+   clone and every build artefact; this one lives in whoever runs the script. */
+const TMDB_KEY = process.env.TMDB_API_KEY || '';
+
+/* Titles TMDB files under a different name than we do. Kept as an explicit,
+   short table rather than a fuzzier matcher: loosening `matches` to bridge
+   "TVF Pitchers" and "Pitchers" would also bridge things that are not the same
+   show at all, and a wrong poster is worse than none. */
+const TMDB_ALIAS = {
+  'tvf-pitchers': 'Pitchers',
+};
 
 /* Storefronts, in order. India first: a show that exists in both catalogues is
    more likely to carry the artwork an Indian founder recognises there, and the
@@ -189,6 +218,33 @@ async function movieArtwork(title) {
   return null;
 }
 
+/* TMDB, asked only about what Apple could not answer.
+
+   `kind` is 'tv' or 'movie' -- the two endpoints take the same shape and return
+   the same `poster_path`, so one function serves both. The name is checked with
+   the same `matches` Apple's answers go through: a second source is a second
+   chance to be handed the wrong show. */
+async function tmdbArtwork(item, kind) {
+  if (!TMDB_KEY) return null;
+
+  const wanted = TMDB_ALIAS[item.id] || item.title;
+  const params = new URLSearchParams({
+    api_key: TMDB_KEY, query: mainTitle(wanted), include_adult: 'false',
+  });
+  const res = await fetch(`${TMDB}/search/${kind}?${params}`);
+  await sleep(GAP_MS);
+  if (!res.ok) throw new Error(`tmdb ${res.status}`);
+
+  const { results = [] } = await res.json();
+  /* TMDB calls a series' title `name` and a film's `title`, and keeps the
+     untranslated one alongside -- which is what matches for a show we know by
+     its English name and TMDB files under its original. */
+  const hit = results.find((r) => r.poster_path && [r.name, r.original_name, r.title, r.original_title]
+    .filter(Boolean)
+    .some((n) => matches(n, wanted)));
+  return hit ? `${TMDB_IMAGE}${hit.poster_path}` : null;
+}
+
 /* A poster dropped into public/covers/<id>.<ext> wins over any lookup -- the
    same escape hatch the book covers have, and the one the Indian series will
    probably need. */
@@ -231,9 +287,23 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     if (existing[item.id]) { skipped += 1; continue; }
 
     try {
-      const url = await artworkFor(item.title);
-      if (url) { existing[item.id] = url; found += 1; console.log(`  found:     ${item.title}`); }
-      else { missed += 1; gaps.push(item); console.warn(`  no poster: ${item.title}`); }
+      let url = await artworkFor(item.title);
+      let source = 'apple';
+      /* Apple is asked first because it needs no key; TMDB is asked only about
+         what Apple does not sell, which is most of the streaming exclusives. */
+      if (!url) {
+        url = await tmdbArtwork(item, wantMovies ? 'movie' : 'tv');
+        source = 'tmdb';
+      }
+      if (url) {
+        existing[item.id] = url;
+        found += 1;
+        console.log(`  found:     ${item.title}  (${source})`);
+      } else {
+        missed += 1;
+        gaps.push(item);
+        console.warn(`  no poster: ${item.title}`);
+      }
     } catch (err) {
       missed += 1;
       gaps.push(item);
@@ -244,8 +314,12 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   }
 
   console.log(`\n${items.length} titles: ${found} with a poster, ${missed} without, ${skipped} already had one.`);
+  if (gaps.length && !TMDB_KEY) {
+    console.log('\nTMDB was not asked: TMDB_API_KEY is not set in this terminal.');
+    console.log('Set it and re-run before adding anything by hand.');
+  }
   if (gaps.length) {
-    console.log('\nAdd these by hand -- save each as public/covers/<id>.jpg:');
+    console.log('\nStill missing -- save each as public/covers/<id>.jpg:');
     for (const g of gaps) console.log(`  ${g.id.padEnd(24)} ${g.title}`);
   }
   console.log(`\nWritten to ${OUT}`);
