@@ -1,9 +1,9 @@
 # Hand-added covers and artwork
 
 For anything the catalogues do not have. Several of our books are Indian
-editions nobody has scanned, and the same is true of the series: Apple carries
-Mad Men and has never heard of Panchayat. This folder is the escape hatch for
-all of it — books, podcasts, series and films alike.
+editions nobody has scanned. This folder is the escape hatch for all of it —
+books, podcasts, series and films alike — and it is the last resort, after
+both catalogues a script knows about have been asked.
 
 ## Adding one
 
@@ -17,10 +17,19 @@ all of it — books, podcasts, series and films alike.
    - a series → `node scripts/fetch-poster-art.mjs`
    - a film → `node scripts/fetch-poster-art.mjs movies`
 
-   **The series are where this folder earns its keep.** Apple's catalogue is
-   thin on shows that live on SonyLIV, JioCinema and Prime India, so Panchayat
-   and Scam 1992 are likelier to need a hand-added poster than Mad Men is. The
-   script prints exactly which ids came back empty, ready to paste.
+   **The series have two sources; the films have one.** Apple only lists what
+   Apple SELLS, so a streaming exclusive is simply absent from it: Panchayat,
+   Scam 1992, TVF Pitchers, Rocket Boys and Shark Tank India live on Indian
+   platforms, and WeCrashed, The Playlist and The Last Dance are Apple's,
+   Netflix's and ESPN's own originals. TVMaze has all of them, so the series run
+   asks Apple first and TVMaze for the rest. Neither needs a key or an account.
+
+   TVMaze is television only, which is why a film that Apple does not carry has
+   nowhere else to go and lands here. (TMDB would cover films too, and is
+   blocked by several Indian ISPs, so it is not used.)
+
+   Either way the script prints exactly which ids came back empty, ready to
+   paste.
 
 For a podcast whose whole feed is missing, put one image in `shows/` instead
 of one per episode — see the README in there.

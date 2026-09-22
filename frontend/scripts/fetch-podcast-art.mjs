@@ -26,7 +26,7 @@
  * RUN IT WHERE THERE IS NETWORK:
  *
  *     node scripts/fetch-podcast-art.mjs            # fill in the gaps
- *     node scripts/fetch-podcast-art.mjs --refresh  # re-look-up everything
+ *     node scripts/fetch-podcast-art.mjs --refresh  # re-look-up the episodes
  *
  * Incremental by default, like its sibling: it only asks about ids it has no
  * answer for, nothing it cannot find is written, and a card with no artwork
@@ -161,9 +161,15 @@ const localShowCover = (show) => localAt(SHOW_DIR, showSlug(show), '/covers/show
 // Importable for the unit test without firing thirty requests at Apple.
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const refresh = process.argv.includes('--refresh');
-  const existing = refresh ? {} : JSON.parse(readFileSync(OUT, 'utf8'));
+  const existing = JSON.parse(readFileSync(OUT, 'utf8'));
 
   const { PODCASTS } = await import('../src/data/watch.js');
+
+  /* --refresh forgets what THIS run is about to look up, and nothing else.
+     Starting from an empty object instead would drop every cover the other
+     scripts filled in: covers.json is one shared map, and each script only ever
+     writes its own keys back into it. */
+  if (refresh) for (const item of PODCASTS) delete existing[item.id];
 
   // One lookup per SHOW, reused by every episode of it.
   const byShow = new Map();
