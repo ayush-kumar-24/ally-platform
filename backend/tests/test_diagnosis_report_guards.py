@@ -379,3 +379,46 @@ def test_sweep_query_excludes_recent_and_reported_sessions():
     assert "not in" in sql, "must exclude sessions that already have an active report"
     assert "completed_at" in sql, "must apply an age cutoff"
     assert "limit" in sql, "one sweep must be bounded"
+
+
+def test_not_applicable_answer_classifies_as_unscored():
+    """Regression: a `not_applicable` answer with score NULL crashed the whole
+    reasoning pipeline.
+
+    The production pairing (ADAPTIVE_QUESTIONS=true + ANSWER_CLASSIFIER=stored)
+    is exactly what writes `not_applicable` labels with no score, so the stored
+    classifier hit `_score_for_label` with a label its dict did not carry:
+
+        KeyError: <ScoreLabel.NOT_APPLICABLE: 'not_applicable'>
+
+    and no report was generated for the session at all. N/A is unscored --
+    `score` is None, never zero, because zero is Green's band and would enter
+    the risk numerator as positive evidence.
+    """
+    answer = _answer(answer_id=729, question_id=3668, score_label="not_applicable")
+
+    result = asyncio.run(StoredScoreAnswerClassifier().classify(answer, None, _context()))
+
+    assert result.label is ScoreLabel.NOT_APPLICABLE
+    assert result.score is None
+    assert not result.label.is_scored
+
+
+def test_not_applicable_in_a_session_does_not_block_the_other_answers():
+    """The failure was session-fatal, not answer-local: one N/A answer took the
+    whole batch down. Every other answer must still classify."""
+    answers = [
+        _answer(answer_id=1, score_label="red"),
+        _answer(answer_id=2, score_label="not_applicable"),
+        _answer(answer_id=3, score_label="amber"),
+    ]
+
+    results = [
+        asyncio.run(StoredScoreAnswerClassifier().classify(a, None, _context()))
+        for a in answers
+    ]
+
+    assert [r.label for r in results] == [
+        ScoreLabel.RED, ScoreLabel.NOT_APPLICABLE, ScoreLabel.AMBER
+    ]
+    assert [r.score is None for r in results] == [False, True, False]

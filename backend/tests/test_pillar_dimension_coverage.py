@@ -34,6 +34,7 @@ from app.api.v1.diagnosis.stage_scope import (
 from app.api.v1.reports.document import (_coverage_note, _pillar_verdicts,
                                           _standing)
 from app.api.v1.reports.narrator import TemplateNarrator, _pillar_label
+from app.models.enums import ScoreLabel
 
 IDEATION, EARLY, FULL = 1, 2, 5
 TONE = SimpleNamespace(persona=None)
@@ -281,7 +282,11 @@ def _scored_pillars(stage_order):
     qs, cls = {}, []
     for qid in range(1, 4):
         qs[qid] = SimpleNamespace(question_id=qid, problem_id=104)
-        cls.append(SimpleNamespace(question_id=qid, score=Decimal("0")))
+        cls.append(
+            SimpleNamespace(
+                question_id=qid, score=Decimal("0"), label=ScoreLabel.GREEN
+            )
+        )
     repo = SimpleNamespace(
         get_readiness_pillars=lambda: pillars,
         get_problems_by_ids=lambda ids: {104: SimpleNamespace(pillar_id=4)},

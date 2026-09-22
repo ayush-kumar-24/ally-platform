@@ -28,6 +28,7 @@ from app.api.v1.reasoning.engines.business_health import (
     RiskInversionPillarScoreStrategy,
 )
 from app.core.config import settings
+from app.models.enums import ScoreLabel
 
 _BANDS = [
     {"level": "Critical Gap", "range_min": 0, "range_max": 35},
@@ -60,7 +61,14 @@ def _scorer(answers_per_pillar):
             qid += 1
             questions[qid] = SimpleNamespace(question_id=qid, problem_id=100 + pillar_id)
             classifications.append(
-                SimpleNamespace(question_id=qid, score=Decimal(str(score)))
+                SimpleNamespace(
+                    question_id=qid,
+                    score=Decimal(str(score)),
+                    # The scorer filters on `label.is_scored`, like every other
+                    # engine that consumes a classification: a double without a
+                    # label is not a faithful stand-in. These are all scored.
+                    label=ScoreLabel.RED,
+                )
             )
     problems = {
         100 + p: SimpleNamespace(pillar_id=p) for p in answers_per_pillar
@@ -179,3 +187,72 @@ def test_an_abandoned_ideation_session_narrows_rather_than_misleads():
     assert scored == {1, 2}
     assert _by_id(result)[4].score is None
     assert _by_id(result)[6].score is None
+
+
+# --- not-applicable answers -------------------------------------------------
+
+def _scorer_with_labels(answers_per_pillar):
+    """Like `_scorer`, but each entry is a (label, score) pair so a pillar can
+    carry NOT_APPLICABLE answers, whose score is None."""
+    classifications, questions = [], {}
+    qid = 0
+    for pillar_id, entries in answers_per_pillar.items():
+        for label, score in entries:
+            qid += 1
+            questions[qid] = SimpleNamespace(question_id=qid, problem_id=100 + pillar_id)
+            classifications.append(
+                SimpleNamespace(
+                    question_id=qid,
+                    score=None if score is None else Decimal(str(score)),
+                    label=label,
+                )
+            )
+    problems = {100 + p: SimpleNamespace(pillar_id=p) for p in answers_per_pillar}
+    repo = SimpleNamespace(
+        get_readiness_pillars=lambda: _PILLARS,
+        get_problems_by_ids=lambda ids: problems,
+    )
+    scorer = BusinessHealthScorer(repo, RiskInversionPillarScoreStrategy())
+    return scorer.compute(classifications, questions, context=None)
+
+
+def test_a_not_applicable_answer_does_not_crash_the_pillar_score():
+    """Regression: NOT_APPLICABLE carries `score=None` on purpose (zero would
+    read as Green), and the pillar sum was taking it unfiltered --
+
+        TypeError: unsupported operand type(s) for +: 'decimal.Decimal' and 'NoneType'
+
+    which took down the whole reasoning pipeline, so no report was produced for
+    the session at all."""
+    result = _scorer_with_labels({
+        1: [(ScoreLabel.RED, 2), (ScoreLabel.NOT_APPLICABLE, None),
+            (ScoreLabel.RED, 2), (ScoreLabel.AMBER, 1)],
+    })
+
+    assert _by_id(result)[1].score is not None
+
+
+def test_a_not_applicable_answer_neither_raises_nor_dilutes_risk():
+    """N/A is not evidence in either direction: the pillar must score exactly as
+    if the question had never been asked, and must not count toward the
+    evidence floor."""
+    scored = [(ScoreLabel.RED, 2), (ScoreLabel.RED, 2), (ScoreLabel.AMBER, 1)]
+
+    without = _by_id(_scorer_with_labels({1: scored}))[1]
+    with_na = _by_id(
+        _scorer_with_labels({1: scored + [(ScoreLabel.NOT_APPLICABLE, None)]})
+    )[1]
+
+    assert with_na.score == without.score
+    assert with_na.assessed_question_count == without.assessed_question_count == 3
+
+
+def test_a_pillar_answered_only_not_applicable_is_not_scored():
+    """Nothing to report on: no score, rather than a fabricated one."""
+    result = _by_id(_scorer_with_labels({
+        1: [(ScoreLabel.NOT_APPLICABLE, None), (ScoreLabel.NOT_APPLICABLE, None),
+            (ScoreLabel.NOT_APPLICABLE, None), (ScoreLabel.NOT_APPLICABLE, None)],
+    }))[1]
+
+    assert result.score is None
+    assert result.assessed_question_count == 0

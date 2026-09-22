@@ -176,6 +176,13 @@ class BusinessHealthScorer:
             question = questions.get(c.question_id)
             if question is None:
                 continue
+            # NOT_APPLICABLE is unscored (`score` is None): excluded from both
+            # the risk sum and `answered`, exactly as symptom_detection,
+            # root_cause and the category-risk pass do. Included, it would both
+            # crash the sum and count as an answered question toward
+            # MIN_ANSWERS_PER_PILLAR_SCORE without contributing evidence.
+            if not c.label.is_scored:
+                continue
             pillar_id = problem_to_pillar.get(question.problem_id)
             if pillar_id is None:
                 continue

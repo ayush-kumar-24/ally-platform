@@ -2159,16 +2159,24 @@ def _config_report(settings) -> tuple[list[str], bool]:
     return lines, bool(settings.diagnosis_scoring_configured)
 
 
-def _llm_calls(db, sa) -> tuple[int, float]:
-    """(calls, cost so far). Zero rows after a run means the model never ran."""
+def _llm_calls(db, sa) -> tuple[int, float, int]:
+    """(calls, cost so far, failed calls).
+
+    The failure count is the third value because a run where every provider call
+    returned an error still LOOKS healthy: the advisor falls back to the
+    deterministic pick, every answer takes the neutral AMBER fallback score, a
+    report is still produced, and the only outward sign is a cost of $0.0000.
+    Five such runs were mistaken for results before this was counted.
+    """
     try:
         row = db.execute(sa.text(
-            "select count(*), coalesce(sum(estimated_cost_usd), 0) from llm_call_log"
+            "select count(*), coalesce(sum(estimated_cost_usd), 0), "
+            "count(*) filter (where status <> 'ok') from llm_call_log"
         )).one()
-        return int(row[0]), float(row[1])
+        return int(row[0]), float(row[1]), int(row[2])
     except Exception:                                            # noqa: BLE001
         db.rollback()
-        return -1, 0.0
+        return -1, 0.0, -1
 
 
 #: Rows a test run of either mode can add, in the order they must be deleted
@@ -2587,7 +2595,7 @@ def run(args) -> int:
 
     using_existing = bool(args.founder_email or args.founder_id)
     with SessionLocal() as db:
-        calls_before, cost_before = _llm_calls(db, sa)
+        calls_before, cost_before, fails_before = _llm_calls(db, sa)
         if using_existing:
             fid, label = _resolve_existing_founder(
                 db, sa, email=args.founder_email, founder_id=args.founder_id)
@@ -2677,7 +2685,7 @@ def run(args) -> int:
         report = db.execute(sa.text(
             "select report_id, business_dna from founder_reports "
             "where founder_id=:f order by report_id desc limit 1"), {"f": fid}).first()
-        calls_after, cost_after = _llm_calls(db, sa)
+        calls_after, cost_after, fails_after = _llm_calls(db, sa)
 
     # --- what happened ----------------------------------------------------
     print("\n" + "=" * 74)
@@ -2744,21 +2752,47 @@ def run(args) -> int:
     else:
         print("  report                  NONE GENERATED")
 
+    degraded = None
     if calls_before >= 0:
         made = calls_after - calls_before
+        failed = fails_after - fails_before
         print(f"  model calls this run    {made}"
-              f"   (cost ${cost_after - cost_before:.4f})")
+              f"   (cost ${cost_after - cost_before:.4f}, {failed} failed)")
         if made == 0:
             print("    ^ ZERO. Nothing reached a model. Either scoring is off, or "
                   "the provider failed and the failover chain fell through to "
                   "MockLLMProvider -- check the logs for an auth error.")
+        elif failed:
+            degraded = (
+                f"{failed} of {made} provider calls FAILED. Every failed "
+                f"classification takes the neutral AMBER fallback and every "
+                f"failed advisor call takes the deterministic question pick, so "
+                f"this run measures the fallback path, NOT the adaptive engine."
+            )
+            print(f"    ^ {degraded}")
     else:
         print("  model calls this run    (llm_call_log unavailable)")
+
+    coverage_gap = None
+    if qk is not None and qk.counts[HARNESS_MISS]:
+        coverage_gap = (
+            f"{qk.counts[HARNESS_MISS]} questions had no prepared answer. The "
+            f"harness submitted a literal '[HARNESS_MISS: ...]' string for each, "
+            f"which the engine then scored and used as evidence. Build a "
+            f"full-coverage map with scripts/qa/build_persona_answer_map.py."
+        )
+        print(f"\n  COVERAGE GAP            {coverage_gap}")
 
     if args.json_out:
         with open(args.json_out, "w", encoding="utf-8") as fh:
             json.dump({"generated_at": datetime.now(timezone.utc).isoformat(),
                        "stage_order": args.stage, "founder_id": fid,
+                       # Stamped so a run that fell back to the deterministic
+                       # path or answered from HARNESS_MISS can never be read
+                       # later as evidence about the adaptive engine.
+                       "valid_for_diagnostic_evidence": not (degraded or coverage_gap),
+                       "degraded_reason": degraded,
+                       "coverage_gap": coverage_gap,
                        "founder_dna": dna, "current_problem": problem,
                        "diagnosis": diagnosis,
                        "report": (report[1] if report else None)}, fh, indent=1)
@@ -2770,6 +2804,12 @@ def run(args) -> int:
         print(f"\n  clean up with: --database-url ... --cleanup-founder-id {fid}")
     else:
         print(f"\n  clean up with: --database-url ... --cleanup")
+
+    if args.strict_evidence and (degraded or coverage_gap):
+        print("\n  STRICT EVIDENCE MODE: this run is NOT usable as evidence about "
+              "the adaptive engine. Exiting non-zero so a batch stops here rather "
+              "than writing another file that looks like a result.")
+        return 3
     return 0
 
 
@@ -2822,6 +2862,17 @@ def main(argv=None) -> int:
                         "reaction. traction alone proved the engine COVERS "
                         "stage 4; the pair is what proves it DISCRIMINATES "
                         "there, the way weak/strong does at Ideation.")
+    p.add_argument("--strict-evidence", action="store_true",
+                   help="Exit 3 if the run cannot support a claim about the "
+                        "adaptive engine: any provider call failed (so answers "
+                        "took the neutral AMBER fallback and questions the "
+                        "deterministic pick), or any served question had no "
+                        "prepared answer (so a literal HARNESS_MISS string was "
+                        "submitted and scored). Both conditions otherwise "
+                        "produce a run that looks entirely normal -- a report is "
+                        "generated either way -- which is how five fallback runs "
+                        "were once mistaken for adversarial results. Use this "
+                        "for anything whose output will be quoted.")
     p.add_argument("--answer-map", metavar="FILE",
                    help="JSON {phase: {question_id: {a, status}}}. Answers are "
                         "looked up by question id and nothing is matched by "

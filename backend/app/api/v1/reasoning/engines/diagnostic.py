@@ -89,7 +89,7 @@ class StoredScoreAnswerClassifier(AnswerClassifier):
             answer_id=answer.answer_id,
             question_id=answer.question_id,
             label=label,
-            score=Decimal(score),
+            score=None if score is None else Decimal(score),
             is_distress_flagged=answer.is_distress_flagged,
             is_follow_up=answer.is_follow_up,
             triggered_follow_up_id=answer.triggered_follow_up_id,
@@ -102,11 +102,14 @@ class StoredScoreAnswerClassifier(AnswerClassifier):
             return ScoreLabel.AMBER
         return ScoreLabel.GREEN
 
-    def _score_for_label(self, label: ScoreLabel, bands) -> Decimal:
+    def _score_for_label(self, label: ScoreLabel, bands) -> Decimal | None:
+        # NOT_APPLICABLE is unscored: None, never zero. Zero is Green's band and
+        # would enter the risk numerator as positive evidence.
         return {
             ScoreLabel.GREEN: bands.green,
             ScoreLabel.AMBER: bands.amber,
             ScoreLabel.RED: bands.red,
+            ScoreLabel.NOT_APPLICABLE: None,
         }[label]
 
 

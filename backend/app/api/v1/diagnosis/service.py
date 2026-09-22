@@ -652,8 +652,8 @@ class DiagnosisService:
         # burnout and isolation appeared to be active blockers.
         if not needs_fallback_score(insight):
             self._apply_insight(answer, insight)
-            self._learn_session_facts(session, answer, answered)
-            await self._extract_capability_evidence(session, answer, answered)
+            self._learn_session_facts(session, answer, question)
+            await self._extract_capability_evidence(session, answer, question)
         else:
             # No USABLE score means the advisor was absent, FAILED (timeout, bad
             # reply), or returned a label outside {green, amber, red} -- advisor
