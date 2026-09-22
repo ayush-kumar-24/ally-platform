@@ -107,7 +107,7 @@ export default function TermsOfService() {
           <div className="legal-meta-row">
             <span className="legal-meta-item">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
-              Effective: 29 September 2026
+              Effective: 6 October 2026
             </span>
             <span className="legal-meta-item">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M9 12h6m-3-3v6"/><circle cx="12" cy="12" r="9"/></svg>

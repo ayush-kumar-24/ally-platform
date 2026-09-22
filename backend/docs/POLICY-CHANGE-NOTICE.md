@@ -2,8 +2,8 @@
 
 Section 11 of the Privacy Policy promises that material changes are
 communicated "at least 7 days before they take effect". The documents are dated
-**29 September 2026**. That date is only honest if this notice goes out on or
-before **22 September 2026**.
+**6 October 2026**. That date is only honest if this notice goes out on or
+before **29 September 2026**.
 
 **Sending this is a manual step and nobody is going to do it automatically.**
 The platform has no announcement mailer; the only bulk path today is whatever
@@ -44,7 +44,7 @@ costs you the one thing that makes the next notice get read.
 > Hello {first name},
 >
 > We've rewritten parts of Ally's Terms of Service and Privacy Policy. They take
-> effect on 29 September 2026.
+> effect on 6 October 2026.
 >
 > **Nothing about what we do with your data has changed.** These changes make
 > the documents describe what Ally actually does, more accurately than they did
@@ -100,7 +100,7 @@ costs you the one thing that makes the next notice get read.
 1. **Record the send date** — what was sent, to how many people, when. §11 is a
    promise about timing, and the evidence for it is that record. Keep it
    wherever the consent evidence pack lives.
-2. **If the notice cannot go out before 22 September**, change the effective
+2. **If the notice cannot go out before 29 September**, change the effective
    date in both documents instead of letting the promise slide. It is one string
    in `PrivacyPolicy.jsx` and `TermsOfService.jsx`; a date the documents
    themselves contradict is worse than a later date.
