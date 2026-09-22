@@ -27,6 +27,10 @@
    Every rule in the file is scoped under .adm, so nothing here reaches the
    founder product; the cost is the few KB it adds to the entry CSS. */
 @import "./styles/admin.css";
+/* legal.css is here for the same reason, and was the only other stylesheet
+   imported from a component -- so Terms and Privacy were unstyled in
+   production too. Its rules are all scoped under .legal-* / .grievance-*. */
+@import "./styles/legal.css";
 
 @theme {
   /* ── Ivory palette ── */
