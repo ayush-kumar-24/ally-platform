@@ -31,6 +31,11 @@ on:
   schedule:
     # Report recovery + PDF backfill: every 10 minutes.
     - cron: "*/10 * * * *"
+    # Account erasure: once a day, 00:50 IST (19:20 UTC). Deliberately NOT on
+    # the ten-minute cron -- the sweep only ever acts on founders whose 30-day
+    # window has already closed, so checking every ten minutes buys nothing and
+    # puts a destructive job on a schedule nobody reads.
+    - cron: "20 19 * * *"
   workflow_dispatch:      # so it can be run by hand while testing
 
 concurrency:
@@ -81,8 +86,15 @@ jobs:
           API: ${{ vars.ALLY_API_BASE || 'https://api.goxlally.ai' }}
           SECRET: ${{ secrets.INTERNAL_JOBS_SECRET }}
 
+      # This step was gated on workflow_dispatch ALONE, while every other step
+      # in this file also runs on the schedule. So it only ever ran when
+      # somebody clicked the button: a founder whose 30-day window closed was
+      # never actually erased unless a human happened to trigger this by hand.
+      # EventBridge is now the real schedule (see backend/docs/
+      # DELETION-SCHEDULE.md); this is the backstop, and a backstop that only
+      # fires when asked is not one.
       - name: Process due account deletions
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event.schedule == '20 19 * * *' || github.event_name == 'workflow_dispatch'
         run: |
           curl -sS -f -X POST \
             "$API/api/v1/internal/jobs/process-deletions" \

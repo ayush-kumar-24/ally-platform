@@ -1,10 +1,29 @@
 /**
- * Dynamic tracking script injector based on user cookie consents
+ * Tracking scripts loaded inside the SIGNED-IN product, on consent.
+ *
+ * NO ADVERTISING TAG IS LOADED FROM HERE, AND THAT IS THE POINT.
+ *
+ * The Privacy Policy says, in terms: "We do not use your personal data for
+ * targeted advertising." This file used to inject the Meta (Facebook) Pixel
+ * whenever a founder accepted marketing cookies, which would have made that
+ * sentence untrue the moment a pixel ID was configured. Nothing was firing --
+ * the deploy workflow never passes VITE_META_PIXEL_ID, so the injector
+ * returned early -- but "the secret happens not to be set" is not a privacy
+ * control. Adding one line to a workflow file would have switched on ad
+ * tracking inside the pages that hold founders' diagnostic answers, with no
+ * review and no change to the policy.
+ *
+ * Marketing tags belong on the public landing site, which is a separate
+ * codebase with its own consent banner and its own policy. That was already
+ * the stated plan; this file simply no longer contradicts it.
+ *
+ * The banner still RECORDS a marketing preference, and should: the choice is
+ * part of the consent record either way, and dropping it would lose the
+ * history. It just no longer causes anything to load here.
  */
 
 // Simple flag to prevent duplicate injection
 let isAnalyticsInitialized = false;
-let isMarketingInitialized = false;
 
 /**
  * Injects Google Analytics tracking script.
@@ -51,57 +70,9 @@ export function initializeAnalytics(measurementId = import.meta.env.VITE_GA_MEAS
 }
 
 /**
- * Injects Meta Pixel (Facebook Pixel) tracking script.
+ * Loads what the founder's choice permits. Analytics only -- see the note at
+ * the top of this file for why `consents.marketing` deliberately loads nothing.
  *
- * Same rule: nothing loads without a configured pixel ID. Ad pixels inside
- * the signed-in product are a deliberate decision, not a default -- the
- * marketing measurement plan keeps Meta on the public landing site and
- * sends only coarse server-side events from the product.
- */
-export function initializeMarketing(pixelId = import.meta.env.VITE_META_PIXEL_ID) {
-  if (!pixelId) return;
-  if (isMarketingInitialized) return;
-  if (window.fbq) {
-    isMarketingInitialized = true;
-    return;
-  }
-
-  try {
-    /* Meta's own snippet, de-minified. Functionally identical to the copy-paste
-       version — the original relied on a leading `!` and a bare ternary as
-       statements, which are expressions evaluated purely for side effects. */
-    const src = 'https://connect.facebook.net/en_US/fbevents.js';
-    if (!window.fbq) {
-      const fbq = function (...args) {
-        if (fbq.callMethod) fbq.callMethod.apply(fbq, args);
-        else fbq.queue.push(args);
-      };
-      fbq.push = fbq;
-      fbq.loaded = true;
-      fbq.version = '2.0';
-      fbq.queue = [];
-      window.fbq = fbq;
-      if (!window._fbq) window._fbq = fbq;
-
-      const script = document.createElement('script');
-      script.async = true;
-      script.src = src;
-      const first = document.getElementsByTagName('script')[0];
-      first.parentNode.insertBefore(script, first);
-    }
-
-    window.fbq('init', pixelId);
-    window.fbq('track', 'PageView');
-
-    isMarketingInitialized = true;
-    if (import.meta.env.DEV) console.debug('[Consent] Meta Pixel initialized.');
-  } catch (error) {
-    console.error('[Consent] Failed to load Meta Pixel:', error);
-  }
-}
-
-/**
- * Evaluates preferences and injects scripts accordingly
  * @param {Object} consents - Cookie preferences
  */
 export function triggerTrackingScripts(consents) {
@@ -109,9 +80,5 @@ export function triggerTrackingScripts(consents) {
 
   if (consents.analytics) {
     initializeAnalytics();
-  }
-
-  if (consents.marketing) {
-    initializeMarketing();
   }
 }
