@@ -3,10 +3,20 @@
  *
  * WHY THIS IS NOT fetch-covers.mjs. That one asks Open Library, which is a book
  * catalogue and has no idea what Mad Men is. This asks Apple, which carries TV
- * seasons and films -- the same free, keyless endpoint the podcast artwork
+ * shows and films -- the same free, keyless endpoint the podcast artwork
  * already comes from, so there is no account to create and no key to rotate.
  * TMDB would also work and wants an API key, which is the only reason it is not
  * used here.
+ *
+ * SERIES TAKE TWO REQUESTS, AND THAT IS NOT AN OVERSIGHT. `entity=tvSeason` on
+ * the search endpoint returns resultCount 0 for everything, with or without
+ * `media=tvShow` -- verified against the live API, not assumed. What does work
+ * is `media=tvShow`, which answers with EPISODES: the right show, but artwork
+ * that is a still from one episode rather than the show's poster, and an
+ * artistName Apple sometimes runs together ("MadMen"). So the search is used
+ * only to learn the show's artistId, and the poster comes from a second call to
+ * the /lookup endpoint, where `entity=tvSeason` does work and hands back proper
+ * season art. Films need only the one search.
  *
  * NOTHING ON THE RENDERING SIDE CHANGES. covers.json is a flat id -> URL map and
  * TitleTile (pages/KnowledgePage.jsx) already reads it for every title tile --
@@ -38,14 +48,18 @@ const OUT = resolve(HERE, '../src/data/covers.json');
 const LOCAL_DIR = resolve(HERE, '../public/covers');
 
 const SEARCH = 'https://itunes.apple.com/search';
+const LOOKUP = 'https://itunes.apple.com/lookup';
 
 /* Storefronts, in order. India first: a show that exists in both catalogues is
    more likely to carry the artwork an Indian founder recognises there, and the
    Indian titles exist in no other storefront at all. */
 const STOREFRONTS = ['in', 'us'];
 
-// Apple asks for no more than ~20 calls a minute on this endpoint.
-const GAP_MS = 400;
+/* Apple throttles this endpoint at roughly 20 calls a minute and answers an
+   over-limit request with resultCount 0 rather than an error, which is
+   indistinguishable from "we do not have that". A second per call keeps a
+   13-title run inside the budget and is still under a minute of waiting. */
+const GAP_MS = 1000;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /* "Scam 1992: The Harshad Mehta Story" -> "Scam 1992".
@@ -57,6 +71,13 @@ export const mainTitle = (title) => String(title || '').split(/[:—–]/)[0].tr
    subtitle apart from a different show -- see `plausible`. */
 const loose = (s) => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
 
+/* Everything but the letters and digits. Used for EXACT comparison only, never
+   as a prefix, because Apple's own data is inconsistent about spaces: the show
+   that lookup calls "Mad Men" comes back from search as "MadMen". Squashing is
+   safe for equality and dangerous for prefixes -- it eats the very punctuation
+   `CONTINUES` relies on -- so the two are kept apart. */
+const squash = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
 /* Where one title is allowed to continue past the other: a subtitle, a season
    suffix, a parenthetical. A SPACE IS NOT IN THIS SET, and that is the whole
    point of it. */
@@ -67,10 +88,10 @@ const CONTINUES = /^[\s]*[,:\-–—(\[|/]/;
 
    So a candidate is accepted when the name Apple has for it is OURS, or ours
    plus a subtitle -- "Silicon Valley, Season 1", "Super Pumped: The Battle For
-   Uber", "The Playlist (Norwegian)". It is refused when the extra words simply
-   run on: "Panchayat Raj Documentary" is not Panchayat and "The Dropout Kings"
-   is not The Dropout, though a plain prefix test calls both a match. Short
-   titles are where this matters and they are most of the Indian list. */
+   Uber", "Mad Men, The Complete Series". It is refused when the extra words
+   simply run on: "Panchayat Raj Documentary" is not Panchayat and "The Dropout
+   Kings" is not The Dropout, though a plain prefix test calls both a match.
+   Short titles are where this matters and they are most of the Indian list. */
 export function plausible(candidateName, wanted) {
   const got = loose(candidateName);
   const want = loose(mainTitle(wanted));
@@ -83,41 +104,81 @@ export function plausible(candidateName, wanted) {
   return false;
 }
 
-/* For a TV season Apple puts the SHOW in artistName and "Show, Season 1" in
-   collectionName; for a film the name is trackName or collectionName. Checking
-   all three means one matcher serves both entity types. */
+/* `plausible`, plus the one loosening Apple's own data forces on us. */
+export function matches(candidateName, wanted) {
+  if (plausible(candidateName, wanted)) return true;
+  const got = squash(candidateName);
+  return Boolean(got) && got === squash(mainTitle(wanted));
+}
+
+/* For an episode Apple puts the show in artistName and "Show, The Complete
+   Series" in collectionName; for a film the name is trackName or
+   collectionName. Checking all three means one matcher serves both. */
 export function nameCandidates(result) {
   return [result.artistName, result.collectionName, result.trackName].filter(Boolean);
 }
+
+/* 100x100 is the default Apple hands back on most rows. The URL is templated on
+   its dimensions, so asking for a bigger one is a string replace rather than
+   another request. */
+const big = (url) => url.replace(/\/\d+x\d+bb\./, '/600x600bb.');
 
 export function pickArtwork(results, wanted) {
   for (const r of results) {
     const art = r.artworkUrl600 || r.artworkUrl100;
     if (!art) continue;
-    if (nameCandidates(r).some((n) => plausible(n, wanted))) {
-      /* 100x100 is the default Apple hands back on some rows. The URL is
-         templated on its dimensions, so asking for a bigger one is a string
-         replace rather than another request. */
-      return art.replace(/\/\d+x\d+bb\./, '/600x600bb.');
-    }
+    if (nameCandidates(r).some((n) => matches(n, wanted))) return big(art);
   }
   return null;
 }
 
-async function query({ term, entity, country }) {
-  const params = new URLSearchParams({ term, entity, country, limit: '15' });
-  const res = await fetch(`${SEARCH}?${params}`);
-  if (!res.ok) throw new Error(`search ${res.status}`);
+async function ask(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`apple ${res.status}`);
   // Apple serves this as text/javascript, which res.json() refuses on some
   // Node versions. Parsing the text ourselves sidesteps the content type.
   const { results = [] } = JSON.parse(await res.text());
   return results;
 }
 
-async function artworkFor(title, entity) {
+const search = (params) => ask(`${SEARCH}?${new URLSearchParams(params)}`);
+const lookup = (params) => ask(`${LOOKUP}?${new URLSearchParams(params)}`);
+
+/* The show's own poster, via the two-step described at the top of the file. */
+async function seriesArtwork(title) {
+  for (const country of STOREFRONTS) {
+    const hits = await search({
+      term: mainTitle(title), media: 'tvShow', country, limit: '25',
+    });
+    await sleep(GAP_MS);
+
+    /* Only the id is taken from here. The episode's own artwork is a still
+       frame, which is not what a tile wants. */
+    const show = hits.find((r) => nameCandidates(r).some((n) => matches(n, title)));
+    if (!show?.artistId) continue;
+
+    const seasons = await lookup({ id: String(show.artistId), entity: 'tvSeason', country });
+    await sleep(GAP_MS);
+
+    /* The first row of a lookup is the show itself and carries no artwork; the
+       collections after it are the seasons and the box set, any of which is the
+       poster we want. The name is re-checked because an id can only have come
+       from a match, but a lookup that returns the wrong thing should still be
+       refused rather than trusted. */
+    const art = seasons
+      .filter((r) => r.wrapperType === 'collection' && (r.artworkUrl600 || r.artworkUrl100))
+      .find((r) => nameCandidates(r).some((n) => matches(n, title)));
+    if (art) return big(art.artworkUrl600 || art.artworkUrl100);
+  }
+  return null;
+}
+
+/* Films need no second call: `media=movie` answers with the film itself, and
+   its artwork is the poster. */
+async function movieArtwork(title) {
   for (const country of STOREFRONTS) {
     for (const term of [title, mainTitle(title)]) {
-      const found = pickArtwork(await query({ term, entity, country }), title);
+      const found = pickArtwork(await search({ term, media: 'movie', country, limit: '15' }), title);
       await sleep(GAP_MS);
       if (found) return found;
       // The full title and the short title are the same string for most of
@@ -146,7 +207,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
 
   const { SERIES, MOVIES } = await import('../src/data/watch.js');
   const items = wantMovies ? MOVIES : SERIES;
-  const entity = wantMovies ? 'movie' : 'tvSeason';
+  const artworkFor = wantMovies ? movieArtwork : seriesArtwork;
 
   let found = 0, missed = 0, skipped = 0;
   const gaps = [];
@@ -164,8 +225,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     if (existing[item.id]) { skipped += 1; continue; }
 
     try {
-      const url = await artworkFor(item.title, entity);
-      if (url) { existing[item.id] = url; found += 1; }
+      const url = await artworkFor(item.title);
+      if (url) { existing[item.id] = url; found += 1; console.log(`  found:     ${item.title}`); }
       else { missed += 1; gaps.push(item); console.warn(`  no poster: ${item.title}`); }
     } catch (err) {
       missed += 1;
