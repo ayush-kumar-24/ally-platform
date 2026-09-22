@@ -14,6 +14,23 @@
 @import "./styles/goals.css";
 @import "./styles/recommendations.css";
 @import "./styles/frameworks.css";
+/* admin.css is imported here rather than from AdminLayout, deliberately.
+
+   Imported from the component it lands in the lazy AdminLayout chunk, and its
+   <link> is then injected at runtime by Vite's preload helper off the chunk's
+   dependency list. In this project's production deploys that list does not
+   survive, so the stylesheet is built, uploaded, and never fetched -- the admin
+   panel renders as unstyled HTML, dark ink on the app's dark body. Pulling it
+   into the entry bundle makes it part of the one stylesheet index.html <link>s
+   directly, which does load.
+
+   Every rule in the file is scoped under .adm, so nothing here reaches the
+   founder product; the cost is the few KB it adds to the entry CSS. */
+@import "./styles/admin.css";
+/* legal.css is here for the same reason, and was the only other stylesheet
+   imported from a component -- so Terms and Privacy were unstyled in
+   production too. Its rules are all scoped under .legal-* / .grievance-*. */
+@import "./styles/legal.css";
 
 @theme {
   /* ── Ivory palette ── */

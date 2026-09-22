@@ -1,6 +1,5 @@
 import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import '../styles/legal.css';
 
 const SECTIONS = [
   {
