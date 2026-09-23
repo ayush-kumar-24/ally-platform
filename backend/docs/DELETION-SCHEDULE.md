@@ -66,26 +66,51 @@ other finds nothing to do.
 
 ## What to watch
 
-The endpoint returns a summary, and each founder logs its own line:
+### Two log lines, and the difference between them matters
+
+**`deletion sweep completed`** — exactly ONE per run, emitted by the endpoint
+unconditionally, including on the days it finds nobody due:
 
 ```json
-{"due_count": 3, "results": [
-  {"founder_id": 41, "status": "executed", "tables_touched": 33},
-  {"founder_id": 58, "status": "failed", "error": "..."}
-]}
+{"message": "deletion sweep completed",
+ "due_count": 3, "executed_count": 2, "failed_count": 1}
 ```
 
-Two things are worth an alarm:
+**`founder deletion completed`** — one per founder actually erased, from
+`AccountDeletionExecutor.run`, carrying `founder_id` and `tables_touched`.
 
-1. **Any `"status": "failed"`.** That founder has asked to be erased and has
-   not been. It will retry, but a repeat failure is a schema problem somebody
-   has to look at — most likely a new founder-scoped table that nobody added to
-   `_HARD_DELETE_TABLES` in `app/privacy/deletion_executor.py`.
-2. **The job not reporting at all for 48 hours.** A silent job and a job with
-   nothing to do look identical from outside, which is exactly the failure mode
-   that hid the `workflow_dispatch` gate above. A CloudWatch metric filter on
-   `deletion sweep completed` with an alarm on *absence* is the check that
-   would have caught it.
+These were originally the same name, on the per-founder line, and that was
+backwards in both directions. A healthy sweep on a day nobody was due logged
+nothing, so an absence alarm fired on a job that was working perfectly. And a
+dead job on a day somebody WAS due looked identical to a working one, because
+that line is the only evidence either way. The heartbeat has to come from the
+sweep, not from its outcome.
+
+`tests/test_internal_jobs_deletion_logging.py` pins this: the line on an empty
+sweep, exactly one per run, the counts as top-level JSON fields, and the
+executor no longer claiming the sweep's name.
+
+The endpoint also returns the same counts plus a per-founder breakdown, for
+anyone calling it by hand — EventBridge records no response body anywhere,
+which is why the log line and not the response is what the alarms read.
+
+### Alarms
+
+1. **Absence of `deletion sweep completed` for 48 hours.** The failure this job
+   has to be watched for is that it stops running, and a job that does not run
+   produces no output at all — so an expected line going missing is the only
+   thing that can catch it. This is the alarm that would have caught the
+   `workflow_dispatch` gate above.
+2. **`failed_count` above zero.** Those founders asked to be erased and have
+   not been. They are retried on the next sweep, but a number that does not
+   come back down is a schema problem somebody has to look at — most likely a
+   new founder-scoped table nobody added to `_HARD_DELETE_TABLES` in
+   `app/privacy/deletion_executor.py`.
+
+Both alarms read JSON fields, not the formatted message, so a refactor that
+interpolated the counts into the string would break them silently. That is what
+the last test in that file exists to stop.
+
 
 To answer "is anyone stuck?" directly, without waiting for a sweep:
 
