@@ -1939,6 +1939,95 @@ GENUINELY_NON_APPLICABLE = "GENUINELY_NON_APPLICABLE"  # it does not apply here
 HARNESS_MISS = "HARNESS_MISS"                      # WE have no answer: a bug
 
 
+#: The largest share of served answers that may be harness filler before a run
+#: stops counting as evidence.
+#:
+#: NOT a measured constant -- a judgement, set here so it is arguable in one
+#: place instead of implicit everywhere. The reasoning: FALLBACKS[persona] is a
+#: string THIS SCRIPT invented, and AnswerLedger.summary already warns that the
+#: engine scores it like any other answer. On a category holding a single
+#: question one filler answer is enough to manufacture a top finding -- RC-1088
+#: was rank 1 on exactly that. At one in five, a reader cannot tell a real
+#: pattern from an artefact of how much we happened not to know.
+#:
+#: Deflections are NOT filler. "I covered that" is a real founder state the
+#: ledger produces deliberately, and it carries no new claim for the engine to
+#: score. Only `unknown` -- the persona has no answer at all -- counts here.
+MAX_FILLER_SHARE = 0.20
+
+
+def evidence_degraded_reason(*, calls_observable: bool, made: int,
+                             failed: int) -> str | None:
+    """Why this run cannot be read as evidence about the ADAPTIVE engine, or None.
+
+    D1. This used to answer None for the single most important case. `degraded`
+    was set only in the `elif failed:` branch, which is reachable only when
+    `made > 0`, so a run where NOTHING reached a model -- a dead key, an
+    exhausted account, or scoring simply off -- printed a warning and was then
+    stamped `valid_for_diagnostic_evidence: true`. A real batch of five
+    adversarial runs came back 36 calls, $0.0000, 30 advisor failures and was
+    briefly read as engine behaviour. Zero calls is not a quiet run: with
+    ADAPTIVE_QUESTIONS the advisor IS the classifier, so zero calls means every
+    answer is unscored and every band is the neutral AMBER fallback.
+
+    `calls_observable` false means llm_call_log could not be read. That is not
+    a pass either: validity is a positive claim, and a run we could not watch
+    does not support it.
+    """
+    if not calls_observable:
+        return ("llm_call_log could not be read, so the number of provider "
+                "calls this run made is unknown. Validity is a positive claim "
+                "about the evidence and nothing here supports it.")
+    if made == 0:
+        return ("ZERO provider calls were made. With ADAPTIVE_QUESTIONS the "
+                "submit-time advisor IS the classifier, so zero calls means no "
+                "answer carried a score label and every band is the neutral "
+                "AMBER fallback. This run measures the unscored path, NOT the "
+                "adaptive engine.")
+    if failed:
+        return (f"{failed} of {made} provider calls FAILED. Every failed "
+                f"classification takes the neutral AMBER fallback and every "
+                f"failed advisor call takes the deterministic question pick, so "
+                f"this run measures the fallback path, NOT the adaptive engine.")
+    return None
+
+
+def coverage_gap_reason(*, harness_misses: int | None, filler: int | None,
+                        served: int | None,
+                        max_filler_share: float = MAX_FILLER_SHARE) -> str | None:
+    """Why the ANSWERS behind this run are not the founder's, or None.
+
+    D2. Only the question-keyed path (`--answer-map`) ever reported this, via
+    HARNESS_MISS. Persona mode -- the default, and the one every persona run
+    uses -- had no gap at all: a question the persona has no answer for is
+    filled with FALLBACKS[persona] and counted only as `_fell_back`, which
+    nothing downstream read. A desi_bar run served 11 of 46 answers (24%) from
+    that one invented string and reported clean.
+
+    `served is None` means neither ledger was kept (--repeat-answers), so
+    coverage was not measured. Same rule as D1: not measured is not a pass.
+    """
+    if harness_misses:
+        return (f"{harness_misses} questions had no prepared answer. The "
+                f"harness submitted a literal '[HARNESS_MISS: ...]' string for "
+                f"each, which the engine then scored and used as evidence. "
+                f"Build a full-coverage map with "
+                f"scripts/qa/build_persona_answer_map.py.")
+    if served is None:
+        return ("answer coverage was not measured for this run (--repeat-answers "
+                "keeps no ledger), so the share of harness filler in the "
+                "evidence is unknown.")
+    if served and filler:
+        share = filler / served
+        if share > max_filler_share:
+            return (f"{filler} of {served} served answers ({share:.0%}) were "
+                    f"generic harness filler, above the {max_filler_share:.0%} "
+                    f"ceiling. The engine scores that string like any other "
+                    f"answer, so findings built on it belong to this script, "
+                    f"not to the founder.")
+    return None
+
+
 class QuestionKeyedLedger:
     """Answers looked up by question id. No topic matching anywhere.
 
@@ -2752,35 +2841,34 @@ def run(args) -> int:
     else:
         print("  report                  NONE GENERATED")
 
-    degraded = None
-    if calls_before >= 0:
-        made = calls_after - calls_before
-        failed = fails_after - fails_before
+    calls_observable = calls_before >= 0
+    made = (calls_after - calls_before) if calls_observable else 0
+    failed = (fails_after - fails_before) if calls_observable else 0
+    if calls_observable:
         print(f"  model calls this run    {made}"
               f"   (cost ${cost_after - cost_before:.4f}, {failed} failed)")
-        if made == 0:
-            print("    ^ ZERO. Nothing reached a model. Either scoring is off, or "
-                  "the provider failed and the failover chain fell through to "
-                  "MockLLMProvider -- check the logs for an auth error.")
-        elif failed:
-            degraded = (
-                f"{failed} of {made} provider calls FAILED. Every failed "
-                f"classification takes the neutral AMBER fallback and every "
-                f"failed advisor call takes the deterministic question pick, so "
-                f"this run measures the fallback path, NOT the adaptive engine."
-            )
-            print(f"    ^ {degraded}")
     else:
         print("  model calls this run    (llm_call_log unavailable)")
+    degraded = evidence_degraded_reason(calls_observable=calls_observable,
+                                        made=made, failed=failed)
+    if degraded:
+        print(f"    ^ {degraded}")
 
-    coverage_gap = None
-    if qk is not None and qk.counts[HARNESS_MISS]:
-        coverage_gap = (
-            f"{qk.counts[HARNESS_MISS]} questions had no prepared answer. The "
-            f"harness submitted a literal '[HARNESS_MISS: ...]' string for each, "
-            f"which the engine then scored and used as evidence. Build a "
-            f"full-coverage map with scripts/qa/build_persona_answer_map.py."
-        )
+    # Filler is `unknown` only: a deflection is a real founder state the ledger
+    # produces on purpose (see AnswerLedger), not something this script made up.
+    if qk is not None:
+        harness_misses = qk.counts[HARNESS_MISS]
+        filler = served = None
+    elif ledger is not None:
+        harness_misses = 0
+        filler = ledger.unknown
+        served = ledger.matched + ledger.deflected + ledger.unknown
+    else:
+        harness_misses, filler, served = 0, None, None
+    coverage_gap = coverage_gap_reason(harness_misses=harness_misses,
+                                       filler=filler, served=served,
+                                       max_filler_share=args.max_filler_share)
+    if coverage_gap:
         print(f"\n  COVERAGE GAP            {coverage_gap}")
 
     if args.json_out:
@@ -2793,6 +2881,14 @@ def run(args) -> int:
                        "valid_for_diagnostic_evidence": not (degraded or coverage_gap),
                        "degraded_reason": degraded,
                        "coverage_gap": coverage_gap,
+                       # The inputs to the two verdicts above, so a reader can
+                       # re-derive them instead of trusting the booleans.
+                       "evidence_inputs": {
+                           "calls_observable": calls_observable,
+                           "model_calls": made, "failed_calls": failed,
+                           "harness_misses": harness_misses,
+                           "filler_answers": filler, "served_answers": served,
+                           "max_filler_share": args.max_filler_share},
                        "founder_dna": dna, "current_problem": problem,
                        "diagnosis": diagnosis,
                        "report": (report[1] if report else None)}, fh, indent=1)
@@ -2885,6 +2981,13 @@ def main(argv=None) -> int:
                         "is what the discrimination baselines were measured "
                         "with, and it inflates evidence when several questions "
                         "share a topic.")
+    p.add_argument("--max-filler-share", type=float, default=MAX_FILLER_SHARE,
+                   metavar="F",
+                   help=f"largest share of served answers that may be generic "
+                        f"harness filler before the run is reported as a "
+                        f"COVERAGE GAP and stamped invalid "
+                        f"(default {MAX_FILLER_SHARE}). Deflections do not "
+                        f"count as filler.")
     p.add_argument("--json-out", metavar="FILE", help="write the full transcript as JSON")
     args = p.parse_args(argv)
 
