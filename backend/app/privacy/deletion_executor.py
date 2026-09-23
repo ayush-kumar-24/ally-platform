@@ -252,8 +252,15 @@ class AccountDeletionExecutor:
         )
         self.db.commit()
 
+        # ONE FOUNDER, not the sweep. The name matters: CloudWatch has a metric
+        # filter on "deletion sweep completed" with an alarm on ABSENCE, and
+        # this line only appears when somebody was actually erased. Leaving the
+        # sweep's name on it meant a healthy job with nothing due logged
+        # nothing, and the alarm read that as the job being dead -- while a
+        # genuinely dead job on a day somebody was due would have looked fine.
+        # The sweep's own line lives in api/v1/webhooks/internal_jobs.py.
         logger.info(
-            "deletion sweep completed",
+            "founder deletion completed",
             extra={"founder_id": founder_id, "tables_touched": len(hard_deleted)},
         )
         return DeletionResult(

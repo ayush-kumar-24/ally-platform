@@ -101,7 +101,27 @@ def process_deletions(
             db.rollback()
             results.append({"founder_id": founder_id, "status": "failed", "error": str(exc)})
 
-    return {"due_count": len(due), "results": results}
+    executed = sum(1 for r in results if r["status"] == "executed")
+    failed = len(results) - executed
+
+    # THE HEARTBEAT. Exactly one line per sweep, and unconditionally -- a run
+    # that found nobody due has to say so, or the CloudWatch alarm watching for
+    # the ABSENCE of this line fires on a perfectly healthy job. Which is the
+    # more useful signal precisely because the failure it guards against is a
+    # job that stops running: a job that does not run produces no output, so
+    # nothing but an expected line going missing can catch it.
+    #
+    # `failed` is worth an alarm of its own. Those founders asked to be erased
+    # and have not been; they are retried on the next sweep, but a number that
+    # does not come back down is a schema problem somebody has to look at.
+    logger.info(
+        "deletion sweep completed",
+        extra={"due_count": len(due), "executed_count": executed,
+               "failed_count": failed},
+    )
+
+    return {"due_count": len(due), "executed_count": executed,
+            "failed_count": failed, "results": results}
 
 
 @router.post(

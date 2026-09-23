@@ -13,8 +13,8 @@
 import { get, post } from './api';
 
 export const CURRENT_VERSIONS = {
-  terms: '1.0',
-  privacy: '1.0',
+  terms: '1.1',
+  privacy: '1.1',
 };
 
 /** Consent captured before an authenticated identity exists, awaiting flush. */
@@ -42,6 +42,34 @@ export function recordConsent({ agreeTerms, agreeDiagnosis, ageConfirmed }) {
 /** Current consent + full history + whether re-consent is due. */
 export function getConsents() {
   return get('/consents');
+}
+
+/**
+ * Re-accept the CURRENT documents, carrying the founder's existing choices
+ * forward.
+ *
+ * Called when `needs_reconsent` is true -- the founder agreed to an older
+ * version of the Terms or Privacy Policy and has now been shown the new one.
+ *
+ * WHAT THIS MUST NOT DO is quietly reset anything. A new ledger row is a
+ * complete statement of what the founder agrees to, so posting defaults here
+ * would revoke the optional diagnosis consent of everyone who re-accepts a
+ * wording change -- a silent opt-out nobody asked for. Their existing
+ * `agree_diagnosis` is read back and carried across.
+ *
+ * `age_confirmed` is passed through AS IS, including null. Null means the
+ * question was never put to them, and sending `true` would manufacture an
+ * attestation they never made -- the one thing a consent record exists to
+ * rule out.
+ */
+export async function acceptUpdatedPolicies() {
+  const status = await getConsents();
+  const current = status?.current ?? {};
+  return recordConsent({
+    agreeTerms: true,
+    agreeDiagnosis: Boolean(current.agree_diagnosis),
+    ageConfirmed: current.age_confirmed ?? null,
+  });
 }
 
 // ── Deferred capture ─────────────────────────────────────────────────────────

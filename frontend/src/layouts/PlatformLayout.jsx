@@ -1,5 +1,6 @@
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import DeletionPendingGate from '../components/DeletionPendingGate';
+import ReconsentGate from '../components/ReconsentGate';
 import PlanRequiredGate from '../components/PlanRequiredGate';
 import HelpWidget from '../components/HelpWidget';
 import { useApp } from '../context/AppContext';
@@ -606,6 +607,10 @@ export default function PlatformLayout() {
           feature server-side, so the founder must meet it once on the way
           in rather than as a silent 403 somewhere deep in the product. */}
       <DeletionPendingGate />
+      {/* After DeletionPendingGate: someone on their way out should not be
+          asked to re-agree to anything first. That gate is undismissable, so
+          it wins regardless; the order just makes the intent readable. */}
+      <ReconsentGate />
       <PlanRequiredGate />
       <ProductTour />
       {/* Fixed-position, so it renders last and belongs to no column. */}

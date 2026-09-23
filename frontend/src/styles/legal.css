@@ -258,6 +258,9 @@
   color: var(--on-dark-muted, #a7c0b4);
   margin: 0;
 }
+/* Sections are now one <p> per paragraph, so the gap goes BETWEEN them and the
+   section's own spacing above and below is left to its container. */
+.legal-section-body + .legal-section-body { margin-top: 0.9em; }
 
 /* ── Grievance Officer card ── */
 .grievance-card {

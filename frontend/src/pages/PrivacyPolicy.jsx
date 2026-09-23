@@ -5,7 +5,7 @@ const SECTIONS = [
   {
     id: 'overview',
     title: '1. Overview',
-    content: `GoXL Consulting Solutions Pvt. Ltd. ("GoXL", "we", "us", "our") operates the Ally platform ("Platform"). This Privacy Policy explains how we collect, use, store, disclose, and protect your personal data when you access or use the Platform. This policy is compliant with India's Digital Personal Data Protection Act, 2023 ("DPDP Act"), and applicable provisions of the Information Technology Act, 2000.`,
+    content: `GoXL Consulting Solutions Pvt. Ltd. ("GoXL", "we", "us", "our") operates the Ally platform ("Platform"). This Privacy Policy explains how we collect, use, store, disclose, and protect your personal data when you access or use the Platform. This policy is written to meet India's Digital Personal Data Protection Act, 2023 ("DPDP Act") and applicable provisions of the Information Technology Act, 2000. It describes the commitments we make to you; it is not by itself a certification that every operational control behind those commitments has been independently verified.`,
   },
   {
     id: 'data-collected',
@@ -20,7 +20,7 @@ const SECTIONS = [
   {
     id: 'legal-basis',
     title: '3. Legal Basis for Processing',
-    content: `We process your personal data on the following legal bases: (a) Consent — you provide explicit consent at the onboarding stage, which you may withdraw at any time without affecting prior processing; (b) Contract — processing is necessary to deliver the Platform services you have requested; (c) Legitimate Interests — to improve our AI models using anonymised, aggregated insights; (d) Legal Obligation — to comply with applicable Indian laws and regulatory requirements. Under the DPDP Act, you are the "Data Principal" and GoXL is the "Data Fiduciary" with respect to your personal data.`,
+    content: `Under the DPDP Act you are the "Data Principal" and GoXL is the "Data Fiduciary". The Act allows personal data to be processed on your consent, or for one of the specific "legitimate uses" it lists in Section 7 — it does not have a general "legitimate interests" basis of the kind found in European law. (a) Consent — this is our primary basis. You give it explicitly at sign-up, in two separate ticks: one for these documents, and one, entirely optional, for processing your business diagnostic answers. You may withdraw either at any time, which stops further processing from that point without making earlier processing unlawful; (b) Legitimate uses under Section 7 — for the limited purposes the Act itself permits, including complying with a legal obligation or a court order. Improving our models is NOT one of these and we do not claim it as one. Where we improve our models, we do so using data that has been aggregated and stripped of anything that identifies you; data in that state is no longer personal data and falls outside the Act. If we ever wanted to use your identifiable data for model improvement, we would come back and ask you for separate consent.`,
   },
   {
     id: 'how-we-use',
@@ -40,12 +40,16 @@ const SECTIONS = [
   {
     id: 'rights',
     title: '7. Your Rights Under the DPDP Act',
-    content: `As a Data Principal, you have the following rights under the DPDP Act, 2023: (a) Right to Access — you may request a summary of the personal data we hold about you; (b) Right to Correction — you may request correction of inaccurate or incomplete personal data; (c) Right to Erasure — you may request deletion of your personal data (subject to legal retention obligations); (d) Right to Grievance Redressal — you may raise a complaint with our Grievance Officer (see Section 10); (e) Right to Withdraw Consent — you may withdraw consent at any time; (f) Right to Nominate — you may nominate another individual to exercise your rights in the event of your death or incapacity. To exercise any right, email us at privacy@goxl.in or info@goxl.in.`,
+    content: `As a Data Principal, you have the following rights under the DPDP Act, 2023: (a) Right to Access — you may request a summary of the personal data we hold about you; (b) Right to Correction — you may request correction of inaccurate or incomplete personal data; (c) Right to Erasure — you may request deletion of your personal data (subject to legal retention obligations); (d) Right to Grievance Redressal — you may raise a complaint with our Grievance Officer (see Section 10); (e) Right to Withdraw Consent — you may withdraw consent at any time; (f) Right to Nominate — you may nominate another individual to exercise your rights in the event of your death or incapacity.
+
+The fastest way to exercise most of these is inside your account, under Profile → Privacy Centre. From there you can download everything we hold about you or a portable copy of what you gave us, see a summary of what we store, request a correction, withdraw your consent, pause processing of your data, and delete your account — each of which takes effect immediately or, for deletion, after a 30-day window in which you can change your mind. You do not need to email anyone or wait for us to action it. If you would rather write to us, or you cannot sign in, email privacy@goxl.in or info@goxl.in and we will action it for you.`,
   },
   {
     id: 'security',
     title: '8. Data Security',
-    content: `We implement industry-standard technical and organisational safeguards to protect your data, including: TLS 1.3 encryption for all data in transit; AES-256 encryption for data at rest; access controls limiting data access to authorised personnel only; regular security audits and vulnerability assessments; breach notification procedures in compliance with the DPDP Act. While we take every precaution, no system is 100% secure. In the event of a data breach that poses significant risk to your rights, we will notify you as required by law.`,
+    content: `We protect your data with the following measures: all traffic between you and the Platform travels over encrypted connections (TLS); our database is not reachable from the public internet and is accessible only to our own server-side code, never directly from a browser; it is encrypted at rest by our cloud database provider; access by our personnel is restricted to those who need it and is logged; and we operate the breach procedure described below. We describe here only the controls we actually operate — where an independent audit or penetration test has been carried out, we will say so specifically rather than claim it in general terms. No system is completely secure, and we do not claim otherwise.
+
+If a personal data breach affects your data, we will inform the Data Protection Board of India and every affected person, in the form and manner the DPDP Act requires. We do not apply our own severity threshold before telling you: the obligation under Section 8(6) of the Act applies to a personal data breach, not only to a serious one.`,
   },
   {
     id: 'cookies',
@@ -69,6 +73,13 @@ const SECTIONS = [
     content: `For any privacy-related questions not addressed by this policy, please contact us at info@goxl.in. For formal complaints or data rights requests, please use the Grievance Officer contact in Section 10.`,
   },
 ];
+
+/* Split a section body on blank lines. Kept here rather than reaching for a
+   Markdown renderer: these strings are plain prose and the only structure
+   they carry is the paragraph break. */
+const paragraphs = (text) => String(text || "").split(/\n\s*\n/)
+  .map((t) => t.trim())
+  .filter(Boolean);
 
 export default function PrivacyPolicy() {
   useEffect(() => {
@@ -106,15 +117,15 @@ export default function PrivacyPolicy() {
           <div className="legal-meta-row">
             <span className="legal-meta-item">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
-              Effective: 1 July 2026
+              Effective: 6 October 2026
             </span>
             <span className="legal-meta-item">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M9 12h6m-3-3v6"/><circle cx="12" cy="12" r="9"/></svg>
-              Version 1.0
+              Version 1.1
             </span>
             <span className="legal-meta-item">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-              DPDP Act 2023 Compliant
+              Written for the DPDP Act, 2023
             </span>
           </div>
         </div>
@@ -192,7 +203,12 @@ export default function PrivacyPolicy() {
               ) : (
                 <section key={s.id} id={s.id} className="legal-section">
                   <h2 className="legal-section-title">{s.title}</h2>
-                  <p className="legal-section-body">{s.content}</p>
+                  {/* One <p> per paragraph. A single <p> collapses the blank lines in
+                      these strings into a space, which turned the longer sections into
+                      one unbroken wall of text. */}
+                  {paragraphs(s.content).map((para, i) => (
+                    <p className="legal-section-body" key={i}>{para}</p>
+                  ))}
                 </section>
               )
             )}

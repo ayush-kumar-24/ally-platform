@@ -25,7 +25,7 @@ const SECTIONS = [
   {
     id: 'data',
     title: '4. Your Data & Content',
-    content: `You retain full ownership of all business information, diagnostic inputs, and data you provide to the Platform ("Your Data"). By submitting Your Data, you grant GoXL a limited, non-exclusive, royalty-free licence to process Your Data solely to deliver the Platform's services to you. We do not sell, rent, or share Your Data with third parties for advertising or marketing purposes. Anonymised, aggregated insights may be used internally to improve our AI models.`,
+    content: `You retain full ownership of all business information, diagnostic inputs, and data you provide to the Platform ("Your Data"). By submitting Your Data, you grant GoXL a limited, non-exclusive, royalty-free licence to process Your Data for two purposes and no others: (a) to deliver the Platform's services to you; and (b) to improve our models, using only data that has first been aggregated across users and stripped of anything that identifies you or your business. Your identifiable data is not used to improve our models. We do not sell, rent, or share Your Data with third parties for advertising or marketing purposes. How each of these is handled, and the legal basis for it, is set out in our Privacy Policy.`,
   },
   {
     id: 'prohibited',
@@ -64,6 +64,13 @@ const SECTIONS = [
   },
 ];
 
+/* Split a section body on blank lines. Kept here rather than reaching for a
+   Markdown renderer: these strings are plain prose and the only structure
+   they carry is the paragraph break. */
+const paragraphs = (text) => String(text || "").split(/\n\s*\n/)
+  .map((t) => t.trim())
+  .filter(Boolean);
+
 export default function TermsOfService() {
   useEffect(() => {
     document.title = 'Terms of Service — Ally by GoXL';
@@ -100,11 +107,11 @@ export default function TermsOfService() {
           <div className="legal-meta-row">
             <span className="legal-meta-item">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
-              Effective: 1 July 2026
+              Effective: 6 October 2026
             </span>
             <span className="legal-meta-item">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M9 12h6m-3-3v6"/><circle cx="12" cy="12" r="9"/></svg>
-              Version 1.0
+              Version 1.1
             </span>
             <span className="legal-meta-item">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
@@ -136,7 +143,12 @@ export default function TermsOfService() {
             {SECTIONS.map((s) => (
               <section key={s.id} id={s.id} className="legal-section">
                 <h2 className="legal-section-title">{s.title}</h2>
-                <p className="legal-section-body">{s.content}</p>
+                {/* One <p> per paragraph. A single <p> collapses the blank lines in
+                    these strings into a space, which turned the longer sections into
+                    one unbroken wall of text. */}
+                {paragraphs(s.content).map((para, i) => (
+                  <p className="legal-section-body" key={i}>{para}</p>
+                ))}
               </section>
             ))}
           </article>
