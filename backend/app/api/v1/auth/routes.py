@@ -152,12 +152,27 @@ def start_session(
     identity: AuthUser = Depends(get_upstream_identity),
     db: Session = Depends(get_db),
 ):
-    """Exchange a verified Google/LinkedIn (Supabase) token for backend tokens.
+    """Exchange a verified upstream identity token for Ally's own tokens.
+
+    WHICH TOKEN TO SEND depends on AUTH_PROVIDER, because the upstream systems
+    differ:
+
+      supabase  the Supabase access token
+      cognito   the Cognito **ID** token -- not the access token. The ID token
+                is the one carrying email and email_verified, which
+                provisioning needs; an access token from the same pool passes
+                every signature check and would provision a founder with no
+                address.
+      dev       any id as the bearer token, or none for the default dev
+                founder. Dev identities are not provisioned.
 
     On a real first login this also creates the founder row (provisioning); on
-    later logins it just finds it. Send the Supabase access token as the bearer
-    token. In dev mode, send any id as the bearer token (or none for the default
-    dev founder) -- dev identities are not provisioned.
+    later logins it just finds it.
+
+    Whatever the provider, what comes back is Ally's own access and refresh
+    pair. Nothing downstream talks to the identity provider again, which is why
+    changing AUTH_PROVIDER does not sign existing sessions out -- it only
+    changes what this one endpoint will accept.
     """
     ip = request.client.host if request.client else "0.0.0.0"
     founder, created, waitlisted = ensure_founder_or_waitlist(identity, db, ip_address=ip)

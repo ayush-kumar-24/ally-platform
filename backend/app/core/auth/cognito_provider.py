@@ -36,12 +36,24 @@ class CognitoAuthProvider(AuthProvider):
         self._jwks_url = f"{self._issuer}/.well-known/jwks.json"
 
         self._keys: dict[str, dict] = {}
-        self._fetched_at = 0.0
+        #: None until the first successful fetch, and NOT 0.0. The throttle
+        #: below compares against time.monotonic(), whose zero point is
+        #: arbitrary -- on a freshly booted Fargate microVM it starts near
+        #: zero. With 0.0 as the initial value, the very first fetch looked
+        #: like one that had just happened and was skipped, so every token was
+        #: rejected as "signed by an unknown Cognito key" until the process had
+        #: been alive a minute. A sentinel that cannot be mistaken for a
+        #: timestamp is the fix; `test_keys_are_fetched_on_the_first_request_
+        #: of_a_fresh_process` is what keeps it.
+        self._fetched_at: float | None = None
         self._lock = threading.Lock()
 
     def _refresh_keys(self) -> None:
         with self._lock:
-            if time.monotonic() - self._fetched_at < _JWKS_MIN_REFRESH_SECONDS:
+            if (
+                self._fetched_at is not None
+                and time.monotonic() - self._fetched_at < _JWKS_MIN_REFRESH_SECONDS
+            ):
                 return
 
             try:
