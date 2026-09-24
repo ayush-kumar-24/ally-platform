@@ -1,19 +1,28 @@
 """One-off: everything the industry-adaptive selection needs, in one command.
 
-WHY A SCRIPT AND NOT `alembic upgrade head`. Two pre-existing blockers, neither
-introduced by this work:
+WHY A SCRIPT AND NOT `alembic upgrade head`. One blocker, and it is scoped to
+the TEST database, not production.
 
-  1. `alembic_version` carries an ORPHANED STAMP -- f8a3c26e4b91, a revision
-     that exists in no file in this repository. Alembic refuses to start from a
-     revision it cannot find. Already documented in
-     scripts/_apply_dimension_code_column.py, which hit the same wall and solved
-     it the same way.
-  2. The migration graph has TEN HEADS, so even from a valid stamp
-     `upgrade head` fails with "Multiple head revisions are present".
+The Supabase instance carries an ORPHANED STAMP in alembic_version --
+f8a3c26e4b91, a revision that exists in no file in this repository -- so alembic
+refuses to start from it there, and it is genuinely behind besides (the head
+migration's RLS work is absent). Already documented in
+scripts/_apply_dimension_code_column.py, which hit the same wall.
 
-This script does not touch `alembic_version`. Reconciling the stamp and the ten
-heads is separate work, and mixing it with a schema fix would make both harder
-to reason about.
+PRODUCTION IS FINE. RDS has a valid stamp: backend-deploy.yml runs
+`alembic upgrade head` on every deploy and hard-fails on a non-zero exit, and it
+has been succeeding. On RDS this script is the no-op that migration would have
+made anyway, which is why every statement is idempotent.
+
+An earlier version of this docstring also claimed "the migration graph has TEN
+HEADS". THAT WAS WRONG -- it came from a hand-rolled parser that missed merge
+revisions and saw 91 of the real 130. Alembic reports exactly ONE head,
+c9f41b8e3a07. Corrected rather than deleted, because the claim was handed to the
+AWS team.
+
+This script does not touch `alembic_version`. Reconciling Supabase's stamp needs
+an audit of which migrations actually ran there, not a blind `alembic stamp
+head`, and that is separate from a schema fix.
 
 WHY A SCRIPT AND NOT `psql -f data/rds/00*.sql`. The SQL files say the same
 thing and are the right artifact to hand someone. But the production container

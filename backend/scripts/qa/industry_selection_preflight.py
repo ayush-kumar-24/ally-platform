@@ -147,6 +147,49 @@ def _founder(db, industry_code: str | None, stage_order: int):
     return founder, industry_name, stage
 
 
+
+class _TurnByTurn:
+    """The repository, with the answers this simulation has pretended to give.
+
+    WHY THIS IS NOT OPTIONAL. The pillar round-robin -- the thing that stops one
+    subject eating the whole budget -- keys on ANSWERED counts, read from the
+    database per turn. A simulation that ranks the bank once, at zero answers,
+    therefore sees every pillar tied at round 0 forever and reports whatever the
+    lower sort terms happen to prefer.
+
+    Measured: ranking once at turn 0 for a SaaS founder at Expansion showed
+    three pillars across 32 questions and none of Founder Readiness, Team &
+    Leadership or Strategic Clarity -- which reads exactly like the starvation
+    bug the opening-block cap exists to prevent, and is not. It is the snapshot
+    lying. Stepping turn by turn, feeding each pick back as an answer, is the
+    only way to see the sequence a founder actually gets.
+
+    Wraps rather than subclasses so every other method -- and the repository's
+    own per-request memoisation -- is untouched.
+    """
+
+    def __init__(self, inner):
+        self._inner = inner
+        self._answered: dict[tuple[int, str], int] = {}
+        self._asked: set[int] = set()
+
+    def __getattr__(self, name):
+        return getattr(self._inner, name)
+
+    def record(self, question, pillar_id):
+        self._asked.add(question.question_id)
+        if pillar_id is not None:
+            key = (pillar_id, question.category)
+            self._answered[key] = self._answered.get(key, 0) + 1
+
+    def answered_count_per_pillar_category(self, session_id):
+        return dict(self._answered)
+
+    def list_candidate_questions(self, **kwargs):
+        return [q for q in self._inner.list_candidate_questions(**kwargs)
+                if q.question_id not in self._asked]
+
+
 def simulate(db, industry_code: str | None, stage_order: int, show: int):
     repo = DiagnosisRepository(db)
     engine = QuestionSelectionEngine(repo)
@@ -177,27 +220,47 @@ def simulate(db, industry_code: str | None, stage_order: int, show: int):
         print("\n  Nothing eligible -- that is a data problem, not a selection one.")
         return
 
-    ordered = engine.order_candidates(candidates, session, founder)
     owned = repo.question_owned_by_industry() if _safe(repo) else {}
     code = (industry_code or "").casefold()
     pillar_of = repo.problem_to_pillar()
 
-    print(f"\n  The first {min(show, budget)} questions, in order:\n")
+    # TURN BY TURN, not one ranking. See _TurnByTurn for why a single snapshot
+    # reports pillar starvation that does not exist.
+    sim = _TurnByTurn(repo)
+    walker = QuestionSelectionEngine(sim)
+    turns = min(show, budget)
+
+    print(f"\n  The first {turns} questions, in the order a founder gets them:\n")
     seen_pillars: set[int] = set()
-    for n, q in enumerate(ordered[:min(show, budget)], 1):
+    per_pillar: dict[int, int] = {}
+    for n in range(1, turns + 1):
+        session.questions_answered_count = n - 1
+        q = walker.select_next_question(session, founder)
+        if q is None:
+            print(f"  {n:>4}. (bank exhausted)")
+            break
+        pillar = pillar_of.get(q.problem_id)
+        sim.record(q, pillar)
+        if pillar:
+            seen_pillars.add(pillar)
+            per_pillar[pillar] = per_pillar.get(pillar, 0) + 1
         industries = owned.get(q.question_id, frozenset())
         tag = ("[OWN INDUSTRY]" if any(c.casefold() == code for c in industries)
                else f"[{'/'.join(sorted(industries))}]" if industries else "[universal]")
-        pillar = pillar_of.get(q.problem_id)
-        seen_pillars.add(pillar) if pillar else None
         marker = "|" if n <= block else " "
         print(f"  {marker}{n:>3}. {tag:<16} P{pillar or '?'} {q.category[:22]:<22} "
-              f"{q.question_text[:60]}")
+              f"{q.question_text[:58]}")
     if block:
         print(f"\n  ( | marks the {block}-question industry opening block )")
-    print(f"\n  pillars touched in those {min(show, budget)}: "
-          f"{', '.join(PILLARS.get(p, '?') for p in sorted(seen_pillars))}")
+    missing = sorted(set(scope.pillars if scope else PILLARS) - seen_pillars)
+    print(f"\n  PILLAR COVERAGE over those {turns}:")
+    for pid in sorted(scope.pillars if scope else PILLARS):
+        got = per_pillar.get(pid, 0)
+        flag = "   <- NEVER ASKED" if got == 0 else ""
+        print(f"    {PILLARS.get(pid, pid):<22} {got:>3}{flag}")
+    print(f"  {'ALL PILLARS COVERED' if not missing else 'PILLARS MISSED: ' + str(len(missing))}")
 
+    ordered = engine.order_candidates(candidates, session, founder)
     foreign = [q for q in ordered
                if (i := owned.get(q.question_id)) and not any(c.casefold() == code for c in i)]
     print(f"\n  OTHER INDUSTRIES' QUESTIONS STILL ELIGIBLE: {len(foreign)}"
