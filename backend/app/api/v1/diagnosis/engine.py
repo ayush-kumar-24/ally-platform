@@ -22,6 +22,8 @@ from app.api.v1.diagnosis.context_scope import (
 from app.api.v1.diagnosis.industry_scope import (
     excluded_question_ids,
     industry_id_for,
+    normalise_weights,
+    relevance_ranker,
 )
 from app.api.v1.diagnosis.repository import DiagnosisRepository
 from app.api.v1.diagnosis.stage_scope import resolve_scope
@@ -156,9 +158,11 @@ class QuestionSelectionEngine:
         candidates = self.candidate_questions(session, founder)
         if not candidates:
             return None
-        return min(candidates, key=self._sort_key_for(session))
+        return min(candidates, key=self._sort_key_for(session, founder))
 
-    def _round_robin_key_for(self, session: DiagnosisSession):
+    def _round_robin_key_for(
+        self, session: DiagnosisSession, founder: Founder | None = None
+    ):
         """The GATHER-phase key: one question per pillar before any pillar
         gets a second.
 
@@ -225,22 +229,76 @@ class QuestionSelectionEngine:
         for (pillar_id, _category), count in per_cat.items():
             per_pillar[pillar_id] = per_pillar.get(pillar_id, 0) + count
 
+        # THIRD term, and its position is the whole design. Industry decides
+        # WHICH question represents a (pillar, category) in a round; the two
+        # coverage terms above still decide how many rounds each pillar and each
+        # category gets. Promote it above them and a well-stocked industry -- 60
+        # seeded questions, all CORE -- would take rounds from pillars that have
+        # not been asked about at all, which is the exact starvation this key was
+        # written to stop. Demote it below `_sort_key` and it could never change
+        # anything, because question_id is a total order.
+        industry_rank = self._industry_rank_for(session, founder)
+
         def key(question: Question):
             pillar_id = problem_to_pillar.get(question.problem_id)
             # A question with no pillar cannot advance pillar coverage, so it
             # sorts behind every pillar-bearing question rather than competing
             # for a round it does not belong to.
             if pillar_id is None:
-                return (len(per_pillar) + 1_000, 0, *_sort_key(question))
+                return (len(per_pillar) + 1_000, 0,
+                        industry_rank(question), *_sort_key(question))
             return (
                 per_pillar.get(pillar_id, 0),
                 per_cat.get((pillar_id, question.category), 0),
+                industry_rank(question),
                 *_sort_key(question),
             )
 
         return key
 
-    def _sort_key_for(self, session: DiagnosisSession):
+    def _industry_rank_for(
+        self, session: DiagnosisSession, founder: Founder | None
+    ):
+        """`question -> relevance rank` for this founder's industry.
+
+        Returns a CONSTANT ranker -- one that cannot reorder anything -- rather
+        than raising, whenever the industry is unknown or any of the three reads
+        fails. Twenty-six of the thirty industries carry no
+        `top_pain_point_weights` today, so "no weight signal" is the ordinary
+        state and not a fault; those founders still get the mapping signal, and
+        a founder with neither gets exactly the pre-industry order.
+
+        Same degrade contract as `_pillar_map_or_none` and
+        `_detected_root_cause_ids`: a preference must never be able to stop the
+        assessment from finding a next question.
+        """
+        industry_id = industry_id_for(session, founder)
+        if industry_id is None:
+            return relevance_ranker(None, None, None)
+
+        try:
+            with self.repository.db.begin_nested():
+                code = self.repository.industry_code(industry_id)
+                applicability = (
+                    self.repository.question_applicability_for_industry(code)
+                    if code else {}
+                )
+                weights = normalise_weights(
+                    self.repository.industry_pain_point_weights(industry_id)
+                )
+                problem_to_code = self.repository.problem_to_code() if weights else {}
+        except Exception:                                  # noqa: BLE001
+            logger.warning(
+                "Industry relevance unavailable; using the default order",
+                extra={"stage": "industry_scope", "session_id": session.session_id},
+            )
+            return relevance_ranker(None, None, None)
+
+        return relevance_ranker(applicability, problem_to_code, weights)
+
+    def _sort_key_for(
+        self, session: DiagnosisSession, founder: Founder | None = None
+    ):
         """The ranking key, biased by what the session is currently trying to do.
 
         Below the validate threshold the job is to GATHER: cover all six
@@ -258,7 +316,7 @@ class QuestionSelectionEngine:
         so a session in validate mode that runs out of targeted questions simply
         continues with the normal order rather than ending early.
         """
-        base = self._round_robin_key_for(session)
+        base = self._round_robin_key_for(session, founder)
 
         targeted = self._detected_root_cause_ids(session)
         if not targeted:
@@ -683,15 +741,25 @@ class QuestionSelectionEngine:
         return problem_to_dimension or None
 
     def order_candidates(
-        self, candidates: list[Question], session: DiagnosisSession | None = None
+        self,
+        candidates: list[Question],
+        session: DiagnosisSession | None = None,
+        founder: Founder | None = None,
     ) -> list[Question]:
         """The deterministic ask-order -- the shortlist head is the default pick.
 
         Takes the session so the adaptive advisor's shortlist carries the same
         validate-mode bias as the direct pick; without it the LLM would be handed
         a broad shortlist while the deterministic path was targeting confirmation.
+
+        Takes the founder for the same reason, one axis over: the shortlist must
+        carry the same INDUSTRY bias too. The session's snapshot is normally
+        enough on its own (`start_session` writes it), so the founder is optional
+        and is only the fallback for a session that predates the snapshot.
         """
-        key = self._sort_key_for(session) if session is not None else _sort_key
+        key = (
+            self._sort_key_for(session, founder) if session is not None else _sort_key
+        )
         return sorted(candidates, key=key)
 
     def resolve_follow_up(self, session: DiagnosisSession, answer_question: Question) -> None:

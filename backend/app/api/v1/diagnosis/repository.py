@@ -31,6 +31,10 @@ class DiagnosisRepository:
         #: Same, for industry_code(); keyed by industry_id, so a session that
         #: asks twice does not re-read the same single row.
         self._industry_code: dict[int, str | None] = {}
+        #: Same, for question_applicability_for_industry(), keyed by industry_code.
+        self._question_applicability: dict[str, dict[int, str]] = {}
+        #: Same, for industry_pain_point_weights(), keyed by industry_id.
+        self._industry_weights: dict[int, dict] = {}
 
     # --- Sessions ---
 
@@ -391,6 +395,56 @@ class DiagnosisRepository:
                 question_id: frozenset(codes) for question_id, codes in owned.items()
             }
         return self._question_owned_by_industry
+
+    def question_applicability_for_industry(self, industry_code: str) -> dict[int, str]:
+        """{question_id: 'primary' | 'supporting'} for ONE industry.
+
+        The grading `question_owned_by_industry` deliberately ignores: ownership
+        decides eligibility, this decides order. Kept as a separate, narrower
+        query rather than widening that map because this one is scoped to a
+        single industry (~60 rows) while that one is the whole table (~1,800),
+        and a caller must not be able to mistake one for the other.
+
+        Memoised per industry_code for the life of this repository -- one
+        request -- for the same reason as the maps above: `select_next_question`
+        and `order_candidates` both ask.
+        """
+        key = (industry_code or "").strip().casefold()
+        if key not in self._question_applicability:
+            rows = self.db.execute(
+                _text(
+                    "select question_id, applicability_type "
+                    "from question_industry_mapping "
+                    "where lower(industry_code) = :c "
+                    "  and applicability_type is not null"
+                ),
+                {"c": key},
+            ).all()
+            self._question_applicability[key] = {
+                int(question_id): str(applicability)
+                for question_id, applicability in rows
+            }
+        return self._question_applicability[key]
+
+    def industry_pain_point_weights(self, industry_id: int) -> dict:
+        """`industries.top_pain_point_weights` for one industry, or {}.
+
+        Returned raw -- shaping and validating it is `industry_scope`'s job, not
+        this layer's, and the column's shape was never formalised (see
+        `reasoning/config.IndustryProbabilityStrategy`). {} for a missing row, a
+        NULL column, or the `'{}'` default that twenty-six of the thirty
+        industries currently carry.
+        """
+        if industry_id not in self._industry_weights:
+            raw = self.db.execute(
+                _text(
+                    "select top_pain_point_weights from industries "
+                    "where industry_id = :i"
+                ),
+                {"i": industry_id},
+            ).scalar()
+            self._industry_weights[industry_id] = raw if isinstance(raw, dict) else {}
+        return self._industry_weights[industry_id]
 
     def industry_code(self, industry_id: int) -> str | None:
         """`industries.industry_code` for one id, or None when there is no row.

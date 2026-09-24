@@ -42,9 +42,47 @@ unreachable.
 
 from __future__ import annotations
 
-from typing import Any
+from decimal import Decimal, InvalidOperation
+from typing import Any, Callable
 
 from app.core.logger import logger
+
+# --- Relevance ranks -------------------------------------------------------
+#
+# Lower sorts first. These are a PREFERENCE, never an eligibility test: the rank
+# is the FOURTH term of the selection key, below pillar coverage and below
+# category coverage within a pillar, so it decides which question represents a
+# (pillar, category) in a given round and never how many rounds anything gets.
+# Putting it any higher would let a well-stocked industry starve a pillar, which
+# is the exact failure `engine._round_robin_key_for` exists to prevent.
+
+#: `question_industry_mapping.applicability_type = 'primary'` -- a defining
+#: question for this industry.
+PRIMARY_RANK = 0
+#: `applicability_type = 'supporting'` -- relevant but not core.
+SUPPORTING_RANK = 1
+#: A UNIVERSAL question whose problem this industry weights heavily. Ranks below
+#: the industry's own questions because a question written for the industry is a
+#: stronger statement of relevance than a weight applied to a general one.
+STRONG_WEIGHT_RANK = 2
+#: A universal question whose problem this industry weights mildly.
+WEAK_WEIGHT_RANK = 3
+#: Everything else. The default, and the rank the whole catalogue falls to when
+#: no industry is known or no industry data can be read -- which reproduces the
+#: pre-industry order exactly.
+UNIVERSAL_RANK = 4
+
+#: Where `industries.top_pain_point_weights` stops being a nudge and starts
+#: being a statement. The seeded values are exactly 1.05, 1.15, 1.3 and 1.5, so
+#: this splits them 2-2 rather than cutting through a cluster: 1.3 and 1.5 are
+#: "this is what goes wrong in this industry", 1.05 and 1.15 are "worth a little
+#: more than average". Inclusive, so a weight of exactly 1.3 is strong.
+STRONG_WEIGHT_THRESHOLD = Decimal("1.3")
+
+#: The rank every question gets when there is nothing to rank on. A constant
+#: means the term contributes nothing to the ordering, so the key degrades to
+#: exactly what it was before industry existed.
+_NO_SIGNAL: Callable[[Any], int] = lambda _question: UNIVERSAL_RANK  # noqa: E731
 
 
 def industry_id_for(session: Any, founder: Any) -> int | None:
@@ -110,3 +148,80 @@ def excluded_question_ids(
         for question_id, industries in owned_by_industry.items()
         if not any(code.strip().casefold() == wanted for code in industries)
     )
+
+
+def normalise_weights(raw: Any) -> dict[str, Decimal]:
+    """`industries.top_pain_point_weights` as {problem_code: weight}, or {}.
+
+    The column is free-shaped JSONB whose format was never formalised -- see
+    `reasoning/config.IndustryProbabilityStrategy`, which says so in as many
+    words. Seeded rows look like {"IVA-001": 1.5, "SAL-005": 1.5}, but only four
+    of the thirty industries have a value at all; the other twenty-six carry the
+    `'{}'` default because the migration seeds only name, code and description.
+
+    So this is deliberately forgiving and never raises: anything that is not a
+    mapping, any key that is not a string, and any value that will not read as a
+    number is skipped rather than failing the sort. A weight the shape of which
+    we cannot understand is no signal, and no signal is the ordinary case here
+    rather than an error.
+    """
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, Decimal] = {}
+    for code, value in raw.items():
+        if not isinstance(code, str) or not code.strip():
+            continue
+        if isinstance(value, bool):                # bool is an int; not a weight
+            continue
+        try:
+            out[code.strip().upper()] = Decimal(str(value))
+        except (InvalidOperation, TypeError, ValueError):
+            continue
+    return out
+
+
+def relevance_ranker(
+    applicability: dict[int, str] | None,
+    problem_to_code: dict[int, str] | None,
+    weights: dict[str, Decimal] | None,
+) -> Callable[[Any], int]:
+    """A `question -> rank` function, lower being more relevant to this founder.
+
+    Two independent signals, checked strongest first:
+
+      1. `question_industry_mapping` -- this question was WRITTEN for the
+         founder's industry. After `excluded_question_ids` has run, the only
+         mapped questions left in the candidate set are the founder's own, so
+         this is a straight primary/supporting read.
+      2. `industries.top_pain_point_weights` -- this question's problem is one
+         the founder's industry says goes wrong more often than average. Applies
+         to UNIVERSAL questions, which is the point: it is how a SaaS founder
+         gets the general churn and pricing questions ahead of the general
+         supply-chain ones without either being industry-owned.
+
+    Returns a constant when neither signal is available, so the term vanishes
+    from the sort rather than reordering anything on no evidence. That is the
+    ordinary state for twenty-six of the thirty industries today.
+    """
+    applicability = applicability or {}
+    problem_to_code = problem_to_code or {}
+    weights = weights or {}
+    if not applicability and not weights:
+        return _NO_SIGNAL
+
+    def rank(question: Any) -> int:
+        kind = applicability.get(getattr(question, "question_id", None))
+        if kind == "primary":
+            return PRIMARY_RANK
+        if kind == "supporting":
+            return SUPPORTING_RANK
+        # `.get() or ""`: a problem with no code recorded is UNKNOWN, so it
+        # carries no weight and falls to universal -- never an error, and never
+        # a reason to reorder. Same reading as the dimension and context maps.
+        code = (problem_to_code.get(getattr(question, "problem_id", None)) or "").upper()
+        weight = weights.get(code)
+        if weight is None:
+            return UNIVERSAL_RANK
+        return STRONG_WEIGHT_RANK if weight >= STRONG_WEIGHT_THRESHOLD else WEAK_WEIGHT_RANK
+
+    return rank
