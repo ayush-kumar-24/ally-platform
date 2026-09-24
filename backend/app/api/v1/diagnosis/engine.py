@@ -19,6 +19,10 @@ from app.api.v1.diagnosis.context_scope import (
     gated_problem_codes,
     gated_root_cause_codes,
 )
+from app.api.v1.diagnosis.industry_scope import (
+    excluded_question_ids,
+    industry_id_for,
+)
 from app.api.v1.diagnosis.repository import DiagnosisRepository
 from app.api.v1.diagnosis.stage_scope import resolve_scope
 from app.core.logger import logger
@@ -305,9 +309,14 @@ class QuestionSelectionEngine:
             # verbatim during Founder DNA -- see list_candidate_questions.
             founder_id=founder.founder_id,
         )
-        return self._in_scope(candidates, founder)
+        return self._in_scope(candidates, founder, session)
 
-    def _in_scope(self, candidates: list[Question], founder: Founder) -> list[Question]:
+    def _in_scope(
+        self,
+        candidates: list[Question],
+        founder: Founder,
+        session: DiagnosisSession | None = None,
+    ) -> list[Question]:
         """Drop questions this founder should not be asked.
 
         CONTEXT runs first and is a different axis from the rest: it asks
@@ -360,6 +369,14 @@ class QuestionSelectionEngine:
         # down returns this name, so a stage-scope data problem re-admits the
         # stage filters and never re-admits a gated problem.
         candidates = self._context_gated(candidates, founder)
+
+        # INDUSTRY next, and also outside the stage-scope short-circuit: a
+        # question written for another industry is not something a Growth-stage
+        # founder has merely outgrown, it was never theirs. Rebinding
+        # `candidates` for the same reason `_context_gated` does -- the
+        # stage-scope fallback below returns this name, so a stage-scope data
+        # problem must not re-admit another industry's bank.
+        candidates = self._industry_gated(candidates, founder, session)
 
         scope = resolve_scope(founder)
         if scope is None or scope.withholds_nothing:
@@ -488,6 +505,111 @@ class QuestionSelectionEngine:
                 },
             )
         return kept
+
+    def _industry_gated(
+        self,
+        candidates: list[Question],
+        founder: Founder,
+        session: DiagnosisSession | None,
+    ) -> list[Question]:
+        """Drop questions written for an industry that is not this founder's.
+
+        See `industry_scope` for why this is needed at all -- in short, 1,800
+        seeded industry questions are stage-tagged and therefore eligible for
+        every founder, so a Logistics founder is today a valid candidate for a
+        SaaS security-certification question.
+
+        Degrades exactly like `_context_gated` and the pillar and dimension
+        tests, and for the same reason: an unavailable mapping table disables
+        THIS test only. Four separate ways to end up not gating -- no mapping
+        rows, an unreadable mapping table, an unreadable industry code, or a
+        gate that would empty the set -- and every one of them admits the
+        question rather than withholding it.
+
+        Never returns empty when it was given a non-empty set. Same invariant as
+        `_in_scope` and `_context_gated`: ending a founder's diagnosis early over
+        a data problem is worse than asking one off-industry question.
+        """
+        if not candidates:
+            return candidates
+
+        owned = self._industry_ownership_or_none()
+        if not owned:
+            return candidates
+
+        industry_id = industry_id_for(session, founder)
+        # A missing industry is not a missing MAP: `excluded_question_ids`
+        # treats an unknown industry as "no industry's questions are yours",
+        # which leaves the whole universal bank reachable. See its docstring for
+        # why that is the right direction here and not a failure to fail open.
+        code = self._industry_code_or_none(industry_id) if industry_id else None
+        excluded = excluded_question_ids(owned, code)
+        if not excluded:
+            return candidates
+
+        kept = [q for q in candidates if q.question_id not in excluded]
+
+        if not kept:
+            logger.warning(
+                "Industry gate matched no candidate question; leaving the set "
+                "ungated rather than ending the diagnosis",
+                extra={
+                    "stage": "industry_scope",
+                    "industry_code": code,
+                    "candidates": len(candidates),
+                },
+            )
+            return candidates
+
+        if len(kept) != len(candidates):
+            logger.info(
+                "diagnosis gated on founder industry",
+                extra={
+                    "stage": "industry_scope",
+                    "industry_code": code,
+                    "withheld": len(candidates) - len(kept),
+                    "candidates": len(candidates),
+                },
+            )
+        return kept
+
+    def _industry_ownership_or_none(self) -> dict[int, frozenset[str]] | None:
+        """{question_id: {industry_code}} for industry-owned questions, or None
+        when the mapping table cannot be read.
+
+        Empty is treated the same as unavailable, and here that is an ordinary
+        state rather than a fault: a database where the industry seeds have not
+        been applied has no mapping rows and no industry questions either, so
+        there is nothing to gate. Mirrors `_dimension_map_or_none`.
+        """
+        try:
+            with self.repository.db.begin_nested():
+                owned = self.repository.question_owned_by_industry()
+        except Exception:                                  # noqa: BLE001
+            logger.warning(
+                "Industry mapping unavailable; selecting without the industry gate",
+                extra={"stage": "industry_scope"},
+            )
+            return None
+        return owned or None
+
+    def _industry_code_or_none(self, industry_id: int) -> str | None:
+        """`industries.industry_code` for this founder, or None when unreadable.
+
+        None here means UNKNOWN INDUSTRY, which the gate handles deliberately
+        (no industry's questions are this founder's) rather than by disabling
+        itself -- disabling would re-admit all thirty industries at once, which
+        is the very thing the gate exists to stop.
+        """
+        try:
+            with self.repository.db.begin_nested():
+                return self.repository.industry_code(industry_id)
+        except Exception:                                  # noqa: BLE001
+            logger.warning(
+                "Industry code unreadable; gating as unknown industry",
+                extra={"stage": "industry_scope", "industry_id": industry_id},
+            )
+            return None
 
     def _cause_code_map_or_none(self) -> dict[int, str]:
         """root_cause_id -> root_cause_code, or {} when it cannot be read.

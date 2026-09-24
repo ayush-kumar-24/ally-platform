@@ -26,6 +26,11 @@ class DiagnosisRepository:
         self._problem_to_code: dict[int, str] | None = None
         #: Same, for root_cause_to_code().
         self._root_cause_to_code: dict[int, str] | None = None
+        #: Same, for question_owned_by_industry().
+        self._question_owned_by_industry: dict[int, frozenset[str]] | None = None
+        #: Same, for industry_code(); keyed by industry_id, so a session that
+        #: asks twice does not re-read the same single row.
+        self._industry_code: dict[int, str | None] = {}
 
     # --- Sessions ---
 
@@ -338,6 +343,71 @@ class DiagnosisRepository:
             ).all()
             self._root_cause_to_code = {rid: code for rid, code in rows}
         return self._root_cause_to_code
+
+    # --- Industry ownership ---
+    #
+    # `question_industry_mapping` is the link between a question and the
+    # industry it was written for. Thirty industry datasets populate it, 60 rows
+    # each. Nothing read it until `industry_scope` -- see that module for what
+    # that cost.
+
+    def question_owned_by_industry(self) -> dict[int, frozenset[str]]:
+        """{question_id: {industry_code, ...}} for INDUSTRY-OWNED questions only.
+
+        A question with no row in `question_industry_mapping` is universal and is
+        deliberately absent from this map rather than present with an empty set:
+        the caller's rule is "absent means everyone", and an empty set would read
+        as "nobody".
+
+        About 1,800 rows (30 industries x 60 questions), fetched whole and
+        memoised for the life of this repository -- the same shape and the same
+        rationale as `problem_to_pillar`. The candidate set is rebuilt on every
+        question, so a per-candidate join would repeat this work up to 30 times a
+        session.
+
+        `stage_group` is in the table but is not read here. It records which
+        stage-group wording a mapping row was created for; whether the founder is
+        eligible for that wording is already decided by
+        `list_candidate_questions`, which filters on
+        `questions.primary_stage_group`. Reading it again here would apply the
+        same test twice and could only ever disagree with itself.
+
+        `applicability_type` ('primary' / 'supporting') is likewise not read by
+        the exclusion rule -- ownership is ownership. It is the grading the
+        RANKING side will want, and is left in the table for that.
+        """
+        if self._question_owned_by_industry is None:
+            rows = self.db.execute(
+                _text(
+                    "select question_id, industry_code "
+                    "from question_industry_mapping "
+                    "where industry_code is not null"
+                )
+            ).all()
+            owned: dict[int, set[str]] = {}
+            for question_id, industry_code in rows:
+                owned.setdefault(int(question_id), set()).add(str(industry_code))
+            self._question_owned_by_industry = {
+                question_id: frozenset(codes) for question_id, codes in owned.items()
+            }
+        return self._question_owned_by_industry
+
+    def industry_code(self, industry_id: int) -> str | None:
+        """`industries.industry_code` for one id, or None when there is no row.
+
+        The code, not the name, is what `question_industry_mapping` joins on and
+        what every industry seed tags its rows with. `industries.industry_name`
+        is the founder-facing string onboarding stores; the two must not be
+        confused, which is why this returns only the code.
+        """
+        if industry_id not in self._industry_code:
+            self._industry_code[industry_id] = self.db.execute(
+                _text(
+                    "select industry_code from industries where industry_id = :i"
+                ),
+                {"i": industry_id},
+            ).scalar()
+        return self._industry_code[industry_id]
 
     def answered_count_per_pillar_category(
         self, session_id: int
