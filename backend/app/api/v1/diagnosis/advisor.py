@@ -158,7 +158,28 @@ class LLMNextQuestionAdvisor(NextQuestionAdvisor):
             "You are guiding a startup founder's diagnostic interview. Read the "
             "founder's latest answer, judge how strong it is (Green = concrete "
             "evidence/ownership, Amber = partial/vague, Red = no real evidence/"
-            "avoidance), then choose which of the CANDIDATE questions to ask next -- "
+            "avoidance). "
+            # A founder saying a question does not apply is not avoiding it --
+            # they are telling us something true about their business, and it is
+            # often the most accurate answer available. Measured on a keyed run:
+            # a pre-revenue founder with no free tier answered "N/A" to three
+            # free-plan questions and all three came back RED, fed his pillar
+            # scores, and were quoted back to him in the report as symptoms of
+            # declining average selling price -- on a business with no revenue.
+            #
+            # AMBER rather than a fourth label on purpose. There is no
+            # not_applicable in _VALID_LABELS, and adding one reaches the stored
+            # classifier, category risk, pillar banding and the report. Amber is
+            # already what this codebase uses for "we could not assess this":
+            # see _apply_fallback_score, which picks it so an unassessable answer
+            # "neither manufactures a clean signal (green) nor invents a problem
+            # the founder may not have (red)". Same reasoning, same choice.
+            "An answer that says the question does not apply to this business -- "
+            "\"N/A\", \"we don't have that\", \"there is no free tier\" -- is NOT "
+            "avoidance and must NEVER be Red. Score it Amber: it is a true "
+            "statement about the business, not a failure to answer. Judge it Red "
+            "only when the founder dodges a question that DOES apply to them. "
+            "Then choose which of the CANDIDATE questions to ask next -- "
             "the one that will most improve the diagnosis given what they just said "
             "(e.g. probe deeper on a weak/avoidant answer, move on after a strong one). "
             "FOUNDER CONTEXT, when present, is what onboarding already established "
