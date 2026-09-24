@@ -175,6 +175,18 @@ def reset_diagnosis(founder_id: int, payload: ConfirmRequest,
             "rows_affected": service.reset_diagnosis(admin, founder_id, ip=ip)}
 
 
+@router.post("/users/{founder_id}/reset-onboarding", response_model=dict,
+             summary="Clear the user's onboarding answers so they retake it")
+def reset_onboarding(founder_id: int, payload: ConfirmRequest,
+                     ip: str | None = Depends(client_ip),
+                     admin: PanelAdmin = Depends(get_panel_admin),
+                     service=Depends(get_panel_service)) -> dict:
+    if not payload.confirm:
+        raise ConfirmationRequiredError("onboarding reset")
+    return {"founder_id": founder_id,
+            "rows_affected": service.reset_onboarding(admin, founder_id, ip=ip)}
+
+
 @router.post("/users/{founder_id}/reset-conversations", response_model=dict,
              summary="Delete the user's chat history")
 def reset_conversations(founder_id: int, payload: ConfirmRequest,

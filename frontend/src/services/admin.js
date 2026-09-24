@@ -60,6 +60,10 @@ export function resetDiagnosis(id) {
   return post(`/admin/users/${id}/reset-diagnosis`, { confirm: true });
 }
 
+export function resetOnboarding(id) {
+  return post(`/admin/users/${id}/reset-onboarding`, { confirm: true });
+}
+
 export function resetConversations(id) {
   return post(`/admin/users/${id}/reset-conversations`, { confirm: true });
 }

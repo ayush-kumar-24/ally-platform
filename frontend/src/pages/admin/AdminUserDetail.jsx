@@ -22,6 +22,7 @@ import {
   regenerateReport,
   resetConversations,
   resetDiagnosis,
+  resetOnboarding,
   setPlan,
 } from '../../services/admin';
 import {
@@ -181,6 +182,7 @@ export default function AdminUserDetail() {
   const canPlan = can(me, 'modify_subscription');
   const canResetDiag = can(me, 'reset_diagnosis');
   const canResetChat = can(me, 'reset_conversations');
+  const canResetOnboarding = can(me, 'reset_onboarding');
   const balance = ledger?.balance ?? detail.credits?.balance ?? 0;
 
   return (
@@ -364,10 +366,27 @@ export default function AdminUserDetail() {
       <div className="adm-panel">
         <h2>Actions</h2>
         <div className="adm-actions">
+          {canResetOnboarding && (
+            <button className="adm-btn" type="button" disabled={busy} onClick={() => setDialog({
+              title: 'Reset onboarding?',
+              body: 'Clears every answer the founder gave during onboarding, so Ally asks '
+                + 'them again from the first question. Their diagnosis, report and chat '
+                + 'history are kept. It cannot be undone.',
+              danger: true, confirmLabel: 'Reset onboarding',
+              run: () => run(() => resetOnboarding(id), r => `Onboarding reset (${r.rows_affected} row(s)).`),
+            })}>Reset onboarding</button>
+          )}
+          {/* Body rewritten to say what this now does. It used to clear two
+              columns that the lifetime cap does not read, so it promised a
+              fresh diagnosis and did not deliver one -- see reset_diagnosis in
+              admin/users_db_repository.py. */}
           {canResetDiag && (
             <button className="adm-btn" type="button" disabled={busy} onClick={() => setDialog({
               title: 'Reset diagnosis?',
-              body: 'This clears the founder\'s diagnosis progress so they can start again. It cannot be undone.',
+              body: 'Deletes the founder\'s diagnosis sessions, answers, Founder DNA, '
+                + 'Current Problem answers, report and any share links to it, so they can '
+                + 'run a new diagnosis from scratch. Their onboarding answers and chat '
+                + 'history are kept. It cannot be undone.',
               danger: true, confirmLabel: 'Reset diagnosis',
               run: () => run(() => resetDiagnosis(id), r => `Diagnosis reset (${r.rows_affected} row(s)).`),
             })}>Reset diagnosis</button>

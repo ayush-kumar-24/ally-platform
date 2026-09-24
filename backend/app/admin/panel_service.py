@@ -203,6 +203,21 @@ class AdminPanelService:
                           ip_address=ip, new_value={"rows_affected": affected})
         return affected
 
+    def reset_onboarding(self, admin, founder_id: int, *, ip: str | None = None) -> int:
+        """Send a founder back through onboarding.
+
+        Separate from reset_diagnosis on purpose: correcting answers and
+        throwing away a report are different decisions, and an admin should be
+        able to make the first without making the second.
+        """
+        require(admin.role, Capability.RESET_ONBOARDING)
+        self._require_user(founder_id)
+        affected = self.users.reset_onboarding(founder_id)
+        self.audit.record(admin=admin, action="user.reset_onboarding",
+                          resource=f"founder:{founder_id}", target_user_id=founder_id,
+                          ip_address=ip, new_value={"rows_affected": affected})
+        return affected
+
     def reset_conversations(self, admin, founder_id: int, *, ip: str | None = None) -> int:
         require(admin.role, Capability.RESET_CONVERSATIONS)
         self._require_user(founder_id)

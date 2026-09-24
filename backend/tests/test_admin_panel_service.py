@@ -169,6 +169,20 @@ def test_resets_allowed_for_admin_not_support():
         s.reset_diagnosis(SUPPORT, 1)
 
 
+def test_reset_onboarding_allowed_for_admin_not_support():
+    s, repo, _ = build()
+    assert s.reset_onboarding(ADMIN, 1) == 1
+    assert repo.resets_for(1) == ["onboarding"]
+    with pytest.raises(AdminForbiddenError):
+        s.reset_onboarding(SUPPORT, 1)
+
+
+def test_reset_onboarding_on_missing_user_404s():
+    s, _, _ = build()
+    with pytest.raises(AdminFounderNotFoundError):
+        s.reset_onboarding(ADMIN, 4242)
+
+
 def test_action_on_missing_user_404s():
     s, _, _ = build()
     with pytest.raises(AdminFounderNotFoundError):

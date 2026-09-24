@@ -39,6 +39,10 @@ class Capability(str, Enum):
     EDIT_USER_PROFILE = "edit_user_profile"
     RESET_DIAGNOSIS = "reset_diagnosis"
     RESET_CONVERSATIONS = "reset_conversations"
+    # Sends a founder back through onboarding. Same admin tier as the two
+    # above: it clears answers the founder can simply give again, and it
+    # destroys nothing they cannot recreate by answering eleven questions.
+    RESET_ONBOARDING = "reset_onboarding"
     # Recovery, not destruction -- same admin tier as the other "undo" actions
     # above, not the super-admin-only DELETE_USER below. A founder whose
     # Supabase identity was deleted by mistake (or a compromised account) has
@@ -96,6 +100,7 @@ _ADMIN: frozenset[Capability] = frozenset({
     Capability.EDIT_USER_PROFILE,
     Capability.RESET_DIAGNOSIS,
     Capability.RESET_CONVERSATIONS,
+    Capability.RESET_ONBOARDING,
     Capability.CANCEL_DELETION,
     Capability.MANAGE_PRIVACY_REQUESTS,
     Capability.MANAGE_DISCOVERY_CALLS,
