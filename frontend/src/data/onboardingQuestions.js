@@ -156,10 +156,26 @@ export function activeOptions(question, path) {
   return options.filter((o) => typeof o === 'string' || !o.paths || o.paths.includes(path));
 }
 
-/** The parts of a `group` question asked on `path` (all of them when null). */
+/** The parts of a `group` question asked on `path`.
+ *
+ * When `path` is null the founder has not answered the stage question yet, so
+ * the honest answer is "everything that applies on EVERY path" -- not
+ * "everything". Those are different sets, and the difference was a live bug: a
+ * founder who selected Ideation was shown the Business Reality block (Revenue
+ * is predictable, Financials are clear, Team operates without dependency),
+ * which is `paths: [PATH_2]` precisely because a Stage 0 founder has no
+ * business to assess structure on. Returning every part let a PATH_2-only part
+ * render whenever the path was unknown.
+ *
+ * Note it filters rather than returning `[]`: every part in every group
+ * currently declares an explicit `paths`, so excluding all declared parts would
+ * empty Q3 -- the group that HOLDS the stage question -- and the founder could
+ * never answer the question that sets the path. Fail open for parts eligible
+ * everywhere, fail closed for parts scoped to a subset.
+ */
 export function activeParts(question, path) {
   const parts = question?.parts || [];
-  if (!path) return parts;
+  if (!path) return parts.filter((p) => !p.paths || BOTH.every((x) => p.paths.includes(x)));
   return parts.filter((p) => !p.paths || p.paths.includes(path));
 }
 
