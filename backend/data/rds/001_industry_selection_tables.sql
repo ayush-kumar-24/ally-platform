@@ -180,11 +180,15 @@ SELECT
       WHERE NOT EXISTS (SELECT 1 FROM industries i
                         WHERE i.industry_code = m.industry_code))       AS orphan_industries;
 
--- How many of another industry's questions each founder is now shielded from,
--- at the stage band where the industry banks are deepest. Should be > 0.
-SELECT count(*) AS other_industry_questions_now_blocked
-FROM questions q
-JOIN question_industry_mapping m ON m.question_id = q.question_id
-WHERE q.primary_stage_group = 'Stage 1->10+'
-   OR q.primary_stage_group = (SELECT DISTINCT primary_stage_group FROM questions
-                               WHERE primary_stage_group LIKE 'Stage 1%' LIMIT 1);
+-- What this actually buys, per stage band: how many of ANOTHER industry's
+-- questions a founder is now shielded from. Expected 435 / 580 / 725.
+--
+-- Matched on industry_code rather than on the stage_group text, because that
+-- column holds a Unicode arrow ("Stage 0->1" is really "Stage 0→1") and a
+-- literal would depend on the client encoding. Grouping avoids typing it.
+SELECT m.stage_group,
+       count(*)                                                AS industry_owned,
+       count(*) FILTER (WHERE m.industry_code <> 'saas')        AS blocked_for_saas_founder
+FROM question_industry_mapping m
+GROUP BY m.stage_group
+ORDER BY m.stage_group;
