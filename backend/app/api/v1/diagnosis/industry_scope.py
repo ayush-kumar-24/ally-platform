@@ -61,28 +61,65 @@ from app.core.logger import logger
 PRIMARY_RANK = 0
 #: `applicability_type = 'supporting'` -- relevant but not core.
 SUPPORTING_RANK = 1
-#: A UNIVERSAL question whose problem this industry weights heavily. Ranks below
-#: the industry's own questions because a question written for the industry is a
+#: A UNIVERSAL question whose problem this industry weights. Ranks below the
+#: industry's own questions because a question written for the industry is a
 #: stronger statement of relevance than a weight applied to a general one.
-STRONG_WEIGHT_RANK = 2
-#: A universal question whose problem this industry weights mildly.
-WEAK_WEIGHT_RANK = 3
+#: HOW heavily it is weighted is the second half of the key -- see `rank` in
+#: `relevance_ranker`.
+WEIGHTED_RANK = 2
 #: Everything else. The default, and the rank the whole catalogue falls to when
 #: no industry is known or no industry data can be read -- which reproduces the
 #: pre-industry order exactly.
-UNIVERSAL_RANK = 4
+UNIVERSAL_RANK = 3
 
-#: Where `industries.top_pain_point_weights` stops being a nudge and starts
-#: being a statement. The seeded values are exactly 1.05, 1.15, 1.3 and 1.5, so
-#: this splits them 2-2 rather than cutting through a cluster: 1.3 and 1.5 are
-#: "this is what goes wrong in this industry", 1.05 and 1.15 are "worth a little
-#: more than average". Inclusive, so a weight of exactly 1.3 is strong.
-STRONG_WEIGHT_THRESHOLD = Decimal("1.3")
+# --- weight normalisation ---------------------------------------------------
+#
+# `industries.top_pain_point_weights` is a four-level relevance scale in exactly
+# the way `root_cause_weights.stage_weight` is -- the seeded values are 1.05,
+# 1.15, 1.3 and 1.5 and nothing else -- so it is normalised the same way, for
+# the same reason, and that consistency is deliberate.
+#
+# This replaced a 1.3 threshold that graded the four levels into two buckets.
+# That was the same flattening the stage prior suffered from its clamp (see
+# `reasoning/engines/confidence.normalise_stage_weight`): 1.05 and 1.15 became
+# one thing, 1.3 and 1.5 another, so a problem an industry calls peak and one it
+# calls merely defining sorted identically and the tie fell through to
+# question_id -- a surrogate key deciding which question a founder meets first.
+#
+# Normalising keeps all four levels distinct and on the SAME 0..1 range every
+# other relevance signal in the system now uses, so the two cannot drift apart
+# as either scale is extended.
+_WEIGHT_MIN = Decimal("1.05")
+_WEIGHT_MAX = Decimal("1.5")
 
 #: The rank every question gets when there is nothing to rank on. A constant
 #: means the term contributes nothing to the ordering, so the key degrades to
 #: exactly what it was before industry existed.
-_NO_SIGNAL: Callable[[Any], int] = lambda _question: UNIVERSAL_RANK  # noqa: E731
+_NO_SIGNAL: Callable[[Any], tuple[int, Decimal]] = (
+    lambda _question: (UNIVERSAL_RANK, _ZERO)              # noqa: E731
+)
+
+_ZERO = Decimal("0")
+_ONE = Decimal("1")
+
+
+def normalise_weight(weight: Decimal | None) -> Decimal:
+    """A pain-point weight onto 0..1, relative differences preserved.
+
+    1.05 -> 0.00, 1.15 -> 0.22, 1.3 -> 0.56, 1.5 -> 1.00.
+
+    Out-of-range values are clamped rather than allowed through, so a weight
+    someone adds outside the seeded range cannot outrank an industry's own
+    questions -- the ordering between the ranks is a rule, and a magnitude must
+    never be able to cross it.
+    """
+    if weight is None:
+        return _ZERO
+    span = _WEIGHT_MAX - _WEIGHT_MIN
+    if span <= _ZERO:                                      # defensive: constants
+        return _ZERO
+    scaled = (weight - _WEIGHT_MIN) / span
+    return min(_ONE, max(_ZERO, scaled))
 
 
 def industry_id_for(session: Any, founder: Any) -> int | None:
@@ -257,7 +294,7 @@ def relevance_ranker(
     applicability: dict[int, str] | None,
     problem_to_code: dict[int, str] | None,
     weights: dict[str, Decimal] | None,
-) -> Callable[[Any], int]:
+) -> Callable[[Any], tuple[int, Decimal]]:
     """A `question -> rank` function, lower being more relevant to this founder.
 
     Two independent signals, checked strongest first:
@@ -282,19 +319,27 @@ def relevance_ranker(
     if not applicability and not weights:
         return _NO_SIGNAL
 
-    def rank(question: Any) -> int:
+    def rank(question: Any) -> tuple[int, Decimal]:
+        """(band, tie-break) -- both ascending, so lower sorts first.
+
+        The band is the rule: a question written for the industry always
+        outranks a general one the industry merely weights. The second element
+        orders WITHIN the weighted band by how heavily, negated so that a
+        heavier weight sorts first, and it is a normalised 0..1 value rather
+        than a bucket so all four seeded levels stay distinct.
+        """
         kind = applicability.get(getattr(question, "question_id", None))
         if kind == "primary":
-            return PRIMARY_RANK
+            return (PRIMARY_RANK, _ZERO)
         if kind == "supporting":
-            return SUPPORTING_RANK
+            return (SUPPORTING_RANK, _ZERO)
         # `.get() or ""`: a problem with no code recorded is UNKNOWN, so it
         # carries no weight and falls to universal -- never an error, and never
         # a reason to reorder. Same reading as the dimension and context maps.
         code = (problem_to_code.get(getattr(question, "problem_id", None)) or "").upper()
         weight = weights.get(code)
         if weight is None:
-            return UNIVERSAL_RANK
-        return STRONG_WEIGHT_RANK if weight >= STRONG_WEIGHT_THRESHOLD else WEAK_WEIGHT_RANK
+            return (UNIVERSAL_RANK, _ZERO)
+        return (WEIGHTED_RANK, -normalise_weight(weight))
 
     return rank

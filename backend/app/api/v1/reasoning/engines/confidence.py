@@ -66,6 +66,51 @@ _ONE = Decimal("1")
 _CONFIDENCE_MIN = Decimal("0")
 _CONFIDENCE_MAX = Decimal("100")
 
+# --- stage prior normalisation ---------------------------------------------
+#
+# `root_cause_weights.stage_weight` is a four-level RELEVANCE SCALE, not a
+# probability. A CHECK constraint on the column enforces exactly these values:
+#
+#     0.5  low relevance at this stage
+#     1.0  moderate
+#     1.5  high
+#     2.0  peak
+#
+# This factor used to be read with `_clamp(stage_raw, 0, 1)`, which is correct
+# for a probability and wrong for this. Measured on the shipped catalogue --
+# 9,776 weight rows -- it flattened the top two levels into the third:
+#
+#     0.50  x 1,000        ->  0.50
+#     1.00  x 2,062        ->  1.00
+#     1.50  x 3,674        ->  1.00   collapsed
+#     2.00  x 3,040        ->  1.00   collapsed
+#
+# So 6,714 rows, 69% of the catalogue, lost the distinction the column exists
+# to record: "peak relevance at this stage" and "moderate relevance at this
+# stage" produced an identical contribution, and a factor carrying 20% of the
+# ranking stopped separating the causes it was meant to separate. Ties then
+# fall through to the deterministic tie-break, which is root_cause_id -- so
+# which finding reached the founder's top three could turn on a surrogate key.
+#
+# MIN-MAX, NOT A RAW PASS-THROUGH. Removing the clamp instead would let 2.0
+# through into a 0.20-weighted term and hand stage a 0.40 contribution -- equal
+# to category risk, the factor the scoring document calls "the highest weighted
+# factor" and to which stage is explicitly "subordinate". Normalising keeps the
+# factor's ceiling at exactly its configured weight while restoring all four
+# levels:
+#
+#     (w - 0.5) / (2.0 - 0.5)  ->  0.00 / 0.33 / 0.67 / 1.00
+#
+# CONSEQUENCE, STATED BECAUSE IT IS A REAL TRADE. Low relevance now contributes
+# zero, the same as a cause with no weight row at all. The two remain
+# distinguishable downstream -- `ScoreComponent.available` still records which
+# is which, and the report reads that -- but they no longer separate in the
+# RANKING. That is the honest reading of a min-max scale: the bottom of a scale
+# is its zero. Dividing by _STAGE_WEIGHT_MAX instead (0.25/0.50/0.75/1.00)
+# would keep low above absent, at the cost of no level ever scoring zero.
+_STAGE_WEIGHT_MIN = Decimal("0.5")
+_STAGE_WEIGHT_MAX = Decimal("2.0")
+
 _FACTOR_CATEGORY_RISK = "category_risk"
 _FACTOR_CONFIRMATION = "confirmation"
 _FACTOR_STAGE_PROBABILITY = "stage_probability"
@@ -137,6 +182,30 @@ def evidence_breadth_value(detection) -> Decimal:
 
 def _q(value: Decimal) -> Decimal:
     return value.quantize(_QUANT, rounding=ROUND_HALF_UP)
+
+
+def normalise_stage_weight(weight: Decimal | None) -> Decimal:
+    """A 0.5/1.0/1.5/2.0 stage relevance onto 0..1, differences preserved.
+
+    See the _STAGE_WEIGHT_MIN block above for why this is min-max rather than a
+    clamp or a raw pass-through.
+
+    Values OUTSIDE the constrained range are clamped to it rather than allowed
+    to push the factor past its configured weight: the CHECK constraint makes
+    them impossible today, but this function is also the contract for whatever
+    edits the column next, and a factor silently exceeding its own weight is
+    the failure this whole change exists to avoid.
+
+    None -> 0, matching the caller's "no weight row" reading. The caller still
+    records availability separately, so absent and low stay distinguishable in
+    the report even though they now share a ranking contribution.
+    """
+    if weight is None:
+        return _ZERO
+    span = _STAGE_WEIGHT_MAX - _STAGE_WEIGHT_MIN
+    if span <= _ZERO:                                      # defensive: constants
+        return _ZERO
+    return _q(_clamp((weight - _STAGE_WEIGHT_MIN) / span, _ZERO, _ONE))
 
 
 def _clamp(value: Decimal, low: Decimal, high: Decimal) -> Decimal:
@@ -219,10 +288,13 @@ class WeightedConfidenceModel(ConfidenceModel):
         # 2. Confirmation multiplier (0.5 / 1.0 / 1.5) -- always available.
         conf_multiplier = self._multiplier(detection.confirmation_status, multipliers)
 
-        # 3. Stage-adjusted prior from root_cause_weights.
+        # 3. Stage-adjusted prior from root_cause_weights, normalised from the
+        # column's four-level relevance scale onto 0..1. See
+        # `normalise_stage_weight` -- a clamp here flattened 69% of the
+        # catalogue into a single value.
         stage_raw = stage_weights.get(detection.root_cause_id)
         stage_available = stage_raw is not None
-        stage_value = _clamp(stage_raw if stage_available else _ZERO, _ZERO, _ONE)
+        stage_value = normalise_stage_weight(stage_raw if stage_available else None)
 
         # 4. Industry-adjusted prior via the injected strategy.
         industry_value, industry_available = self._industry_probability(

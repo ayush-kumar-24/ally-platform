@@ -345,7 +345,7 @@ class QuestionSelectionEngine:
             # universal question whose problem the industry merely weights
             # heavily is not what makes the founder feel read. Those still win
             # their ties through the fourth term inside `base`.
-            owned = rank(question) <= SUPPORTING_RANK
+            owned = rank(question)[0] <= SUPPORTING_RANK
             return (0 if owned else 1, *base(question))
 
         return key

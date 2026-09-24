@@ -33,10 +33,10 @@ from types import SimpleNamespace
 from app.api.v1.diagnosis.engine import QuestionSelectionEngine
 from app.api.v1.diagnosis.industry_scope import (
     PRIMARY_RANK,
-    STRONG_WEIGHT_RANK,
     SUPPORTING_RANK,
     UNIVERSAL_RANK,
-    WEAK_WEIGHT_RANK,
+    WEIGHTED_RANK,
+    normalise_weight,
     normalise_weights,
     relevance_ranker,
 )
@@ -274,28 +274,50 @@ def test_the_order_is_identical_on_every_request():
 def test_ranker_grades_both_signals():
     rank = relevance_ranker(_APPLICABILITY, _PROBLEM_CODE,
                             normalise_weights(_WEIGHTS_RAW))
-    assert rank(_q(SAS_PRIMARY, 21)) == PRIMARY_RANK
-    assert rank(_q(SAS_SUPPORTING, 22)) == SUPPORTING_RANK
-    assert rank(_q(U_STRONG, 31)) == STRONG_WEIGHT_RANK
-    assert rank(_q(U_WEAK, 32)) == WEAK_WEIGHT_RANK
-    assert rank(_q(U_PLAIN, 33)) == UNIVERSAL_RANK
+    assert rank(_q(SAS_PRIMARY, 21))[0] == PRIMARY_RANK
+    assert rank(_q(SAS_SUPPORTING, 22))[0] == SUPPORTING_RANK
+    assert rank(_q(U_STRONG, 31))[0] == WEIGHTED_RANK
+    assert rank(_q(U_WEAK, 32))[0] == WEIGHTED_RANK
+    assert rank(_q(U_PLAIN, 33))[0] == UNIVERSAL_RANK
+    # ... and the two weighted ones stay APART, which the old two-bucket
+    # grading could not do for 1.05 against 1.15 nor 1.3 against 1.5.
+    assert rank(_q(U_STRONG, 31))[1] < rank(_q(U_WEAK, 32))[1]
 
 
 def test_a_question_with_no_problem_code_is_universal_not_an_error():
     rank = relevance_ranker({}, {}, normalise_weights(_WEIGHTS_RAW))
-    assert rank(_q(1, None)) == UNIVERSAL_RANK
-    assert rank(_q(1, 999)) == UNIVERSAL_RANK
+    assert rank(_q(1, None))[0] == UNIVERSAL_RANK
+    assert rank(_q(1, 999))[0] == UNIVERSAL_RANK
 
 
-def test_the_strong_threshold_splits_the_seeded_values_two_and_two():
-    """1.05 / 1.15 mild, 1.3 / 1.5 strong -- the only four values seeded, so
-    the boundary never cuts through a cluster. 1.3 itself is strong."""
+def test_all_four_seeded_weight_levels_stay_distinct():
+    """The reason this is normalised and not bucketed. A 1.3 threshold graded
+    these four into two, so 1.05 sorted level with 1.15 and 1.3 level with 1.5,
+    and the tie fell through to question_id -- a surrogate key deciding which
+    question a founder meets first. Same flattening the stage prior suffered
+    from its clamp."""
     weights = normalise_weights({"A-001": 1.05, "A-002": 1.15,
                                  "A-003": 1.3, "A-004": 1.5})
     codes = {1: "A-001", 2: "A-002", 3: "A-003", 4: "A-004"}
     rank = relevance_ranker({}, codes, weights)
-    assert [rank(_q(0, pid)) for pid in (1, 2, 3, 4)] == [
-        WEAK_WEIGHT_RANK, WEAK_WEIGHT_RANK, STRONG_WEIGHT_RANK, STRONG_WEIGHT_RANK]
+    keys = [rank(_q(0, pid)) for pid in (1, 2, 3, 4)]
+    assert all(k[0] == WEIGHTED_RANK for k in keys)
+    assert len({k[1] for k in keys}) == 4, keys
+    # Heaviest first: the key is ascending, so 1.5 must carry the lowest value.
+    assert keys[3][1] < keys[2][1] < keys[1][1] < keys[0][1]
+
+
+def test_normalise_weight_maps_the_seeded_range_onto_zero_to_one():
+    assert normalise_weight(Decimal("1.05")) == 0
+    assert normalise_weight(Decimal("1.5")) == 1
+    assert 0 < normalise_weight(Decimal("1.15")) < normalise_weight(Decimal("1.3")) < 1
+
+
+def test_an_out_of_range_weight_cannot_cross_a_band():
+    """The ordering between bands is a rule; a magnitude must never break it."""
+    assert normalise_weight(Decimal("99")) == 1
+    assert normalise_weight(Decimal("0.1")) == 0
+    assert normalise_weight(None) == 0
 
 
 def test_normalise_weights_survives_anything_the_column_might_hold():
@@ -314,4 +336,4 @@ def test_normalise_weights_survives_anything_the_column_might_hold():
 def test_no_signal_ranks_everything_the_same():
     rank = relevance_ranker(None, None, None)
     assert {rank(_q(qid, pid)) for qid, pid in ((1, 21), (2, 31), (3, 99))} == {
-        UNIVERSAL_RANK}
+        (UNIVERSAL_RANK, Decimal(0))}
