@@ -34,16 +34,52 @@ industry-adaptive feature dead. Nothing errored. The feature fails **open** by
 design, so a stage-6 SaaS founder was simply asked **zero** questions written
 for her industry, and the report looked normal.
 
-Two things follow, and neither is optional:
+### The stopgap, and what it costs
+
+A rebuild done today therefore has no clean path. Skipping the six files the
+migrations are ahead on keeps the industry feature alive:
+
+```
+02_industries  12_problems  14_root_causes
+16_interventions  18_questions  19_question_tag_mapping
+```
+
+**Do not mistake that for a fix. It buys the industry feature by breaking
+recommendations.** The interventions in those two sources are disjoint by
+problem: the migrations cover problems **276-725** (the newer dimension layer),
+`16_interventions.sql` covers **1-275** (the original catalogue). Keep either
+one alone and half the root-cause catalogue can no longer reach an
+intervention -- 2,009 of 3,996 skipping the file, 2,023 of 3,996 loading it the
+documented way. A diagnosis landing there produces a report that names three
+root causes and recommends nothing, with `recommended_intervention_ids`,
+`priority_actions` and `next_steps` all empty and no error anywhere.
+
+Loading the file *without* the delete does not work either, and it is worth
+saying why so nobody loses an afternoon to it: the file's `intervention_id`
+values are 45-499 and the migrations already occupy 1-1024, so every row
+collides and `on conflict do nothing` silently inserts **zero**. That is the
+same surrogate-key collision the delete in step 4 exists to prevent, biting
+from the other side.
+
+**The only real fix is to re-run the dump.** The live database holds both sets
+reconciled -- 1,440 interventions, ids 45-1522, covering 717 of 723 problems --
+so a current snapshot needs no skip list at all, for interventions or for
+anything else. Until that dump is re-run, a rebuilt database is good enough to
+exercise the engine and not good enough to judge a recommendation.
+
+### What is not optional
 
 1. **Keep the snapshot current.** Re-run the dump whenever the question bank,
-   root causes, weights, industries or scoring rules change — see *Producing the
-   dump* at the bottom — and commit the diff. `--check` exits non-zero on drift,
-   so CI can notice the snapshot ageing instead of a disaster discovering it.
-2. **Always run `verify_seed_data` after step 4 and believe it.** It now has an
-   `== Industry-adaptive selection ==` section that exists specifically to catch
-   this, plus a corrected industry count. A rebuild that passes everything
-   except those checks is a rebuild with a dead feature.
+   root causes, weights, industries, interventions or scoring rules change --
+   see *Producing the dump* at the bottom -- and commit the diff. `--check`
+   exits non-zero on drift, so CI can notice the snapshot ageing instead of a
+   disaster discovering it.
+2. **Always run `verify_seed_data` after step 4 and believe it.** Two of its
+   sections exist because of exactly this: `== Industry-adaptive selection ==`
+   and `== Interventions reachable from root causes ==`. The second one fails
+   on BOTH one-sided intervention loads, by design, because both are wrong. A
+   rebuild that passes everything except those sections is a rebuild with a
+   dead feature, not a working database with a cosmetic warning.
 
 ## What is where
 
@@ -112,9 +148,13 @@ psql "$DATABASE_URL" -c "ALTER TABLE scoring_rules ENABLE TRIGGER validate_scori
 #    CAT_RISK_THRESHOLD, without which the reasoning engine will not start,
 #    because rule_id 1 was already taken by a different rule.
 #
-#    READ THE WARNING AT THE TOP OF THIS FILE FIRST. This step is only safe
-#    when the snapshot is at least as new as the migration graph. Step 5 is what
-#    tells you whether it was.
+#    READ "The stopgap, and what it costs" AT THE TOP OF THIS FILE FIRST.
+#    This step is only safe when the snapshot is at least as new as the
+#    migration graph. It is not, today. Step 5 is what tells you whether it
+#    was, and with the snapshot as it stands it WILL fail -- on the industry
+#    section if you run this loop as written, and on the intervention section
+#    if you skip the six stale files instead. Both failures are real. Neither
+#    is fixed here; both are fixed by re-running the dump.
 for f in data/reference/[0-9][0-9]_*.sql; do
   t=$(basename "$f" .sql | sed 's/^[0-9]*_//')
   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
@@ -122,7 +162,9 @@ for f in data/reference/[0-9][0-9]_*.sql; do
 done
 
 # 5. PROVE IT. Not optional, and not a formality -- this is the step that
-#    distinguishes a restored database from a populated one.
+#    distinguishes a restored database from a populated one. Read every
+#    failure as real; none of them is cosmetic, and the two that this
+#    procedure currently provokes are described at the top of the file.
 python -m scripts.verify_seed_data
 
 # 6. Embeddings. Semantic retrieval returns nothing until this finishes.
@@ -196,6 +238,13 @@ its 7 rows were verified byte-identical to the live table. Nothing in
 were the only copy of the LLM prompts, which is precisely the situation
 `dump_reference_data.py` exists to end.
 
-A rebuild done from the committed snapshot before that dump is re-run will fail
-step 5 on four checks — industries, the industry questions, the orphaned
-mappings, and prompts. That is the guard working, not a broken procedure.
+A rebuild done from the committed snapshot before that dump is re-run fails
+step 5 whichever way it is done, and that is the guard working rather than a
+broken procedure:
+
+* run step 4 as written and it fails on **industries**, **the industry
+  questions** and **the orphaned mappings** — the industry feature is dead
+* skip the six stale files instead and it fails on **interventions reachable
+  from root causes** — half the catalogue can recommend nothing
+
+Re-running the dump is what clears both at once. Nothing else does.

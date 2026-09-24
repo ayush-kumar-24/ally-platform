@@ -156,6 +156,55 @@ def main() -> int:
     print(f"  [INFO] industries with pain-point weights: "
           f"{weighted}/{total_industries}   (0 weakens ranking, never breaks it)")
 
+    # ------------------------------------------------------------------
+    # Can the diagnosis actually RECOMMEND anything?
+    #
+    # A founder's report ends in interventions, and they are looked up by the
+    # problem behind each detected root cause. A root cause whose problem has
+    # no intervention row contributes a finding and no action -- the report
+    # generates, names three root causes, and hands over an empty
+    # recommended_intervention_ids. Nothing errors.
+    #
+    # This is not hypothetical either. The first version of the skip list in
+    # docs/RESTORE.md kept the migration-seeded interventions and dropped the
+    # reference file, and the two sets turned out to be DISJOINT by problem:
+    # the migrations cover problems 276-725 (the newer dimension layer) and the
+    # reference file covers 1-275 (the original catalogue). A rebuild that kept
+    # only one of them left HALF the root-cause catalogue -- 2,009 of 3,996 --
+    # unable to produce a single recommendation, and the industry checks above
+    # all passed while it did.
+    #
+    # Measured on the live database for calibration: 36 of 3,996 root causes
+    # (0.9%) have no intervention, and 6 of 723 problems are uncovered. Some
+    # genuine gaps are therefore expected and must not fail the build. Half the
+    # catalogue is not a gap, it is a missing table, so the threshold sits well
+    # clear of both numbers.
+    # ------------------------------------------------------------------
+    print("\n== Interventions reachable from root causes ==")
+
+    rc_total = q("select count(*) from root_causes")
+    rc_orphan = q(
+        "select count(*) from root_causes r where not exists "
+        "(select 1 from interventions i where i.problem_id = r.problem_id)"
+    )
+    share = (rc_orphan / rc_total) if rc_total else 0.0
+    check(
+        "root causes can reach an intervention",
+        share <= 0.05,
+        f"{rc_orphan}/{rc_total} ({share:.1%}) cannot -- a diagnosis landing on "
+        "one of these produces a report with no recommendations. Usual cause: "
+        "interventions loaded from only one of the two catalogues"
+        if share > 0.05 else f"{rc_orphan}/{rc_total} ({share:.1%}) cannot",
+    )
+
+    uncovered_problems = q(
+        "select count(*) from problems p "
+        " where exists (select 1 from root_causes r where r.problem_id = p.problem_id) "
+        "   and not exists (select 1 from interventions i where i.problem_id = p.problem_id)"
+    )
+    print(f"  [INFO] problems carrying root causes but no intervention: "
+          f"{uncovered_problems}")
+
     print("\n== Embeddings (RAG / semantic) ==")
     for tbl in ("root_causes", "problems", "questions", "agent_interpretations", "rag_chunks"):
         total = q(f"select count(*) from {tbl}")
