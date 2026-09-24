@@ -50,6 +50,50 @@ _OPTIONAL_COLUMNS = ("phone", "business_name", "status", "credits_balance",
                      "last_active_at", "admin_notes")
 
 
+#: The founder's diagnosis, in delete order. Children first; `sessions` last,
+#: because deleting it cascades to `answers`, `detected_root_causes`,
+#: `founder_reports` and `internal_intelligence_reports` -- naming those
+#: explicitly first is what makes the returned row count mean something, and
+#: what keeps this readable as "everything a diagnosis leaves behind".
+#:
+#: Three of these are keyed to the FOUNDER, not to the session, so deleting
+#: `sessions` alone would leave them behind: `founder_dna_answers` (the Founder
+#: DNA phase), `current_problem_answers` (the Current Problem phase) and
+#: `stage_assessments`. And `report_shares` has no foreign key to
+#: `founder_reports` at all, so its rows would survive pointing at reports that
+#: no longer exist -- live share links to a deleted report.
+_DIAGNOSIS_TABLES: tuple[str, ...] = (
+    "report_shares",
+    "internal_intelligence_reports",
+    "founder_reports",
+    "detected_root_causes",
+    "answers",
+    "stage_assessments",
+    "founder_dna_answers",
+    "current_problem_answers",
+    "rag_retrieval_log",
+    "sessions",
+)
+
+#: Every `founders` column the guided onboarding writes, derived from the four
+#: section maps in frontend/src/services/profile.js (BUSINESS, FOUNDER, GOALS,
+#: PROFILE) -- the only things that write them.
+#:
+#: `full_name` and `email` are deliberately absent. Onboarding's first question
+#: pre-fills the name and lets a founder change it, but the column is NOT NULL
+#: and comes from signup rather than from onboarding; clearing it would break
+#: the row and take away an identity the founder never offered to give up.
+_ONBOARDING_COLUMNS: tuple[str, ...] = (
+    "stage_id", "experience_level", "current_revenue",
+    "building_summary", "product_description", "problem_statement",
+    "industry", "industry_mapped_id",
+    "customer_segment", "customer_segment_other",
+    "founder_reality_signals", "business_reality_signals", "invisible_gaps",
+    "current_challenges", "current_challenges_other",
+    "goal_90_day", "vision_1_year", "linkedin_url",
+)
+
+
 class SqlAlchemyAdminUserRepository(AdminUserRepository):
     def __init__(self, db):
         self.db = db
@@ -238,11 +282,75 @@ class SqlAlchemyAdminUserRepository(AdminUserRepository):
         return self.get_summary(founder_id)
 
     def reset_diagnosis(self, founder_id: int) -> int:
-        r = self.db.execute(
-            text("""update founders
-                       set diagnosis_used = 0, diagnosis_locked_at = null
-                     where founder_id = :fid"""), {"fid": founder_id})
-        self.db.commit()
+        """Erase the diagnosis so the founder can genuinely run another one.
+
+        THIS USED TO CLEAR TWO COLUMNS AND NOTHING ELSE -- `diagnosis_used` and
+        `diagnosis_locked_at` on `founders` -- which did not do what the button
+        promised. The lifetime cap is not read from either of them: it counts
+        COMPLETED ROWS in `sessions` (see count_completed_sessions in
+        api/v1/diagnosis/repository.py, and the limit check in that package's
+        service). So an admin pressed "Reset diagnosis", the panel reported
+        rows affected, and the founder was still refused with
+        DiagnosisAlreadyCompletedError the moment they tried again. The two
+        columns drive the "diagnosis completed" display in the user list and
+        nothing else.
+
+        It now deletes the diagnosis itself, then clears those two columns so
+        the display agrees with reality.
+
+        One transaction, so a failure part-way through cannot leave a founder
+        with half a diagnosis -- unlike the privacy deletion sweep, which
+        deliberately takes a savepoint per table because it must continue past
+        a failure to honour an erasure request. Here, stopping cleanly and
+        changing nothing is the better outcome: the admin can look at the
+        error and try again.
+        """
+        affected = 0
+        try:
+            for table in _DIAGNOSIS_TABLES:
+                r = self.db.execute(
+                    text(f"delete from {table} where founder_id = :fid"),  # noqa: S608
+                    {"fid": founder_id})
+                affected += r.rowcount or 0
+            r = self.db.execute(
+                text("""update founders
+                           set diagnosis_used = 0, diagnosis_locked_at = null
+                         where founder_id = :fid"""), {"fid": founder_id})
+            affected += r.rowcount or 0
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
+        return affected
+
+    def reset_onboarding(self, founder_id: int) -> int:
+        """Clear the founder's onboarding answers and send them back through it.
+
+        `profile_completed` has to be written here explicitly. Everywhere else
+        it is recomputed by FounderRepository.update() on the way past, but
+        this repository writes SQL directly and never goes through it -- and
+        leaving the flag true is not a cosmetic miss: GuidedLayout and the
+        login redirect both read it, so the founder would be bounced straight
+        to /app and would never see the questions whose answers we just
+        deleted.
+
+        The diagnosis is deliberately untouched. It is a separate action with
+        its own button, and a founder correcting a wrong stage answer should
+        not silently lose a report they spent an hour on.
+        """
+        assignments = ", ".join(f"{column} = null" for column in _ONBOARDING_COLUMNS)
+        try:
+            r = self.db.execute(
+                text(f"""update founders
+                            set {assignments},
+                                profile_completed = false,
+                                updated_at = now()
+                          where founder_id = :fid"""),  # noqa: S608
+                {"fid": founder_id})
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
         return r.rowcount or 0
 
     def set_subscription_expiry(self, founder_id: int, expires_at: datetime) -> bool:

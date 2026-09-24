@@ -109,6 +109,19 @@ _HARD_DELETE_TABLES: tuple[str, ...] = (
     # three policy lists (its FKs are all SET NULL/CASCADE, so it was never
     # an ordering blocker, just silently never deleted).
     "rag_retrieval_log",
+    # founder_dna_answers and current_problem_answers were missing from all
+    # THREE policy lists in this module -- not hard-deleted, not scrubbed, not
+    # listed for retention. They hold a founder's own answers to the Founder
+    # DNA and Current Problem phases, which is content data with no retention
+    # claim over it, so an erasure request left it in place.
+    #
+    # Their FK on founder_id is ondelete='CASCADE', which looks like it would
+    # have covered them, and does not: this sweep ANONYMISES the `founders`
+    # row rather than deleting it (see the module docstring), so that cascade
+    # never fires. Same shape of miss as admin_notes and rag_retrieval_log
+    # above. Both are CASCADE/plain FKs to founders only, so they are not an
+    # ordering constraint for anything else here.
+    "founder_dna_answers", "current_problem_answers",
     "report_shares", "sessions", "stage_assessments", "suggestions",
     "suggestion_feedback", "daily_token_usage", "plan_call_usage",
     "unbilled_usage", "llm_call_log",

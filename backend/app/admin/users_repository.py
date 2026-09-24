@@ -39,7 +39,15 @@ class AdminUserRepository(abc.ABC):
 
     @abc.abstractmethod
     def reset_diagnosis(self, founder_id: int) -> int:
-        """Clear diagnosis progress. Returns rows affected."""
+        """Erase the founder's diagnosis so they can run a new one.
+
+        Returns rows affected across every table it touches.
+        """
+
+    @abc.abstractmethod
+    def reset_onboarding(self, founder_id: int) -> int:
+        """Clear the founder's onboarding answers and send them back through
+        the flow. Returns rows affected."""
 
     @abc.abstractmethod
     def reset_conversations(self, founder_id: int) -> int:
@@ -145,6 +153,11 @@ class InMemoryAdminUserRepository(AdminUserRepository):
     def reset_diagnosis(self, founder_id: int) -> int:
         with self._lock:
             self._resets.setdefault(founder_id, []).append("diagnosis")
+            return 1
+
+    def reset_onboarding(self, founder_id: int) -> int:
+        with self._lock:
+            self._resets.setdefault(founder_id, []).append("onboarding")
             return 1
 
     def reset_conversations(self, founder_id: int) -> int:
