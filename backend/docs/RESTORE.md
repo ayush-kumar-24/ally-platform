@@ -47,10 +47,16 @@ migrations are ahead on keeps the industry feature alive:
 **Do not mistake that for a fix. It buys the industry feature by breaking
 recommendations.** The interventions in those two sources are disjoint by
 problem: the migrations cover problems **276-725** (the newer dimension layer),
-`16_interventions.sql` covers **1-275** (the original catalogue). Keep either
-one alone and half the root-cause catalogue can no longer reach an
-intervention -- 2,009 of 3,996 skipping the file, 2,023 of 3,996 loading it the
-documented way. A diagnosis landing there produces a report that names three
+`16_interventions.sql` covers **1-269** (the original catalogue, 417 rows over
+267 distinct problems). Keep either one alone and half the root-cause catalogue
+can no longer reach an intervention -- 2,009 of 3,996 skipping the file, 2,023
+of 3,996 loading it the documented way.
+
+Problems **270-275** are covered by NEITHER source: 6 problems carrying 36 root
+causes, which reach no intervention on any database, the live one included.
+That is the 0.9% the threshold in `verify_seed_data` is calibrated around, and
+it is a real content gap rather than a rebuild artifact -- worth filling, but
+not something a restore can fix. A diagnosis landing there produces a report that names three
 root causes and recommends nothing, with `recommended_intervention_ids`,
 `priority_actions` and `next_steps` all empty and no error anywhere.
 

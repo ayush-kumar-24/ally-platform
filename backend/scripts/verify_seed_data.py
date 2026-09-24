@@ -169,7 +169,7 @@ def main() -> int:
     # docs/RESTORE.md kept the migration-seeded interventions and dropped the
     # reference file, and the two sets turned out to be DISJOINT by problem:
     # the migrations cover problems 276-725 (the newer dimension layer) and the
-    # reference file covers 1-275 (the original catalogue). A rebuild that kept
+    # reference file covers 1-269 (the original catalogue). A rebuild that kept
     # only one of them left HALF the root-cause catalogue -- 2,009 of 3,996 --
     # unable to produce a single recommendation, and the industry checks above
     # all passed while it did.
