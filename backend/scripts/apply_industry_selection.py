@@ -103,10 +103,39 @@ ALTER TABLE question_tags
     ADD COLUMN IF NOT EXISTS precondition_token VARCHAR DEFAULT NULL;
 COMMENT ON COLUMN question_tags.precondition_token IS
 'Nullable. If set (e.g. has_team, fundraising_intent), a question with this tag should only be shown when that condition is known to be true. NULL means no precondition -- do not set this on every tag automatically, only where genuinely required.';
-
-ALTER TABLE question_industry_mapping ENABLE ROW LEVEL SECURITY;
-ALTER TABLE session_context_facts     ENABLE ROW LEVEL SECURITY;
 """
+
+# --- row-level security ----------------------------------------------------
+#
+# NOT part of _DDL, and that is the whole point. An earlier version of this
+# script enabled RLS unconditionally, justified as "a no-op, there is no
+# PostgREST in front of RDS". That reasoning was WRONG and would have broken
+# production: what makes RLS harmless is the CONNECTING ROLE, not the API in
+# front of the database.
+#
+#     Supabase   tables owned by postgres; the app connects as postgres,
+#                which has rolbypassrls = true  -> RLS never applies
+#     RDS        the app connects as ally_app, which does NOT own these
+#                tables, has no BYPASSRLS, and there are no policies
+#                -> RLS ON means ally_app reads ZERO rows
+#
+# Zero rows is the exact silent failure this feature exists to avoid: selection
+# fails open, so it would not error, it would quietly stop gating industries --
+# indistinguishable from the table being missing.
+#
+# So the decision is made from the database, not from a comment. RLS is enabled
+# only where it provably cannot lock the caller out.
+_CAN_SAFELY_ENABLE_RLS = """
+SELECT COALESCE(
+    (SELECT rolbypassrls FROM pg_roles WHERE rolname = current_user), false)
+ OR (SELECT pg_get_userbyid(relowner) = current_user
+       FROM pg_class WHERE relname = 'question_industry_mapping')
+"""
+
+_ENABLE_RLS = (
+    "ALTER TABLE question_industry_mapping ENABLE ROW LEVEL SECURITY",
+    "ALTER TABLE session_context_facts     ENABLE ROW LEVEL SECURITY",
+)
 
 # Derived from questions.industry_relevance, never from a literal list of ids:
 # ids are surrogate keys that differ between instances, so a literal list would
@@ -289,8 +318,24 @@ def run(args) -> int:
                 {"w": weights, "c": code},
             ).rowcount
 
+        # Decided from the database, never assumed. See _CAN_SAFELY_ENABLE_RLS.
+        rls_safe = bool(conn.execute(sa.text(_CAN_SAFELY_ENABLE_RLS)).scalar())
+        if rls_safe:
+            for statement in _ENABLE_RLS:
+                conn.execute(sa.text(statement))
+
     print(f"\n  mapping rows inserted : {inserted}")
     print(f"  industries weighted   : {updated}")
+    if rls_safe:
+        print("  row-level security    : enabled (this role owns the tables "
+              "or bypasses RLS)")
+    else:
+        print("  row-level security    : LEFT OFF -- this role neither owns the")
+        print("                          tables nor bypasses RLS, so enabling it")
+        print("                          would make the backend read zero rows.")
+        print("                          Correct for RDS. See the note in")
+        print("                          data/rds/001_industry_selection_tables.sql")
+        print("                          for how to add it properly later.")
 
     with engine.connect() as conn:
         problems = verify(conn)

@@ -142,16 +142,45 @@ WHERE q.industry_relevance IS NOT NULL
 ON CONFLICT (question_id, industry_code, stage_group) DO NOTHING;
 
 -- --------------------------------------------------------------------------
--- 5. Row-level security.
+-- 5. Row-level security -- DELIBERATELY NOT ENABLED HERE.
 --
--- A no-op on RDS -- there is no PostgREST in front of it -- but it is what the
--- Supabase instance runs, and keeping the statement here means the two
--- databases are provably identical. RLS ON with no policies is the pattern
--- every other reference table in this schema already uses: the application
--- connects as the owning role and bypasses RLS.
+-- An earlier draft of this file ran
+--     ALTER TABLE question_industry_mapping ENABLE ROW LEVEL SECURITY;
+-- and justified it as "a no-op on RDS, there is no PostgREST in front of it".
+-- That reasoning was WRONG and the statement would have broken production.
+--
+-- What makes RLS harmless is the CONNECTING ROLE, not the API in front of the
+-- database. Measured on both instances:
+--
+--     Supabase   tables owned by postgres; the app connects as postgres,
+--                which has rolbypassrls = true  -> RLS never applies
+--     RDS        the app connects as ally_app, which does NOT own these
+--                tables, does NOT have BYPASSRLS, and there are no policies
+--                -> RLS ON means ally_app reads ZERO rows
+--
+-- Zero rows is the exact silent failure this feature is built to avoid. The
+-- selection code fails open, so it would not error -- it would quietly stop
+-- gating industries again, indistinguishable from the table being missing.
+--
+-- So RLS stays OFF on RDS, where the table is reachable only from inside the
+-- VPC by an application role. The Supabase instance keeps it ON because it
+-- sits behind PostgREST on the public internet, and every other reference
+-- table there does the same.
+--
+-- TO ENABLE IT ON RDS LATER, the policy must exist FIRST and must name the
+-- role that actually connects:
+--
+--     CREATE POLICY qim_read ON question_industry_mapping
+--         FOR SELECT TO ally_app USING (true);
+--     ALTER TABLE question_industry_mapping ENABLE ROW LEVEL SECURITY;
+--
+-- Check the role before trusting any of this:
+--
+--     SELECT current_user,
+--            (SELECT rolbypassrls FROM pg_roles WHERE rolname = current_user),
+--            pg_get_userbyid(relowner)
+--       FROM pg_class WHERE relname = 'question_industry_mapping';
 -- --------------------------------------------------------------------------
-ALTER TABLE question_industry_mapping ENABLE ROW LEVEL SECURITY;
-ALTER TABLE session_context_facts     ENABLE ROW LEVEL SECURITY;
 
 COMMIT;
 
