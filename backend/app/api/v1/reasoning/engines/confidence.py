@@ -208,6 +208,46 @@ def normalise_stage_weight(weight: Decimal | None) -> Decimal:
     return _q(_clamp((weight - _STAGE_WEIGHT_MIN) / span, _ZERO, _ONE))
 
 
+def normalise_confirmation(
+    multiplier: Decimal, multipliers: ConfirmationMultipliers
+) -> Decimal | None:
+    """A confirmation multiplier onto 0..1: 0.5 -> 0.00, 1.0 -> 0.50, 1.5 -> 1.00.
+
+    THE SAME RESCALING THE CONFIDENCE MODEL ALREADY APPLIED, extracted so there
+    is one reading of this number instead of two. `_confirmation_ratio` has
+    normalised it since it was written; the RANKING model multiplied the raw
+    multiplier by its 0.25 weight, so one file held both readings:
+
+        ranking      NOT_TESTED 0.125   UNCONFIRMED 0.250   CONFIRMED 0.375
+        confidence   NOT_TESTED 0.000   UNCONFIRMED 0.500   CONFIRMED 1.000
+
+    What the raw reading cost. `scoring_rules` calls this "25%" and
+    WEIGHT_FACTORS_SUM_CHECK asserts the five ranking weights sum to 1.0 -- but
+    that check validates the WEIGHTS, never the score they can produce. With a
+    1.5x multiplier running through a 0.25 weight, confirmation reached 0.375
+    and the maximum attainable score was 0.40 + 0.375 + 0.20 + 0 + 0.15 = 1.125.
+    That score is surfaced to founders: `reporting/generator.py` passes
+    `final_weighted_score` straight into `RootCauseHighlight.confidence`, so a
+    confirmed cause in a strong category could report a confidence above 1.
+
+    RANKING IS UNCHANGED BY THIS, and that is worth stating plainly because it
+    is the reason the fix is safe. The transform is (m - 0.5) / 1.0, a linear
+    shift applied identically to every root cause in a session, so every score
+    moves down by exactly 0.125 and no pair can swap. The gaps between the three
+    statuses are also unchanged at 0.125 each. Only the absolute number moves,
+    back onto the 0..1 scale the other four factors already use.
+
+    None means the multipliers are misconfigured so the rescaling could not run
+    -- "attempted and failed", which the caller treats as unavailable rather
+    than as a clean zero, exactly as `_confirmation_ratio` already did.
+    """
+    low = multipliers.not_tested
+    span = multipliers.confirmed - low
+    if span <= 0:
+        return None
+    return _clamp((multiplier - low) / span, _ZERO, _ONE)
+
+
 def _clamp(value: Decimal, low: Decimal, high: Decimal) -> Decimal:
     return max(low, min(high, value))
 
@@ -285,8 +325,23 @@ class WeightedConfidenceModel(ConfidenceModel):
         cat_available = cat_source is not None
         cat_value = _clamp(cat_source or _ZERO, _ZERO, _ONE)
 
-        # 2. Confirmation multiplier (0.5 / 1.0 / 1.5) -- always available.
+        # 2. Confirmation multiplier (0.5 / 1.0 / 1.5), normalised onto 0..1 the
+        # same way the confidence model has always read it. The raw multiplier
+        # through a 0.25 weight reached 0.375 and pushed the attainable score to
+        # 1.125 -- on a number surfaced to founders as `confidence`. See
+        # `normalise_confirmation`; the change cannot reorder anything.
+        #
+        # `conf_value` feeds the ranking. `conf_multiplier` is the RAW value and
+        # is still what gets persisted and reported on the ScoredRootCause, so
+        # "this cause was confirmed at 1.5x" keeps meaning what it always did.
         conf_multiplier = self._multiplier(detection.confirmation_status, multipliers)
+        conf_normalised = normalise_confirmation(conf_multiplier, multipliers)
+        # None means the multipliers are misconfigured. Falling back to the raw
+        # value would quietly restore the >1 score this exists to remove, so the
+        # factor is recorded unavailable instead -- the same reading every other
+        # factor here gives to "we could not compute this".
+        conf_available = conf_normalised is not None
+        conf_value = conf_normalised if conf_available else _ZERO
 
         # 3. Stage-adjusted prior from root_cause_weights, normalised from the
         # column's four-level relevance scale onto 0..1. See
@@ -323,9 +378,9 @@ class WeightedConfidenceModel(ConfidenceModel):
             ScoreComponent(
                 _FACTOR_CONFIRMATION,
                 weights.confirmation_status,
-                conf_multiplier,
-                _q(weights.confirmation_status * conf_multiplier),
-                True,
+                conf_value,
+                _q(weights.confirmation_status * conf_value),
+                conf_available,
             ),
             ScoreComponent(
                 _FACTOR_STAGE_PROBABILITY,
@@ -605,7 +660,7 @@ class WeightedConfidenceModel(ConfidenceModel):
             ConfirmationStatus.NOT_TESTED: multipliers.not_tested,
         }
         values = [
-            _clamp((by_status[s.confirmation_status] - low) / span, _ZERO, _ONE)
+            normalise_confirmation(by_status[s.confirmation_status], multipliers)
             for s in top_findings
         ]
         return _q(sum(values, _ZERO) / Decimal(len(values)))
