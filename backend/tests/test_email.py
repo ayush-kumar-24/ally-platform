@@ -101,20 +101,34 @@ def test_send_due_reminders_respects_prefs_and_flags(smtp, monkeypatch):
                        dict(u=str(uid), n="Rem Test", e=f"t{uid.hex[:8]}@x.com",
                             p="v1", t="v1", i="127.0.0.1", b="test")).scalar()
     now = datetime.now(timezone.utc)
-    # a call ~23h out -> inside the 24h window, reminder not yet sent
+    # TWO calls: one ~23h out and one 30 minutes out.
+    #
+    # The 24h reminder was deliberately dropped on 2026-09-07 -- two emails for
+    # one 30-minute call is the amount of mail that teaches a founder to filter
+    # us, and at a day's distance nobody changes their plans anyway. This test
+    # still asserted result["24h"] == 1, so it described a reminder that no
+    # longer exists and failed on a KeyError.
+    #
+    # Rewritten to pin the decision rather than just the surviving key: the
+    # distant call must produce NOTHING, and only the one inside the hour sends.
     session.execute(text(
         "insert into discovery_calls (founder_id, scheduled_at, status, meeting_link) "
         "values (:f, :s, 'confirmed', 'https://meet.example/room')"
     ), {"f": fid, "s": now + timedelta(hours=23)})
+    session.execute(text(
+        "insert into discovery_calls (founder_id, scheduled_at, status, meeting_link) "
+        "values (:f, :s, 'confirmed', 'https://meet.example/soon')"
+    ), {"f": fid, "s": now + timedelta(minutes=30)})
     session.flush()
 
     try:
         result = dn.send_due_reminders(session, now=now)
-        assert result["24h"] == 1        # one reminder sent
+        assert result["1h"] == 1         # the imminent call, and only that one
+        assert "24h" not in result       # the day-before reminder is gone
         assert len(smtp.sent) == 1
         # running again sends nothing (flag now set)
         smtp.sent.clear()
-        assert dn.send_due_reminders(session, now=now)["24h"] == 0
+        assert dn.send_due_reminders(session, now=now)["1h"] == 0
         assert smtp.sent == []
     finally:
         session.close()

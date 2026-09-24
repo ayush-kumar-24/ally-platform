@@ -74,9 +74,16 @@ def main() -> int:
     pillar_sum = q("select coalesce(sum(pillar_weightage),0) from readiness_pillars")
     check("readiness_pillars weightage sums to 100", float(pillar_sum) == 100.0, f"got {pillar_sum}")
 
+    # WEIGHT_EVIDENCE_BREADTH is the fifth factor, added by migration
+    # d3e8b41c9a52, which moved the budget to it from WEIGHT_INDUSTRY_PROBABILITY
+    # (that factor can never contribute -- root_cause_weights has no industry
+    # column). The database's own check_scoring_weights_sum() trigger was
+    # updated to count it; this list was not, so it summed a strict subset and
+    # reported 0.8500 on a correct database -- a hard FAIL on a healthy restore.
     rank_sum = q(
         "select coalesce(sum(rule_value),0) from scoring_rules where rule_code in "
-        "('WEIGHT_CATEGORY_RISK','WEIGHT_CONFIRMATION_STATUS','WEIGHT_STAGE_PROBABILITY','WEIGHT_INDUSTRY_PROBABILITY')"
+        "('WEIGHT_CATEGORY_RISK','WEIGHT_CONFIRMATION_STATUS','WEIGHT_STAGE_PROBABILITY',"
+        "'WEIGHT_INDUSTRY_PROBABILITY','WEIGHT_EVIDENCE_BREADTH')"
     )
     check("root-cause ranking weights sum to 1.0", abs(float(rank_sum) - 1.0) < 1e-6, f"got {rank_sum}")
 

@@ -94,3 +94,100 @@ jobs:
 
       - name: Build Docker image
         run: docker build -t ally-backend-ci .
+
+  # ---------------------------------------------------------------------------
+  # The suite itself, against a real database.
+  #
+  # The job above is fast and deliberately stays that way; this one is the
+  # honest signal. Before it existed CI ran exactly ONE test file out of 192 --
+  # tests/test_rls_context.py, which is pure MagicMock and needs no database.
+  # Every other file was collected by nobody and run by nothing, so the tests
+  # for plans, entitlement gates, privacy, credits, the admin panel and the rest
+  # were decoration. Three of them had been failing since 12 August 2026 and
+  # nobody could have known.
+  #
+  # DATABASE_URL pointed at localhost:5432 with no Postgres behind it, which is
+  # why only the mock file survived. Hence the service container below.
+  # ---------------------------------------------------------------------------
+  backend-tests:
+    name: Backend Test Suite
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: backend
+
+    services:
+      postgres:
+        # pgvector, not plain postgres: the first migration to run is
+        # CREATE EXTENSION vector, and the stock image does not carry it.
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci -d ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      DATABASE_URL: postgresql+psycopg://ci:ci@localhost:5432/ci
+      # psql wants a plain libpq URL; the +psycopg suffix is SQLAlchemy's.
+      PSQL_URL: postgresql://ci:ci@localhost:5432/ci
+      SECRET_KEY: ci-only-secret-key
+      ENVIRONMENT: development
+      AUTH_PROVIDER: dev
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Install psql client
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+
+      # The procedure in backend/docs/RESTORE.md, step for step. Running it here
+      # means the documented rebuild is exercised on every push instead of being
+      # trusted -- it had in fact stopped working, and this job is what catches
+      # that happening again.
+      - name: Build the database (schema up to the seed gate)
+        run: alembic upgrade c6a4e83f19d7
+
+      - name: Load pre-gate reference data
+        run: |
+          for f in data/reference/00*.sql; do
+            echo "  $f"
+            psql "$PSQL_URL" -q -v ON_ERROR_STOP=1 \
+              -c "set session_replication_role=replica;" -f "$f"
+          done
+
+      - name: Finish the migrations
+        run: alembic upgrade head
+
+      - name: Load the full reference dump
+        run: |
+          for f in data/reference/[0-9][0-9]_*.sql; do
+            t=$(basename "$f" .sql | sed 's/^[0-9]*_//')
+            echo "  $t"
+            psql "$PSQL_URL" -q -v ON_ERROR_STOP=1 \
+              -c "set session_replication_role=replica;" \
+              -c "delete from \"$t\";" -f "$f"
+          done
+
+      - name: Run the test suite
+        run: pytest -q

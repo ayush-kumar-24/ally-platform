@@ -20,7 +20,18 @@ from app.credits import (
 from app.credits.buckets import plan_movements
 from app.credits.expiry import CreditBucket, CreditState
 
-T0 = datetime(2026, 8, 2, 12, 0, tzinfo=timezone.utc)
+# Anchored to the clock, not to a calendar date.
+#
+# This was datetime(2026, 8, 2, 12, 0), and settlement is driven by the
+# database's own now(), not by T0. So every 'in the future' fixture built as
+# T0 + n days quietly became a date in the PAST once that day arrived, and
+# every PAST renewal fell further behind until settlement was catching up
+# several whole periods instead of one. Three tests here had been failing
+# since 12 August 2026 for that reason alone, unnoticed because CI runs
+# none of this file.
+#
+# Relative dates mean what they say on any day the suite is run.
+T0 = datetime.now(timezone.utc)
 PAST = T0 - timedelta(seconds=1)
 UID = 1
 

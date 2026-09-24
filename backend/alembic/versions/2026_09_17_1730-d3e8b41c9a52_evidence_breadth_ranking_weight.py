@@ -75,14 +75,29 @@ def upgrade() -> None:
         "(SELECT MAX(rule_id) FROM scoring_rules))"
     )
     op.execute(_sum_check(_FACTORS_WITH_BREADTH))
+    # WHERE EXISTS, not a bare VALUES: on a database being built from scratch
+    # `scoring_rules` is still empty here. RESTORE.md loads only the pre-gate
+    # files before this point and brings the weights in afterwards, so a bare
+    # insert lands a single 0.0000 row in an otherwise empty table -- and the
+    # trigger above, which is a row trigger, then sees a factor sum of 0.0000
+    # and rejects it. `alembic upgrade head` failed there on every fresh build,
+    # which is to say a rebuild from the committed dump could not be done at all.
+    #
+    # Skipping the row on an empty table loses nothing: there is no budget to
+    # move yet, and data/reference/04_scoring_rules.sql carries the finished
+    # set, this rule included. On a populated database -- production, and every
+    # database where this migration has already run -- the row exists, so this
+    # guard changes nothing.
     op.execute(
         "INSERT INTO scoring_rules "
         "(rule_code, rule_name, rule_value, rule_description, source_document, is_active) "
-        "VALUES ('WEIGHT_EVIDENCE_BREADTH', 'Evidence Breadth Weight', 0.0000, "
+        "SELECT 'WEIGHT_EVIDENCE_BREADTH', 'Evidence Breadth Weight', 0.0000, "
         "'Ranking weight for corroboration across independent dimensions, not raw "
         "answer count. Funded from WEIGHT_INDUSTRY_PROBABILITY, which can never "
         "contribute: root_cause_weights has no industry column.', "
-        "'QA cross-case audit A/B/C', true) "
+        "'QA cross-case audit A/B/C', true "
+        "WHERE EXISTS (SELECT 1 FROM scoring_rules "
+        "              WHERE rule_code = 'WEIGHT_INDUSTRY_PROBABILITY') "
         "ON CONFLICT (rule_code) DO NOTHING"
     )
     # Single statement: the sum is 1.0 before and after, never in between.

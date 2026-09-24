@@ -73,6 +73,11 @@ def test_every_task_is_registered_in_the_enum():
         # The help bot's two calls. Their routing rows are seeded by migration
         # c8e3a41f7b52; if you add a task here, add the row there too.
         "support_routing", "support_answer",
+        # The nightly personalised quote. Its routing row is seeded by migration
+        # b4f2a91c7e63, same rule as the two above. Added to LLMTask.ALL with
+        # that feature and missed here, so this assertion described the enum as
+        # it was before daily quotes existed.
+        "daily_quote_selection",
     }
 
 
