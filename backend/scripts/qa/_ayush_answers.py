@@ -46,6 +46,41 @@ DIAGNOSIS = {
  525: ("I do it myself in a spreadsheet. No accounting software, no accountant yet. There's very little to account for right now, but I know that's a bad habit to start.", "weak"),
  408: ("Data security and compliance for enterprise buyers. I know it will block a deal eventually and I haven't done anything because there's no deal close enough yet to force it. That's the honest reason -- it isn't urgent so it stays undone.", "average"),
  421: ("About six weeks ago, and it did change things. I started thinking it was for any business, and the prospect calls pushed me towards founders and small operators who don't have an analyst. I update that view as I go, it's one of the few things I do keep checking.", "strong"),
+
+ # --- added after the first keyed run -------------------------------------
+ # The bank above was written against the questions the DETERMINISTIC selector
+ # serves. With the advisor on, selection changes and the industry opening
+ # block pulls from the 1,800-question industry bank, so 16 of 30 questions had
+ # no answer here and got the placeholder -- which the classifier read as
+ # avoidance and scored red, 16 times. These cover the rest of the SaaS
+ # Stage 0->1 bank and every universal question that run actually served.
+ #
+ # Same rule as everything above: answered as Ayush really is, not to produce
+ # a finding. Several are unflattering and two are close to N/A without being
+ # N/A -- nobody has cancelled because nobody pays, which is a real answer and
+ # a worse one than "does not apply".
+
+ 5040: ("They have to connect at least one real data source and answer the profile questions honestly. That's maybe twenty minutes of work before anything useful comes back, and I think that is the single biggest reason pilots go quiet -- the value is real but it is not immediate.", "average"),
+ 5047: ("No. There is no free tier to upgrade from, and with the pilots I have never once said 'this is what it costs, do you want it'. I keep telling myself the product isn't ready for that conversation, which is probably an excuse.", "weak"),
+ 5048: ("Nobody has cancelled because nobody is paying. Of the nine pilot accounts, five went quiet after the first session. That is functionally the same thing and I should treat it that way.", "average"),
+ 5049: ("No warning at all. They just stop logging in and I find out when I happen to check. There's no usage alert, no check-in, nothing -- I notice weeks later.", "weak"),
+ 5050: ("Not properly. I know roughly why in my head for two of them; nothing is written down. So five pilots went quiet and I cannot tell you the pattern, which is exactly the thing I would tell a customer off for.", "weak"),
+ 5052: ("Not really. There's no pricing page and no written breakdown of what you get. It's whatever I say on the call, which means it changes slightly every time and nobody has anything to look at afterwards.", "weak"),
+ 5056: ("Never, because I have never closed a deal. Two prospects asked for a free pilot and I said yes to one, which is a hundred percent discount if you want to be honest about it.", "weak"),
+
+ 1917: ("Some are. The ones who stayed got real value out of the diagnosis and said so. But I think most of them never got far enough in to see it -- they saw the setup, not the payoff. So the value is there and the path to it is too long.", "average"),
+ 2282: ("The customer calls. I have told myself it's because I learn the most from them, and that is partly true, but it is also that I do not trust anyone else to handle a prospect yet. Nobody has ever had the chance to prove me wrong.", "weak"),
+ 2285: ("Almost nothing. There's a half-written doc for the engineering side and that's it. If I had to hand over the customer side tomorrow the person would be starting from zero with a set of Slack messages.", "weak"),
+ 2286: ("The diagnosis logic itself -- why a question is asked in a particular order and what it is really testing. That lives entirely in my head. If someone had to change it without me they would break it and not know.", "weak"),
+ 2347: ("An operations lead at a services business, forty to eighty people, who already suspects the problem is internal and not the market. That's from the pilots, not from my pitch deck -- the ones who came back were all that shape. I could not have told you that three months ago.", "strong"),
+ 61: ("Nine, all from outbound I did myself -- cold emails and two intros. Four came back and used it more than once. None of them pay, and I would call them interested rather than committed.", "average"),
+ 282: ("Honestly, not much. Nine pilots, four repeat users, a lot of people saying it is useful. That is a signal, not evidence. The claim I make in a pitch -- that this changes how they run the business -- has nothing behind it yet and I know it.", "strong"),
+ 1714: ("No. No accountant, no CS, no lawyer. I know that is a gap and I have been telling myself it can wait until there is revenue, which is the same logic I would challenge in a founder if they said it to me.", "weak"),
+ 2758: ("It lives in conversation and memory. Three people, so it has not broken yet. There is a Notion board that is half right and nobody updates it.", "weak"),
+ 2761: ("Because I needed someone. There was no defined role -- I was drowning on the build and brought in an engineer I already knew. It worked out, but it was a reaction, not a decision.", "average"),
+ 2877: ("There is no proposal. After a good call I send a follow-up email and nothing formal follows it, because I do not have a price I am confident enough to put in writing. That gap is where the interest dies.", "weak"),
+ 2910: ("Habit, mostly. I do outbound email and LinkedIn because that is what I know, not because I worked out where these buyers actually are. I have never tested a second channel properly.", "weak"),
+ 2937: ("Yes, basically. I look at the balance and my own runway and that is it. No burn rate, no cost per pilot, nothing forward-looking. There is very little to model right now, but that is how the habit starts.", "weak"),
 }
 
 CURRENT_PROBLEM = {
