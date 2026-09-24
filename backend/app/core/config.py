@@ -304,8 +304,39 @@ class Settings(BaseSettings):
     # and 1-2 for below-floor.
     MIN_ANSWERS_PER_PILLAR_SCORE: int = 3
 
-    # Share of the question budget spent, up front, on questions written for
-    # the founder's own industry before pillar coverage takes over.
+    # How many questions written for the founder's OWN industry open the
+    # diagnosis, before pillar coverage takes over. Keyed by
+    # founder_stages.stage_order.
+    #
+    # Set per stage rather than as a fraction because the right number is a
+    # product judgement about how much of a stage is industry-shaped, and that
+    # is not linear in the budget: an Ideation founder has almost nothing built,
+    # so what industry they are in is most of what distinguishes them from any
+    # other Ideation founder, while a Maturity founder has years of their own
+    # evidence to be asked about.
+    #
+    #     1  Ideation          6 of 14      5  Growth / Scaling  12 of 30
+    #     2  Validation        8 of 20      6  Expansion         13 of 32
+    #     3  Prototype / MVP  10 of 24      7  Maturity          14 of 32
+    #     4  Early Traction   12 of 30      8  Exit              14 of 30
+    #
+    # Stages 3, 6 and 8 were not specified and are interpolated between their
+    # neighbours; change them freely, they carry no more authority than that.
+    #
+    # Data, not behaviour: editable in production like
+    # founder_stages.question_budget. An empty dict, or a stage missing from it,
+    # falls back to INDUSTRY_OPENING_SHARE below. Zero for a stage disables the
+    # block at that stage.
+    #
+    # Every value here is still bounded at runtime by `opening_block_size` --
+    # see INDUSTRY_OPENING_SHARE for the measurements behind that bound, and
+    # note that at Ideation and Validation these numbers sit exactly ON it.
+    INDUSTRY_OPENING_QUESTIONS: dict[int, int] = {
+        1: 6, 2: 8, 3: 10, 4: 12, 5: 12, 6: 13, 7: 14, 8: 14,
+    }
+
+    # Fallback share of the budget, used only for a stage absent from
+    # INDUSTRY_OPENING_QUESTIONS above (including an unknown stage).
     #
     # WHY AN OPENING BLOCK AND NOT JUST A RANKING PREFERENCE. As a tie-break
     # (industry_scope's relevance rank) industry is too quiet to be felt: it

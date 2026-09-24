@@ -26,6 +26,7 @@ from app.api.v1.diagnosis.industry_scope import (
     normalise_weights,
     opening_block_size,
     relevance_ranker,
+    requested_opening,
 )
 from app.api.v1.diagnosis.repository import DiagnosisRepository
 from app.api.v1.diagnosis.stage_scope import ALL_PILLARS, resolve_scope
@@ -361,17 +362,22 @@ class QuestionSelectionEngine:
         if founder is None:
             return 0
         try:
+            stage = getattr(founder, "stage", None)
             scope = resolve_scope(founder)
             pillars_in_scope = len(scope.pillars) if scope is not None else len(ALL_PILLARS)
             budget = settings.question_budget(
-                getattr(getattr(founder, "stage", None), "question_budget", None)
+                getattr(stage, "question_budget", None)
             )
-            available = self._industry_question_count(session, founder)
             return opening_block_size(
                 budget=budget,
                 pillars_in_scope=pillars_in_scope,
-                share=settings.INDUSTRY_OPENING_SHARE,
-                available=available,
+                requested=requested_opening(
+                    getattr(stage, "stage_order", None),
+                    budget,
+                    settings.INDUSTRY_OPENING_QUESTIONS,
+                    settings.INDUSTRY_OPENING_SHARE,
+                ),
+                available=self._industry_question_count(session, founder),
             )
         except Exception:                                  # noqa: BLE001
             logger.warning(

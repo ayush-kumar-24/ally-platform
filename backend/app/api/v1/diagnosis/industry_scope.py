@@ -194,36 +194,63 @@ def normalise_weights(raw: Any) -> dict[str, Decimal]:
 MIN_QUESTIONS_PER_PILLAR = 2
 
 
+def requested_opening(stage_order: Any, budget: int, per_stage, share: float) -> int:
+    """The opening block size ASKED FOR, before any bound is applied.
+
+    The per-stage table wins wherever it has an entry -- it is the product
+    judgement, and it is not a fraction of anything. The share is the fallback
+    for a stage the table does not name and for a founder whose stage cannot be
+    read at all, which is the same situation the rest of this module treats as
+    unknown rather than as zero.
+
+    Never raises: an unusable stage_order or a table holding something other
+    than an int falls through to the share.
+    """
+    try:
+        if per_stage:
+            requested = per_stage.get(int(stage_order))
+            if requested is not None:
+                return max(0, int(requested))
+    except (TypeError, ValueError):                        # noqa: BLE001
+        pass
+    if share <= 0:
+        return 0
+    return int(budget * min(share, 1.0))
+
+
 def opening_block_size(
     budget: int,
     pillars_in_scope: int,
-    share: float,
+    requested: int,
     available: int,
 ) -> int:
     """How many of the first questions are reserved for the founder's industry.
 
     Three independent limits, smallest wins:
 
-      * `share` of the budget -- the product decision, tunable in production.
+      * `requested` -- the product decision, per stage (see
+        `Settings.INDUSTRY_OPENING_QUESTIONS`).
       * what is left after every in-scope pillar is guaranteed
         MIN_QUESTIONS_PER_PILLAR. This is the guard that matters: the industry
         banks cover two to four pillars out of six (see
         `Settings.INDUSTRY_OPENING_SHARE` for the measurements), so an
         unguarded block would leave the pillars it does not touch with nothing.
+        The shipped per-stage numbers sit exactly on this bound at Ideation and
+        Validation and comfortably inside it everywhere else, so it binds only
+        if someone raises them.
       * `available` -- how many industry questions this founder's stage
-        actually has. Reserving ten slots when the bank holds four would idle
-        six, and the block is meant to be a head start, not a quota.
+        actually has. Reserving fourteen slots when the bank holds four would
+        idle ten, and the block is a head start, not a quota.
 
     Returns 0 rather than raising for any nonsensical input -- a negative
-    budget, a share above 1, no pillars in scope. 0 means "no opening block",
-    which is the pre-existing behaviour and always safe.
+    budget, a request larger than the budget, no pillars in scope. 0 means "no
+    opening block", which is the pre-existing behaviour and always safe.
     """
-    if budget <= 0 or available <= 0 or share <= 0:
+    if budget <= 0 or available <= 0 or requested <= 0:
         return 0
-    by_share = int(budget * min(share, 1.0))
     reserved_for_coverage = max(0, pillars_in_scope) * MIN_QUESTIONS_PER_PILLAR
     by_coverage = budget - reserved_for_coverage
-    return max(0, min(by_share, by_coverage, available))
+    return max(0, min(requested, by_coverage, available))
 
 
 def relevance_ranker(

@@ -36,6 +36,7 @@ from app.api.v1.diagnosis.engine import QuestionSelectionEngine
 from app.api.v1.diagnosis.industry_scope import (
     MIN_QUESTIONS_PER_PILLAR,
     opening_block_size,
+    requested_opening,
 )
 from app.core.config import settings
 
@@ -197,9 +198,10 @@ def test_an_unreadable_answer_count_keeps_the_block_open():
     assert _order(session=session)[:2] == [SAS_A, SAS_B]
 
 
-def test_the_share_setting_can_switch_the_block_off(monkeypatch):
-    """0.0 must return selection to the ranking preference alone -- the escape
-    hatch if the block ever misbehaves in production."""
+def test_the_setting_can_switch_the_block_off(monkeypatch):
+    """Zero for a stage must return selection to the ranking preference alone
+    -- the escape hatch if the block ever misbehaves in production."""
+    monkeypatch.setattr(settings, "INDUSTRY_OPENING_QUESTIONS", {5: 0})
     monkeypatch.setattr(settings, "INDUSTRY_OPENING_SHARE", 0.0)
     assert _order(session=_session(answered=0))[0] == U_OPS
 
@@ -209,69 +211,117 @@ def test_the_share_setting_can_switch_the_block_off(monkeypatch):
 #: stage_order -> question_budget, from migration 8f3a1c92d7b4.
 _REAL_BUDGETS = {1: 14, 2: 20, 3: 24, 4: 30, 5: 30, 6: 32, 7: 32, 8: 30}
 
-#: Industry questions actually seeded per stage group, counted off the seed
-#: migrations: 15 at Stage 0, 20 at Stage 0->1, 25 at Stage 1->10+.
+#: Industry questions actually seeded per stage GROUP, counted off the seed
+#: migrations: 15 at Stage 0, 20 at Stage 0->1, 25 at Stage 1->10+. Mapped onto
+#: stage_order by engine._STAGE_ORDER_TO_GROUP (1 -> Stage 0, 2-4 -> Stage 0->1,
+#: 5-8 -> Stage 1->10+).
 _BANK_AT_STAGE = {1: 15, 2: 20, 3: 20, 4: 20, 5: 25, 6: 25, 7: 25, 8: 25}
+
+#: How many readiness pillars each stage is diagnosed on, per stage_scope.
+#: Ideation is the narrow one; from Stage 0->1 upward all six are live.
+_PILLARS_AT_STAGE = {1: 4, 2: 6, 3: 6, 4: 6, 5: 6, 6: 6, 7: 6, 8: 6}
+
+
+@pytest.mark.parametrize("stage_order", sorted(_REAL_BUDGETS))
+def test_the_shipped_numbers_fit_their_stage_budget(stage_order):
+    """Each configured opening must survive all three bounds unchanged -- if a
+    bound silently trimmed one, the shipped number would be a fiction."""
+    requested = settings.INDUSTRY_OPENING_QUESTIONS[stage_order]
+    size = opening_block_size(
+        budget=_REAL_BUDGETS[stage_order],
+        pillars_in_scope=_PILLARS_AT_STAGE[stage_order],
+        requested=requested,
+        available=_BANK_AT_STAGE[stage_order],
+    )
+    assert size == requested, (
+        f"stage {stage_order}: asked for {requested}, bounded to {size}")
 
 
 @pytest.mark.parametrize("stage_order", sorted(_REAL_BUDGETS))
 def test_every_stage_keeps_two_questions_per_pillar_for_coverage(stage_order):
-    """The guarantee, checked against the numbers that actually ship rather
-    than a fixture. Six pillars x 2 = 12 reserved; at Ideation only two pillars
-    are in scope, so the reservation is smaller there and the block larger."""
+    """The guarantee, against the numbers that actually ship rather than a
+    fixture. Ideation (6 of 14, four pillars) and Validation (8 of 20, six
+    pillars) sit EXACTLY on this bound -- 8 left for 4 pillars, 12 left for 6.
+    Raising either without raising the budget would start trimming."""
     budget = _REAL_BUDGETS[stage_order]
-    for pillars in range(1, 7):
-        size = opening_block_size(
-            budget=budget, pillars_in_scope=pillars,
-            share=1 / 3, available=_BANK_AT_STAGE[stage_order])
-        left = budget - size
-        assert left >= pillars * MIN_QUESTIONS_PER_PILLAR, (
-            f"stage {stage_order}: block {size} of {budget} leaves {left} "
-            f"for {pillars} pillars")
+    pillars = _PILLARS_AT_STAGE[stage_order]
+    size = opening_block_size(
+        budget=budget, pillars_in_scope=pillars,
+        requested=settings.INDUSTRY_OPENING_QUESTIONS[stage_order],
+        available=_BANK_AT_STAGE[stage_order])
+    left = budget - size
+    assert left >= pillars * MIN_QUESTIONS_PER_PILLAR, (
+        f"stage {stage_order}: block {size} of {budget} leaves {left} "
+        f"for {pillars} pillars")
 
 
 def test_the_block_is_never_larger_than_the_bank():
-    """Reserving ten slots when the bank holds four would idle six. The block
-    is a head start, not a quota."""
-    assert opening_block_size(budget=30, pillars_in_scope=6, share=1 / 3,
+    """Reserving fourteen slots when the bank holds four would idle ten. The
+    block is a head start, not a quota."""
+    assert opening_block_size(budget=30, pillars_in_scope=6, requested=14,
                               available=4) == 4
 
 
-def test_the_share_is_the_binding_limit_when_the_bank_is_deep():
-    assert opening_block_size(budget=30, pillars_in_scope=6, share=1 / 3,
-                              available=25) == 10
+def test_the_request_is_the_binding_limit_when_there_is_room():
+    assert opening_block_size(budget=30, pillars_in_scope=6, requested=12,
+                              available=25) == 12
 
 
-def test_coverage_is_the_binding_limit_at_ideation():
-    """Ideation: budget 14, bank 15, six pillars would reserve 12 and leave 2.
-    Coverage wins over the share here, which is exactly the case that would
-    otherwise spend the whole diagnosis on one or two pillars."""
-    assert opening_block_size(budget=14, pillars_in_scope=6, share=1 / 3,
+def test_coverage_trims_a_request_that_would_starve_the_pillars():
+    """Ideation, budget 14, if someone raised the ask to 12: six pillars would
+    reserve 12 and leave 2, so the block is trimmed to 2 rather than spending
+    the whole diagnosis on the industry bank."""
+    assert opening_block_size(budget=14, pillars_in_scope=6, requested=12,
                               available=15) == 2
-    # Two pillars in scope (the real Ideation scope) reserves only 4, so the
-    # share's 4 binds instead and the founder gets a proper industry opening.
-    assert opening_block_size(budget=14, pillars_in_scope=2, share=1 / 3,
-                              available=15) == 4
+    # The four pillars Ideation is actually scoped to reserve 8, so the shipped
+    # 6 passes through untouched.
+    assert opening_block_size(budget=14, pillars_in_scope=4, requested=6,
+                              available=15) == 6
 
 
 def test_opening_block_size_never_raises_on_nonsense():
     for kwargs in (
-        dict(budget=0, pillars_in_scope=6, share=1 / 3, available=25),
-        dict(budget=-5, pillars_in_scope=6, share=1 / 3, available=25),
-        dict(budget=30, pillars_in_scope=6, share=0.0, available=25),
-        dict(budget=30, pillars_in_scope=6, share=-1.0, available=25),
-        dict(budget=30, pillars_in_scope=6, share=1 / 3, available=0),
-        dict(budget=30, pillars_in_scope=-2, share=1 / 3, available=25),
-        dict(budget=5, pillars_in_scope=6, share=1 / 3, available=25),
+        dict(budget=0, pillars_in_scope=6, requested=12, available=25),
+        dict(budget=-5, pillars_in_scope=6, requested=12, available=25),
+        dict(budget=30, pillars_in_scope=6, requested=0, available=25),
+        dict(budget=30, pillars_in_scope=6, requested=-4, available=25),
+        dict(budget=30, pillars_in_scope=6, requested=12, available=0),
+        dict(budget=30, pillars_in_scope=-2, requested=12, available=25),
+        dict(budget=5, pillars_in_scope=6, requested=12, available=25),
     ):
         assert opening_block_size(**kwargs) >= 0
 
 
-def test_a_share_above_one_cannot_consume_the_whole_budget():
-    size = opening_block_size(budget=30, pillars_in_scope=6, share=5.0,
+def test_a_request_larger_than_the_budget_cannot_consume_it():
+    size = opening_block_size(budget=30, pillars_in_scope=6, requested=999,
                               available=25)
     assert 30 - size >= 6 * MIN_QUESTIONS_PER_PILLAR
 
 
-def test_the_shipped_default_share_is_a_third():
-    assert settings.INDUSTRY_OPENING_SHARE == pytest.approx(1 / 3)
+# --- how the request is resolved -----------------------------------------
+
+
+def test_the_per_stage_table_wins_over_the_share():
+    assert requested_opening(1, 14, {1: 6}, 1 / 3) == 6
+    assert requested_opening(7, 32, {7: 14}, 1 / 3) == 14
+
+
+def test_a_stage_absent_from_the_table_falls_back_to_the_share():
+    assert requested_opening(4, 30, {1: 6}, 1 / 3) == 10
+
+
+def test_an_unknown_stage_falls_back_to_the_share():
+    assert requested_opening(None, 30, {1: 6}, 1 / 3) == 10
+    assert requested_opening("nonsense", 30, {1: 6}, 1 / 3) == 10
+
+
+def test_zero_for_a_stage_disables_the_block_there():
+    assert requested_opening(1, 14, {1: 0}, 1 / 3) == 0
+
+
+def test_the_shipped_numbers_are_the_agreed_ones():
+    """Ideation 6, Validation 8, Early Traction and Growth 12, Maturity 14.
+    Stages 3, 6 and 8 were interpolated and are asserted only so a change to
+    them is a deliberate edit rather than a drift."""
+    assert settings.INDUSTRY_OPENING_QUESTIONS == {
+        1: 6, 2: 8, 3: 10, 4: 12, 5: 12, 6: 13, 7: 14, 8: 14}
