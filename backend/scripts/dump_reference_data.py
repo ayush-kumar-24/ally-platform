@@ -91,12 +91,6 @@ REFERENCE_TABLES: tuple[tuple[str, str], ...] = (
     ("current_problem_questions", "The Current Problem phase."),
     ("notification_types", "Notification catalogue."),
     ("support_bot_answers", "Support bot content."),
-    # Added after a from-scratch rebuild came up with zero rows here and
-    # verify_seed_data hard-failed. Nothing in alembic/ seeds this table, so
-    # the live databases were once again the only copy -- the exact situation
-    # this whole script exists to end. The prompts are authored content, not
-    # founder data: no names, no answers, no session text.
-    ("prompt_library", "The LLM prompts. Seeded by no migration."),
 )
 
 #: Tables that hold a FOUNDER's data. None of these may ever be dumped: they

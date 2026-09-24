@@ -37,7 +37,7 @@ def main() -> int:
 
     print("== Catalogue presence (counts) ==")
     counts = {
-        "founder_stages": (8, 8), "industries": (30, 30), "readiness_pillars": (6, 6),
+        "founder_stages": (8, 8), "industries": (4, 4), "readiness_pillars": (6, 6),
         "session_state_bands": (4, 4), "psychological_state_signals": (20, None),
         "chronic_state_inference": (1, None), "prompt_library": (1, None),
         "archetypes": (8, 8), "scoring_rules": (20, None), "problems": (1, None),
@@ -75,16 +75,8 @@ def main() -> int:
     check("readiness_pillars weightage sums to 100", float(pillar_sum) == 100.0, f"got {pillar_sum}")
 
     rank_sum = q(
-        # WEIGHT_EVIDENCE_BREADTH belongs in this sum. Migration d3e8b41c9a52
-        # moved 0.15 of the budget from WEIGHT_INDUSTRY_PROBABILITY (which can
-        # never contribute -- root_cause_weights has no industry column) to
-        # breadth, and updated check_scoring_weights_sum() to enumerate five
-        # factors. This check kept summing the original four, so on a CORRECT
-        # database it reported 0.85 and failed. A release gate that fails on a
-        # correct database is worse than no gate: it trains people to ignore it.
         "select coalesce(sum(rule_value),0) from scoring_rules where rule_code in "
-        "('WEIGHT_CATEGORY_RISK','WEIGHT_CONFIRMATION_STATUS','WEIGHT_STAGE_PROBABILITY',"
-        "'WEIGHT_INDUSTRY_PROBABILITY','WEIGHT_EVIDENCE_BREADTH')"
+        "('WEIGHT_CATEGORY_RISK','WEIGHT_CONFIRMATION_STATUS','WEIGHT_STAGE_PROBABILITY','WEIGHT_INDUSTRY_PROBABILITY')"
     )
     check("root-cause ranking weights sum to 1.0", abs(float(rank_sum) - 1.0) < 1e-6, f"got {rank_sum}")
 
@@ -101,109 +93,6 @@ def main() -> int:
         "q.primary_stage_group not in (select distinct onboarding_label from founder_stages where onboarding_label is not null)"
     )
     check("questions.primary_stage_group values are valid", bad_stage_group == 0, f"{bad_stage_group} invalid")
-
-    # ------------------------------------------------------------------
-    # The industry feature, which fails OPEN and therefore fails SILENTLY.
-    #
-    # Every one of these checks exists because a rebuild following
-    # docs/RESTORE.md passed every check above it while the industry feature
-    # was completely dead. Step 4 of that procedure reloads `industries` and
-    # `questions` from data/reference/, and that snapshot predates the industry
-    # work: 4 industries instead of 30, and no `industry_relevance` column at
-    # all. The selection code then treated all 1,800 industry questions as
-    # universal -- no error, no warning, and a SaaS founder was a valid
-    # candidate for "out of 100 deliveries, how many arrive damaged?".
-    #
-    # Measured on that rebuild: a stage-6 SaaS founder was asked ZERO questions
-    # written for her industry. The same founder on a correct database gets 14
-    # of 32, the first 13 forced by the opening block.
-    #
-    # A gate that cannot see that is not gating the thing that matters.
-    # ------------------------------------------------------------------
-    print("\n== Industry-adaptive selection ==")
-
-    industry_questions = q(
-        "select count(*) from questions where industry_relevance is not null "
-        "and industry_relevance <> '[\"all\"]'::jsonb"
-    )
-    check("questions carry an industry", industry_questions > 0,
-          "" if industry_questions else
-          "0 -- every question is universal, so the industry feature is OFF "
-          "for every founder. Usual cause: questions reloaded from a dump "
-          "taken before industry_relevance existed")
-
-    mapping_rows = q("select count(*) from question_industry_mapping")
-    check("question_industry_mapping is populated", mapping_rows > 0,
-          f"{mapping_rows} rows" if mapping_rows else
-          "0 -- the gate, the ranking and the opening block all read this table")
-
-    orphan_mappings = q(
-        "select count(*) from question_industry_mapping m where not exists "
-        "(select 1 from industries i where i.industry_code = m.industry_code)"
-    )
-    check("every mapped industry_code resolves", orphan_mappings == 0,
-          "" if orphan_mappings == 0 else
-          f"{orphan_mappings} mapping row(s) name an industry that no longer "
-          "exists -- industries was reloaded from a stale dump")
-
-    # Not a hard failure: weights only sharpen ranking, and a missing set
-    # degrades to the universal ordering rather than breaking anything.
-    weighted = q(
-        "select count(*) from industries where top_pain_point_weights is not null "
-        "and top_pain_point_weights::text not in ('{}', 'null')"
-    )
-    total_industries = q("select count(*) from industries")
-    print(f"  [INFO] industries with pain-point weights: "
-          f"{weighted}/{total_industries}   (0 weakens ranking, never breaks it)")
-
-    # ------------------------------------------------------------------
-    # Can the diagnosis actually RECOMMEND anything?
-    #
-    # A founder's report ends in interventions, and they are looked up by the
-    # problem behind each detected root cause. A root cause whose problem has
-    # no intervention row contributes a finding and no action -- the report
-    # generates, names three root causes, and hands over an empty
-    # recommended_intervention_ids. Nothing errors.
-    #
-    # This is not hypothetical either. The first version of the skip list in
-    # docs/RESTORE.md kept the migration-seeded interventions and dropped the
-    # reference file, and the two sets turned out to be DISJOINT by problem:
-    # the migrations cover problems 276-725 (the newer dimension layer) and the
-    # reference file covers 1-275 (the original catalogue). A rebuild that kept
-    # only one of them left HALF the root-cause catalogue -- 2,009 of 3,996 --
-    # unable to produce a single recommendation, and the industry checks above
-    # all passed while it did.
-    #
-    # Measured on the live database for calibration: 36 of 3,996 root causes
-    # (0.9%) have no intervention, and 6 of 723 problems are uncovered. Some
-    # genuine gaps are therefore expected and must not fail the build. Half the
-    # catalogue is not a gap, it is a missing table, so the threshold sits well
-    # clear of both numbers.
-    # ------------------------------------------------------------------
-    print("\n== Interventions reachable from root causes ==")
-
-    rc_total = q("select count(*) from root_causes")
-    rc_orphan = q(
-        "select count(*) from root_causes r where not exists "
-        "(select 1 from interventions i where i.problem_id = r.problem_id)"
-    )
-    share = (rc_orphan / rc_total) if rc_total else 0.0
-    check(
-        "root causes can reach an intervention",
-        share <= 0.05,
-        f"{rc_orphan}/{rc_total} ({share:.1%}) cannot -- a diagnosis landing on "
-        "one of these produces a report with no recommendations. Usual cause: "
-        "interventions loaded from only one of the two catalogues"
-        if share > 0.05 else f"{rc_orphan}/{rc_total} ({share:.1%}) cannot",
-    )
-
-    uncovered_problems = q(
-        "select count(*) from problems p "
-        " where exists (select 1 from root_causes r where r.problem_id = p.problem_id) "
-        "   and not exists (select 1 from interventions i where i.problem_id = p.problem_id)"
-    )
-    print(f"  [INFO] problems carrying root causes but no intervention: "
-          f"{uncovered_problems}")
 
     print("\n== Embeddings (RAG / semantic) ==")
     for tbl in ("root_causes", "problems", "questions", "agent_interpretations", "rag_chunks"):

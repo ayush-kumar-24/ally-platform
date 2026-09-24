@@ -2284,7 +2284,7 @@ _ONBOARDING = {
         "problem_statement":
             "Customers churn after the second month and I cannot tell why.",
         "building_summary": "Compliance SaaS for Indian SMBs.",
-        "industry": "Technology & SaaS",
+        "industry": "SaaS",
         "current_challenges": ["Sales", "Cash flow"],
         "goal_90_day": "Ten real customer interviews.",
         "vision_1_year": "Series A raised.",
@@ -2297,7 +2297,7 @@ _ONBOARDING = {
         "building_summary":
             "Ally -- an AI business diagnosis for early-stage founders: what "
             "is actually wrong, the root causes under it, and what to do next.",
-        "industry": "Technology & SaaS",
+        "industry": "SaaS",
         "current_challenges": ["Sales", "Cash flow"],
         "goal_90_day":
             "One founder outside our own network paying for a diagnosis.",
@@ -2316,8 +2316,7 @@ _ONBOARDING = {
 _ONBOARDING["ally_weak"] = _ONBOARDING["ally_mvp"]
 
 
-def _seed_founder(db, sa, stage_order: int, persona: str | None = None,
-                  industry: str | None = None) -> tuple[int, str]:
+def _seed_founder(db, sa, stage_order: int, persona: str | None = None) -> tuple[int, str]:
     """A brand-new synthetic founder with a random user_id.
 
     Only works where founders.user_id carries no FK to auth.users -- see the
@@ -2353,16 +2352,11 @@ def _seed_founder(db, sa, stage_order: int, persona: str | None = None,
     email = f"e2e+{int(time.time())}@{TEST_DOMAIN}"
     revenue = REVENUE_BY_STAGE_ORDER.get(stage_order, FIELDS["current_revenue"])
     profile = {**_ONBOARDING[None], **_ONBOARDING.get(persona, {})}
-    # --industry overrides the persona's own industry so ONE persona --
-    # identical answers, identical stage -- can be run across two industries
-    # and the question sets diffed. That diff is the feature working.
-    if industry:
-        profile = {**profile, "industry": industry}
     try:
         fid = db.execute(sa.text("""
             insert into founders (user_id, email, full_name, stage_id, profile_completed,
                                   experience_level, problem_statement, building_summary,
-                                  business_name, industry, industry_mapped_id, customer_segment,
+                                  business_name, industry, customer_segment,
                                   current_challenges, goal_90_day, vision_1_year,
                                   founder_reality_signals, invisible_gaps,
                                   current_revenue, product_description,
@@ -2370,17 +2364,6 @@ def _seed_founder(db, sa, stage_order: int, persona: str | None = None,
             values (gen_random_uuid(), :e, 'E2E Test Founder', :s, true,
                     'one_company', :problem, :building,
                     :bizname, :industry,
-                    -- industry_mapped_id is the column the industry-adaptive
-                    -- selection actually reads; `industry` alone is free text
-                    -- and leaves the whole feature switched off. Resolved with
-                    -- the same rule FounderRepository.resolve_industry_id uses,
-                    -- so a persona founder and a real one cannot disagree. NULL
-                    -- when the string matches nothing, which is the honest
-                    -- answer and is exactly what a real founder would get.
-                    (select industry_id from industries
-                      where lower(btrim(:industry)) in (lower(industry_name),
-                                                        lower(industry_code))
-                      order by industry_id limit 1),
                     '["Business"]'::jsonb, cast(:challenges as jsonb),
                     :goal90, :vision1,
                     '{"clear_next_step": true}'::jsonb, '["pricing"]'::jsonb,
@@ -2611,8 +2594,7 @@ def run(args) -> int:
             print(f"\n  existing founder {fid} ({label}) (unchanged: not created "
                   "by this script)")
         else:
-            fid, label = _seed_founder(db, sa, args.stage, args.persona,
-                                       getattr(args, 'industry', None))
+            fid, label = _seed_founder(db, sa, args.stage, args.persona)
             print(f"\n  test founder {fid} <{label}> at stage_order {args.stage}")
 
     from fastapi import Depends
@@ -2824,17 +2806,6 @@ def main(argv=None) -> int:
                    help="same as --cleanup-founder-email, but by founder_id")
     p.add_argument("--allow-unscored", action="store_true",
                    help="run even with scoring off (useful only to test the fallback)")
-    p.add_argument("--industry", metavar="NAME_OR_CODE",
-                   help="override the persona's industry, by industries."
-                        "industry_name or industry_code (e.g. 'logistics', "
-                        "'Technology & SaaS'). THE POINT OF THIS FLAG is to run "
-                        "ONE persona -- identical answers, identical stage -- "
-                        "across two industries and diff the questions asked. "
-                        "Anything that differs is the industry-adaptive "
-                        "selection working; anything identical is it not. "
-                        "A value matching no industry leaves industry_mapped_id "
-                        "NULL, which switches the feature off for that run, "
-                        "which is itself a useful control.")
     p.add_argument("--persona", choices=sorted(PERSONAS), default="weak",
                    help="which answer set to reply with. 'weak' (default) is a "
                         "founder who has not done the work; 'strong' is the same "
@@ -3090,7 +3061,7 @@ _DESI_BAR_ONBOARDING = {
         "Protein bars and mithai-format sweets made only from desi "
         "ingredients -- ragi, jaggery, makhana, ghee, dates -- with no "
         "refined sugar and no protein isolate.",
-    "industry": "Food & Beverage / FoodTech",
+    "industry": "Food & Beverage (D2C)",
     "current_challenges": ["Sales", "Operations"],
     "goal_90_day":
         "One person outside my own network paying for a box, and a fully "
@@ -3460,7 +3431,7 @@ _ARYA_ONBOARDING = {
         "A beauty parlour franchise for neighbourhood and small-town India, "
         "run by women, where the training and the standards come with the "
         "brand rather than just the signage.",
-    "industry": "Beauty & Personal Care",
+    "industry": "Beauty & Wellness",
     "current_challenges": ["Operations", "Team"],
     "goal_90_day":
         "A written training manual and one franchise signed by someone I did "
@@ -3780,7 +3751,7 @@ _VIKRAM_ONBOARDING = {
     "building_summary":
         "Regional B2B logistics -- warehousing and line-haul across four "
         "cities, expanding to ten in eighteen months.",
-    "industry": "Logistics & Supply Chain",
+    "industry": "Logistics",
     "current_challenges": ["Operations", "Team"],
     "goal_90_day":
         "Two new cities open and taking volume, and a per-client "
@@ -4187,7 +4158,7 @@ _SIDDHARTH_ONBOARDING = {
     "building_summary":
         "B2B SaaS for HR compliance at Indian SMEs: statutory reminders, "
         "employee documentation, and HR workflows.",
-    "industry": "Technology & SaaS",
+    "industry": "SaaS",
     "current_challenges": ["Sales", "Operations"],
     "goal_90_day":
         "One full sales cycle closed by somebody who is not me, and a real "
