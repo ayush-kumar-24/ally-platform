@@ -267,19 +267,61 @@ class QuestionSelectionEngine:
         """
         base = self._round_robin_key_for(session)
 
+        # RCCS CONTENDERS outrank everything: root causes with real evidence
+        # behind them that have not yet reached the strong threshold. One more
+        # answer on one of these can materially change the diagnosis, which is
+        # precisely what the completion gate's `high_value_question_available`
+        # check refuses to finish while true -- so the selector must go and ask
+        # them rather than leaving the gate blocked on a question it never picks.
+        #
+        # This EXTENDS the existing key, it does not replace it. Everything below
+        # the first term is the untouched pillar round-robin, so a session with
+        # no contenders sorts exactly as it always has.
+        contenders = self._rccs_contender_ids(session)
         targeted = self._detected_root_cause_ids(session)
-        if not targeted:
+
+        if not contenders and not targeted:
             return base
 
-        # Confirmation outranks coverage once there is something to confirm --
-        # but only among targeted questions. Everything below still round-robins,
-        # so falling out of validate mode resumes even pillar coverage rather
-        # than reverting to a single-category drain.
         def key(question: Question):
-            confirms = question.root_cause_id in targeted
-            return (0 if confirms else 1, *base(question))
+            if question.root_cause_id in contenders:
+                rank = 0
+            elif question.root_cause_id in targeted:
+                rank = 1
+            else:
+                rank = 2
+            return (rank, *base(question))
 
         return key
+
+    def _rccs_contender_ids(self, session: DiagnosisSession) -> set[int]:
+        """Root causes in the contention band: evidenced, not yet strong.
+
+        Empty once the diagnosis is over, and empty on any failure -- question
+        selection must never break on an optional preference. Reads the persisted
+        evidence trail, so it is free of LLM cost and returns nothing on a
+        database where the trail's migration has not been applied, which simply
+        degrades to the previous ordering.
+        """
+        if session.routing_state == RoutingState.GENERATE_REPORT.value:
+            return set()
+        try:
+            from app.api.v1.diagnosis.rccs import RCCS_STRONG_THRESHOLD
+            from app.api.v1.diagnosis.rccs_store import RCCSStore
+
+            with self.repository.db.begin_nested():
+                state = RCCSStore(self.repository.db).load_state(session.session_id)
+            if state is None:
+                return set()
+            return {
+                s.root_cause_id
+                for s in state.all_scores()
+                if s.has_supporting_evidence and s.rccs < RCCS_STRONG_THRESHOLD
+            }
+        except Exception:                                  # noqa: BLE001
+            logger.warning("RCCS selection bias unavailable; using the default order",
+                           extra={"session_id": session.session_id})
+            return set()
 
     def _detected_root_cause_ids(self, session: DiagnosisSession) -> set[int]:
         """Root causes worth confirming, or empty when the bias does not apply.

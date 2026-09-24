@@ -1580,6 +1580,72 @@ class Answers(Base):
     triggered_follow_up: Mapped[Optional['Questions']] = relationship('Questions', foreign_keys=[triggered_follow_up_id], back_populates='answers_triggered_follow_up')
 
 
+class RootCauseEvidenceEvents(Base):
+    """One answer's directional effect on one root cause -- the RCCS trail.
+
+    This is the persistence the report needs to say *why* a root cause scored
+    what it scored: which question was asked, which answer produced the
+    movement, which way it moved the cause and by how much, in which pillar, and
+    whether it arrived by the direct `questions.root_cause_id` edge or the
+    weaker sibling edge through a shared `problems.problem_id`.
+
+    The unique constraint on (session_id, answer_id, root_cause_id) is the
+    DATABASE half of the idempotence `RCCSState.apply` enforces in memory.
+    Replaying a session, reprocessing an answer or retrying a request must never
+    increment a score twice, and a guard that lives only in the application is
+    one restart away from not being a guard.
+
+    Append-only. A contradiction is a NEW row with direction 'contradict', never
+    an update to the row it contradicts -- which is what keeps the trail able to
+    explain a score that went 0.85 -> 0.72 rather than just reporting 0.72.
+    """
+
+    __tablename__ = 'root_cause_evidence_events'
+    __table_args__ = (
+        CheckConstraint(
+            "direction::text = ANY (ARRAY['support'::character varying,"
+            " 'contradict'::character varying]::text[])",
+            name='root_cause_evidence_events_direction_check',
+        ),
+        CheckConstraint('magnitude > 0', name='root_cause_evidence_events_magnitude_check'),
+        ForeignKeyConstraint(['session_id'], ['sessions.session_id'], ondelete='CASCADE',
+                             name='rc_evidence_events_session_id_fkey'),
+        ForeignKeyConstraint(['answer_id'], ['answers.answer_id'], ondelete='CASCADE',
+                             name='rc_evidence_events_answer_id_fkey'),
+        ForeignKeyConstraint(['question_id'], ['questions.question_id'],
+                             name='rc_evidence_events_question_id_fkey'),
+        ForeignKeyConstraint(['root_cause_id'], ['root_causes.root_cause_id'],
+                             name='rc_evidence_events_root_cause_id_fkey'),
+        PrimaryKeyConstraint('evidence_event_id', name='root_cause_evidence_events_pkey'),
+        Index('idx_rc_evidence_session', 'session_id'),
+        Index('idx_rc_evidence_session_rootcause', 'session_id', 'root_cause_id'),
+        Index('uq_rc_evidence_answer_rootcause', 'session_id', 'answer_id', 'root_cause_id',
+              unique=True),
+    )
+
+    evidence_event_id: Mapped[int] = mapped_column(Integer, primary_key=True,
+                                                   autoincrement=True)
+    session_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    answer_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    question_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    root_cause_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    #: 'support' or 'contradict'.
+    direction: Mapped[str] = mapped_column(String(12), nullable=False)
+    #: Post-attenuation magnitude. Always > 0; the DIRECTION carries the sign,
+    #: so a negative magnitude would be a second way to say the same thing and
+    #: therefore a way for the two to disagree.
+    magnitude: Mapped[decimal.Decimal] = mapped_column(Numeric(6, 4), nullable=False)
+    #: The score band that produced this event -- 'red' / 'amber' / 'green'.
+    score_label: Mapped[str] = mapped_column(String(15), nullable=False)
+    #: 'primary' (questions.root_cause_id) or 'sibling' (shared problem_id).
+    source: Mapped[str] = mapped_column(String(12), nullable=False,
+                                        server_default=text("'primary'"))
+    pillar_id: Mapped[Optional[int]] = mapped_column(Integer)
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text('0'))
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(True), nullable=False, server_default=text('now()'))
+
+
 class DetectedRootCauses(Base):
     __tablename__ = 'detected_root_causes'
     __table_args__ = (

@@ -103,7 +103,28 @@ async def recompute(
         answered = session.questions_answered_count or 0
     report_min, validate_min = _thresholds(db)
 
-    if score >= report_min and answered >= MIN_ANSWERS_BEFORE_COMPLETION:
+    # THE ADAPTIVE GATE, tried first. The diagnosis is finished when the
+    # founder's stated problem has been explained by root causes that are both
+    # strongly scored (RCCS >= 0.80) and actually evidenced by their own answers
+    # -- not when a question count is reached and not when the session-level
+    # confidence score happens to clear 80. See diagnosis/completion.py.
+    #
+    # It is tried BEFORE the score rule rather than replacing it, and that is
+    # deliberate. The gate is strictly the more demanding of the two: it requires
+    # per-cause evidence, problem explanation, pillar coverage and the absence of
+    # a high-value unasked question, none of which the session score can see. So
+    # a diagnosis can now finish EARLIER than 30 questions on strong evidence, or
+    # run LONGER when the evidence is not there -- while the pre-existing score
+    # and monitor routes stay exactly as they were for every session the gate
+    # does not conclude. Nothing that used to complete stops completing.
+    #
+    # Costs no LLM call: every input is a stored, already-classified answer or a
+    # catalogue row.
+    adaptive = _adaptive_gate(db, session, founder)
+
+    if adaptive is not None and adaptive.decision.is_diagnostic_success:
+        session.routing_state = RoutingState.GENERATE_REPORT.value
+    elif score >= report_min and answered >= MIN_ANSWERS_BEFORE_COMPLETION:
         session.routing_state = RoutingState.GENERATE_REPORT.value
     elif _healthy_enough_to_stop(db, assessment, answered, founder):
         session.routing_state = RoutingState.MONITOR.value
@@ -119,9 +140,35 @@ async def recompute(
             "answered": answered,
             "confidence": float(score),
             "routing_state": session.routing_state,
+            "adaptive_reason": (
+                str(adaptive.decision.reason) if adaptive is not None else None
+            ),
+            "strong_root_causes": (
+                len(adaptive.rccs.strong_scores()) if adaptive is not None else None
+            ),
         },
     )
     return score
+
+
+def _adaptive_gate(db: Session, session, founder):
+    """Run the RCCS/quality-gate evaluation for this session, or None on failure.
+
+    Wrapped in its own nested transaction and its own except, on the same
+    fail-open principle as the rest of this module: a gate that cannot be
+    computed must leave the diagnosis running, never end it.
+    """
+    try:
+        from app.api.v1.diagnosis.adaptive_loop import evaluate_session
+
+        with db.begin_nested():
+            return evaluate_session(db, session, founder)
+    except Exception as exc:                                  # noqa: BLE001
+        logger.warning(
+            "Adaptive gate unavailable; diagnosis continues",
+            extra={"session_id": session.session_id, "error": str(exc)},
+        )
+        return None
 
 
 def _healthy_enough_to_stop(

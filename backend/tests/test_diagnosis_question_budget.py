@@ -75,13 +75,50 @@ def _code(fn) -> str:
     return "\n".join(ast.unparse(node) for node in body)
 
 
-def test_the_completion_ceiling_resolves_through_the_shared_rule():
+def test_the_completion_ceiling_resolves_through_the_safety_rule():
+    """The ceiling is now settings.safety_ceiling, NOT settings.question_budget.
+
+    THIS ASSERTION WAS DELIBERATELY INVERTED. It previously required the
+    completion ceiling and the confidence score's coverage DENOMINATOR to be the
+    same number, so that neither could drift from the other. That coupling was
+    correct while a fixed question count WAS the stopping rule; it is wrong now
+    that completion is decided by evidence (diagnosis/completion.py).
+
+    Keeping them coupled would mean raising the ceiling to allow longer
+    diagnoses silently redefined what the confidence score means by "fully
+    covered" and moved the 80-point report threshold underneath every other
+    rule. So the two are now separate rules on purpose, and what these tests
+    pin is that separation -- plus the property the original was really
+    protecting: neither side re-spells the constant itself.
+    """
     code = _code(diagnosis_service.DiagnosisService._attach_question)
-    assert "settings.question_budget(" in code
+    assert "settings.safety_ceiling(" in code
+    assert "settings.question_budget(" not in code, (
+        "the completion ceiling must NOT be the coverage denominator"
+    )
     assert "MAX_DIAGNOSIS_QUESTIONS" not in code, (
         "the ceiling must not read the constant directly -- that is how it "
-        "drifts from the coverage denominator"
+        "drifts from the rule that owns it"
     )
+
+
+def test_the_ceiling_and_the_denominator_are_distinct_rules():
+    """Guards the collapse: if these ever return the same number again, the
+    separation above is decorative."""
+    from app.core.config import settings as live
+
+    assert live.safety_ceiling(None) != live.question_budget(None)
+    assert live.safety_ceiling(None) > live.question_budget(None)
+
+
+def test_the_safety_ceiling_is_never_below_the_coverage_denominator():
+    """A ceiling under the denominator would end every diagnosis before coverage
+    could reach 1.0, making the confidence score's own target unreachable -- the
+    exact failure MAX_DIAGNOSIS_QUESTIONS was introduced to fix."""
+    from app.core.config import settings as live
+
+    for stage_budget in (None, 1, 12, 30, 50):
+        assert live.safety_ceiling(stage_budget) >= live.question_budget(stage_budget)
 
 
 def test_the_coverage_denominator_resolves_through_the_shared_rule():

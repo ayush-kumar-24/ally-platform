@@ -1019,7 +1019,8 @@ class DiagnosisService:
         #
         #   1. confidence >= CONFIDENCE_GENERATE_REPORT_MIN -- enough is known
         #   2. routing_state == monitor -- enough is known, and it is all fine
-        #   3. the question budget is spent (MAX_DIAGNOSIS_QUESTIONS)
+        #   3. the SAFETY CEILING is reached (Settings.safety_ceiling) -- a
+        #      runaway guard, never a diagnostic conclusion
         #   4. no eligible question is left in the bank
         #
         # (1) and (2) are both set by the incremental scorer; this reads its
@@ -1046,8 +1047,16 @@ class DiagnosisService:
         # not loaded one; that falls back to the global constant, which is the
         # pre-change behaviour rather than a wrong stage's number.
         stage = getattr(founder, "stage", None) if founder is not None else None
-        budget = settings.question_budget(getattr(stage, "question_budget", None))
-        budget_spent = (session.questions_answered_count or 0) >= budget
+        # The SAFETY CEILING, not `question_budget()`. A fixed question count is
+        # no longer the diagnostic stopping rule -- completion is decided by
+        # whether the founder's stated problem has been explained
+        # (diagnosis/completion.py), which can fire at twelve questions or at
+        # ninety. What survives here is the runaway/abuse guard, and it is
+        # deliberately a DIFFERENT number from the coverage denominator so that
+        # allowing longer diagnoses cannot silently redefine what the confidence
+        # score means by "fully covered". See Settings.safety_ceiling.
+        ceiling = settings.safety_ceiling(getattr(stage, "question_budget", None))
+        budget_spent = (session.questions_answered_count or 0) >= ceiling
         confident = session.routing_state == RoutingState.GENERATE_REPORT.value
         all_clear = session.routing_state == RoutingState.MONITOR.value
 

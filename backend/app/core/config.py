@@ -879,6 +879,41 @@ class Settings(BaseSettings):
         """
         return self.ADAPTIVE_QUESTIONS or self.ANSWER_CLASSIFIER == "llm"
 
+    #: Hard bound on a single diagnosis, as an ABUSE/RUNAWAY guard -- never as
+    #: the diagnostic stopping rule and never as "how long a diagnosis is".
+    #:
+    #: Why this is NOT MAX_DIAGNOSIS_QUESTIONS. That constant is the confidence
+    #: score's COVERAGE DENOMINATOR (see question_budget below), so raising it to
+    #: allow longer diagnoses would silently redefine what "fully covered" means
+    #: and move the 80-point report threshold underneath every other rule. The
+    #: two numbers answer different questions and must not be the same number:
+    #:
+    #:   question_budget()  how much of THIS diagnosis counts as full coverage
+    #:   safety_ceiling()   the point past which a session is presumed runaway
+    #:
+    #: Completion is decided by evidence (diagnosis/completion.py), which
+    #: consults this LAST, so it can only ever catch a session that neither
+    #: explained the founder's problem nor exhausted the question bank. A founder
+    #: is never shown this number, and a session that hits it is recorded as
+    #: `safety_ceiling`, not as a diagnostic conclusion.
+    #:
+    #: 120 is four times the coverage denominator: comfortably beyond any real
+    #: diagnosis, comfortably short of the 569-question Stage 0->1 bank.
+    DIAGNOSIS_SAFETY_CEILING: int = 120
+
+    def safety_ceiling(self, stage_budget: int | None) -> int:
+        """Runaway bound for one diagnosis. Never the completion rule.
+
+        Derived from the stage's own budget so a stage configured for a longer
+        diagnosis gets a proportionally longer guard, and floored at the global
+        constant so a small stage budget can never make the guard tighter than
+        the coverage denominator it sits above.
+        """
+        ceiling = max(1, self.DIAGNOSIS_SAFETY_CEILING)
+        if stage_budget is not None and stage_budget > 0:
+            return max(ceiling, stage_budget * 4)
+        return ceiling
+
     def question_budget(self, stage_budget: int | None) -> int:
         """How many questions a diagnosis may ask, given the founder's stage.
 
