@@ -2,14 +2,10 @@
 
 WHAT THIS IS. The logic already exists as migration
 `b7e4c85d2a19_backfill_founder_industry_link`. This is not new behaviour -- it
-is the same UPDATE, made runnable against the SUPABASE test instance, whose
-alembic_version carries an orphaned stamp (f8a3c26e4b91, in no file in this
-repo) that alembic refuses to start from. Same situation and same remedy as
-scripts/_apply_dimension_code_column.py.
-
-Production does not need it for that reason: RDS has a valid stamp and
-backend-deploy.yml migrates on every deploy. There it is simply a convenient way
-to run one migration's UPDATE without a full upgrade cycle.
+is the same UPDATE, runnable, because alembic cannot execute anything on these
+databases: `alembic_version` carries an orphaned stamp (f8a3c26e4b91, in no file
+in this repo) and the graph has ten heads, so `upgrade head` fails twice over.
+Same situation and same remedy as scripts/_apply_dimension_code_column.py.
 
 WHY IT MATTERS NOW. `founders.industry_mapped_id` is what every industry-aware
 path reads -- the question gate, the relevance ranking, the opening block, the

@@ -34,21 +34,7 @@ def _load_sql() -> list[str]:
     sql = re.sub(r"(?im)^\s*BEGIN\s*;\s*$", "", sql)
     sql = re.sub(r"(?im)^\s*COMMIT\s*;\s*$", "", sql)
 
-    # A fragment that is only comments is NOT a statement. psycopg2 rejects it
-    # with "can't execute an empty query", which took `alembic upgrade head`
-    # down on any database that had not already passed this revision -- so the
-    # migrations could not build a fresh environment from zero, only advance an
-    # existing one. The file's own banner comment is exactly such a fragment.
-    statements = []
-    for raw in sql.split(";"):
-        s = raw.strip()
-        if not s:
-            continue
-        if all(line.strip() == "" or line.strip().startswith("--")
-               for line in s.splitlines()):
-            continue
-        statements.append(s)
-    return statements
+    return [s.strip() for s in sql.split(";") if s.strip()]
 
 
 def upgrade() -> None:
