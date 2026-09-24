@@ -20,11 +20,17 @@ from app.api.v1.diagnosis.context_scope import (
     gated_root_cause_codes,
 )
 from app.api.v1.diagnosis.industry_scope import (
+    SUPPORTING_RANK,
     excluded_question_ids,
     industry_id_for,
+    normalise_weights,
+    opening_block_size,
+    relevance_ranker,
+    requested_opening,
 )
 from app.api.v1.diagnosis.repository import DiagnosisRepository
-from app.api.v1.diagnosis.stage_scope import resolve_scope
+from app.api.v1.diagnosis.stage_scope import ALL_PILLARS, resolve_scope
+from app.core.config import settings
 from app.core.logger import logger
 from app.models import (
     DiagnosisSession,
@@ -156,9 +162,11 @@ class QuestionSelectionEngine:
         candidates = self.candidate_questions(session, founder)
         if not candidates:
             return None
-        return min(candidates, key=self._sort_key_for(session))
+        return min(candidates, key=self._sort_key_for(session, founder))
 
-    def _round_robin_key_for(self, session: DiagnosisSession):
+    def _round_robin_key_for(
+        self, session: DiagnosisSession, founder: Founder | None = None
+    ):
         """The GATHER-phase key: one question per pillar before any pillar
         gets a second.
 
@@ -225,22 +233,195 @@ class QuestionSelectionEngine:
         for (pillar_id, _category), count in per_cat.items():
             per_pillar[pillar_id] = per_pillar.get(pillar_id, 0) + count
 
+        # THIRD term, and its position is the whole design. Industry decides
+        # WHICH question represents a (pillar, category) in a round; the two
+        # coverage terms above still decide how many rounds each pillar and each
+        # category gets. Promote it above them and a well-stocked industry -- 60
+        # seeded questions, all CORE -- would take rounds from pillars that have
+        # not been asked about at all, which is the exact starvation this key was
+        # written to stop. Demote it below `_sort_key` and it could never change
+        # anything, because question_id is a total order.
+        industry_rank = self._industry_rank_for(session, founder)
+
         def key(question: Question):
             pillar_id = problem_to_pillar.get(question.problem_id)
             # A question with no pillar cannot advance pillar coverage, so it
             # sorts behind every pillar-bearing question rather than competing
             # for a round it does not belong to.
             if pillar_id is None:
-                return (len(per_pillar) + 1_000, 0, *_sort_key(question))
+                return (len(per_pillar) + 1_000, 0,
+                        industry_rank(question), *_sort_key(question))
             return (
                 per_pillar.get(pillar_id, 0),
                 per_cat.get((pillar_id, question.category), 0),
+                industry_rank(question),
                 *_sort_key(question),
             )
 
         return key
 
-    def _sort_key_for(self, session: DiagnosisSession):
+    def _industry_rank_for(
+        self, session: DiagnosisSession, founder: Founder | None
+    ):
+        """`question -> relevance rank` for this founder's industry.
+
+        Returns a CONSTANT ranker -- one that cannot reorder anything -- rather
+        than raising, whenever the industry is unknown or any of the three reads
+        fails. Twenty-six of the thirty industries carry no
+        `top_pain_point_weights` today, so "no weight signal" is the ordinary
+        state and not a fault; those founders still get the mapping signal, and
+        a founder with neither gets exactly the pre-industry order.
+
+        Same degrade contract as `_pillar_map_or_none` and
+        `_detected_root_cause_ids`: a preference must never be able to stop the
+        assessment from finding a next question.
+        """
+        industry_id = industry_id_for(session, founder)
+        if industry_id is None:
+            return relevance_ranker(None, None, None)
+
+        try:
+            with self.repository.db.begin_nested():
+                code = self.repository.industry_code(industry_id)
+                applicability = (
+                    self.repository.question_applicability_for_industry(code)
+                    if code else {}
+                )
+                weights = normalise_weights(
+                    self.repository.industry_pain_point_weights(industry_id)
+                )
+                problem_to_code = self.repository.problem_to_code() if weights else {}
+        except Exception:                                  # noqa: BLE001
+            logger.warning(
+                "Industry relevance unavailable; using the default order",
+                extra={"stage": "industry_scope", "session_id": session.session_id},
+            )
+            return relevance_ranker(None, None, None)
+
+        return relevance_ranker(applicability, problem_to_code, weights)
+
+    def _opening_block_key(
+        self, session: DiagnosisSession, founder: Founder | None
+    ):
+        """The round-robin key, with the founder's OWN industry questions
+        promoted above everything for the first N answers of the session.
+
+        WHY THIS EXISTS ON TOP OF THE RELEVANCE RANK. That rank is the fourth
+        term, so it only separates questions the two coverage terms have already
+        tied. On the live bank that means a founder can answer eight or ten
+        questions before meeting one written for their industry, and the
+        diagnosis reads as generic exactly where first impressions are formed.
+        The opening block makes the first few questions unmistakably theirs.
+
+        WHY IT ENDS. The industry banks do not cover the six pillars -- SaaS at
+        Stage 0->1 is 19 Product & Execution questions and one Team, with
+        nothing for Founder Readiness, Market Clarity, Revenue Maturity or
+        Strategic Clarity -- and at Ideation the bank (15) is larger than the
+        whole budget (14). Left running, the block would spend an entire
+        diagnosis inside two pillars and the report would show four of six as
+        never assessed. `opening_block_size` is where that is bounded.
+
+        WHAT IT DOES NOT DO. It promotes, it never filters: a session whose
+        industry bank runs dry inside the block simply continues with the normal
+        order, and everything below the promoted group is still the full
+        round-robin, so the moment the block closes coverage resumes exactly
+        where it would have been.
+
+        Counting ANSWERED questions, not asked ones, matches the round-robin
+        above: a question shown and abandoned must not consume the block.
+        """
+        base = self._round_robin_key_for(session, founder)
+
+        size = self._opening_block_size(session, founder)
+        if size <= 0:
+            return base
+        if self._answered_count(session) >= size:
+            return base
+
+        rank = self._industry_rank_for(session, founder)
+
+        def key(question: Question):
+            # Only the industry's OWN questions open the diagnosis -- a
+            # universal question whose problem the industry merely weights
+            # heavily is not what makes the founder feel read. Those still win
+            # their ties through the fourth term inside `base`.
+            owned = rank(question)[0] <= SUPPORTING_RANK
+            return (0 if owned else 1, *base(question))
+
+        return key
+
+    def _opening_block_size(
+        self, session: DiagnosisSession, founder: Founder | None
+    ) -> int:
+        """How many opening questions this founder's industry gets, or 0.
+
+        0 for every failure and for every founder without an industry, which is
+        the pre-existing behaviour. Never raises: this is a preference, and a
+        preference must never be able to stop the assessment.
+        """
+        if founder is None:
+            return 0
+        try:
+            stage = getattr(founder, "stage", None)
+            scope = resolve_scope(founder)
+            pillars_in_scope = len(scope.pillars) if scope is not None else len(ALL_PILLARS)
+            budget = settings.question_budget(
+                getattr(stage, "question_budget", None)
+            )
+            return opening_block_size(
+                budget=budget,
+                pillars_in_scope=pillars_in_scope,
+                requested=requested_opening(
+                    getattr(stage, "stage_order", None),
+                    budget,
+                    settings.INDUSTRY_OPENING_QUESTIONS,
+                    settings.INDUSTRY_OPENING_SHARE,
+                ),
+                available=self._industry_question_count(session, founder),
+            )
+        except Exception:                                  # noqa: BLE001
+            logger.warning(
+                "Industry opening block unavailable; using the default order",
+                extra={"stage": "industry_scope", "session_id": session.session_id},
+            )
+            return 0
+
+    def _industry_question_count(
+        self, session: DiagnosisSession, founder: Founder | None
+    ) -> int:
+        """How many questions exist for this founder's industry, any stage.
+
+        Deliberately the WHOLE industry bank rather than this stage's slice.
+        The slice is what `list_candidate_questions` has already narrowed to, so
+        counting it again here would be the stage filter applied twice; and this
+        number only ever CAPS the block, so erring high simply lets the other
+        two limits decide, which is where the real protection lives.
+        """
+        industry_id = industry_id_for(session, founder)
+        if industry_id is None:
+            return 0
+        with self.repository.db.begin_nested():
+            code = self.repository.industry_code(industry_id)
+            if not code:
+                return 0
+            return len(self.repository.question_applicability_for_industry(code))
+
+    def _answered_count(self, session: DiagnosisSession) -> int:
+        """Answers recorded in this session so far.
+
+        Read off the session's own counter, which `submit_answer` maintains, so
+        the block costs no extra query per turn. A missing or unreadable counter
+        reads as 0, which keeps the block OPEN -- the safe direction, since the
+        block only ever reorders and the other two limits still bound it.
+        """
+        try:
+            return int(getattr(session, "questions_answered_count", 0) or 0)
+        except (TypeError, ValueError):                    # noqa: BLE001
+            return 0
+
+    def _sort_key_for(
+        self, session: DiagnosisSession, founder: Founder | None = None
+    ):
         """The ranking key, biased by what the session is currently trying to do.
 
         Below the validate threshold the job is to GATHER: cover all six
@@ -258,7 +439,7 @@ class QuestionSelectionEngine:
         so a session in validate mode that runs out of targeted questions simply
         continues with the normal order rather than ending early.
         """
-        base = self._round_robin_key_for(session)
+        base = self._opening_block_key(session, founder)
 
         targeted = self._detected_root_cause_ids(session)
         if not targeted:
@@ -683,15 +864,25 @@ class QuestionSelectionEngine:
         return problem_to_dimension or None
 
     def order_candidates(
-        self, candidates: list[Question], session: DiagnosisSession | None = None
+        self,
+        candidates: list[Question],
+        session: DiagnosisSession | None = None,
+        founder: Founder | None = None,
     ) -> list[Question]:
         """The deterministic ask-order -- the shortlist head is the default pick.
 
         Takes the session so the adaptive advisor's shortlist carries the same
         validate-mode bias as the direct pick; without it the LLM would be handed
         a broad shortlist while the deterministic path was targeting confirmation.
+
+        Takes the founder for the same reason, one axis over: the shortlist must
+        carry the same INDUSTRY bias too. The session's snapshot is normally
+        enough on its own (`start_session` writes it), so the founder is optional
+        and is only the fallback for a session that predates the snapshot.
         """
-        key = self._sort_key_for(session) if session is not None else _sort_key
+        key = (
+            self._sort_key_for(session, founder) if session is not None else _sort_key
+        )
         return sorted(candidates, key=key)
 
     def resolve_follow_up(self, session: DiagnosisSession, answer_question: Question) -> None:
