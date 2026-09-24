@@ -180,6 +180,52 @@ def normalise_weights(raw: Any) -> dict[str, Decimal]:
     return out
 
 
+#: Fewest questions each in-scope pillar must still be able to receive after
+#: the opening block has taken its share.
+#:
+#: Two, not one, and not `MIN_ANSWERS_PER_PILLAR_SCORE` (3). A pillar with one
+#: answer scores 0, 50 or 100 and nothing between, which is why the scoring
+#: floor exists at all; two is the fewest that can produce anything else. Three
+#: would be the honest scoring floor, but this is a guard on a preference, not
+#: the scoring rule -- it exists to stop the opening block starving coverage,
+#: and pitching it at the scoring floor would shrink the block at exactly the
+#: stages (Ideation, Validation) where the industry signal is most of what
+#: distinguishes two founders with nothing built.
+MIN_QUESTIONS_PER_PILLAR = 2
+
+
+def opening_block_size(
+    budget: int,
+    pillars_in_scope: int,
+    share: float,
+    available: int,
+) -> int:
+    """How many of the first questions are reserved for the founder's industry.
+
+    Three independent limits, smallest wins:
+
+      * `share` of the budget -- the product decision, tunable in production.
+      * what is left after every in-scope pillar is guaranteed
+        MIN_QUESTIONS_PER_PILLAR. This is the guard that matters: the industry
+        banks cover two to four pillars out of six (see
+        `Settings.INDUSTRY_OPENING_SHARE` for the measurements), so an
+        unguarded block would leave the pillars it does not touch with nothing.
+      * `available` -- how many industry questions this founder's stage
+        actually has. Reserving ten slots when the bank holds four would idle
+        six, and the block is meant to be a head start, not a quota.
+
+    Returns 0 rather than raising for any nonsensical input -- a negative
+    budget, a share above 1, no pillars in scope. 0 means "no opening block",
+    which is the pre-existing behaviour and always safe.
+    """
+    if budget <= 0 or available <= 0 or share <= 0:
+        return 0
+    by_share = int(budget * min(share, 1.0))
+    reserved_for_coverage = max(0, pillars_in_scope) * MIN_QUESTIONS_PER_PILLAR
+    by_coverage = budget - reserved_for_coverage
+    return max(0, min(by_share, by_coverage, available))
+
+
 def relevance_ranker(
     applicability: dict[int, str] | None,
     problem_to_code: dict[int, str] | None,

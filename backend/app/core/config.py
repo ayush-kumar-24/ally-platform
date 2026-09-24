@@ -304,6 +304,46 @@ class Settings(BaseSettings):
     # and 1-2 for below-floor.
     MIN_ANSWERS_PER_PILLAR_SCORE: int = 3
 
+    # Share of the question budget spent, up front, on questions written for
+    # the founder's own industry before pillar coverage takes over.
+    #
+    # WHY AN OPENING BLOCK AND NOT JUST A RANKING PREFERENCE. As a tie-break
+    # (industry_scope's relevance rank) industry is too quiet to be felt: it
+    # only separates questions the coverage terms have already tied, so a
+    # founder can answer ten questions before meeting one written for their
+    # industry. The diagnosis should read as theirs from the start.
+    #
+    # WHY IT IS CAPPED, AND WHY AT ROUGHLY A THIRD. The industry banks do NOT
+    # cover the six pillars, measured on the seeded data:
+    #
+    #   SaaS,          Stage 0->1   20 questions: 19 Product & Execution,
+    #                               1 Team & Leadership. Nothing at all for
+    #                               Founder Readiness, Market Clarity,
+    #                               Revenue Maturity or Strategic Clarity.
+    #   Manufacturing, Stage 1->10+ 25 questions: 21 Revenue Maturity,
+    #                               4 Product & Execution. Four pillars absent.
+    #
+    # And the bank is large against the budget -- 15 questions at Ideation
+    # (budget 14), 20 at Validation (budget 20), 25 at Growth (budget 30). So
+    # an uncapped industry-first pass would spend an Ideation founder's ENTIRE
+    # diagnosis inside two or three pillars, and Founder Readiness and
+    # Strategic Clarity -- motivation clarity, idea conviction, delegation
+    # anxiety, leadership identity -- would go unasked at every stage in every
+    # industry. Those pillars are scored and reported, and a pillar with no
+    # answers renders as not assessed.
+    #
+    # A third leaves twice the budget for coverage, which at every stage is
+    # more than two questions per in-scope pillar:
+    #
+    #   Ideation 14 -> 4 industry, 10 coverage   Growth     30 -> 10, 20
+    #   Validation 20 -> 6, 14                   Expansion  32 -> 10, 22
+    #   Early Traction 30 -> 10, 20
+    #
+    # Data, not behaviour: tune it in production like founder_stages
+    # .question_budget. 0.0 disables the block entirely and returns selection
+    # to the ranking preference alone.
+    INDUSTRY_OPENING_SHARE: float = 1 / 3
+
     # --- Founder DNA (phase 2, adaptive) ---
     # Safety ceiling for the Founder DNA phase, which runs BEFORE the
     # diagnosis above (see founders.founder_dna_completed_at). Unlike

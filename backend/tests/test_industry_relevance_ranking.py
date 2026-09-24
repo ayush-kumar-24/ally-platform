@@ -90,10 +90,21 @@ def _founder(industry_mapped_id=SAAS_ID):
     )
 
 
-def _session(founder_industry_id=SAAS_ID, routing_state="continue"):
+#: Past any opening block these fixtures can produce: budget 30 (stage_order 5,
+#: no per-stage budget on the fixture) x share 1/3 = 10 at most. A session with
+#: this many answers is firmly in the COVERAGE phase, which is where the
+#: pillar-first guarantees below must hold.
+AFTER_THE_BLOCK = 99
+
+
+def _session(founder_industry_id=SAAS_ID, routing_state="continue", answered=AFTER_THE_BLOCK):
+    """Defaults to a session PAST the opening block, so these tests measure the
+    relevance term (the fourth sort key) rather than the block that precedes it.
+    The block has its own file -- test_industry_opening_block."""
     return SimpleNamespace(
         session_id=1, routing_state=routing_state,
         founder_industry_id=founder_industry_id,
+        questions_answered_count=answered,
     )
 
 
