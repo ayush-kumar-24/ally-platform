@@ -18,6 +18,7 @@ import {
   restrictProcessing,
   withdrawConsent,
 } from '../services/privacy';
+import { getConsents, grantDiagnosisConsent } from '../services/consents';
 
 // --- Privacy Center helpers ------------------------------------------------
 
@@ -301,6 +302,11 @@ export default function FounderProfile() {
   // Danger Zone section off-screen behind a wall of history rows.
   const [historyOpen, setHistoryOpen] = useState(false);
   const [privacyState, setPrivacyState] = useState(null);   // restriction / deletion standing
+  // null = not known yet (or the lookup failed), so the banner below stays
+  // hidden rather than telling a founder their consent is missing on the
+  // strength of a failed request.
+  const [diagnosisConsent, setDiagnosisConsent] = useState(null);
+  const [grantingConsent, setGrantingConsent] = useState(false);
   // "View data summary" used to download a JSON file of database table names --
   // it neither viewed anything nor said anything a founder could read. Held here
   // so it can be shown on the page instead.
@@ -336,6 +342,12 @@ export default function FounderProfile() {
       } finally {
         setRequestsLoaded(true);
       }
+      /* Separate try: a consent lookup that fails must not cost the founder
+         their privacy standing or request history above. */
+      try {
+        const consents = await getConsents();
+        setDiagnosisConsent(Boolean(consents?.current?.agree_diagnosis));
+      } catch { /* leave null -- the banner stays hidden */ }
     })();
   }, []);
 
@@ -472,6 +484,28 @@ export default function FounderProfile() {
       inFlight.current = false;
       setSubmitting(false);
       setProgress('');
+    }
+  }, [showToast]);
+
+  /* Give diagnosis consent from here. Every message that refuses a diagnosis
+     for want of consent tells the founder they "can give it from your
+     profile" -- and until this existed, that was not true: the Privacy Centre
+     could withdraw consent and restrict processing, but had no control that
+     GAVE consent back. A founder who withdrew, or whose consent was never
+     recorded, had no way in the product to undo it. */
+  const handleGrantConsent = useCallback(async () => {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setGrantingConsent(true);
+    try {
+      const record = await grantDiagnosisConsent();
+      setDiagnosisConsent(Boolean(record?.agree_diagnosis));
+      showToast('Consent recorded — Ally can run your diagnosis.');
+    } catch (err) {
+      showToast(err.detail || 'Could not save your consent — please try again.');
+    } finally {
+      inFlight.current = false;
+      setGrantingConsent(false);
     }
   }, [showToast]);
 
@@ -1537,6 +1571,35 @@ export default function FounderProfile() {
               style={{ flexShrink: 0 }}
             >
               {submitting ? (progress || 'Working…') : 'Resume'}
+            </button>
+          </div>
+        )}
+
+        {/* Consent missing, and nothing else more urgent is standing in the
+            way. Not shown while `diagnosisConsent` is null: that means the
+            lookup has not answered yet, and claiming consent is missing on a
+            failed request would be worse than saying nothing. */}
+        {diagnosisConsent === false && !privacyState?.deletion_pending
+          && !privacyState?.processing_restricted && (
+          <div className="pr-privacy-banner" role="status" style={{
+            background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10,
+            padding: '12px 14px', marginBottom: 14, color: '#92400e', fontSize: 13,
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+          }}>
+            <span>
+              <strong>Diagnosis consent not given.</strong>{' '}
+              Ally cannot run a diagnosis on your answers until you agree to it,
+              as described in the Privacy Policy.
+            </span>
+            <button
+              className="pr-privacy-btn"
+              onClick={handleGrantConsent}
+              disabled={grantingConsent || submitting}
+              type="button"
+              id="privacy-btn-grant-consent"
+              style={{ flexShrink: 0 }}
+            >
+              {grantingConsent ? 'Saving…' : 'Give consent'}
             </button>
           </div>
         )}
