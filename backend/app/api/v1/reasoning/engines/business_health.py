@@ -57,14 +57,92 @@ def _int(value: Decimal) -> Decimal:
     return value.quantize(_ONE, rounding=ROUND_HALF_UP)
 
 
-def _band_for(score_bands, value: Decimal) -> str | None:
-    """Return the band `level` whose [range_min, range_max] contains `value`."""
-    for band in score_bands or []:
+#: How far the band floors are lowered, so that a founder who answers amber to
+#: everything reads as Developing rather than Needs Attention.
+#:
+#: The scoring formula is (1 - sum/(count*2)) * 100 with green 0, amber 1, red
+#: 2, so all-amber lands on exactly 50 -- and the catalogue's bands put 50 in
+#: "Needs Attention". Amber means a real practice with a real gap, which is the
+#: ordinary state of a working business, so the effect was that a fairly graded
+#: session still read as a warning from end to end.
+#:
+#: Measured, not chosen. A keyed ideation run graded 5 red / 7 amber / 1 green
+#: -- a spread with genuine variation in it -- and produced Market Clarity 42
+#: ("Needs Attention"), Strategic Clarity 17, and an overall of 34: one point
+#: under the Critical Gap line. The grading was right. The bands sat above
+#: where honest grading lands.
+#:
+#: Applied here rather than by editing readiness_pillars.score_bands, because
+#: those rows are content the team edits directly and carry the written band
+#: descriptions with them. This moves only where the boundaries fall, leaves
+#: the prose alone, and keeps the change in one reviewable place.
+_BAND_FLOOR_SHIFT = Decimal("15")
+
+#: The bottom band's wording is written for a business that has tried and is
+#: failing. At ideation nothing is built yet, and readiness_pillars says so
+#: itself -- "Revenue Maturity is not expected at this stage. The score here
+#: measures intent." Telling a founder four months into an idea that she has a
+#: "Critical Gap" describes being early as being broken.
+_EARLY_STAGE_ORDERS = frozenset({1, 2})
+_EARLY_BOTTOM_BAND = "Not started yet"
+_BOTTOM_BAND = "Critical Gap"
+
+
+def _stage_order(context) -> int | None:
+    """The founder's stage ORDER, not their stage id.
+
+    Read from the loaded stage row when it is there; `stage_id` is the
+    fallback, and only because the two coincide in the seeded catalogue -- an
+    id is not an ordering and must not be treated as one if the rows are ever
+    renumbered.
+    """
+    stage = getattr(getattr(context, "founder", None), "stage", None)
+    order = getattr(stage, "stage_order", None)
+    if order is not None:
+        return int(order)
+    sid = getattr(context, "stage_id", None)
+    return int(sid) if sid is not None else None
+
+
+def _band_for(score_bands, value: Decimal, stage_order: int | None = None) -> str | None:
+    """Return the band `level` for `value`, with the middle floors shifted down.
+
+    The BOTTOM band keeps its floor at 0 -- there is nothing beneath it to
+    shift into -- and the TOP band keeps its own floor, so "Strong" is exactly
+    as hard to reach as it was. Only the boundaries in between move, and
+    ceilings follow from the floors so the bands still tile 0-100 with no gap
+    for a value to fall through.
+    """
+    bands = list(score_bands or [])
+    if not bands:
+        return None
+    ordered = sorted(bands, key=lambda b: Decimal(str(b.get("range_min", 0))))
+    last = len(ordered) - 1
+
+    floors: list[Decimal] = []
+    for i, band in enumerate(ordered):
         low = Decimal(str(band.get("range_min", 0)))
-        high = Decimal(str(band.get("range_max", 100)))
-        if low <= value <= high:
-            return band.get("level")
-    return None
+        if i == 0:
+            floors.append(Decimal("0"))
+        elif i == last:
+            floors.append(low)
+        else:
+            floors.append(max(Decimal("0"), low - _BAND_FLOOR_SHIFT))
+
+    level = None
+    for i, band in enumerate(ordered):
+        ceiling = (Decimal(str(band.get("range_max", 100))) if i == last
+                   else floors[i + 1] - 1)
+        if floors[i] <= value <= ceiling:
+            level = band.get("level")
+            break
+    if level is None:
+        level = ordered[last].get("level")
+
+    if (level == _BOTTOM_BAND and stage_order is not None
+            and stage_order in _EARLY_STAGE_ORDERS):
+        return _EARLY_BOTTOM_BAND
+    return level
 
 
 @runtime_checkable
@@ -161,6 +239,7 @@ class BusinessHealthScorer:
         context: ReasoningContext,
     ) -> BusinessHealthScore:
         pillars = self.repository.get_readiness_pillars()
+        stage_order = _stage_order(context)
 
         # question -> problem -> pillar (database FK mapping, not guessed).
         problem_ids = {
@@ -251,7 +330,7 @@ class BusinessHealthScorer:
                     pillar_name=pillar.pillar_name,
                     weight=pillar.pillar_weightage,
                     score=health,
-                    band=_band_for(pillar.score_bands, health),
+                    band=_band_for(pillar.score_bands, health, stage_order),
                     red_flag_triggered=flagged,
                     red_flag_note=pillar.red_flag_note if flagged else None,
                     assessed_question_count=len(answer_scores),
@@ -260,7 +339,7 @@ class BusinessHealthScorer:
                 )
             )
 
-        overall, overall_band = self._overall(pillar_scores, pillars)
+        overall, overall_band = self._overall(pillar_scores, pillars, stage_order)
         red_flags = tuple(p.pillar_name for p in pillar_scores if p.red_flag_triggered)
         return BusinessHealthScore(
             overall_score=overall,
@@ -269,7 +348,8 @@ class BusinessHealthScorer:
             red_flags=red_flags,
         )
 
-    def _overall(self, pillar_scores, pillars) -> tuple[Decimal, str | None]:
+    def _overall(self, pillar_scores, pillars,
+                 stage_order: int | None = None) -> tuple[Decimal, str | None]:
         """Weight the assessed pillars by pillar_weightage, renormalising over the
         weight actually present so unseen pillars neither help nor hurt."""
         assessed = [p for p in pillar_scores if p.score is not None]
@@ -279,4 +359,4 @@ class BusinessHealthScorer:
         weighted = sum((p.score * p.weight for p in assessed), _ZERO)
         overall = _int(weighted / total_weight)
         bands = pillars[0].score_bands if pillars else None
-        return overall, _band_for(bands, overall)
+        return overall, _band_for(bands, overall, stage_order)
