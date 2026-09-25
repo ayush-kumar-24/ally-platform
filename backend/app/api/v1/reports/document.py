@@ -29,12 +29,35 @@ from app.api.v1.reports.document_style import PRINT_ONLY, STYLE, font_face_css
 _CRITICAL_MAX = 35
 _WATCH_MAX = 60
 
+#: Strength score a dimension needs to reach the "Lean on this" column.
+#:
+#: Was _WATCH_MAX (60), the same boundary the colour bands use. Those are not
+#: the same question: 60 is where a dimension stops LOOKING amber, and this is
+#: where there is enough there to lean on. Measured on a growth-stage run,
+#: Strategy & Planning came in at four amber and one red -- a dimension the
+#: founder is genuinely handling -- and scored 57, so the column came back
+#: empty while the page told him nothing was working.
+#:
+#: 55 is the bottom of the catalogue's own "Needs Attention" band, so a
+#: dimension has to clear that band's floor rather than merely exist.
+_STRENGTH_MIN = 55
+
 #: Scored answers a dimension needs before the report will call it a STRENGTH.
-#: Matches Settings.MIN_ANSWERS_PER_PILLAR_SCORE, which is the same judgement
-#: one level up: business_health refuses to score a pillar on fewer answers
-#: than this, and a dimension is a narrower thing than a pillar. Deliberately
-#: not applied to gaps -- see `_high_low`.
-_MIN_STRENGTH_ANSWERS = 3
+#:
+#: Started at 3, matching Settings.MIN_ANSWERS_PER_PILLAR_SCORE, on the
+#: reasoning that a dimension is a narrower thing than a pillar so the pillar
+#: floor was a safe borrowing. Measured, it was too high: the engine spreads
+#: roughly thirty questions across fourteen dimensions, so most dimensions end
+#: a session with one or two answers and only the ones the adaptive advisor
+#: dug into reach three. Since it digs where it suspects PROBLEMS, a floor of 3
+#: systematically admitted the weak dimensions and excluded the healthy ones --
+#: the opposite of what the column is for.
+#:
+#: 2 still rules out the case this exists to stop: a dimension asked about once
+#: and answered well is not evidence of a strength, and that was how
+#: Competitive Awareness came to be called "the machinery you will use to fix
+#: the column on the right" for a founder who was never asked about it.
+_MIN_STRENGTH_ANSWERS = 2
 
 
 def _tone(score: int) -> str:
@@ -318,10 +341,26 @@ def _high_low(categories: Sequence[Mapping[str, Any]]) -> str:
     # A gap needs no such floor: risk only rises when answers actually scored
     # badly, so a flagged dimension has its evidence by construction. It is
     # the ABSENCE of evidence that must never be read as health.
+    def _can_be_a_strength(c: Mapping[str, Any]) -> bool:
+        answers = int(c.get("answers_count") or 0)
+        if answers < _MIN_STRENGTH_ANSWERS:
+            return False
+        # A red answer must not be half the evidence. With few answers the
+        # smoothing prior pulls risk toward zero, so a dimension answered once
+        # amber and once red scored 63 -- and the page then read "Team &
+        # Leadership: Strong" in this column while the pillar bar above it said
+        # Critical Gap, about the same founder, from the same answers.
+        #
+        # A minority of reds is fine and is what a real strength looks like:
+        # four amber and one red is a dimension being handled, not a hole. Half
+        # or more is not something to lean on.
+        reds = int(c.get("red_count") or 0)
+        return reds * 2 < answers
+
     evidenced = {
         str(c.get("category") or "Dimension")
         for c in categories
-        if int(c.get("answers_count") or 0) >= _MIN_STRENGTH_ANSWERS
+        if _can_be_a_strength(c)
     }
 
     # Split on the SAME boundary the band words use, not on a separate cut.
@@ -331,7 +370,7 @@ def _high_low(categories: Sequence[Mapping[str, Any]]) -> str:
     # the `or scored[-3:]` fallback filled "Fix this first" with the bottom
     # three whatever their band. Live report, 25 Aug: "Fix this first --
     # Team & Leadership: Strong".
-    strengths = [p for p in scored if p[1] >= _WATCH_MAX and p[0] in evidenced][:4]
+    strengths = [p for p in scored if p[1] >= _STRENGTH_MIN and p[0] in evidenced][:4]
     gaps = [p for p in reversed(scored) if p[1] < _WATCH_MAX][:6]
 
     # Nothing genuinely weak is a real result, and saying so is better than
@@ -349,7 +388,7 @@ def _high_low(categories: Sequence[Mapping[str, Any]]) -> str:
         # Two different reasons for an empty column, and they are not the same
         # news. Saying "nothing has cleared the line" to someone whose session
         # simply did not probe deeply enough would be its own false verdict.
-        thin = any(p[1] >= _WATCH_MAX for p in scored)
+        thin = any(p[1] >= _STRENGTH_MIN for p in scored)
         left_body = (
             '<p class="panel-note">Not enough was asked about your stronger '
             'areas this session to call any of them a strength. That is a gap '

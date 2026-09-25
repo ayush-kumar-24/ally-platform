@@ -82,6 +82,11 @@ class CategoryRisk:
     #: distinguish "asked repeatedly and healthy" from "barely asked": both
     #: come out near 0, and the report called both a strength.
     answers_count: int = 0
+    #: How many of those answers scored RED. Carried for the same reason as
+    #: the count: risk alone cannot say whether a dimension is quietly healthy
+    #: or has one serious hole, and with few answers the smoothing prior pulls
+    #: both toward the same number.
+    red_count: int = 0
 
 
 @dataclass(frozen=True)

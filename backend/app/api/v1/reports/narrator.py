@@ -524,6 +524,25 @@ class LLMSectionNarrator:
             "Return ONLY a JSON object with exactly the same keys as the input.\n"
             "For each key, write 1-2 short sentences in plain, everyday English, "
             "addressed to the founder as \"you\".\n"
+            # The cards print the summary UNDER a dimension label and nothing
+            # else -- the question that produced the answer is not on the page.
+            # So a summary that merely opens where the founder opened is
+            # meaningless there. Live, two unrelated founders both got
+            # "Core Motivation: The bridge", because the question offers a
+            # choice between a trophy and a bridge and both answered "the
+            # bridge"; the rest of what they said -- clinics that lose patients
+            # to a notebook, a front desk getting home an hour earlier -- was
+            # the actual content and was dropped. Other cards read "Decision
+            # Style: I gather.", "Energy Patterns: March and April this year."
+            "EACH SUMMARY MUST STAND ALONE. It is printed under a short label "
+            "with no question next to it, so it has to make sense to someone "
+            "who never saw the question. Never answer a question that is not "
+            "shown: do not open with \"The bridge\", \"Yesterday\", \"March\", "
+            "\"I gather\" or any other bare reply. Say the SUBSTANCE -- what "
+            "they described, chose or care about, and why -- in a sentence that "
+            "reads on its own.\n"
+            "If the founder's answer opens with a short reply and then explains "
+            "it, the explanation is the summary. Compress THAT.\n"
             "Use ONLY what that key's own text says. Never add a fact, name, number "
             "or judgement that is not already there, and never mix material between "
             "keys. If a value says too little to summarise, shorten it and leave the "
