@@ -12,7 +12,48 @@
 -- Idempotent, no hardcoded ids: causes resolved by code, ON CONFLICT DO NOTHING.
 -- =====================================================================
 BEGIN;
-select setval(pg_get_serial_sequence('root_cause_weights','weight_id'), greatest((select coalesce(max(weight_id),0) from root_cause_weights), 1));
+-- Repair the sequence ONLY if it is actually behind its own table.
+--
+-- An earlier version called setval() unconditionally. setval() needs UPDATE on
+-- the sequence, and a migration role that has INSERT on the tables and only
+-- USAGE on the sequence does not have it -- so the call failed with
+-- "permission denied for sequence root_cause_weights_weight_id_seq" and took
+-- the whole transaction with it, before a single row was inserted. Raised by
+-- the AWS team from a permission problem they had already hit once.
+--
+-- INSERT itself only needs nextval(), which USAGE alone allows. So the repair
+-- is needed only in the one case where the sequence sits behind max(weight_id)
+-- -- which happens when rows were loaded with explicit ids, as the original
+-- catalogue was via Supabase. If the sequence is already ahead, this does
+-- nothing and needs no privilege at all.
+do $$
+declare
+  seq text := pg_get_serial_sequence('root_cause_weights','weight_id');
+  mx  bigint;
+  cur bigint;
+begin
+  select coalesce(max(weight_id), 0) into mx from root_cause_weights;
+  cur := pg_sequence_last_value(seq::regclass);
+
+  if cur is not null and cur >= mx then
+    raise notice 'sequence is ahead of the table (sequence %, max id %) -- no repair needed.', cur, mx;
+    return;
+  end if;
+
+  begin
+    perform setval(seq, greatest(mx, 1));
+    raise notice 'sequence repaired: moved to % (was %).', greatest(mx, 1), coalesce(cur::text, 'unused');
+  exception
+    when insufficient_privilege then
+      raise exception
+        'The sequence % is behind its table (highest weight_id is %, sequence is at %), '
+        'and this role cannot run setval on it. Inserting now would collide on the primary key. '
+        'Either grant the privilege:  GRANT USAGE, UPDATE ON SEQUENCE % TO current_user;  '
+        'or have the table owner run:  SELECT setval(''%'', %);  '
+        'then re-run this file. Nothing has been changed.',
+        seq, mx, coalesce(cur::text, 'unused'), seq, seq, greatest(mx, 1);
+  end;
+end $$;
 
 -- RTL
 insert into root_cause_weights (root_cause_id, stage_id, stage_weight, notes) select rc.root_cause_id, 1, 1.5, 'batch content: stage relevance curve for dimension skill_stage_fit' from root_causes rc where rc.root_cause_code = 'RC-RTL-301-1' on conflict (root_cause_id, stage_id) do nothing;

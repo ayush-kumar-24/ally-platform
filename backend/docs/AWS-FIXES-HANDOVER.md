@@ -43,10 +43,37 @@ rollout can verify one batch before starting the next.
   so on a database with no batch content it changes nothing. Verified: the md5
   of every batch stage_weight value is identical before and after running it on
   a freshly loaded database.
-- **`fix_batch_stage_weights.sql`** (no number) is **superseded**. It was the
-  original combined batch 1 + 2 file — 2,160 statements across ten industry
-  prefixes — which could not be deployed one batch at a time. Files 4 and 6
-  replace it. Do not run it.
+- **`fix_batch_stage_weights.sql`** (no number) is **superseded — do not run
+  it.** It was the original combined batch 1 + 2 file, 2,160 statements across
+  ten industry prefixes, which could not be deployed one batch at a time.
+  Files 4 and 6 replace it.
+
+  It also has a defect the numbered files do not: its final check asks whether
+  any matching root cause is missing weight rows, and against a database with
+  **no** batch root causes that question has no failures to find, so it
+  reports "stage weights ok" having inserted nothing. Verified. Do not read a
+  pass from that file as proof of anything. Found by the AWS team in review.
+
+### A note on sequence privileges
+
+Each weight file repairs `root_cause_weights_weight_id_seq` if it sits behind
+its own table — which happens where rows were loaded with explicit ids, as the
+original catalogue was.
+
+`setval()` needs **UPDATE** on the sequence. `INSERT` needs only **USAGE**, via
+`nextval()`. So a migration role with INSERT on the tables and USAGE on the
+sequences can load these files, but an unconditional `setval()` would fail for
+it with `permission denied for sequence root_cause_weights_weight_id_seq` and
+abort the transaction before inserting anything.
+
+The files now check first and only call `setval()` when the sequence is
+genuinely behind. Three outcomes, all tested:
+
+- sequence already ahead → skipped, no privilege needed, load proceeds
+- sequence behind, role can `setval` → repaired, with a notice saying so
+- sequence behind, role cannot → **fails before changing anything**, and names
+  both remedies: the `GRANT USAGE, UPDATE ON SEQUENCE … TO current_user` or the
+  exact `SELECT setval(…)` for the table owner to run
 - **`fix_concentrate_batch_evidence.sql`** is **not needed on a fresh load** —
   skip it. Batches 1 and 2 were re-emitted with evidence concentration built
   into the content itself. Measured on a database with only batch 1 loaded,
