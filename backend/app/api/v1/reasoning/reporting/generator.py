@@ -139,6 +139,7 @@ class ReportGenerator:
                 band=self._band(c.is_flagged, c.normalised_risk),
                 is_flagged=c.is_flagged,
                 answers_count=getattr(c, "answers_count", 0),
+                red_count=getattr(c, "red_count", 0),
             )
             for c in bundle.diagnosis.category_risks
         )

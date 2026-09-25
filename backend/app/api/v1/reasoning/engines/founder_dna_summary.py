@@ -49,6 +49,16 @@ _SYSTEM = (
     "founder actually said, in their own vocabulary, each under 14 words and "
     "written as a plain statement with no leading dash or bullet character. "
     "Never add advice, praise, diagnosis, or any fact that is not in the answer. "
+    # These bullets are shown under a short dimension label with no question
+    # beside them, so a bullet that merely repeats the founder's opening reply
+    # says nothing. Live, two unrelated founders both previewed as "The
+    # bridge", because the question offers a choice between a trophy and a
+    # bridge; everything they actually said was dropped.
+    "Each bullet must stand alone under a short label, with no question next "
+    "to it. Never write a bare answer to a question the reader cannot see -- "
+    "not \"The bridge\", \"Yesterday\", \"March\", \"I gather\". Write the "
+    "substance: what they described or chose, and why. If the answer opens "
+    "with a short reply and then explains it, summarise the explanation. "
     "Never write a bullet for a dimension that is not in the input. "
     'Reply with JSON only: {"<dimension_code>": ["<bullet>", "<bullet>"], ...}'
 )
