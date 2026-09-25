@@ -241,12 +241,50 @@ class LLMNextQuestionAdvisor(NextQuestionAdvisor):
             "the founder does not track or know it.\n"
             "  NOT_APPLICABLE      -- the thing asked about is not part of how "
             "this business works at all.\n"
-            "  AMBIGUOUS           -- partial or mixed.\n"
+            "  AMBIGUOUS           -- partial or mixed: the answer shows a real "
+            "practice AND a real gap, or answers part of the question well and "
+            "part of it not at all.\n"
             "Then map the state to a label:\n"
             "- green: POSITIVE_EVIDENCE.\n"
             "- amber: AMBIGUOUS.\n"
             "- red: NEGATIVE_EVIDENCE, or UNKNOWN/NOT_MEASURED -- not knowing "
             "something your business depends on IS a real gap.\n"
+            # The over-correction. The note below this map fixed a grader that
+            # was rewarding candour with green; measured on the next keyed run
+            # it had gone the other way, and 28 of 30 answers came back red --
+            # among them "two to three kilos a week, I track it roughly on a
+            # weekly sheet" and "by weight, maybe 2%", from a founder who had
+            # costed all fourteen of his dishes and could quote his margin per
+            # order to the rupee. Every pillar then read Critical Gap, which is
+            # not a diagnosis, and a 0.50 risk in the psychology category
+            # triggered a burnout section for a founder who had said in
+            # onboarding that he was mentally clear.
+            #
+            # Two things were collapsing into red that are not NEGATIVE_EVIDENCE:
+            # an answer that reports a working practice alongside a gap, and an
+            # answer where the founder DOES know the number and says it. Both
+            # are what AMBIGUOUS exists for.
+            "MIXED IS AMBER, NOT RED. Red is for an answer that shows the thing "
+            "asked about is genuinely weak, missing or unmanaged. If the "
+            "founder describes something they actually do -- a routine, a "
+            "record, a number they track -- and it is incomplete, that is "
+            "AMBIGUOUS. \"Two to three kilos a week, I track it roughly on a "
+            "weekly sheet but I have never costed it\" reports a real practice "
+            "with a real gap: amber. UNKNOWN/NOT_MEASURED means they do not "
+            "know it at all -- not that they know it approximately, or track it "
+            "in a rougher form than you would like.\n"
+            "A NUMBER THE FOUNDER KNOWS IS EVIDENCE, NOT A GAP. If they answer "
+            "with a figure from their own records, that part of the answer is "
+            "POSITIVE_EVIDENCE. Do not grade it red because some adjacent "
+            "thing they were not asked about is untracked.\n"
+            "CALIBRATION. These questions are written to find weaknesses and "
+            "the engine deliberately asks MORE where it suspects a problem, so "
+            "some skew toward red is expected and correct. But a whole session "
+            "of red is a grading failure, not a finding: it makes every pillar "
+            "Critical Gap, which tells the founder nothing about where to "
+            "start. If you are about to return red, check that the answer "
+            "really does describe something weak, missing or unmanaged, and "
+            "not merely something imperfect.\n"
             "- not_applicable: NOT_APPLICABLE only. It carries NO score and is "
             "excluded from the diagnosis rather than counted against the "
             "founder.\n"
