@@ -52,7 +52,16 @@ const ROUTE_EYE = {
   '/app/ally-chat': 'Conversation',
   '/app/founder-dna-journey': 'Founder first',
   '/app/current-problem': 'In your words',
-  '/app/diagnosis': 'Diagnosis',
+  /* "Business DNA", not "Diagnosis", because that is what these questions are
+     building: the diagnosis IS the Business DNA assessment -- six pillars and
+     twenty dimensions (api/v1/diagnosis/business_dna.py). The founder has just
+     come off a Founder DNA interview headed "Founder first" and this panel
+     said nothing to place the second half, so there was no way to tell from
+     the screen that the business was now the subject.
+
+     The '/app/business-dna' route below reads 'Business' for the same reason
+     in reverse: it is where the finished DNA is READ, not built. */
+  '/app/diagnosis': 'Business DNA',
   '/app/founder-dna': 'Founder first',
   '/app/vision': 'Long-term',
   '/app/business-dna': 'Business',
