@@ -23,12 +23,21 @@ own transaction and rolls back rather than half-applying.
 | 6 | `fix_concentrate_batch_evidence.sql` | An UPDATE that remaps batch 1–2 questions so evidence concentrates instead of scattering. | 2 KB |
 | 7 | `batch3_industries_11to15.sql` | Content: fashion & apparel, food & beverage, gaming, healthcare, hospitality & travel. 810 rows. | 428 KB |
 | 8 | `fix_batch3_stage_weights.sql` | 1,080 `root_cause_weights` rows — the 135 batch 3 root causes × 8 stages. | 330 KB |
+| 9 | `batch4_industries_16to20.sql` | Content: HRTech, import/export, manufacturing, SaaS, LegalTech. 810 rows. | 425 KB |
+| 10 | `fix_batch4_stage_weights.sql` | 1,080 `root_cause_weights` rows — the 135 batch 4 root causes × 8 stages. | 331 KB |
+| 11 | `fix_stage_weight_curves.sql` | **Correction.** Replaces the flat stage curve in files 5, 8 and 10 with one curve per dimension. 72 UPDATEs. | 32 KB |
 
-Order matters in three places only: the schema change (1) must land before any
+Order matters in four places only: the schema change (1) must land before any
 session writes a `not_applicable` answer; 5 and 6 reference rows that 2 and 3
-insert; and 8 reference rows that 7 inserts (it checks for all 135 and refuses
-to run otherwise, naming the file to load first). 4 is independent of the
+insert; 8 and 10 reference rows that 7 and 9 insert (each checks for all 135
+and refuses to run otherwise, naming the file to load first); and **11 must run
+last**, because it corrects what 5, 8 and 10 wrote. 4 is independent of the
 batches and can go any time after 1.
+
+**If you have already applied files 1–8**, you need 9, 10 and 11. File 11 is an
+UPDATE and is safe to run on its own against whatever batch weights are already
+in place — it does not depend on 9 or 10 having been run, and re-running it
+changes nothing.
 
 ```bash
 cd /path/to/sql
@@ -40,7 +49,10 @@ for f in \
   fix_batch_stage_weights.sql \
   fix_concentrate_batch_evidence.sql \
   batch3_industries_11to15.sql \
-  fix_batch3_stage_weights.sql
+  fix_batch3_stage_weights.sql \
+  batch4_industries_16to20.sql \
+  fix_batch4_stage_weights.sql \
+  fix_stage_weight_curves.sql
 do
   echo "== $f"
   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f" || break
@@ -164,6 +176,44 @@ Verified after loading, per industry: 9 problems across all 9 dimension codes
 and all 3 previously-starved pillars, 18 of roughly 38 own-industry Stage 0→1
 questions coming from this batch, and the selection engine returning a full
 12-question opening block with every pillar covered.
+
+## 4b. Batch 4 (industries 16–20), and a correction to my own stage weights
+
+`batch4_industries_16to20.sql`, `fix_batch4_stage_weights.sql`, and
+`fix_stage_weight_curves.sql`.
+
+Batch 4 is the same shape as the others — 810 rows, 9 dimensions per industry,
+evidence concentration built in at 2.00 questions per (root cause, stage).
+
+It is also the batch that finally allowed the detection chain to be tested end
+to end, because SaaS is the one industry with a human-written answer bank. That
+run found a mistake in my own work, which file 11 corrects.
+
+**What was wrong.** All three stage-weight files wrote the same eight values for
+every cause: `1.0, 2.0, 2.0, 2.0, 1.5, 1.0, 0.5, 0.5`. That put every one of
+the 540 batch causes at the maximum `2.00` at Early Traction, while the original
+catalogue is spread 0.50–2.00 there with a mean of 1.557 and only 20% of causes
+at the top value.
+
+**What it did.** A real SaaS founder run at Early Traction returned batch causes
+at ranks 1, 2, 3, 4 and 5, with all three top findings from batch content, each
+carrying `stage_probability` 1.0000 against 0.6667 for the original causes below
+them. The intent was to remove a handicap; the effect was to hand the new
+content an advantage. A ranking that looks like new content winning on merit,
+when it is winning on a weight I chose, is worse than the handicap it replaced.
+
+**The correction.** `stage_weight` answers "how relevant is this cause at this
+stage", which is a property of the **dimension**, not of the batch the content
+arrived in. File 11 replaces the flat curve with one curve per dimension,
+reasoned from what each dimension is — role clarity cannot be wrong before there
+is a team; founder dependency is exactly what binds at Expansion. At Early
+Traction this lands the batch mean on 1.556 against the catalogue's 1.557.
+
+**And the content still surfaces.** Re-running the same diagnosis after the
+correction: batch causes still hold ranks 1–5, but now at the same
+`stage_probability` as the causes below them (0.6667), with the margin between
+rank 5 and rank 6 narrowing from 0.089 to 0.022. It survived losing the
+advantage, which is the only version of that result worth reporting.
 
 ## 5. Evidence concentration
 

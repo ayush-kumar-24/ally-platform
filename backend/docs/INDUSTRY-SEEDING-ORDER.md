@@ -21,11 +21,11 @@ three pillars the industry layer never covered, across all nine dimension codes.
 | 13 | Gaming | `gaming` | GAM | 3 | **done** |
 | 14 | Healthcare & HealthTech / MedTech | `healthtech` | HLT | 3 | **done** |
 | 15 | Hospitality, Travel & Tourism | `travel_hospitality` | TRV | 3 | **done** |
-| 16 | Human Resources & HRTech | `hrtech` | HRT | 4 | pending |
-| 17 | Import / Export & Trade | `trade_import_export` | TRD | 4 | pending |
-| 18 | Industrial & Manufacturing | `manufacturing` | MFG | 4 | pending |
-| 19 | Information Technology & Software (SaaS) | `saas` | SAS | 4 | pending |
-| 20 | Legal & LegalTech | `legaltech` | LGL | 4 | pending |
+| 16 | Human Resources & HRTech | `hrtech` | HRT | 4 | **done** |
+| 17 | Import / Export & Trade | `trade_import_export` | TRD | 4 | **done** |
+| 18 | Industrial & Manufacturing | `manufacturing` | MFG | 4 | **done** |
+| 19 | Information Technology & Software (SaaS) | `saas` | SAS | 4 | **done** |
+| 20 | Legal & LegalTech | `legaltech` | LGL | 4 | **done** |
 | 21 | Logistics & Supply Chain | `logistics` | LOG | 5 | pending |
 | 22 | Marketing, Advertising & AdTech | `adtech_marketing` | MKT | 5 | pending |
 | 23 | Non-Profit, Social Impact & NGO | `ngo` | NGO | 5 | pending |
