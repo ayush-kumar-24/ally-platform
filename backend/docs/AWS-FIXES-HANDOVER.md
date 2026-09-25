@@ -28,6 +28,8 @@ own transaction and rolls back rather than half-applying.
 | 11 | `fix_stage_weight_curves.sql` | **Correction.** Replaces the flat stage curve in files 5, 8 and 10 with one curve per dimension. 72 UPDATEs. | 32 KB |
 | 12 | `batch5_industries_21to25.sql` | Content: logistics, marketing/AdTech, NGO, pharma/biotech, professional services. 810 rows. | 425 KB |
 | 13 | `fix_batch5_stage_weights.sql` | 1,080 `root_cause_weights` rows. Already uses the per-dimension curve — file 11 does not touch it. | 336 KB |
+| 14 | `batch6_industries_26to30.sql` | Content: retail, sports & fitness, telecom, textiles, transport & delivery. 810 rows. **Completes all 30 industries.** | 425 KB |
+| 15 | `fix_batch6_stage_weights.sql` | 1,080 `root_cause_weights` rows, per-dimension curve. | 336 KB |
 
 Order matters in four places only: the schema change (1) must land before any
 session writes a `not_applicable` answer; 5 and 6 reference rows that 2 and 3
@@ -62,7 +64,9 @@ for f in \
   fix_batch4_stage_weights.sql \
   fix_stage_weight_curves.sql \
   batch5_industries_21to25.sql \
-  fix_batch5_stage_weights.sql
+  fix_batch5_stage_weights.sql \
+  batch6_industries_26to30.sql \
+  fix_batch6_stage_weights.sql
 do
   echo "== $f"
   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f" || break
@@ -239,6 +243,27 @@ pillars, 2.00 questions per (root cause, stage), Early Traction weight mean
 1.556 against the catalogue's 1.557. All five industries return a full
 12-question opening block with every pillar covered and zero foreign-industry
 leakage.
+
+## 4d. Batch 6 (industries 26–30) — the last one
+
+`batch6_industries_26to30.sql` and `fix_batch6_stage_weights.sql`.
+
+Retail, Sports & Fitness, Telecom, Textiles, Transport & Delivery. **This
+completes all 30 industries.** Like batch 5, it uses the per-dimension stage
+curve from the start and refuses to commit if its Early Traction mean exceeds
+1.7, so file 11 has nothing of batch 6's to correct.
+
+Once files 1–15 are applied, the whole set measures:
+
+```
+industries with all 9 dimensions across all 3 previously-starved pillars:  30 of 30
+stage weight mean at Early Traction:   batch 1.556   catalogue 1.557
+questions per (root cause, stage):     2.00 (min 2, max 2)
+```
+
+And the real selection engine, run for every one of the 30 industries at Early
+Traction, returns a full 12-question opening block, `ALL PILLARS COVERED`, and
+`OTHER INDUSTRIES' QUESTIONS STILL ELIGIBLE: 0` — 30 for 30, no exceptions.
 
 ## 5. Evidence concentration
 
