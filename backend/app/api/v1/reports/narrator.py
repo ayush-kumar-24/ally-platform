@@ -492,8 +492,21 @@ class LLMSectionNarrator:
     wrapper). Falls back to the template on empty/failed output, so it never
     blocks a report and never fabricates when the model misbehaves."""
 
-    def __init__(self, llm: Callable[[str], str], *, fallback: SectionNarrator | None = None):
+    def __init__(self, llm: Callable[[str], str], *,
+                 fallback: SectionNarrator | None = None,
+                 long_llm: Callable[[str], str] | None = None):
         self.llm = llm
+        # `summarise_dimensions` is the one call here that is not a section of
+        # prose: it returns a JSON object covering every Founder-DNA dimension
+        # the founder answered, a dozen or more, at one to two sentences each.
+        # That does not fit in the section budget, and when it overruns the
+        # reply is truncated mid-JSON, json.loads raises, the except swallows
+        # it and EVERY card silently falls back to the raw answer -- which
+        # _shorten then cuts to its first sentence. That is where "Core
+        # Motivation: The bridge.", "Focus Attention: Last week." and
+        # "Emotional Intelligence: Farhan." came from on live reports. The
+        # prompt was never the problem; it never got to finish speaking.
+        self.long_llm = long_llm or llm
         self.fallback = fallback or TemplateNarrator()
 
     def narrate(self, section_key: str, slots: dict[str, Any], tone: ToneGuidance) -> str:
@@ -551,7 +564,7 @@ class LLMSectionNarrator:
             f"INPUT: {json.dumps(material, default=str)}"
         )
         try:
-            parsed = json.loads(_json_object((self.llm(prompt) or "").strip()))
+            parsed = json.loads(_json_object((self.long_llm(prompt) or "").strip()))
         except Exception:
             parsed = {}
         if not isinstance(parsed, dict):

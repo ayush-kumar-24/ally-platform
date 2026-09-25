@@ -212,9 +212,25 @@ class ReportPayload:
     def psychology_flagged(self) -> bool:
         """Founder Psychology takes narrative precedence when the psychology
         category is flagged OR the Founder Readiness pillar red-flagged (Section H)."""
+        # BOTH routes need evidence that this is about the founder's state,
+        # not just a low business score.
+        #
+        # The category route was gated first: "Founder Psychology" carries
+        # operational questions, so risk there is not evidence of distress.
+        # The pillar route has the same flaw one level up. A growth-stage
+        # founder scored Founder Readiness 30, tripped its red flag, and was
+        # told he was "showing signs of strain -- overwork, thinning
+        # boundaries, reactive decisions, or self-doubt" -- on a session where
+        # NO distress-tagged question was answered badly, where he had
+        # described taking three weeks off during which revenue hit its
+        # second-best month, and where he had answered "mentally clear" in
+        # onboarding. A low readiness score is a business reading. It is not a
+        # report of how someone is doing, and this section speaks as though it
+        # were.
+        if self.distress_evidence <= 0:
+            return False
         cat = self._category_value("Founder Psychology")
-        if (cat is not None and cat >= self.cat_risk_threshold
-                and self.distress_evidence > 0):
+        if cat is not None and cat >= self.cat_risk_threshold:
             return True
         return any(p.name == "Founder Readiness" and p.red_flag_triggered for p in self.pillars)
 
