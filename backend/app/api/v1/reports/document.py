@@ -797,7 +797,8 @@ _FACTS_SKIP = {
 }
 
 
-def _pillar_verdicts(pillars: Sequence[Mapping[str, Any]]) -> str:
+def _pillar_verdicts(pillars: Sequence[Mapping[str, Any]],
+                     hedged: bool = False) -> str:
     """The per-pillar verdicts as a list, one card each.
 
     These used to arrive as narrator prose: six verdicts, each a name, a band
@@ -848,7 +849,14 @@ def _pillar_verdicts(pillars: Sequence[Mapping[str, Any]]) -> str:
                if desc else "")
             + '</li>'
         )
-    return f'<ul class="verdicts">{"".join(items)}</ul>'
+    # Say it where the verdicts are, not only at the top of the report. A
+    # caveat eleven pages earlier does not travel with a founder who opens the
+    # PDF at the pillar they were worried about.
+    lede = ('<p class="verdict-provisional">These bands come from a session that '
+            'did not gather enough answers to be confident. Read them as a '
+            'first reading to check, not a settled score.</p>'
+            if hedged else "")
+    return f'{lede}<ul class="verdicts">{"".join(items)}</ul>'
 
 
 def _section_body(key: str, narrative, ctx: Mapping[str, Any]) -> str:
@@ -878,7 +886,8 @@ def _section_body(key: str, narrative, ctx: Mapping[str, Any]) -> str:
         return f'<div class="care">{prose}</div>' if prose else ""
     if key == "business_dna":
         extra = (_standing(ctx["pillars"], ctx["bands"])
-                 + _pillar_verdicts(_facts(narrative, "business_dna").get("pillars") or [])
+                 + _pillar_verdicts(_facts(narrative, "business_dna").get("pillars") or [],
+                                    hedged=bool(ctx.get("hedged")))
                  + _high_low(ctx["categories"]))
     elif key == "problem_path":
         # The narrative's prose is rendered INSIDE _root_cause (it leads the
@@ -974,6 +983,14 @@ def build_report_document(
     keys = [s.key for s in getattr(narrative, "sections", ()) if getattr(s, "key", None)]
     has_root_cause = "problem_path" in keys
     wellbeing_first = "acknowledgement" in keys or "support_recommendation" in keys
+    # The narrator wrote the certainty caveat, so the rest of the page has to
+    # agree with it. It opens "we did not gather enough signal this session to
+    # be confident ... a provisional draft, not a settled diagnosis" -- and the
+    # page then handed out three Critical Gap verdicts and four Strong ratings
+    # in the same typeface it would use for a full session. A reader cannot act
+    # on both statements, so one of them is noise; this makes the bands carry
+    # the caveat the top of the page already made.
+    hedged = "hedge" in keys
 
     confirm_lines, solve_lines = _plan_lines(narrative)
     planned = len(confirm_lines) + len(solve_lines) or len(actions)
@@ -986,6 +1003,7 @@ def build_report_document(
 
     ctx = {
         "pillars": pillars, "categories": categories, "causes": causes,
+        "hedged": hedged,
         "actions": actions, "symptoms": symptoms, "steps": steps, "stats": stats,
         "bands": _pillar_bands(narrative),
     }
