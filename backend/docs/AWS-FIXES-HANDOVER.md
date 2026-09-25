@@ -47,10 +47,30 @@ rollout can verify one batch before starting the next.
   original combined batch 1 + 2 file — 2,160 statements across ten industry
   prefixes — which could not be deployed one batch at a time. Files 4 and 6
   replace it. Do not run it.
-- **`fix_concentrate_batch_evidence.sql`** is also superseded for a fresh load:
-  batches 3 onwards build evidence concentration into the content itself, and
-  batches 1–2 as re-emitted do the same. It is an UPDATE and harmless to run,
-  but it has nothing to do.
+- **`fix_concentrate_batch_evidence.sql`** is **not needed on a fresh load** —
+  skip it. Batches 1 and 2 were re-emitted with evidence concentration built
+  into the content itself. Measured on a database with only batch 1 loaded,
+  before this file was run at all: **2.00 questions per (root cause, stage),
+  min 2, max 2** — and the same for batch 2. Running it anyway is harmless (the
+  question-to-cause links hash identically before and after) but pointless.
+
+  It is kept only for a database that loaded an *older* copy of batch 1 or 2.
+  To tell which you have, after loading batch 1:
+
+  ```sql
+  select round(avg(n),2) from (
+    select root_cause_id, primary_stage_group, count(*) n from questions
+     where question_code ~ '^S(0|01|10)-(AGR|AUT|BFS|BPC|PRP)-[23][0-9][0-9]-[0-9]$'
+     group by 1,2) t;
+  ```
+
+  `2.00` → already concentrated, skip the file. `1.00` → scattered, run it.
+
+  Its self-check used to pass silently against a database with no batch rows,
+  because `avg()` over an empty set is NULL and `NULL < 2` is NULL rather than
+  true. Found by the AWS team in review. It now counts rows first and refuses
+  with a message naming the files to load — and it requires **both** batch 1
+  and batch 2 (540 questions), since it covers both.
 
 Order matters in two places only: each weight file requires its own content
 file to have landed (it checks for all 135 causes and refuses otherwise,
