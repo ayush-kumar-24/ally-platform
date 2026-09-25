@@ -97,8 +97,21 @@ export async function grantDiagnosisConsent() {
   const status = await getConsents();
   const current = status?.current ?? {};
   return recordConsent({
-    agreeTerms: Boolean(current.agree_terms),
+    // Always true, and it has to be: the service refuses to store a record
+    // with `agree_terms` false (TermsNotAcceptedError), so every record that
+    // exists already has it true -- and when NO record exists, which is the
+    // state this function exists to repair, there is nothing to carry across.
+    // Reading it back with Boolean(current.agree_terms) therefore sent false
+    // for precisely the founders who need this, and the write 422'd.
+    //
+    // True is also the accurate value, not a convenience: the terms checkbox
+    // is required to create an account at all, which is why signup posts
+    // `agreeTerms: true` unconditionally (Login.jsx).
+    agreeTerms: true,
     agreeDiagnosis: true,
+    // Still carried across AS IS, including null -- unlike the terms, nothing
+    // about having an account attests to this one, and sending true would
+    // manufacture a statement the founder never made.
     ageConfirmed: current.age_confirmed ?? null,
   });
 }
