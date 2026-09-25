@@ -268,7 +268,25 @@ class ReportNarrativeGenerator:
         # empty-content section for a non-psychology red flag, and it fabricated
         # a claim to fill it -- so this must match the Founder-Readiness check
         # _slots_and_facts actually uses, not any red flag.
-        show_psych = p.psychology_flagged or self._founder_readiness_flagged(p)
+        # The second way in is Section H itself, and it now asks the question
+        # _slots_and_facts already asks: is Founder Readiness in the CRITICAL
+        # GAP band, so that there is a written band description to show? Not
+        # merely "is the pillar red-flagged".
+        #
+        # The two come apart, and when they do this section has no content. A
+        # growth founder scored Founder Readiness 30 against a threshold of 35
+        # -- flagged -- while his band read "Needs Attention", so
+        # `section_h_text` was None and the narrator wrote the section out of
+        # `red_flag_note`, which is operator text about when to fire a section.
+        # He was told he showed "overwork, blurred boundaries, reactive
+        # decisions, and self-doubt" on a session with no distress-tagged
+        # answer scored badly, after describing three weeks away during which
+        # revenue hit its second-best month.
+        #
+        # The spec'd trigger is unchanged: Critical Gap still fires it, with
+        # that band's own words. What is gone is the case where the section
+        # appears with nothing to say and the model fills the gap.
+        show_psych = p.psychology_flagged or self._founder_readiness_state(p)[1]
 
         if variant is ReportVariant.DISTRESS:
             # Acknowledgement FIRST; a support recommendation BEFORE any business.
@@ -327,10 +345,27 @@ class ReportNarrativeGenerator:
     @staticmethod
     def _founder_readiness_state(p: ReportPayload):
         """The Founder Readiness pillar and whether it is in the Critical Gap
-        state (band or explicit red flag) -- the single source of truth for
-        Section H, so ordering and content agree on the same trigger."""
+        BAND -- the single source of truth for Section H, so ordering and
+        content agree on the same trigger.
+
+        The red flag used to count too, and it fires on a different threshold.
+        When the two disagreed, the section still rendered and still took its
+        text from `band_description` -- but that was then the description of
+        whatever band the founder was ACTUALLY in. A growth founder at 30, band
+        "Needs Attention", red flag tripped at 35, got Section H carrying the
+        Needs Attention paragraph: "showing signs of strain -- overwork, poor
+        boundaries, reactive decision-making, or self-doubt", printed under a
+        heading about how he is doing, on a session with no distress-tagged
+        answer scored badly and after he described three weeks away during
+        which revenue hit its second-best month.
+
+        Section H is defined on the band (0-35). The red flag still does its
+        own job everywhere else -- it is listed, and it still drives
+        `red_flag_pillars` -- it just no longer opens a section whose content
+        is another band's words.
+        """
         fr = next((pl for pl in p.pillars if pl.name == "Founder Readiness"), None)
-        critical_gap = bool(fr and (fr.band == "Critical Gap" or fr.red_flag_triggered))
+        critical_gap = bool(fr and fr.band == "Critical Gap")
         return fr, critical_gap
 
     def _founder_readiness_flagged(self, p: ReportPayload) -> bool:

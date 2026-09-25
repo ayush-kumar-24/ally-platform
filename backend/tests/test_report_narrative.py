@@ -96,7 +96,8 @@ def test_no_clear_diagnosis_does_not_assert():
 
 # 4. Psychology precedence: leads even when a business category scores higher.
 def test_psychology_precedence():
-    p = _payload(category_risk_scores={"Sales & Revenue": 0.9, "Founder Psychology": 0.5})
+    p = _payload(category_risk_scores={"Sales & Revenue": 0.9, "Founder Psychology": 0.5},
+                 distress_evidence=1)
     assert p.psychology_flagged is True
     n = _gen(p)
     keys = _keys(n)
@@ -107,15 +108,36 @@ def test_psychology_precedence():
 
 # 5. A pillar red flag surfaces despite a healthy overall score.
 def test_pillar_red_flag_despite_healthy_overall():
+    fr = _pillar("Founder Readiness", 30, True, "Below 35% triggers Section H.",
+                 band="Critical Gap")
     p = _payload(
         business_health_overall=82,  # healthy
-        pillars=(_pillar("Founder Readiness", 30, True, "Below 35% triggers Section H."),
-                 _pillar("Market Clarity", 78)),
-        red_flag_pillars=(_pillar("Founder Readiness", 30, True, "Below 35% triggers Section H."),),
+        pillars=(fr, _pillar("Market Clarity", 78)),
+        red_flag_pillars=(fr,),
     )
     n = _gen(p)
     keys = _keys(n)
     assert "psychological_note" in keys
+    biz = next(s for s in n.sections if s.key == "business_dna")
+    assert "Founder Readiness" in biz.facts["red_flag_pillars"]
+
+
+def test_a_red_flag_outside_the_critical_band_is_listed_but_opens_no_section():
+    """The red-flag threshold (35) and the band floors are separate numbers and
+    they no longer coincide, so a pillar can be flagged while its band reads
+    Needs Attention. Section H's content is the CRITICAL GAP band's
+    description; fired from the flag alone it rendered carrying whatever band
+    the founder was actually in -- live, the Needs Attention paragraph
+    ("showing signs of strain -- overwork, poor boundaries, reactive
+    decision-making, or self-doubt") printed under a heading about how he is
+    doing, for a founder with no distress evidence at all.
+
+    The flag keeps its own job: the pillar is still listed."""
+    fr = _pillar("Founder Readiness", 30, True, "Below 35% triggers Section H.",
+                 band="Needs Attention")
+    p = _payload(pillars=(fr, _pillar("Market Clarity", 78)), red_flag_pillars=(fr,))
+    n = _gen(p)
+    assert "psychological_note" not in _keys(n)
     biz = next(s for s in n.sections if s.key == "business_dna")
     assert "Founder Readiness" in biz.facts["red_flag_pillars"]
 
@@ -238,7 +260,8 @@ def test_psychological_note_never_prints_session_framing():
     # fall back to the report_framing_adjustment directive.
     framing = "Report is de-prioritised. Lead with acknowledgement of difficulty."
     p = _payload(category_risk_scores={"Founder Psychology": 0.5, "Sales & Revenue": 0.9},
-                 pillars=(_pillar("Founder Readiness", 60),), red_flag_pillars=())
+                 pillars=(_pillar("Founder Readiness", 60),), red_flag_pillars=(),
+                 distress_evidence=1)
     n = _gen(p, session_framing=framing)
     note = next(s for s in n.sections if s.key == "psychological_note").prose
     assert "de-prioritised" not in note and "Lead with acknowledgement" not in note
@@ -425,3 +448,28 @@ def test_a_question_stored_as_an_answer_is_never_narrated_back():
 def test_a_real_blind_spot_still_gets_narrated():
     prose = _dna(strengths_blind_spots=("You hold on to decisions too long.",))
     assert "A pattern worth naming: You hold on to decisions too long." in prose
+
+
+def test_a_low_readiness_score_alone_does_not_claim_the_founder_is_struggling():
+    """THE REGRESSION: the wellbeing section fired off a RED-FLAGGED PILLAR as
+    well as off category risk, and a low Founder Readiness score is a business
+    reading, not a report of how someone is doing.
+
+    Live, a growth-stage founder scored Founder Readiness 30, tripped the red
+    flag, and was told he was "showing signs of strain -- overwork, thinning
+    boundaries, reactive decisions, or self-doubt" -- on a session where no
+    distress-tagged question was answered badly, where he had described taking
+    three weeks off during which revenue hit its second-best month, and where
+    he had answered "mentally clear" in onboarding."""
+    p = _payload(pillars=(_pillar("Founder Readiness", 30, flag=True),),
+                 red_flag_pillars=(_pillar("Founder Readiness", 30, flag=True),),
+                 distress_evidence=0)
+    assert p.psychology_flagged is False
+
+
+def test_a_red_flagged_pillar_with_real_distress_evidence_still_leads():
+    """The gate is about evidence, not about silencing the section."""
+    p = _payload(pillars=(_pillar("Founder Readiness", 30, flag=True),),
+                 red_flag_pillars=(_pillar("Founder Readiness", 30, flag=True),),
+                 distress_evidence=2)
+    assert p.psychology_flagged is True
