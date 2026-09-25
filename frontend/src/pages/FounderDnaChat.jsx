@@ -414,9 +414,14 @@ export default function FounderDnaChat() {
             </div>
           ))}
           {busy && (
-            <div className="typing" aria-live="polite" aria-label="Ally is thinking">
-              <div className="m-av ally" aria-hidden="true"><img src="/ally-logo-mark-on-dark.png" alt="" /></div>
-              <div className="bubble"><div className="td"><span /><span /><span /></div></div>
+            <div className="typing">
+              <div className="m-av ally thinking" aria-hidden="true">
+                <span className="th-orbit" />
+                <img src="/ally-logo-mark-on-dark.png" alt="" />
+              </div>
+              <div className="bubble" role="status" aria-live="polite">
+                <span className="th-text">Ally is thinking</span>
+              </div>
             </div>
           )}
         </div>

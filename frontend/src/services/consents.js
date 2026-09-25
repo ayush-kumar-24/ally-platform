@@ -72,6 +72,37 @@ export async function acceptUpdatedPolicies() {
   });
 }
 
+/**
+ * Record diagnosis consent for a founder who is giving it AFTER signup.
+ *
+ * Why this exists: the Welcome screen asks for diagnosis consent again when
+ * the founder did not tick it at signup, and it used to answer its own
+ * question -- it set `diagnosisConsent: true` on the in-memory user and
+ * navigated on, without ever posting to /consents. The founder saw consent
+ * given; the ledger never heard about it. Nothing noticed until
+ * POST /diagnosis/start, the one route gated by `require_diagnosis_consent`,
+ * refused with 403 -- after the founder had answered the whole Founder DNA
+ * interview and the current-problem phase, because neither of those is gated
+ * by it.
+ *
+ * Reads the stored record first and carries its other fields across, for the
+ * same reason `acceptUpdatedPolicies` does: a ledger row is a complete
+ * statement of what the founder agrees to, so posting defaults would revoke
+ * or manufacture the rest of it. `age_confirmed` passes through AS IS,
+ * including null.
+ *
+ * @returns {Promise<object>} the stored consent record
+ */
+export async function grantDiagnosisConsent() {
+  const status = await getConsents();
+  const current = status?.current ?? {};
+  return recordConsent({
+    agreeTerms: Boolean(current.agree_terms),
+    agreeDiagnosis: true,
+    ageConfirmed: current.age_confirmed ?? null,
+  });
+}
+
 // ── Deferred capture ─────────────────────────────────────────────────────────
 // Consent is collected on the login screen — i.e. potentially before the backend
 // knows who the founder is. Rather than drop it, we hold it locally and flush it
