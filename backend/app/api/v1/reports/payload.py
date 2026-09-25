@@ -123,6 +123,19 @@ class ReportPayload:
     #: read that as the engine having ignored the interview.
     diagnosis_answers: int = 0
 
+    #: Answers to questions actually TAGGED as distress indicators
+    #: (questions.is_distress_tagged) that came back red or amber. The
+    #: wellbeing narrative used to lead on category risk in "Founder
+    #: Psychology" alone -- and that category carries operational questions.
+    #: Live, a founder was told he was "carrying real burnout, fear, or
+    #: isolation" off five answers about which dish loses money, how much food
+    #: he throws away, whether the kitchen runs without him, what would break
+    #: if he took a week off, and who else can judge the produce. None is about
+    #: his mental state, and he had said in onboarding that he was mentally
+    #: clear. So the claim now needs evidence from a question that was actually
+    #: asking about wellbeing.
+    distress_evidence: int = 0
+
     # How much of the six-pillar model the score above was actually built on.
     # Stage scoping means a partial assessment is routine, not exceptional: a
     # Validation founder is diagnosed on 3 pillars and a Prototype founder on 4,
@@ -185,7 +198,8 @@ class ReportPayload:
         """Founder Psychology takes narrative precedence when the psychology
         category is flagged OR the Founder Readiness pillar red-flagged (Section H)."""
         cat = self._category_value("Founder Psychology")
-        if cat is not None and cat >= self.cat_risk_threshold:
+        if (cat is not None and cat >= self.cat_risk_threshold
+                and self.distress_evidence > 0):
             return True
         return any(p.name == "Founder Readiness" and p.red_flag_triggered for p in self.pillars)
 
@@ -394,6 +408,16 @@ def build_report_payload(db: Session, report) -> ReportPayload:
         solve_actions=_actions(report.solve_actions),
         category_risk_scores=dict(sess.get("category_risk_scores") or {}),
         diagnosis_answers=int(sess.get("questions_answered_count") or 0),
+        distress_evidence=int(
+            db.execute(
+                text("select count(*) from answers a "
+                     "join questions q on q.question_id = a.question_id "
+                     "where a.session_id = :sid and q.is_distress_tagged "
+                     "and a.score_label in ('red', 'amber')"),
+                {"sid": report.session_id},
+            ).scalar()
+            or 0
+        ),
         cat_risk_threshold=float(thresholds.get("CAT_RISK_THRESHOLD", Decimal("0.30"))),
         generate_report_min=float(thresholds.get("CONFIDENCE_GENERATE_REPORT_MIN", Decimal("80"))),
         chronic_state=chronic_state, chronic_adjustment=chronic_adjustment,
