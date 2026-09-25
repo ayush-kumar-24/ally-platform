@@ -16,11 +16,11 @@ three pillars the industry layer never covered, across all nine dimension codes.
 | 8 | Education & EdTech | `edtech` | EDU | 2 | **done** |
 | 9 | Energy, CleanTech & Renewables | `cleantech_energy` | ENR | 2 | **done** |
 | 10 | Entertainment & Media | `media_entertainment` | MED | 2 | **done** |
-| 11 | Fashion & Apparel | `fashion_apparel` | FSH | 3 | pending |
-| 12 | Food & Beverage / FoodTech | `foodtech` | FNB | 3 | pending |
-| 13 | Gaming | `gaming` | GAM | 3 | pending |
-| 14 | Healthcare & HealthTech / MedTech | `healthtech` | HLT | 3 | pending |
-| 15 | Hospitality, Travel & Tourism | `travel_hospitality` | TRV | 3 | pending |
+| 11 | Fashion & Apparel | `fashion_apparel` | FSH | 3 | **done** |
+| 12 | Food & Beverage / FoodTech | `foodtech` | FNB | 3 | **done** |
+| 13 | Gaming | `gaming` | GAM | 3 | **done** |
+| 14 | Healthcare & HealthTech / MedTech | `healthtech` | HLT | 3 | **done** |
+| 15 | Hospitality, Travel & Tourism | `travel_hospitality` | TRV | 3 | **done** |
 | 16 | Human Resources & HRTech | `hrtech` | HRT | 4 | pending |
 | 17 | Import / Export & Trade | `trade_import_export` | TRD | 4 | pending |
 | 18 | Industrial & Manufacturing | `manufacturing` | MFG | 4 | pending |
