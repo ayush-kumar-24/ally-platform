@@ -46,6 +46,12 @@ from app.main import app
 from app.models import Founder
 
 OUT = os.environ.get("AYUSH_E2E_OUT", os.getcwd())
+#: Above this share of substituted answers the run is not evidence -- see the
+#: block at the end of main(). A third is generous: the adaptive selector will
+#: legitimately pick some questions the bank does not cover, but past this the
+#: bands are the placeholder's, not the founder's.
+GENERIC_LIMIT = 1 / 3
+
 GENERIC = ("Honestly, I don't have a good answer for that yet. We're pre-revenue "
            "and a lot of that isn't built -- it's on the list, not done.")
 
@@ -233,6 +239,11 @@ def main():
         if rec["phase"] == "diag":
             rec["score_label"] = labels.get(rec["question_id"])
 
+    # Counted from the transcript rather than tallied as we go, so a question
+    # that was re-asked after an off-question rejection is not double counted.
+    _substituted = sum(1 for r in transcript if r.get("answer_source") == "generic")
+    _from_bank = sum(1 for r in transcript if r.get("answer_source") == "bank")
+
     payload = {
         "started_at": started,
         "finished_at": datetime.now(timezone.utc).isoformat(),
@@ -246,6 +257,12 @@ def main():
         "llm_cost_usd": float(cost),
         "llm_call_breakdown": call_breakdown,
         "reasoning_error": err,
+        # SUBSTITUTION ACCOUNTING. See the GENERIC_LIMIT block below: a run that
+        # answered most questions with the placeholder is measuring the harness,
+        # so the count belongs in the summary and not only in the transcript.
+        "answers_from_bank": _from_bank,
+        "answers_substituted": _substituted,
+        "substituted_share": round(_substituted / max(len(transcript), 1), 3),
         "config": {
             "ADAPTIVE_QUESTIONS": settings.ADAPTIVE_QUESTIONS,
             "ANSWER_CLASSIFIER": settings.ANSWER_CLASSIFIER,
@@ -256,8 +273,38 @@ def main():
     with open(os.path.join(OUT, "result.json"), "w", encoding="utf-8") as fh:
         json.dump(payload, fh, indent=1, default=str)
     print(f"founder={fid} session={sid} questions={len(transcript)} "
+          f"answered_from_bank={_from_bank} SUBSTITUTED={_substituted} "
+          f"({payload['substituted_share']:.0%}) "
           f"llm_calls={payload['llm_calls']} cost=${payload['llm_cost_usd']:.4f} "
           f"root_causes={len(rcs)} report={'yes' if rep else 'NO'} err={err}")
+
+    # WHY THIS EXITS NON-ZERO.
+    #
+    # answer_for() substitutes GENERIC for any question the answer bank does not
+    # cover. That is the right behaviour -- refusing to answer would abort the
+    # walk -- but it used to be invisible: the summary line read
+    # "questions=58 llm_calls=50 ... report=yes err=None" on a run where TWENTY
+    # of thirty-six diagnosis questions were the placeholder. The placeholder is
+    # a non-answer, so the classifier scored all of them Red, and two pillars --
+    # Founder Readiness at 25% of the model and Revenue Maturity at 20% --
+    # scored a flat 0 entirely on answers the founder never gave. The run then
+    # reported a confident "Critical Gap, 22/100" that was measuring this script.
+    #
+    # The adaptive selector picks questions the bank was not written against, so
+    # a few misses are expected and fine. A majority is not a run, it is noise,
+    # and it must not exit 0 and look like evidence.
+    if payload["substituted_share"] > GENERIC_LIMIT:
+        print(f"\nFAIL: {_substituted} of {len(transcript)} answers were the "
+              f"placeholder, not the founder's ({payload['substituted_share']:.0%} "
+              f"> {GENERIC_LIMIT:.0%} limit).\n"
+              f"      The bands, pillar scores and root causes in this run are "
+              f"measuring the harness.\n"
+              f"      Add answers for the missed question ids in "
+              f"scripts/qa/_ayush_answers.py, then re-run.\n"
+              f"      Missed ids: "
+              + ", ".join(str(r["question_id"]) for r in transcript
+                          if r.get("answer_source") == "generic"))
+        raise SystemExit(2)
 
 
 if __name__ == "__main__":

@@ -75,3 +75,37 @@ FOUNDER_DNA = {
  133: "The report layout. I spent nine days on typography and spacing for a report that eleven people had seen. It delayed the follow-up work by about two weeks and none of those eleven mentioned the layout.",
  131: "That I'm not sure I'm the right person to sell this. I can build it and I can explain it, but the part where you ask someone for money -- I avoid it, and I haven't said that to anyone.",
 }
+
+# ---------------------------------------------------------------------------
+# ADDED after the first keyed run. The adaptive selector picks questions the
+# original thirty were not written against: twenty of thirty-six served
+# questions fell through to the GENERIC placeholder, the classifier read those
+# non-answers as Red, and Founder Readiness and Revenue Maturity scored a flat
+# zero on answers Ayush never gave.
+#
+# These are the ids that were missed, answered in the same voice and held to
+# the same founder reality: working AI SaaS, outbound started, early interest,
+# NO revenue, no free tier, nine pilot accounts from demos, team of three,
+# founder does product + outreach + demos + ops, processes informal.
+#
+# Nothing above this line was edited. Grades are my own note, never sent to the
+# engine.
+# ---------------------------------------------------------------------------
+DIAGNOSIS.update({
+ 5047: ("There is no free tier, so there is nobody to ask. The nine pilot accounts were set up by me after a demo, and I have asked four of them what it would take to start paying. Two said they need a couple of things built first, two went quiet.", "average"),
+ 5040: ("They have to give us enough context about their business for the diagnosis to be worth anything -- that is the honest blocker. If they skip it the report reads generic and they never come back. I do it with them on the call now, which works and does not scale.", "average"),
+ 5052: ("Not really. They see the report and it is genuinely useful, but I have never put the value in money terms -- what the wrong decision costs them, what finding it earlier is worth. That gap is probably why nobody has paid yet.", "weak"),
+ 1917: ("I think they understand the diagnosis part and not the rest. Four of nine came back and used it again, which tells me something landed, but I have never asked the five who did not why. I should have.", "weak"),
+ 2282: ("The demo. I have never handed one over because I do not trust that anyone else can read what a founder is actually worried about in the first five minutes. That may be true or it may be me not having written down how I do it.", "weak"),
+ 1714: ("No. No accountant, no company secretary, nobody. I file what I have to and I am fairly sure there are obligations I do not know about. It is on the list and has been for months.", "weak"),
+ 61: ("Nine pilot accounts, all from outbound I sent personally. No inbound, no referrals, no repeatable source. Every single one traces back to a message I wrote myself, which is the problem.", "average"),
+ 2758: ("It lives in conversation and in my head. Three of us talk every day so it works at this size, and it is already starting not to -- things I assumed someone owned turn out to be nobody's.", "weak"),
+ 282: ("Honestly, thin. I can show that nine founders took a demo and four came back. Everything else I say about the market is my own conviction, not evidence. I catch myself stating it as though it were proven.", "average"),
+ 2285: ("No. If I had to hand off the outreach or the demos tomorrow there is nothing written down -- no script, no objection list, no account notes worth the name. It would be starting over.", "weak"),
+ 2877: ("Two or three days, usually, because I write each one from scratch. It is too slow and I know a faster follow-up would probably have converted at least one of the conversations that went quiet.", "weak"),
+ 2910: ("Because it is the one I know. Outbound email is what I have always done, so that is what we do. I have not tested anything else, so I cannot tell you whether it is the right channel or just the familiar one.", "weak"),
+ 2761: ("We have not made a hire. The three of us came together around the idea, so there has been no hiring process and no defined role to fill. Any hiring is on the other side of having revenue.", "n/a"),
+ 2286: ("Reading a founder on a demo call and turning that into the right first diagnosis. Nobody else here could pick that up without me explaining it live, and I have not written any of it down.", "weak"),
+ 2937: ("Pretty much, yes. I look at what is in the account and whether it is going down. There is no model, no forecast, no accounting software -- a spreadsheet and my own sense of it.", "weak"),
+ 2347: ("N/A -- we have no customers, so I cannot describe a best one from experience. The prospects who engage most are small software businesses where the founder is still close to the operation. That is a pattern from conversations, not from anyone who has paid.", "n/a"),
+})
