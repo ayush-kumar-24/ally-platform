@@ -108,6 +108,8 @@ class CategorySnapshot:
     #: that was barely asked -- both sit near 0 risk, and "Lean on this"
     #: called both a strength.
     answers_count: int = 0
+    #: How many of those scored red -- see CategoryRisk.red_count.
+    red_count: int = 0
 
 
 @dataclass(frozen=True)

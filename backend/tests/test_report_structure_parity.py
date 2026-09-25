@@ -275,3 +275,29 @@ def test_a_long_answer_is_trimmed_not_paraphrased():
     html = _working([{"category": "X", "question": "Q?", "answer": long_answer}])
     assert "word word" in html
     assert "\u2026" in html or "&hellip;" in html or "…" in html
+
+
+def test_a_red_heavy_dimension_is_not_something_to_lean_on():
+    """THE REGRESSION: with few answers the smoothing prior pulls risk toward
+    zero, so a dimension answered once amber and once red scored 63 -- and the
+    page read "Team & Leadership: Strong" in the strengths column while the
+    pillar bar above it said Critical Gap, about the same founder, from the
+    same answers."""
+    html = _high_low([
+        {"category": "Team & Leadership", "risk": 0.375,
+         "answers_count": 2, "red_count": 1},
+        {"category": "Operations & Systems", "risk": 0.9,
+         "answers_count": 4, "red_count": 3},
+    ])
+    assert "Team &amp; Leadership" not in html.split("Fix this first")[0]
+
+
+def test_a_mostly_amber_dimension_can_still_be_leaned_on():
+    """Four amber and one red is a dimension being handled, not a hole. A
+    minority of reds is what a real strength looks like -- demanding zero
+    emptied the column for a founder who had one."""
+    html = _high_low([
+        {"category": "Strategy & Planning", "risk": 0.43,
+         "answers_count": 5, "red_count": 1},
+    ])
+    assert "Strategy &amp; Planning" in html.split("Fix this first")[0]

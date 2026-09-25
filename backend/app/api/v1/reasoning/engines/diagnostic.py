@@ -575,6 +575,8 @@ class StandardDiagnosticEngine(DiagnosticEngine):
                     normalised_risk=normalised,
                     is_flagged=normalised >= threshold,
                     answers_count=len(members),
+                    red_count=sum(1 for m in members
+                                  if str(getattr(m.label, 'value', m.label)).lower() == 'red'),
                 )
             )
         return risks
