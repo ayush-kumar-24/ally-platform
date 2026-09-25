@@ -19,12 +19,16 @@ own transaction and rolls back rather than half-applying.
 | 2 | `batch1_industries_1to5.sql` | Content: agritech, automotive, fintech, beauty & personal care, proptech. 810 rows. | 424 KB |
 | 3 | `batch2_industries_6to10.sql` | Content: consumer electronics, e-commerce/D2C, edtech, cleantech & energy, media & entertainment. 810 rows. | 423 KB |
 | 4 | `fix_original_catalogue_interventions.sql` | 417 interventions for problems in the 1–275 range, which had none. | 546 KB |
-| 5 | `fix_batch_stage_weights.sql` | 2,160 `root_cause_weights` rows — the 270 batch root causes × 8 founder stages. | 657 KB |
-| 6 | `fix_concentrate_batch_evidence.sql` | An UPDATE that remaps batch questions so evidence concentrates instead of scattering. | 2 KB |
+| 5 | `fix_batch_stage_weights.sql` | 2,160 `root_cause_weights` rows — the 270 batch 1–2 root causes × 8 founder stages. | 657 KB |
+| 6 | `fix_concentrate_batch_evidence.sql` | An UPDATE that remaps batch 1–2 questions so evidence concentrates instead of scattering. | 2 KB |
+| 7 | `batch3_industries_11to15.sql` | Content: fashion & apparel, food & beverage, gaming, healthcare, hospitality & travel. 810 rows. | 428 KB |
+| 8 | `fix_batch3_stage_weights.sql` | 1,080 `root_cause_weights` rows — the 135 batch 3 root causes × 8 stages. | 330 KB |
 
-Order matters in two places only: the schema change (1) must land before any
-session writes a `not_applicable` answer, and 5 and 6 reference rows that 2 and
-3 insert. 4 is independent of the batches and can go any time after 1.
+Order matters in three places only: the schema change (1) must land before any
+session writes a `not_applicable` answer; 5 and 6 reference rows that 2 and 3
+insert; and 8 reference rows that 7 inserts (it checks for all 135 and refuses
+to run otherwise, naming the file to load first). 4 is independent of the
+batches and can go any time after 1.
 
 ```bash
 cd /path/to/sql
@@ -34,7 +38,9 @@ for f in \
   batch2_industries_6to10.sql \
   fix_original_catalogue_interventions.sql \
   fix_batch_stage_weights.sql \
-  fix_concentrate_batch_evidence.sql
+  fix_concentrate_batch_evidence.sql \
+  batch3_industries_11to15.sql \
+  fix_batch3_stage_weights.sql
 do
   echo "== $f"
   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f" || break
@@ -139,6 +145,26 @@ ranker treats them differently.
 
 ---
 
+## 4a. Batch 3 (industries 11–15)
+
+`batch3_industries_11to15.sql` and `fix_batch3_stage_weights.sql`.
+
+Same shape as batches 1 and 2 — 45 problems, 135 root causes, 270 questions, 90
+interventions, 270 mapping rows — with two differences worth knowing:
+
+- The stage weights were written **with** the content this time, rather than
+  after a failed diagnosis run found them missing. Same relevance curve as
+  batches 1–2.
+- Evidence concentration is built in, not retrofitted: the emitter puts both of
+  a stage's questions on the same root cause, so `fix_concentrate_batch_evidence.sql`
+  has no batch 3 work to do. Measured after loading: exactly 2.00 questions per
+  (root cause, stage), min 2, max 2.
+
+Verified after loading, per industry: 9 problems across all 9 dimension codes
+and all 3 previously-starved pillars, 18 of roughly 38 own-industry Stage 0→1
+questions coming from this batch, and the selection engine returning a full
+12-question opening block with every pillar covered.
+
 ## 5. Evidence concentration
 
 `fix_concentrate_batch_evidence.sql` — an UPDATE, no inserts.
@@ -168,17 +194,30 @@ Expected after all six files, against the rebuilt reference database:
 
 ```
 [PASS] industries = 30
-[PASS] problems = 848
-[PASS] root_causes = 4371
-[PASS] interventions = 1691
-[PASS] root_cause_weights = 11936
-[PASS] questions = 5890
+[PASS] problems = 893
+[PASS] root_causes = 4506
+[PASS] interventions = 1781
+[PASS] root_cause_weights = 13016
+[PASS] questions = 6160
+[PASS] question_industry_mapping is populated -- 2820 rows
 [PASS] readiness_pillars weightage sums to 100 -- got 100.00
 [PASS] root-cause ranking weights sum to 1.0 -- got 1.0000
-[PASS] root causes can reach an intervention -- 36/4371 (0.8%) cannot
+[PASS] root causes can reach an intervention -- 36/4506 (0.8%) cannot
 [INFO] problems carrying root causes but no intervention: 6
 RESULT: all hard checks passed
 ```
+
+Then check that a founder in one of the new industries is actually asked the
+new questions, which the counts above cannot tell you:
+
+```bash
+python -m scripts.qa.industry_selection_preflight --industry gaming --stage 4
+```
+
+This runs the real selection engine read-only. Expect a 12-question industry
+opening block, `ALL PILLARS COVERED`, and
+`OTHER INDUSTRIES' QUESTIONS STILL ELIGIBLE: 0`. If the last line is not zero,
+`question_industry_mapping` did not load and the industry gate is off.
 
 And the schema change directly:
 
