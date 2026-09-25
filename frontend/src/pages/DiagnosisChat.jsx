@@ -385,15 +385,18 @@ export default function DiagnosisChat() {
           {/* Nothing showed while the answer was being interpreted and the next
               question chosen -- a real gap, since that round-trip runs an LLM
               classification plus a confidence recompute and routinely takes
-              12-15s. Reuses AllyChat's own `.typing` dots for the same visual
-              language across both chat surfaces, rather than a new animation. */}
+              12-15s. Reuses AllyChat's own thinking indicator -- the turning
+              mark, the orbit and the words -- so both chat surfaces speak the
+              same visual language. The earlier `.td` dots markup here had no
+              CSS anywhere in the app, so it rendered as an empty bubble. */}
           {busy && (
-            <div className="typing" aria-live="polite" aria-label="Ally is thinking">
-              <div className="m-av ally" aria-hidden="true"><img src="/ally-logo-mark-on-dark.png" alt="" /></div>
-              <div className="bubble">
-                <div className="td">
-                  <span /><span /><span />
-                </div>
+            <div className="typing">
+              <div className="m-av ally thinking" aria-hidden="true">
+                <span className="th-orbit" />
+                <img src="/ally-logo-mark-on-dark.png" alt="" />
+              </div>
+              <div className="bubble" role="status" aria-live="polite">
+                <span className="th-text">Ally is thinking</span>
               </div>
             </div>
           )}

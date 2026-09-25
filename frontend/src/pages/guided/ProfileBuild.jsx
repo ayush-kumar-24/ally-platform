@@ -1461,8 +1461,13 @@ export default function ProfileBuild() {
             ))}
             {typing && (
               <div className="typing">
-                <span className="m-av ally"><img src="/ally-logo-mark-on-dark.png" alt="" /></span>
-                <div className="bubble"><span className="td"><span /><span /><span /></span></div>
+                <div className="m-av ally thinking" aria-hidden="true">
+                  <span className="th-orbit" />
+                  <img src="/ally-logo-mark-on-dark.png" alt="" />
+                </div>
+                <div className="bubble" role="status" aria-live="polite">
+                  <span className="th-text">Ally is thinking</span>
+                </div>
               </div>
             )}
           </div>
