@@ -563,8 +563,10 @@ class ReportNarrativeGenerator:
             if not probes and not causes:
                 return {}, {}
             slots = {"stated_symptom": p.stated_symptom, "probes": probes,
-                     "root_causes": causes}
-            facts = {"probes": probes, "root_causes": causes}
+                     "root_causes": causes,
+                     "diagnosis_answers": p.diagnosis_answers}
+            facts = {"probes": probes, "root_causes": causes,
+                     "diagnosis_answers": p.diagnosis_answers}
             return slots, facts
 
         if key == "recommended_roadmap":

@@ -29,6 +29,13 @@ from app.api.v1.reports.document_style import PRINT_ONLY, STYLE, font_face_css
 _CRITICAL_MAX = 35
 _WATCH_MAX = 60
 
+#: Scored answers a dimension needs before the report will call it a STRENGTH.
+#: Matches Settings.MIN_ANSWERS_PER_PILLAR_SCORE, which is the same judgement
+#: one level up: business_health refuses to score a pillar on fewer answers
+#: than this, and a dimension is a narrower thing than a pillar. Deliberately
+#: not applied to gaps -- see `_high_low`.
+_MIN_STRENGTH_ANSWERS = 3
+
 
 def _tone(score: int) -> str:
     if score < _CRITICAL_MAX:
@@ -298,6 +305,25 @@ def _high_low(categories: Sequence[Mapping[str, Any]]) -> str:
               for c in categories]
     scored.sort(key=lambda pair: pair[1], reverse=True)
 
+    # Which dimensions carry enough evidence to be CALLED something.
+    #
+    # Strength here is 100 - risk, and risk is near zero for two completely
+    # different reasons: a dimension probed repeatedly that came back healthy,
+    # and a dimension barely asked about. Both scored ~100 and both landed in
+    # "Lean on this" -- so a live report told a founder that Competitive
+    # Awareness was Strong and was "the machinery you will use" to fix the
+    # rest, off a dimension the session never asked a single question about.
+    # Two runs in a row produced this, on different founders.
+    #
+    # A gap needs no such floor: risk only rises when answers actually scored
+    # badly, so a flagged dimension has its evidence by construction. It is
+    # the ABSENCE of evidence that must never be read as health.
+    evidenced = {
+        str(c.get("category") or "Dimension")
+        for c in categories
+        if int(c.get("answers_count") or 0) >= _MIN_STRENGTH_ANSWERS
+    }
+
     # Split on the SAME boundary the band words use, not on a separate cut.
     # This used to filter at 50, which is not a band edge (_tone breaks at 35
     # and 60), so the two disagreed: a dimension scoring 62 reads "Strong" and
@@ -305,7 +331,7 @@ def _high_low(categories: Sequence[Mapping[str, Any]]) -> str:
     # the `or scored[-3:]` fallback filled "Fix this first" with the bottom
     # three whatever their band. Live report, 25 Aug: "Fix this first --
     # Team & Leadership: Strong".
-    strengths = [p for p in scored if p[1] >= _WATCH_MAX][:4]
+    strengths = [p for p in scored if p[1] >= _WATCH_MAX and p[0] in evidenced][:4]
     gaps = [p for p in reversed(scored) if p[1] < _WATCH_MAX][:6]
 
     # Nothing genuinely weak is a real result, and saying so is better than
@@ -320,7 +346,16 @@ def _high_low(categories: Sequence[Mapping[str, Any]]) -> str:
                       '<p class="panel-note">This is where the next two weeks should go.</p>')
 
     if not strengths:
+        # Two different reasons for an empty column, and they are not the same
+        # news. Saying "nothing has cleared the line" to someone whose session
+        # simply did not probe deeply enough would be its own false verdict.
+        thin = any(p[1] >= _WATCH_MAX for p in scored)
         left_body = (
+            '<p class="panel-note">Not enough was asked about your stronger '
+            'areas this session to call any of them a strength. That is a gap '
+            'in the evidence, not a verdict on you &mdash; the column on the '
+            'right is what this session can actually speak to.</p>'
+            if thin else
             '<p class="panel-note">Nothing has cleared the line yet. That is normal '
             'this early, and it means the column on the right is the whole plan.</p>')
     else:
@@ -428,29 +463,37 @@ def _heard(symptoms: Sequence[Mapping[str, Any]]) -> str:
     quotes: list[str] = []
     for entry in symptoms:
         evidence = entry.get("evidence") or []
-        pattern = str((entry.get("symptoms") or [""])[0] or "").strip()
         category = str(entry.get("category") or "").strip()
-        if not evidence or not pattern:
+        if not evidence:
             continue
         pair = evidence[0]
         if not isinstance(pair, (list, tuple)) or len(pair) < 2:
             continue
         question, answer = pair[0], pair[1]
 
-        # `symptoms` is generic catalogue text describing the PATTERN for this
-        # CATEGORY -- schemas.SymptomHighlight says so itself: "written before
-        # this founder existed". It is not a reading of the single answer above
-        # it, and presenting it as one produced visible non-sequiturs in the
-        # live PDF: "unresolved tension among team members? / yes / What this
-        # tells us: No board, advisory board, or formal mentorship structure in
-        # place." Label it for what it is -- the pattern this answer counted
-        # toward -- so the page stops asserting a link it cannot support.
+        # The generic catalogue PATTERN line is gone.
+        #
+        # `symptoms` is catalogue text describing a pattern for this CATEGORY
+        # -- schemas.SymptomHighlight says so itself: "written before this
+        # founder existed". An earlier attempt kept it and relabelled it ("the
+        # pattern this counted toward") on the theory that naming it as
+        # general text made it safe to print. It did not. The live PDF still
+        # produced, under a cloud-kitchen founder's own words: "Users signing
+        # up but not completing onboarding or activating the core feature",
+        # and, beside an answer about who packs an order, "Founding team has
+        # no one with relevant domain expertise or prior startup experience"
+        # -- about a chef of fourteen years.
+        #
+        # A label cannot rescue a sentence that is false about the reader's
+        # business. The quote and the dimension it counted toward are both
+        # true and both traceable; the catalogue line was neither, so it is
+        # not printed. What replaces it is nothing, deliberately: this section
+        # exists to show the founder the evidence, and the interpretation is
+        # the whole rest of the report.
         cat_html = (f'<span class="quote-cat">{e(category)}</span>' if category else "")
         quotes.append(
             f'<div class="quote">{cat_html}<div class="quote-q">{e(question)}</div>'
-            f'<div class="quote-a">&ldquo;{e(answer)}&rdquo;</div>'
-            f'<div class="quote-read"><b>The pattern this counted toward:</b> '
-            f'{e(pattern)}</div></div>')
+            f'<div class="quote-a">&ldquo;{e(answer)}&rdquo;</div></div>')
         if len(quotes) == 3:
             break
     if not quotes:
@@ -754,7 +797,8 @@ _FACTS_SKIP = {
 }
 
 
-def _pillar_verdicts(pillars: Sequence[Mapping[str, Any]]) -> str:
+def _pillar_verdicts(pillars: Sequence[Mapping[str, Any]],
+                     hedged: bool = False) -> str:
     """The per-pillar verdicts as a list, one card each.
 
     These used to arrive as narrator prose: six verdicts, each a name, a band
@@ -784,10 +828,35 @@ def _pillar_verdicts(pillars: Sequence[Mapping[str, Any]]) -> str:
             f'<div class="verdict-head"><span class="verdict-name">{e(name)}</span>'
             f'<span class="verdict-band">{e(band)}</span></div>'
             + (f'<span class="verdict-scope">{e(note)}</span>' if note else "")
-            + (f'<p class="verdict-desc">{e(desc)}</p>' if desc else "")
+            # Labelled as what it IS. `readiness_pillars.score_bands`
+            # descriptions are catalogue text written before any founder
+            # existed -- one paragraph per band per pillar, identical for
+            # everyone who lands in that band. Printed bare, directly under
+            # this founder's name and band, they read as findings ABOUT them,
+            # and they are routinely false: a solo founder was told
+            # "Co-founder conflict may be present", and a founder who had
+            # just recited his exact per-order margins was told he "does not
+            # know their unit economics ... if they have revenue, it is
+            # accidental not engineered".
+            #
+            # The fix is not to edit 24 catalogue paragraphs into hedged
+            # prose -- it is to stop presenting general text as a personal
+            # verdict. The reader can weigh "businesses in this band usually
+            # look like X" against their own situation; they cannot weigh a
+            # sentence that claims to be about them.
+            + (f'<p class="verdict-desc"><span class="verdict-desc-lede">'
+               f'What this band usually looks like:</span> {e(desc)}</p>'
+               if desc else "")
             + '</li>'
         )
-    return f'<ul class="verdicts">{"".join(items)}</ul>'
+    # Say it where the verdicts are, not only at the top of the report. A
+    # caveat eleven pages earlier does not travel with a founder who opens the
+    # PDF at the pillar they were worried about.
+    lede = ('<p class="verdict-provisional">These bands come from a session that '
+            'did not gather enough answers to be confident. Read them as a '
+            'first reading to check, not a settled score.</p>'
+            if hedged else "")
+    return f'{lede}<ul class="verdicts">{"".join(items)}</ul>'
 
 
 def _section_body(key: str, narrative, ctx: Mapping[str, Any]) -> str:
@@ -817,7 +886,8 @@ def _section_body(key: str, narrative, ctx: Mapping[str, Any]) -> str:
         return f'<div class="care">{prose}</div>' if prose else ""
     if key == "business_dna":
         extra = (_standing(ctx["pillars"], ctx["bands"])
-                 + _pillar_verdicts(_facts(narrative, "business_dna").get("pillars") or [])
+                 + _pillar_verdicts(_facts(narrative, "business_dna").get("pillars") or [],
+                                    hedged=bool(ctx.get("hedged")))
                  + _high_low(ctx["categories"]))
     elif key == "problem_path":
         # The narrative's prose is rendered INSIDE _root_cause (it leads the
@@ -913,6 +983,14 @@ def build_report_document(
     keys = [s.key for s in getattr(narrative, "sections", ()) if getattr(s, "key", None)]
     has_root_cause = "problem_path" in keys
     wellbeing_first = "acknowledgement" in keys or "support_recommendation" in keys
+    # The narrator wrote the certainty caveat, so the rest of the page has to
+    # agree with it. It opens "we did not gather enough signal this session to
+    # be confident ... a provisional draft, not a settled diagnosis" -- and the
+    # page then handed out three Critical Gap verdicts and four Strong ratings
+    # in the same typeface it would use for a full session. A reader cannot act
+    # on both statements, so one of them is noise; this makes the bands carry
+    # the caveat the top of the page already made.
+    hedged = "hedge" in keys
 
     confirm_lines, solve_lines = _plan_lines(narrative)
     planned = len(confirm_lines) + len(solve_lines) or len(actions)
@@ -925,6 +1003,7 @@ def build_report_document(
 
     ctx = {
         "pillars": pillars, "categories": categories, "causes": causes,
+        "hedged": hedged,
         "actions": actions, "symptoms": symptoms, "steps": steps, "stats": stats,
         "bands": _pillar_bands(narrative),
     }

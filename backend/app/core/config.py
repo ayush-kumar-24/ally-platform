@@ -884,6 +884,24 @@ class Settings(BaseSettings):
     RETRIEVAL_TOP_K: int = 5
     RETRIEVAL_MIN_SIMILARITY: float = 0.0
 
+    #: Cosine DISTANCE below which a diagnosis candidate counts as re-asking
+    #: something this session already asked, and is dropped from selection.
+    #: 0 disables the filter entirely.
+    #:
+    #: The catalogue carries rephrasings of one question inside a single
+    #: category, and they share almost no words -- "could you say whose job it
+    #: was", "is there any system for tracking who owns what", "a mistake
+    #: because two people assumed the other was handling it" have four, seven
+    #: and ten content words with no overlap at all. So this cannot be done
+    #: lexically; it is done on the embeddings `questions` already carries,
+    #: over the HNSW cosine index already built for them.
+    #:
+    #: 0.10 is deliberately tight. A false positive costs the founder a
+    #: question they should have been asked, which is worse and less visible
+    #: than the repeat it prevents, so this starts conservative and is meant to
+    #: be tuned against real sessions rather than guessed upward.
+    DIAGNOSIS_REPEAT_MAX_DISTANCE: float = 0.10
+
     # --- Provider adapters (credentials via env; never logged) ---
     OPENAI_API_KEY: str = ""
     ANTHROPIC_API_KEY: str = ""

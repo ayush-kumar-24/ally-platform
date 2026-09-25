@@ -7,10 +7,12 @@ service so that a single request stays atomic.
 
 from datetime import datetime
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, func, literal, select
 from sqlalchemy import text as _text
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
+from app.core.config import settings
+from app.core.logger import logger
 from app.models import Answer, DiagnosisSession, Question, SessionStatus
 from app.models.schema import FounderDnaAnswers, FounderDnaQuestions
 
@@ -239,6 +241,64 @@ class DiagnosisRepository:
             )
             stmt = stmt.where(
                 func.lower(func.trim(Question.question_text)).not_in(already_told_us)
+            )
+
+        # Do not re-ask, in different words, what this session already asked.
+        #
+        # The `not_in(answered)` above only catches the same question_id, and
+        # the Founder DNA filter only catches identical text. Neither catches a
+        # REPHRASING, and the catalogue is full of them inside a single
+        # category -- so the engine's round-robin, which spreads by pillar and
+        # then by category, spreads happily across three questions asking one
+        # thing. Observed live, all three to the same founder, all in Team &
+        # Leadership:
+        #
+        #   "When something was missed, could you say whose job it was?"
+        #   "Tell me about a small mistake that happened because two people
+        #    assumed the other one was handling it."
+        #   "Is there any system for tracking who owns what, or does it live
+        #    in conversations and memory?"
+        #
+        # He answered the second by pointing back at his answer to the first.
+        # Being asked the same thing three times is the clearest possible
+        # signal that nothing you said was kept -- expensive for a product
+        # whose promise is that it is paying attention -- and it spends slots
+        # out of roughly thirty on evidence already gathered.
+        #
+        # This CANNOT be done on the text: those three share four, seven and
+        # ten content words with no overlap between them. It is done on the
+        # embeddings `questions` already carries, over the HNSW cosine index
+        # already built for them (idx_questions_embedding).
+        #
+        # Fails open in every direction. A null embedding on either side never
+        # matches, so an unembedded bank behaves exactly as before; a threshold
+        # of 0 disables it; and the engine treats an empty candidate set as
+        # "assessment complete", so the guard below keeps the filter from ever
+        # being the reason a diagnosis ends early.
+        max_distance = float(settings.DIAGNOSIS_REPEAT_MAX_DISTANCE or 0)
+        if max_distance > 0:
+            asked_q = aliased(Question)
+            near_repeat = (
+                select(literal(1))
+                .select_from(Answer)
+                .join(asked_q, asked_q.question_id == Answer.question_id)
+                .where(
+                    Answer.session_id == session_id,
+                    asked_q.embedding.is_not(None),
+                    Question.embedding.is_not(None),
+                    Question.embedding.cosine_distance(asked_q.embedding) < max_distance,
+                )
+            )
+            deduped = list(
+                self.db.execute(stmt.where(~near_repeat.exists())).scalars().all()
+            )
+            if deduped:
+                return deduped
+            # Everything left reads as a repeat. Asking one again beats ending
+            # the assessment, so fall through to the unfiltered set.
+            logger.info(
+                "Every remaining candidate reads as a repeat; keeping them",
+                extra={"session_id": session_id},
             )
 
         return list(self.db.execute(stmt).scalars().all())

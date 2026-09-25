@@ -574,6 +574,7 @@ class StandardDiagnosticEngine(DiagnosticEngine):
                     max_score=max_score,
                     normalised_risk=normalised,
                     is_flagged=normalised >= threshold,
+                    answers_count=len(members),
                 )
             )
         return risks

@@ -103,6 +103,11 @@ class CategorySnapshot:
     risk: Decimal
     band: HealthBand
     is_flagged: bool
+    #: Scored answers behind `risk`. Without it the report cannot tell a
+    #: dimension that was probed repeatedly and came back healthy from one
+    #: that was barely asked -- both sit near 0 risk, and "Lean on this"
+    #: called both a strength.
+    answers_count: int = 0
 
 
 @dataclass(frozen=True)

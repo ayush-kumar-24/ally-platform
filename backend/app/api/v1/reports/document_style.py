@@ -127,6 +127,12 @@ STYLE = """
 .rp .verdict.t-ok .verdict-band{color:var(--forest-500);}
 .rp .verdict-scope{display:block;font-size:11.5px;color:var(--ink-faint);margin-top:2px;}
 .rp .verdict-desc{margin:7px 0 0;font-size:13.5px;line-height:1.55;color:var(--ink-soft,#4a4a44);}
+/* The lede that marks the sentence after it as catalogue text about the
+   BAND rather than a finding about this founder. Muted and uppercase so
+   the distinction survives a skim -- the whole point is that nobody reads
+   the paragraph as a personal verdict. */
+.rp .verdict-provisional{margin:0 0 10px;padding:8px 11px;border-radius:7px;background:var(--wash,#f6f5ef);border:1px solid var(--rule,#e3e1d8);font-size:12.5px;line-height:1.5;color:var(--ink-soft,#4a4a44);}
+.rp .verdict-desc-lede{display:block;font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;font-weight:700;color:var(--ink-faint,#8a8a80);margin-bottom:2px;}
 .rp .bar-track{position:relative;height:9px;border-radius:999px;background:#E7E1D6;overflow:hidden;}
 .rp .bar-fill{height:100%;border-radius:999px;}
 .rp .bar-val{text-align:right;font-size:13px;line-height:1.25;font-weight:700;hyphens:none;overflow-wrap:normal;word-break:keep-all;}
