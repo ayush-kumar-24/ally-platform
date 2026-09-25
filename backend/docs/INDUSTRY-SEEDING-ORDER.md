@@ -26,11 +26,11 @@ three pillars the industry layer never covered, across all nine dimension codes.
 | 18 | Industrial & Manufacturing | `manufacturing` | MFG | 4 | **done** |
 | 19 | Information Technology & Software (SaaS) | `saas` | SAS | 4 | **done** |
 | 20 | Legal & LegalTech | `legaltech` | LGL | 4 | **done** |
-| 21 | Logistics & Supply Chain | `logistics` | LOG | 5 | pending |
-| 22 | Marketing, Advertising & AdTech | `adtech_marketing` | MKT | 5 | pending |
-| 23 | Non-Profit, Social Impact & NGO | `ngo` | NGO | 5 | pending |
-| 24 | Pharmaceuticals & Biotech | `pharma_biotech` | PHM | 5 | pending |
-| 25 | Professional Services & Consulting | `services` | SVC | 5 | pending |
+| 21 | Logistics & Supply Chain | `logistics` | LOG | 5 | **done** |
+| 22 | Marketing, Advertising & AdTech | `adtech_marketing` | MKT | 5 | **done** |
+| 23 | Non-Profit, Social Impact & NGO | `ngo` | NGO | 5 | **done** |
+| 24 | Pharmaceuticals & Biotech | `pharma_biotech` | PHM | 5 | **done** |
+| 25 | Professional Services & Consulting | `services` | SVC | 5 | **done** |
 | 26 | Retail (offline & online) | `retail` | RTL | 6 | pending |
 | 27 | Sports, Fitness & Wellness | `sports_fitness` | SPF | 6 | pending |
 | 28 | Telecommunications | `telecom` | TEL | 6 | pending |

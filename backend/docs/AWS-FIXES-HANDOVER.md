@@ -26,6 +26,8 @@ own transaction and rolls back rather than half-applying.
 | 9 | `batch4_industries_16to20.sql` | Content: HRTech, import/export, manufacturing, SaaS, LegalTech. 810 rows. | 425 KB |
 | 10 | `fix_batch4_stage_weights.sql` | 1,080 `root_cause_weights` rows — the 135 batch 4 root causes × 8 stages. | 331 KB |
 | 11 | `fix_stage_weight_curves.sql` | **Correction.** Replaces the flat stage curve in files 5, 8 and 10 with one curve per dimension. 72 UPDATEs. | 32 KB |
+| 12 | `batch5_industries_21to25.sql` | Content: logistics, marketing/AdTech, NGO, pharma/biotech, professional services. 810 rows. | 425 KB |
+| 13 | `fix_batch5_stage_weights.sql` | 1,080 `root_cause_weights` rows. Already uses the per-dimension curve — file 11 does not touch it. | 336 KB |
 
 Order matters in four places only: the schema change (1) must land before any
 session writes a `not_applicable` answer; 5 and 6 reference rows that 2 and 3
@@ -34,10 +36,16 @@ and refuses to run otherwise, naming the file to load first); and **11 must run
 last**, because it corrects what 5, 8 and 10 wrote. 4 is independent of the
 batches and can go any time after 1.
 
-**If you have already applied files 1–8**, you need 9, 10 and 11. File 11 is an
+**If you have already applied files 1–8**, you need 9 onwards. File 11 is an
 UPDATE and is safe to run on its own against whatever batch weights are already
 in place — it does not depend on 9 or 10 having been run, and re-running it
 changes nothing.
+
+Files 12 and 13 (batch 5) go **after** 11, not because they depend on it but
+because 13 already carries the corrected per-dimension curve. Running 11 before
+13 means 11 has nothing of batch 5's to correct, which is the intended state.
+Running them the other way round is also safe — 11 would simply set batch 5's
+weights to the values 13 already wrote.
 
 ```bash
 cd /path/to/sql
@@ -52,7 +60,9 @@ for f in \
   fix_batch3_stage_weights.sql \
   batch4_industries_16to20.sql \
   fix_batch4_stage_weights.sql \
-  fix_stage_weight_curves.sql
+  fix_stage_weight_curves.sql \
+  batch5_industries_21to25.sql \
+  fix_batch5_stage_weights.sql
 do
   echo "== $f"
   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f" || break
@@ -214,6 +224,21 @@ correction: batch causes still hold ranks 1–5, but now at the same
 `stage_probability` as the causes below them (0.6667), with the margin between
 rank 5 and rank 6 narrowing from 0.089 to 0.022. It survived losing the
 advantage, which is the only version of that result worth reporting.
+
+## 4c. Batch 5 (industries 21–25)
+
+`batch5_industries_21to25.sql` and `fix_batch5_stage_weights.sql`.
+
+Same shape as the others. The one difference worth knowing: **batch 5 uses the
+per-dimension stage curve from the start**, so it is the first batch that never
+needed correcting. Its own self-check refuses to commit if the Early Traction
+mean comes out above 1.7, which is the signature of the flat curve returning.
+
+Measured on load: 9 problems per industry across all 9 dimension codes and 3
+pillars, 2.00 questions per (root cause, stage), Early Traction weight mean
+1.556 against the catalogue's 1.557. All five industries return a full
+12-question opening block with every pillar covered and zero foreign-industry
+leakage.
 
 ## 5. Evidence concentration
 
