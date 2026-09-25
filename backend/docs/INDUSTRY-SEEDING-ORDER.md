@@ -1,5 +1,7 @@
 # Industry seeding order (canonical) — A–Z as specified
 
+**All 30 industries are seeded.** Six batches of five, in this order.
+
 Batches of five, in this order. Every batch adds the full chain
 (problem → root causes → questions → interventions → industry mapping) for the
 three pillars the industry layer never covered, across all nine dimension codes.
@@ -31,11 +33,11 @@ three pillars the industry layer never covered, across all nine dimension codes.
 | 23 | Non-Profit, Social Impact & NGO | `ngo` | NGO | 5 | **done** |
 | 24 | Pharmaceuticals & Biotech | `pharma_biotech` | PHM | 5 | **done** |
 | 25 | Professional Services & Consulting | `services` | SVC | 5 | **done** |
-| 26 | Retail (offline & online) | `retail` | RTL | 6 | pending |
-| 27 | Sports, Fitness & Wellness | `sports_fitness` | SPF | 6 | pending |
-| 28 | Telecommunications | `telecom` | TEL | 6 | pending |
-| 29 | Textiles | `textiles` | TXT | 6 | pending |
-| 30 | Transportation & Delivery | `transport_delivery` | DLV | 6 | pending |
+| 26 | Retail (offline & online) | `retail` | RTL | 6 | **done** |
+| 27 | Sports, Fitness & Wellness | `sports_fitness` | SPF | 6 | **done** |
+| 28 | Telecommunications | `telecom` | TEL | 6 | **done** |
+| 29 | Textiles | `textiles` | TXT | 6 | **done** |
+| 30 | Transportation & Delivery | `transport_delivery` | DLV | 6 | **done** |
 
 ## Note on the earlier draft
 
