@@ -109,3 +109,63 @@ DIAGNOSIS.update({
  2937: ("Pretty much, yes. I look at what is in the account and whether it is going down. There is no model, no forecast, no accounting software -- a spreadsheet and my own sense of it.", "weak"),
  2347: ("N/A -- we have no customers, so I cannot describe a best one from experience. The prospects who engage most are small software businesses where the founder is still close to the operation. That is a pattern from conversations, not from anyone who has paid.", "n/a"),
 })
+
+# ---------------------------------------------------------------------------
+# Batch 4 added 18 SaaS questions at Stage 0→1, and twelve of them land in the
+# industry opening block -- so without answers the harness substitutes filler
+# for most of the run and the generic-answer guard (correctly) fails it.
+#
+# Written to the same founder reality held constant at the top of this file:
+# working AI SaaS, outbound started, early interest, NO revenue, team of three,
+# founder does product + outreach + demos + ops, nine pilot accounts.
+# Not tuned to produce a finding. A pre-revenue solo-selling founder answers
+# the revenue and delegation questions badly because that is the truth of the
+# situation, not because I wanted a particular root cause to rank.
+#
+# Spread of the 18: weak 8, average 7, strong 2, n/a 1.
+#
+# NOTE ON THE IDS. This bank is keyed by question_id, which is assigned by the
+# sequence and therefore differs between databases. The question_code in each
+# comment is stable, so these can be re-derived anywhere with:
+#   select question_id, question_code from questions where question_code like 'S01-SAS-3%';
+# Keying the bank by code instead of id would remove the problem entirely; that
+# is a harness change, not an answers change, so it is not made here.
+# ---------------------------------------------------------------------------
+DIAGNOSIS.update({
+ # S01-SAS-301-1
+ 6384: ("Eleven calls last month. Seven were demos off outbound, four were intros someone passed me. Two asked for pricing afterwards and neither came back. So eleven calls, zero closes, and I can name every one of them -- which tells you how small the number is.", "average"),
+ # S01-SAS-301-2
+ 6385: ("Sometimes. The ones who say it outright I remember -- 'not now', 'we'd need it to talk to our data'. But I don't write them down anywhere, so I'm going on the ones that stuck in my head rather than the actual pattern. I suspect the real reason is the same every time and I couldn't prove it.", "weak"),
+ # S01-SAS-302-1
+ 6390: ("Maybe nine or ten hours, because every demo and every setup is me. That part I'm genuinely not short of. What I'm short of is talking to people who aren't already interested.", "average"),
+ # S01-SAS-302-2
+ 6391: ("Deployments and the smaller bug fixes. One of the engineers could do both -- he's done deploys with me sitting there. I keep doing it because it takes me fifteen minutes and explaining it takes an hour, which I know is exactly the wrong reason.", "average"),
+ # S01-SAS-303-1
+ 6396: ("Engineering keeps going, they've got work queued. But nothing ships, because I'm the one who decides what goes in a release, and nothing customer-facing happens at all. I was away four days in August and the honest answer is the company paused.", "weak"),
+ # S01-SAS-303-2
+ 6397: ("One of the two engineers can, and has. The steps aren't written down though -- he learned it by watching me, so if he's out too then it's just me again.", "average"),
+ # S01-SAS-304-1
+ 6402: ("Nobody has left because nobody is paying. But five of the nine pilots went quiet and no, I didn't see any of them coming. Each one I only noticed weeks later when I went looking. If those had been paying customers I'd have lost them the same way.", "weak"),
+ # S01-SAS-304-2
+ 6403: ("There's no definition. I do about two hours with them -- workspace, load their context, run the first diagnosis -- and then I decide in my head that they're set up. Nothing is written, nothing is checked, and it's different every time depending on how the call went.", "weak"),
+ # S01-SAS-305-1
+ 6408: (NA, "n/a"),
+ # S01-SAS-305-2
+ 6409: ("They get an answer on the call, because I'm the one on the call and I'm the one who sets the price. That's the one upside of everything running through me. It won't hold the moment anyone else is selling.", "average"),
+ # S01-SAS-306-1
+ 6414: ("No. Both of them came through people I know and I hired them off conversations and a look at previous work. No test, nothing the same across both. It's worked out so far, which I think is luck rather than judgement.", "weak"),
+ # S01-SAS-306-2
+ 6415: ("Sales. Neither of them sells and neither do I, properly -- I demo, which isn't the same thing. We also have nobody who has run a product against enterprise buyers, and that's who we say we're for. Those two gaps are the same gap really.", "strong"),
+ # S01-SAS-307-1
+ 6420: ("Two came from pilot accounts -- one wanted their own data in it, one wanted a shareable report. The third I decided myself. So mostly whoever asked most recently, which isn't a process.", "average"),
+ # S01-SAS-307-2
+ 6421: ("That's the uncomfortable one. Two solo founders, a small dev agency, and one team inside a large company. They want completely different things and I've been building for all three because each one was a real person asking. Written down like that it's obviously a problem.", "weak"),
+ # S01-SAS-308-1
+ 6426: ("One. An agency wanted us to white-label the report with their branding and I said no, because it would have made us their tool rather than a product. I was fairly sure at the time and I'm still comfortable with it.", "average"),
+ # S01-SAS-308-2
+ 6427: ("Whoever asked last, mostly, plus whatever I think will help the next demo. There's a list but it isn't in any order, so in practice the most recent conversation wins. I don't have a rule I could write down.", "weak"),
+ # S01-SAS-309-1
+ 6432: ("Manual onboarding. I told myself after the third pilot that I'd write the setup down before the next one, and then I did the next six by hand exactly the same way. Same mistake, six more times, and each time I had the reason ready.", "strong"),
+ # S01-SAS-309-2
+ 6433: ("Nowhere. It's in my head and some of it is in WhatsApp. If I stopped tomorrow nobody could tell you why any of those five pilots went quiet.", "weak"),
+})

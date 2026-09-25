@@ -293,6 +293,43 @@ def main():
     # The adaptive selector picks questions the bank was not written against, so
     # a few misses are expected and fine. A majority is not a run, it is noise,
     # and it must not exit 0 and look like evidence.
+    # WHY THIS ALSO EXITS NON-ZERO.
+    #
+    # The module docstring has always said that without a key "every answer
+    # falls back to amber and the report is structurally complete and
+    # diagnostically empty". Nothing enforced it. So a run with no key printed
+    #
+    #     questions=52 answered_from_bank=50 SUBSTITUTED=2 (4%) llm_calls=0
+    #     root_causes=8 report=yes err=None
+    #
+    # and exited 0 -- and I read that as evidence that the new industry content
+    # was being detected from the founder's answers. It was not. All thirty
+    # answers carried the same amber fallback, so the ranking underneath came
+    # from category risk and stage weights alone; not one word Ayush wrote
+    # influenced it. `llm_calls=0` was right there in the line and said exactly
+    # this, which is the problem with putting the disqualifying fact in the
+    # middle of a summary that otherwise reads like success.
+    #
+    # scripts/e2e_journey_check.py refuses to start in this configuration and
+    # says why. This is the same refusal, applied after the walk so the
+    # structural result is still written to result.json and can be read
+    # deliberately -- just never mistaken for a diagnosis.
+    labels = {r.get("score_label") for r in transcript if r.get("score_label")}
+    unscored_run = payload["llm_calls"] == 0 and len(labels) <= 1
+    if unscored_run and os.environ.get("AYUSH_E2E_ALLOW_UNSCORED") != "1":
+        print(f"\nFAIL: no answer was actually classified. llm_calls=0 and every "
+              f"answer carries the same band ({', '.join(sorted(labels)) or 'none'}).\n"
+              f"      This run proves the pipeline CONNECTS. It proves nothing "
+              f"about classification, detection or ranking:\n"
+              f"      the bands are a fallback, so the root causes and pillar "
+              f"scores below are not reading the founder's answers.\n"
+              f"      For a real run: ANTHROPIC_API_KEY=... LLM_PROVIDER=anthropic "
+              f"ADAPTIVE_QUESTIONS=true\n"
+              f"      To accept a structural-only run on purpose, set "
+              f"AYUSH_E2E_ALLOW_UNSCORED=1 -- and do not call the result a "
+              f"diagnosis.")
+        raise SystemExit(3)
+
     if payload["substituted_share"] > GENERIC_LIMIT:
         print(f"\nFAIL: {_substituted} of {len(transcript)} answers were the "
               f"placeholder, not the founder's ({payload['substituted_share']:.0%} "
