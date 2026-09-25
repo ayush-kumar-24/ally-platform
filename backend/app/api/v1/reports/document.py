@@ -373,6 +373,46 @@ def _high_low(categories: Sequence[Mapping[str, Any]]) -> str:
         f'Fix this first</div>{right_body}</div></div>')
 
 
+def _working(strengths: Sequence[Mapping[str, Any]]) -> str:
+    """The founder's own answers that came back GREEN.
+
+    The strengths column above this is scored per DIMENSION, and a dimension
+    needs several answers before it can clear the bar -- deliberately, because
+    calling a barely-asked dimension a strength is how the column used to
+    invent them. The cost was that a founder with two genuinely good answers
+    in two different dimensions saw an empty column and nothing else.
+
+    So this is the same evidence treatment the report already gives the weak
+    answers: quote what they said, name the dimension it counted toward, and
+    assert nothing beyond it. A green grade is a judgement the session already
+    made; printing it is not a new claim.
+    """
+    if not strengths:
+        return ""
+    quotes = []
+    for item in strengths[:3]:
+        question = str(item.get("question") or "").strip()
+        answer = str(item.get("answer") or "").strip()
+        category = str(item.get("category") or "").strip()
+        if not question or not answer:
+            continue
+        # Long answers are trimmed, not summarised -- a paraphrase here would
+        # be the report putting words in the founder's mouth on the one page
+        # that is meant to be purely their own.
+        if len(answer) > 400:
+            answer = answer[:400].rsplit(" ", 1)[0] + "\u2026"
+        cat_html = (f'<span class="quote-cat">{e(category)}</span>' if category else "")
+        quotes.append(
+            f'<div class="quote quote-good">{cat_html}'
+            f'<div class="quote-q">{e(question)}</div>'
+            f'<div class="quote-a">&ldquo;{e(answer)}&rdquo;</div></div>')
+    if not quotes:
+        return ""
+    return ('<p class="working-lede">And here is what you said that is already '
+            'working. These are your answers, graded on the same scale as '
+            'everything else.</p>' + "".join(quotes))
+
+
 def _root_cause(narrative, causes: Sequence[Mapping[str, Any]],
                 categories: Sequence[Mapping[str, Any]],
                 pillars: Sequence[Mapping[str, Any]]) -> str:
@@ -885,10 +925,12 @@ def _section_body(key: str, narrative, ctx: Mapping[str, Any]) -> str:
         # only the prose is wrapped here.
         return f'<div class="care">{prose}</div>' if prose else ""
     if key == "business_dna":
+        bdna = _facts(narrative, "business_dna")
         extra = (_standing(ctx["pillars"], ctx["bands"])
-                 + _pillar_verdicts(_facts(narrative, "business_dna").get("pillars") or [],
+                 + _pillar_verdicts(bdna.get("pillars") or [],
                                     hedged=bool(ctx.get("hedged")))
-                 + _high_low(ctx["categories"]))
+                 + _high_low(ctx["categories"])
+                 + _working(bdna.get("strength_evidence") or []))
     elif key == "problem_path":
         # The narrative's prose is rendered INSIDE _root_cause (it leads the
         # trail), so it must not be prepended here too. When there is no cause

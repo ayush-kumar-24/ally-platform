@@ -23,6 +23,7 @@ from app.api.v1.reports.document import (
     _facts_html,
     _heard,
     _high_low,
+    _working,
     _three_steps,
     build_report_document,
 )
@@ -234,3 +235,43 @@ def test_the_psychological_note_is_numbered_but_keeps_its_treatment():
     assert 'class="care"' in html
     assert "01" in html, "it takes a section number now"
     assert html.index('class="care"') < html.index("Business DNA")
+
+
+# --- the strengths a founder actually earned ---------------------------------
+
+def test_green_answers_are_shown_back_to_the_founder():
+    """THE REGRESSION: the strengths column is scored per DIMENSION and needs
+    several answers before a dimension clears the bar -- deliberately, since
+    crediting a barely-asked dimension is how it used to invent strengths. The
+    cost was that a growth-stage founder whose 30 answers included two genuine
+    greens saw an empty column and nothing else. Those answers existed, were
+    graded, and appeared nowhere."""
+    html = _working([
+        {"category": "Founder Psychology",
+         "question": "What is the biggest decision someone can make without you?",
+         "answer": "Divya can decide not to pursue an entire market segment."},
+        {"category": "Operations & Systems",
+         "question": "Are you building custom work to keep big accounts?",
+         "answer": "No. We have never built a one-off integration."},
+    ])
+    assert "already working" in html
+    assert "biggest decision someone can make without you" in html
+    assert "Divya can decide not to pursue an entire market segment." in html
+    assert "Founder Psychology" in html
+
+
+def test_no_green_answers_means_no_block_rather_than_an_empty_one():
+    assert _working([]) == ""
+
+
+def test_a_strength_without_an_answer_is_skipped_rather_than_quoted_blank():
+    assert _working([{"category": "X", "question": "Q?", "answer": "  "}]) == ""
+
+
+def test_a_long_answer_is_trimmed_not_paraphrased():
+    """A paraphrase here would be the report putting words in the founder's
+    mouth on the one block that is meant to be purely their own."""
+    long_answer = "word " * 200
+    html = _working([{"category": "X", "question": "Q?", "answer": long_answer}])
+    assert "word word" in html
+    assert "\u2026" in html or "&hellip;" in html or "…" in html
