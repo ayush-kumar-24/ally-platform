@@ -172,8 +172,45 @@ class LLMNextQuestionAdvisor(NextQuestionAdvisor):
         )
         system = (
             "You are guiding a startup founder's diagnostic interview. Read the "
-            "founder's latest answer and classify it, then choose which of the "
-            "CANDIDATE questions to ask next -- "
+            "founder's latest answer and classify it. "
+            # THE N/A CASE, and why this now uses the fourth label rather than
+            # Amber.
+            #
+            # session_01J2N7sy5i6pf8RBY96jGBtU found this bug and fixed it by
+            # scoring N/A as Amber, for a stated reason: "There is no
+            # not_applicable in _VALID_LABELS, and adding one reaches the stored
+            # classifier, category risk, pillar banding and the report."
+            #
+            # That reasoning was right about the blast radius and wrong about the
+            # blast: every one of those readers was already built for the fourth
+            # band and handles it correctly. diagnostic.py excludes
+            # NOT_APPLICABLE from BOTH the numerator and the denominator of the
+            # pillar score, symptom_detection.py does not count it as a symptom,
+            # root_cause.py never turns it into evidence, and _LABEL_TO_SCORE
+            # maps it to None rather than zero.
+            #
+            # What actually blocked it was narrower and invisible:
+            # answers.score_label was varchar(10) and 'not_applicable' is
+            # fourteen characters, so migration c7d18a3f420b added the value to
+            # the CHECK constraint but never widened the column. Every write
+            # failed with StringDataRightTruncation and took the whole session
+            # down with a 500. Migration d4a91c7e2b83 widens it.
+            #
+            # With the column fixed, the fourth label is the better answer:
+            # Amber still carries score 1, so an inapplicable question still
+            # drags the pillar it landed in downwards. NOT_APPLICABLE is
+            # excluded from the denominator, which is the treatment "this does
+            # not apply to my business" actually deserves. The instruction text
+            # below is kept almost verbatim from that session's fix -- it is
+            # specific and well chosen -- with the band changed.
+            "An answer that says the question does not apply to this business -- "
+            "\"N/A\", \"we don't have that\", \"there is no free tier\" -- is NOT "
+            "avoidance and must NEVER be Red. Label it not_applicable: it is a "
+            "true statement about the business, not a failure to answer, and that "
+            "band is excluded from the diagnosis rather than counted against "
+            "them. Judge it Red only when the founder dodges a question that DOES "
+            "apply to them. "
+            "Then choose which of the CANDIDATE questions to ask next -- "
             "the one that will most improve the diagnosis given what they just said "
             "(e.g. probe deeper on a weak/avoidant answer, move on after a strong one). "
             "FOUNDER CONTEXT, when present, is what onboarding already established "
