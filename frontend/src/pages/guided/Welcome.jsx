@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
-import { CURRENT_VERSIONS } from '../../services/consents';
+import { CURRENT_VERSIONS, grantDiagnosisConsent } from '../../services/consents';
 
 export default function Welcome() {
   const navigate = useNavigate();
   const { user, setUser, showToast } = useApp();
   const [showModal, setShowModal] = useState(false);
   const [agreeModalDiagnosis, setAgreeModalDiagnosis] = useState(false);
+  const [savingConsent, setSavingConsent] = useState(false);
 
   // Same fabricated-identity bug as everywhere else this session, but on the
   // very first screen a founder sees their own name on: with no name yet, this
@@ -30,7 +31,29 @@ export default function Welcome() {
     }
   };
 
-  const handleModalSubmit = () => {
+  /* The consent has to reach the LEDGER, not just this component's state.
+     Before this awaited grantDiagnosisConsent, the handler set
+     `diagnosisConsent: true` on the in-memory user and navigated on, and
+     nothing was ever posted to /consents. The founder saw consent given and
+     the backend never recorded it -- which surfaces much later, and
+     unrecognisably, as a 403 from POST /diagnosis/start (the only phase gated
+     by `require_diagnosis_consent`; Founder DNA and current-problem are not),
+     after the whole interview has been answered.
+
+     So: persist first, and only move on if the write succeeded. On failure the
+     modal stays open -- navigating would put the founder back in exactly the
+     state this fixes. */
+  const handleModalSubmit = async () => {
+    if (savingConsent) return;
+    setSavingConsent(true);
+    try {
+      await grantDiagnosisConsent();
+    } catch {
+      showToast('Could not save your consent just now. Please try again.');
+      return;
+    } finally {
+      setSavingConsent(false);
+    }
     setUser(prev => ({
       ...prev,
       consents: {
@@ -256,10 +279,10 @@ export default function Welcome() {
               <button 
                 className="modal-btn primary" 
                 onClick={handleModalSubmit}
-                disabled={!agreeModalDiagnosis}
+                disabled={!agreeModalDiagnosis || savingConsent}
                 type="button"
               >
-                Agree &amp; Proceed
+                {savingConsent ? 'Saving\u2026' : 'Agree & Proceed'}
               </button>
             </div>
           </div>

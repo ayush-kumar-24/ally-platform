@@ -153,6 +153,19 @@ export default function DiagnosisChat() {
             || "Tell us what stage you're at in your profile — the questions you'll be asked depend on it.");
           return;
         }
+        /* The two consent gates. Both are 403s a refresh can never clear, and
+           both were landing on the dead-end message below -- the live run that
+           found this had answered the entire Founder DNA interview and the
+           current-problem phase before hitting it, because POST
+           /diagnosis/start is the only one of the three gated by
+           `require_diagnosis_consent`. The backend's own detail names the
+           screen to fix it on, so it is shown rather than reworded. */
+        if (error?.code === 'DiagnosisConsentMissingError'
+            || error?.code === 'ProcessingRestrictedError') {
+          setBlocked(error.detail
+            || 'Ally needs your consent to run a diagnosis on your answers. You can give it from your profile.');
+          return;
+        }
         // The founder's usage is the thing that actually settles it, so ask for
         // it rather than inferring the answer from which error came back. Same
         // count and limit the start gate enforces (plans/router.py
