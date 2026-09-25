@@ -15,63 +15,78 @@ own transaction and rolls back rather than half-applying.
 
 | # | File | What it is | Size |
 |---|------|-----------|------|
-| 1 | `fix_schema_widen_answers_score_label.sql` | **The one schema change.** Widens `answers.score_label` varchar(10) → varchar(20). | 3 KB |
-| 2 | `batch1_industries_1to5.sql` | Content: agritech, automotive, fintech, beauty & personal care, proptech. 810 rows. | 424 KB |
-| 3 | `batch2_industries_6to10.sql` | Content: consumer electronics, e-commerce/D2C, edtech, cleantech & energy, media & entertainment. 810 rows. | 423 KB |
-| 4 | `fix_original_catalogue_interventions.sql` | 417 interventions for problems in the 1–275 range, which had none. | 546 KB |
-| 5 | `fix_batch_stage_weights.sql` | 2,160 `root_cause_weights` rows — the 270 batch 1–2 root causes × 8 founder stages. | 657 KB |
-| 6 | `fix_concentrate_batch_evidence.sql` | An UPDATE that remaps batch 1–2 questions so evidence concentrates instead of scattering. | 2 KB |
-| 7 | `batch3_industries_11to15.sql` | Content: fashion & apparel, food & beverage, gaming, healthcare, hospitality & travel. 810 rows. | 428 KB |
-| 8 | `fix_batch3_stage_weights.sql` | 1,080 `root_cause_weights` rows — the 135 batch 3 root causes × 8 stages. | 330 KB |
-| 9 | `batch4_industries_16to20.sql` | Content: HRTech, import/export, manufacturing, SaaS, LegalTech. 810 rows. | 425 KB |
-| 10 | `fix_batch4_stage_weights.sql` | 1,080 `root_cause_weights` rows — the 135 batch 4 root causes × 8 stages. | 331 KB |
-| 11 | `fix_stage_weight_curves.sql` | **Correction.** Replaces the flat stage curve in files 5, 8 and 10 with one curve per dimension. 72 UPDATEs. | 32 KB |
-| 12 | `batch5_industries_21to25.sql` | Content: logistics, marketing/AdTech, NGO, pharma/biotech, professional services. 810 rows. | 425 KB |
-| 13 | `fix_batch5_stage_weights.sql` | 1,080 `root_cause_weights` rows. Already uses the per-dimension curve — file 11 does not touch it. | 336 KB |
-| 14 | `batch6_industries_26to30.sql` | Content: retail, sports & fitness, telecom, textiles, transport & delivery. 810 rows. **Completes all 30 industries.** | 425 KB |
-| 15 | `fix_batch6_stage_weights.sql` | 1,080 `root_cause_weights` rows, per-dimension curve. | 336 KB |
+| 1 | `fix_schema_widen_answers_score_label.sql` | **Skip if `alembic_version` is already `d4a91c7e2b83`.** Widens `answers.score_label` varchar(10) → varchar(20). | 3 KB |
+| 2 | `fix_original_catalogue_interventions.sql` | 417 interventions for problems in the 1–275 range, which had none. Independent of the batches. | 546 KB |
+| 3 | `batch1_industries_1to5.sql` | Content: agritech, automotive, fintech, beauty & personal care, proptech. 810 rows. | 424 KB |
+| 4 | `fix_batch1_stage_weights.sql` | 1,080 `root_cause_weights` rows (135 causes × 8 stages). | 36 KB |
+| 5 | `batch2_industries_6to10.sql` | Content: consumer electronics, e-commerce/D2C, edtech, cleantech & energy, media. 810 rows. | 423 KB |
+| 6 | `fix_batch2_stage_weights.sql` | 1,080 rows. | 36 KB |
+| 7 | `batch3_industries_11to15.sql` | Content: fashion & apparel, food & beverage, gaming, healthcare, hospitality & travel. 810 rows. | 425 KB |
+| 8 | `fix_batch3_stage_weights.sql` | 1,080 rows. | 36 KB |
+| 9 | `batch4_industries_16to20.sql` | Content: HRTech, import/export, manufacturing, SaaS, LegalTech. 810 rows. | 423 KB |
+| 10 | `fix_batch4_stage_weights.sql` | 1,080 rows. | 36 KB |
+| 11 | `batch5_industries_21to25.sql` | Content: logistics, marketing/AdTech, NGO, pharma/biotech, professional services. 810 rows. | 422 KB |
+| 12 | `fix_batch5_stage_weights.sql` | 1,080 rows. | 316 KB |
+| 13 | `batch6_industries_26to30.sql` | Content: retail, sports & fitness, telecom, textiles, transport & delivery. 810 rows. **Completes all 30.** | 425 KB |
+| 14 | `fix_batch6_stage_weights.sql` | 1,080 rows. | 316 KB |
 
-Order matters in four places only: the schema change (1) must land before any
-session writes a `not_applicable` answer; 5 and 6 reference rows that 2 and 3
-insert; 8 and 10 reference rows that 7 and 9 insert (each checks for all 135
-and refuses to run otherwise, naming the file to load first); and **11 must run
-last**, because it corrects what 5, 8 and 10 wrote. 4 is independent of the
-batches and can go any time after 1.
+Every content file is followed immediately by its own weight file, so a staged
+rollout can verify one batch before starting the next.
 
-**If you have already applied files 1–8**, you need 9 onwards. File 11 is an
-UPDATE and is safe to run on its own against whatever batch weights are already
-in place — it does not depend on 9 or 10 having been run, and re-running it
-changes nothing.
+### Two files you may not need
 
-Files 12 and 13 (batch 5) go **after** 11, not because they depend on it but
-because 13 already carries the corrected per-dimension curve. Running 11 before
-13 means 11 has nothing of batch 5's to correct, which is the intended state.
-Running them the other way round is also safe — 11 would simply set batch 5's
-weights to the values 13 already wrote.
+- **`fix_schema_widen_answers_score_label.sql`** (file 1) — skip it if
+  `alembic_version` already reads `d4a91c7e2b83`.
+- **`fix_stage_weight_curves.sql`** — **not needed on a fresh load.** It exists
+  only to correct databases that received the earlier flat-curve weight files.
+  Files 4, 6, 8, 10, 12 and 14 already carry the corrected per-dimension curve,
+  so on a database with no batch content it changes nothing. Verified: the md5
+  of every batch stage_weight value is identical before and after running it on
+  a freshly loaded database.
+- **`fix_batch_stage_weights.sql`** (no number) is **superseded**. It was the
+  original combined batch 1 + 2 file — 2,160 statements across ten industry
+  prefixes — which could not be deployed one batch at a time. Files 4 and 6
+  replace it. Do not run it.
+- **`fix_concentrate_batch_evidence.sql`** is also superseded for a fresh load:
+  batches 3 onwards build evidence concentration into the content itself, and
+  batches 1–2 as re-emitted do the same. It is an UPDATE and harmless to run,
+  but it has nothing to do.
+
+Order matters in two places only: each weight file requires its own content
+file to have landed (it checks for all 135 causes and refuses otherwise,
+naming the file to load), and file 1 must land before any session writes a
+`not_applicable` answer. File 2 is independent and can go any time.
 
 ```bash
 cd /path/to/sql
 for f in \
-  fix_schema_widen_answers_score_label.sql \
-  batch1_industries_1to5.sql \
-  batch2_industries_6to10.sql \
   fix_original_catalogue_interventions.sql \
-  fix_batch_stage_weights.sql \
-  fix_concentrate_batch_evidence.sql \
-  batch3_industries_11to15.sql \
-  fix_batch3_stage_weights.sql \
-  batch4_industries_16to20.sql \
-  fix_batch4_stage_weights.sql \
-  fix_stage_weight_curves.sql \
-  batch5_industries_21to25.sql \
-  fix_batch5_stage_weights.sql \
-  batch6_industries_26to30.sql \
-  fix_batch6_stage_weights.sql
+  batch1_industries_1to5.sql   fix_batch1_stage_weights.sql \
+  batch2_industries_6to10.sql  fix_batch2_stage_weights.sql \
+  batch3_industries_11to15.sql fix_batch3_stage_weights.sql \
+  batch4_industries_16to20.sql fix_batch4_stage_weights.sql \
+  batch5_industries_21to25.sql fix_batch5_stage_weights.sql \
+  batch6_industries_26to30.sql fix_batch6_stage_weights.sql
 do
   echo "== $f"
   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f" || break
 done
 ```
+
+Add `fix_schema_widen_answers_score_label.sql` at the front only if
+`alembic_version` is older than `d4a91c7e2b83`.
+
+To go batch by batch instead, run one content file and its weight file, verify,
+then continue. Expected deltas per batch:
+
+| | per batch | ×3 batches | ×6 batches |
+|---|---|---|---|
+| problems | +45 | +135 | +270 |
+| root causes | +135 | +405 | +810 |
+| questions | +270 | +810 | +1,620 |
+| interventions | +90 | +270 | +540 |
+| industry mappings | +270 | +810 | +1,620 |
+| stage-weight rows | +1,080 | +3,240 | +6,480 |
 
 `-v ON_ERROR_STOP=1` is not optional. Without it psql keeps going past a failed
 statement and you get a partially applied file with a clean exit code.
@@ -107,10 +122,25 @@ rewrite, no data movement, no long `ACCESS EXCLUSIVE` hold. It is safe on the
 live `answers` table. The existing CHECK constraint is not dropped or
 recreated — it already permits the four values.
 
-**If you apply migrations with alembic instead of SQL**, this same change is
-revision `d4a91c7e2b83` (`widen_answers_score_label`), whose `down_revision` is
-`c9f41b8e3a07`. Apply it *or* the SQL file, not both — though both are
-idempotent, so doing both is harmless rather than wrong.
+**If your database is already at alembic revision `d4a91c7e2b83`, this change
+is DONE — skip file 1 entirely.** That revision IS this fix
+(`widen_answers_score_label`) and it is the current head.
+
+`c9f41b8e3a07` is its PARENT, not a version you should be on. An earlier draft
+of this document mentioned it as a `down_revision` and that read as "the
+expected production version", which it is not. Being at `d4a91c7e2b83` means
+you are ahead of it and correct.
+
+Check with:
+
+```sql
+select version_num from alembic_version;
+```
+
+- `d4a91c7e2b83` → the schema fix is applied. Skip file 1. **Do not run
+  `alembic upgrade head`** — there is nothing to upgrade to.
+- anything older → apply file 1 (the SQL), or the migration as a one-off ECS
+  task. Not both, though both are idempotent so doing both is harmless.
 
 Two application bugs were downstream of this, and are fixed in the same
 branch's Python (nothing for you to run):
