@@ -480,8 +480,18 @@ class ReportNarrativeGenerator:
             ]
             # Hard rule 2 in the facts: red-flag pillars are listed even when the
             # overall band is healthy.
+            # The founder's own strong answers, for the strengths column to
+            # fall back on. The column is scored per DIMENSION, and a dimension
+            # needs several answers before it can clear the bar -- so a founder
+            # with two genuinely good answers in two different dimensions saw
+            # an empty column and the honest-but-bleak note under it. These are
+            # answers the session already graded green; quoting them asserts
+            # nothing new.
+            strengths = [{"category": cat, "question": q, "answer": a}
+                         for cat, q, a in p.strength_evidence]
             facts = {"overall_band": p.business_health_band, "pillars": founder_facing,
-                     "red_flag_pillars": [rp.name for rp in p.red_flag_pillars]}
+                     "red_flag_pillars": [rp.name for rp in p.red_flag_pillars],
+                     "strength_evidence": strengths}
             if p.business_health_band is None and not pillars:
                 return {}, {}
             return slots, facts

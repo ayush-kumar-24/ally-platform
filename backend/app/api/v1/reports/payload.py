@@ -123,6 +123,21 @@ class ReportPayload:
     #: read that as the engine having ignored the interview.
     diagnosis_answers: int = 0
 
+    #: (category, question, answer) for the answers this session graded GREEN,
+    #: oldest first. The report already quotes the founder's weakest answers
+    #: back to them in the evidence section and had nowhere at all to show the
+    #: strong ones -- the Business DNA strengths column works on dimension
+    #: SCORES, and a dimension needs several answers before it can clear the
+    #: bar, so a founder with two genuinely good answers spread across two
+    #: dimensions saw neither.
+    #:
+    #: Measured on a growth-stage run: 2 of 30 answers came back green -- "the
+    #: biggest decision someone can make without you" and "are you building
+    #: custom work to keep big accounts" -- both real, both evidenced, and
+    #: neither appeared anywhere in the report. This is the evidence the
+    #: session already gathered, not a new claim about the founder.
+    strength_evidence: tuple[tuple[str, str, str], ...] = ()
+
     #: Answers to questions actually TAGGED as distress indicators
     #: (questions.is_distress_tagged) that came back red or amber. The
     #: wellbeing narrative used to lead on category risk in "Founder
@@ -408,6 +423,19 @@ def build_report_payload(db: Session, report) -> ReportPayload:
         solve_actions=_actions(report.solve_actions),
         category_risk_scores=dict(sess.get("category_risk_scores") or {}),
         diagnosis_answers=int(sess.get("questions_answered_count") or 0),
+        strength_evidence=tuple(
+            (str(r["category"] or ""), str(r["question_text"] or ""),
+             str(r["answer_text"] or ""))
+            for r in db.execute(
+                text("select q.category, q.question_text, a.answer_text "
+                     "from answers a "
+                     "join questions q on q.question_id = a.question_id "
+                     "where a.session_id = :sid and a.score_label = 'green' "
+                     "and coalesce(btrim(a.answer_text), '') <> '' "
+                     "order by a.answered_at"),
+                {"sid": report.session_id},
+            ).mappings()
+        ),
         distress_evidence=int(
             db.execute(
                 text("select count(*) from answers a "
