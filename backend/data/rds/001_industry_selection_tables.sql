@@ -15,21 +15,29 @@
 --
 -- Two independent reasons, both pre-existing and neither introduced here:
 --
---   1. The alembic_version table carries an ORPHANED STAMP. On the Supabase
---      instance it reads `f8a3c26e4b91`, a revision that exists in no file in
---      this repository. Alembic refuses to run from a revision it cannot find.
---      This is already documented in scripts/_apply_dimension_code_column.py,
---      which solved the same problem the same way for problems.dimension_code.
+--   The SUPABASE test instance carries an ORPHANED STAMP in alembic_version --
+--   `f8a3c26e4b91`, a revision that exists in no file in this repository -- so
+--   alembic refuses to start from it THERE. It is also genuinely behind: the
+--   head migration's effect (RLS on five tables) is absent. Already documented
+--   in scripts/_apply_dimension_code_column.py, which hit the same wall.
 --
---   2. The migration graph has TEN HEADS. Even from a valid stamp,
---      `alembic upgrade head` fails with "Multiple head revisions are
---      present"; it would need `heads` (plural) or a merge migration first.
+--   PRODUCTION IS NOT AFFECTED. RDS has a valid stamp and migrates normally --
+--   backend-deploy.yml runs `alembic upgrade head` on every deploy and
+--   hard-fails on a non-zero exit, and it has been succeeding.
 --
--- So this file applies the exact DDL from
---   alembic/versions/2026_09_18_1758-62ebd946ebc0_industry_stage_structure.py
--- directly, and DOES NOT TOUCH alembic_version. Reconciling the stamp and the
--- ten heads is a separate piece of work; doing it here would mix a schema fix
--- with a migration-history fix and make both harder to reason about.
+--   An earlier version of this comment also claimed "the migration graph has
+--   TEN HEADS". THAT WAS WRONG. It came from a hand-rolled parser that missed
+--   merge revisions and saw only 91 of the real 130. Alembic itself reports
+--   exactly ONE head, c9f41b8e3a07. The claim is corrected here rather than
+--   deleted, because it was handed to the AWS team in this file.
+--
+--   So this file applies the exact DDL from
+--     alembic/versions/2026_09_18_1758-62ebd946ebc0_industry_stage_structure.py
+--   directly, and DOES NOT TOUCH alembic_version. On RDS these statements are
+--   the no-op `alembic upgrade head` would have made anyway, which is why they
+--   are written idempotently. Reconciling Supabase's stamp needs an audit of
+--   which migrations actually ran there -- not a blind `alembic stamp head`,
+--   which would skip real work -- and that is separate from a schema fix.
 --
 -- ---------------------------------------------------------------------------
 -- WHAT BREAKS WITHOUT IT
