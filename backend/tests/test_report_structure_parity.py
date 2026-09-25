@@ -53,9 +53,44 @@ def test_real_facts_still_render_beside_a_boolean():
 
 # --- "Fix this first: ... Strong" ---------------------------------------------
 
-def _cats(*pairs):
-    # risk is 0..1 where 1 is worst; the document scores strength as its inverse
-    return [{"category": name, "risk": (100 - score) / 100} for name, score in pairs]
+def _cats(*pairs, answers=3):
+    # risk is 0..1 where 1 is worst; the document scores strength as its inverse.
+    # `answers` is how many scored answers backed the risk -- the strength
+    # column requires a floor, so the default here clears it and the tests
+    # that care pass their own.
+    return [{"category": name, "risk": (100 - score) / 100, "answers_count": answers}
+            for name, score in pairs]
+
+
+def test_a_barely_asked_dimension_is_never_called_a_strength():
+    """THE REGRESSION, twice on two different founders. Strength is 100 - risk,
+    and risk stays near zero both for a dimension probed repeatedly that came
+    back healthy AND for one the session hardly touched. Both scored ~100, so
+    "Lean on this" listed dimensions the interview had barely asked about --
+    live, a founder was told Competitive Awareness was Strong and was "the
+    machinery you will use" to fix everything else, having never been asked a
+    question about it."""
+    html = _high_low([
+        {"category": "Competitive Awareness", "risk": 0.0, "answers_count": 1},
+        {"category": "Go-To-Market", "risk": 0.05, "answers_count": 0},
+        {"category": "Operations & Systems", "risk": 0.8, "answers_count": 5},
+    ])
+    lean_panel = html.split("Fix this first")[0]
+    assert "Competitive Awareness" not in lean_panel
+    assert "Go-To-Market" not in lean_panel
+    # ...and the honest reason is given, rather than a verdict on the founder.
+    assert "not a verdict on you" in lean_panel
+    # A gap needs no evidence floor: risk only rises when answers scored badly.
+    assert "Operations &amp; Systems" in html.split("Fix this first")[1]
+
+
+def test_a_well_evidenced_healthy_dimension_is_still_a_strength():
+    """The floor must not empty the column for founders who earned it."""
+    html = _high_low([
+        {"category": "Revenue Maturity", "risk": 0.1, "answers_count": 6},
+        {"category": "Operations & Systems", "risk": 0.9, "answers_count": 4},
+    ])
+    assert "Revenue Maturity" in html.split("Fix this first")[0]
 
 
 def test_a_healthy_dimension_is_never_listed_under_fix_this_first():
@@ -93,10 +128,21 @@ def test_nothing_strong_yet_is_said_rather_than_faked():
 
 # --- the mismatched quote caption ---------------------------------------------
 
-def test_catalogue_text_is_not_captioned_as_a_reading_of_one_answer():
-    """THE REGRESSION: `symptoms` is generic text about the CATEGORY -- schemas
-    calls it "written before this founder existed" -- and it was printed as
-    "What this tells us" directly under a single quote."""
+def test_catalogue_text_is_not_printed_beside_a_quote_at_all():
+    """THE REGRESSION, twice. `symptoms` is generic text about the CATEGORY --
+    schemas calls it "written before this founder existed".
+
+    First it was printed as "What this tells us" directly under a single
+    quote. That was relabelled to "The pattern this counted toward", on the
+    theory that naming it as general text made it safe to print beside the
+    founder's own words. It was not: a live report put "Users signing up but
+    not completing onboarding or activating the core feature" under a cloud
+    kitchen founder's answer, and "Founding team has no one with relevant
+    domain expertise" under a career chef's.
+
+    So the assertion is now the strong one -- the catalogue sentence does not
+    appear, under any caption. The quote and the dimension it counted toward
+    are both traceable to this founder and both stay."""
     html = _heard([{
         "category": "Team & Leadership",
         "symptoms": ["No board, advisory board, or formal mentorship structure in place"],
@@ -104,13 +150,29 @@ def test_catalogue_text_is_not_captioned_as_a_reading_of_one_answer():
     }])
 
     assert "What this tells us" not in html
-    assert "The pattern this counted toward" in html
+    assert "The pattern this counted toward" not in html
+    assert "No board, advisory board" not in html
+    # What the founder can actually verify survives.
     assert "Team &amp; Leadership" in html
     assert "unresolved tension" in html
+    assert "yes" in html
 
 
 def test_a_highlight_without_evidence_is_skipped_rather_than_guessed():
     assert _heard([{"category": "X", "symptoms": ["A pattern."], "evidence": []}]) == ""
+
+
+def test_a_quote_survives_a_highlight_with_no_catalogue_pattern():
+    """The pattern text is no longer rendered, so its absence must no longer
+    discard the founder's answer with it -- which the old `not pattern`
+    guard did."""
+    html = _heard([{
+        "category": "Operations & Systems",
+        "symptoms": [],
+        "evidence": [("Who packs the order?", "Nobody owns that step.")],
+    }])
+    assert "Who packs the order?" in html
+    assert "Nobody owns that step." in html
 
 
 # --- three numbered steps -----------------------------------------------------

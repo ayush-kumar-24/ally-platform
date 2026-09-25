@@ -157,7 +157,7 @@ class StandardRecommendationEngine(RecommendationEngine):
         )
         industry_code = self._industry_code(context)
 
-        scored_recs: list[tuple[Decimal, Recommendation]] = []
+        scored_recs: list[tuple[Decimal, Recommendation, bool]] = []
         for intervention in interventions:
             supporting = self._supporting_causes(intervention, code_to_scored)
             if not supporting:
@@ -172,13 +172,35 @@ class StandardRecommendationEngine(RecommendationEngine):
 
             raw_score = max(s.final_weighted_score for s in supporting)
             recommendation = self._build(intervention, supporting, semantic, raw_score)
-            scored_recs.append((raw_score, recommendation))
+            # Does this row name the founder's industry, or is it universal?
+            # Both are relevant -- that is what passed the test above -- but
+            # they are not equally useful, and nothing here preferred the
+            # specific one.
+            written_for_industry = bool(
+                industry_code
+                and industry_code in [str(i) for i in (intervention.industry_relevance or [])]
+            )
+            scored_recs.append((raw_score, recommendation, written_for_industry))
 
-        # Deterministic ordering: best supporting rank first, then stronger raw
-        # score, then intervention_id -- independent of DB return order and of
-        # semantic evidence.
-        scored_recs.sort(key=lambda pair: (pair[1].priority, -pair[0], pair[1].intervention_id))
-        recommendations = [rec for _raw, rec in scored_recs]
+        # Deterministic ordering: best supporting rank first, then rows written
+        # FOR this industry, then stronger raw score, then intervention_id --
+        # independent of DB return order and of semantic evidence.
+        #
+        # The industry term is new. Universal rows are written to fit every
+        # business, which in practice means they are written in the vocabulary
+        # of none: a cloud-kitchen founder running fourteen staff was told to
+        # "build a team wiki with at least 3 documented processes" and to
+        # "create a process map for your single highest-volume operational
+        # activity" as his first two actions, while the interview that produced
+        # them had asked him -- correctly and specifically -- how much food he
+        # throws away in a week.
+        #
+        # Tie-break only, deliberately placed AFTER priority: a universal row
+        # supporting the top-ranked root cause still outranks an industry row
+        # supporting the fourth. It cannot promote a weaker cause, only decide
+        # which of two equally-supported rows a founder actually reads.
+        scored_recs.sort(key=lambda t: (t[1].priority, not t[2], -t[0], t[1].intervention_id))
+        recommendations = [rec for _raw, rec, _ind in scored_recs]
 
         # Fill library gaps, if a fallback is wired. Runs last and only for causes
         # the deterministic pass left with nothing, so a curated intervention can

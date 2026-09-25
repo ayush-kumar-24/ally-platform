@@ -77,6 +77,11 @@ class CategoryRisk:
     max_score: Decimal
     normalised_risk: Decimal  # raw_score / max_score, 0..1
     is_flagged: bool          # normalised_risk >= CAT_RISK_THRESHOLD
+    #: How many SCORED answers produced the risk above (NOT_APPLICABLE
+    #: excluded, same as the numerator). Carried because risk alone cannot
+    #: distinguish "asked repeatedly and healthy" from "barely asked": both
+    #: come out near 0, and the report called both a strength.
+    answers_count: int = 0
 
 
 @dataclass(frozen=True)

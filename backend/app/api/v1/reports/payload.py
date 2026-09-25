@@ -115,6 +115,14 @@ class ReportPayload:
     category_risk_scores: dict[str, Any] = field(default_factory=dict)
     cat_risk_threshold: float = 0.30
 
+    #: Diagnosis questions this founder actually answered
+    #: (sessions.questions_answered_count). The evidence section used to
+    #: describe the report's basis as the symptom probes ALONE -- "3 questions
+    #: in your own words" -- on a report built from those three plus every
+    #: diagnosis answer. A founder who had just answered twenty-nine of them
+    #: read that as the engine having ignored the interview.
+    diagnosis_answers: int = 0
+
     # How much of the six-pillar model the score above was actually built on.
     # Stage scoping means a partial assessment is routine, not exceptional: a
     # Validation founder is diagnosed on 3 pillars and a Prototype founder on 4,
@@ -226,7 +234,8 @@ def build_report_payload(db: Session, report) -> ReportPayload:
     """Assemble the strict payload for one founder_reports row. Read-only."""
     sess = db.execute(
         text("select category_risk_scores, session_state, overall_confidence_score, "
-             "founder_stage_id from sessions where session_id = :sid"),
+             "founder_stage_id, questions_answered_count from sessions "
+             "where session_id = :sid"),
         {"sid": report.session_id},
     ).mappings().first() or {}
 
@@ -384,6 +393,7 @@ def build_report_payload(db: Session, report) -> ReportPayload:
         confirm_actions=_actions(report.confirm_actions),
         solve_actions=_actions(report.solve_actions),
         category_risk_scores=dict(sess.get("category_risk_scores") or {}),
+        diagnosis_answers=int(sess.get("questions_answered_count") or 0),
         cat_risk_threshold=float(thresholds.get("CAT_RISK_THRESHOLD", Decimal("0.30"))),
         generate_report_min=float(thresholds.get("CONFIDENCE_GENERATE_REPORT_MIN", Decimal("80"))),
         chronic_state=chronic_state, chronic_adjustment=chronic_adjustment,

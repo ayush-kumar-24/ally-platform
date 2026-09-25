@@ -359,11 +359,24 @@ class TemplateNarrator:
     def _supporting_evidence(self, s, tone):
         parts = []
         probes = s.get("probes") or []
-        if probes:
-            parts.append(
-                f"This reads from what you told us before the diagnosis started "
-                f"-- {len(probes)} question{'s' if len(probes) != 1 else ''} in your own words."
-            )
+        answered = int(s.get("diagnosis_answers") or 0)
+        if probes or answered:
+            # BOTH halves of the evidence, because the report is built from
+            # both. Naming only the symptom probes described a report written
+            # from three questions when the founder had answered those three
+            # AND the whole diagnosis -- which reads, correctly, as the
+            # interview having been thrown away.
+            bits = []
+            if probes:
+                bits.append(
+                    f"{len(probes)} question{'s' if len(probes) != 1 else ''} "
+                    "in your own words before the diagnosis started"
+                )
+            if answered:
+                bits.append(
+                    f"{answered} diagnosis answer{'s' if answered != 1 else ''}"
+                )
+            parts.append("This reads from " + " and ".join(bits) + ".")
         causes = s.get("root_causes") or []
         confirmed = [c["name"] for c in causes if c.get("confirmation_status") == "confirmed"]
         unconfirmed = [c["name"] for c in causes if c.get("confirmation_status") != "confirmed"]
