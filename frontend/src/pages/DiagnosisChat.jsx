@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { getCurrentSession, normalise, resumeOrStart, submitAnswer } from '../services/diagnosis';
 import { explainLimit, getMyPlan } from '../services/plans';
+import { grantDiagnosisConsent } from '../services/consents';
 import { useVoiceInput } from '../hooks/useVoiceInput';
 import VoiceBars from '../components/VoiceBars';
 import useAutoGrow from '../hooks/useAutoGrow';
@@ -61,6 +62,7 @@ export default function DiagnosisChat() {
   // entirely -- there is no partial state to resume into, so nothing below it
   // renders at all. See the resumeOrStart().catch below.
   const [blocked, setBlocked] = useState(null);
+  const [consenting, setConsenting] = useState(false);
   /* Follows the transcript as it grows -- including the height that lands
      after the message does (a growing composer, a font swap, the entry
      animation), which the old one-shot jump could not see. */
@@ -124,7 +126,7 @@ export default function DiagnosisChat() {
           // already spent, and starting is never going to succeed here. The
           // chat UI never mounts for this founder; it stays blocked at the
           // message below until they upgrade or go read their report.
-          setBlocked(limit.message);
+          setBlocked({ kind: 'completed', text: limit.message });
           return;
         }
         // Live-reported: a founder who HAD finished their diagnosis was still
@@ -149,8 +151,8 @@ export default function DiagnosisChat() {
            Nowhere to send them automatically -- the backend's own message
            already says where to set it -- so this blocks rather than loops. */
         if (error?.code === 'StageNotRecordedError') {
-          setBlocked(error.detail
-            || "Tell us what stage you're at in your profile — the questions you'll be asked depend on it.");
+          setBlocked({ kind: 'stage', text: error.detail
+            || "Tell us what stage you're at in your profile — the questions you'll be asked depend on it." });
           return;
         }
         /* The two consent gates. Both are 403s a refresh can never clear, and
@@ -162,8 +164,11 @@ export default function DiagnosisChat() {
            screen to fix it on, so it is shown rather than reworded. */
         if (error?.code === 'DiagnosisConsentMissingError'
             || error?.code === 'ProcessingRestrictedError') {
-          setBlocked(error.detail
-            || 'Ally needs your consent to run a diagnosis on your answers. You can give it from your profile.');
+          setBlocked({
+            kind: error.code === 'ProcessingRestrictedError' ? 'restricted' : 'consent',
+            text: error.detail
+              || 'Ally needs your consent to run a diagnosis on your answers. You can give it from your profile.',
+          });
           return;
         }
         // The founder's usage is the thing that actually settles it, so ask for
@@ -174,7 +179,7 @@ export default function DiagnosisChat() {
           const usage = (await getMyPlan())?.diagnosis_usage;
           if (cancelled) return;
           if (usage && usage.limit != null && usage.used >= usage.limit) {
-            setBlocked('Your diagnosis is complete — your report is ready to read.');
+            setBlocked({ kind: 'completed', text: 'Your diagnosis is complete — your report is ready to read.' });
             return;
           }
         } catch {
@@ -308,7 +313,60 @@ export default function DiagnosisChat() {
 
   const initials = (user?.initials || user?.name || '?').charAt(0).toUpperCase();
 
+  /* Give the consent and start the diagnosis, from the screen that refused
+     it. A reload rather than re-running the start effect by hand: the whole
+     page's state -- session, question, history -- is derived from that one
+     start call, and re-entering it from here would have to reproduce every
+     branch it takes. This path runs at most once per founder. */
+  const grantConsent = async () => {
+    if (consenting) return;
+    setConsenting(true);
+    try {
+      await grantDiagnosisConsent();
+    } catch {
+      setConsenting(false);
+      showToast('Could not save your consent just now. Please try again.');
+      return;
+    }
+    window.location.reload();
+  };
+
+  /* One screen per REASON the diagnosis will not start, because they are not
+     the same news. This used to render "Diagnosis already completed" with a
+     "View your report" button for every one of them -- so a founder with no
+     stage recorded, or one whose consent was never stored, was told their
+     diagnosis was finished and sent to a report that does not exist. */
   if (blocked) {
+    const kind = blocked.kind || 'completed';
+    const view = {
+      completed: {
+        icon: '✅',
+        heading: 'Diagnosis already completed',
+        action: { label: 'View your report', go: '/app/report' },
+      },
+      stage: {
+        icon: '🧭',
+        heading: 'One thing missing first',
+        action: { label: 'Go to your profile', go: '/app/profile' },
+      },
+      consent: {
+        icon: '🔒',
+        heading: 'Ally needs your consent',
+        // Handled here rather than by sending the founder away: the Privacy
+        // Center can withdraw consent but has no control that GIVES it, so
+        // "you can give it from your profile" had nowhere to land.
+        action: { label: 'Give consent and continue', onClick: grantConsent },
+      },
+      restricted: {
+        icon: '⏸️',
+        heading: 'AI processing is paused',
+        // Deliberately NOT a one-click grant. They restricted processing on
+        // purpose; undoing that belongs in the Privacy Center, where the
+        // choice was made.
+        action: { label: 'Open Privacy Center', go: '/app/profile' },
+      },
+    }[kind];
+
     return (
       <div
         style={{
@@ -318,16 +376,17 @@ export default function DiagnosisChat() {
         }}
         role="status"
       >
-        <div style={{ fontSize: '40px' }} aria-hidden="true">✅</div>
-        <h2 style={{ margin: 0 }}>Diagnosis already completed</h2>
-        <p style={{ color: 'var(--muted-2)', margin: 0 }}>{blocked}</p>
+        <div style={{ fontSize: '40px' }} aria-hidden="true">{view.icon}</div>
+        <h2 style={{ margin: 0 }}>{view.heading}</h2>
+        <p style={{ color: 'var(--muted-2)', margin: 0 }}>{blocked.text}</p>
         <button
           type="button"
           className="btn-primary"
-          onClick={() => navigate('/app/report')}
+          disabled={consenting}
+          onClick={view.action.onClick || (() => navigate(view.action.go))}
           style={{ marginTop: '8px' }}
         >
-          View your report
+          {consenting ? 'Saving\u2026' : view.action.label}
         </button>
       </div>
     );
