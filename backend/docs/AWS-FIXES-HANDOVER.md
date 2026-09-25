@@ -43,44 +43,55 @@ rollout can verify one batch before starting the next.
   so on a database with no batch content it changes nothing. Verified: the md5
   of every batch stage_weight value is identical before and after running it on
   a freshly loaded database.
-- **`fix_batch_stage_weights.sql`** (no number) is **superseded**. It was the
-  original combined batch 1 + 2 file — 2,160 statements across ten industry
-  prefixes — which could not be deployed one batch at a time. Files 4 and 6
-  replace it. Do not run it.
-- **`fix_concentrate_batch_evidence.sql`** is also superseded for a fresh load:
-  batches 3 onwards build evidence concentration into the content itself, and
-  batches 1–2 as re-emitted do the same. It is an UPDATE and harmless to run,
-  but it has nothing to do.
+- **`fix_batch_stage_weights.sql`** (no number) is **superseded — do not run
+  it.** It was the original combined batch 1 + 2 file, 2,160 statements across
+  ten industry prefixes, which could not be deployed one batch at a time.
+  Files 4 and 6 replace it.
 
-Order matters in two places only: each weight file requires its own content
-file to have landed (it checks for all 135 causes and refuses otherwise,
-naming the file to load), and file 1 must land before any session writes a
-`not_applicable` answer. File 2 is independent and can go any time.
+  It also has a defect the numbered files do not: its final check asks whether
+  any matching root cause is missing weight rows, and against a database with
+  **no** batch root causes that question has no failures to find, so it
+  reports "stage weights ok" having inserted nothing. Verified. Do not read a
+  pass from that file as proof of anything. Found by the AWS team in review.
 
-```bash
-cd /path/to/sql
-for f in \
-  fix_original_catalogue_interventions.sql \
-  batch1_industries_1to5.sql   fix_batch1_stage_weights.sql \
-  batch2_industries_6to10.sql  fix_batch2_stage_weights.sql \
-  batch3_industries_11to15.sql fix_batch3_stage_weights.sql \
-  batch4_industries_16to20.sql fix_batch4_stage_weights.sql \
-  batch5_industries_21to25.sql fix_batch5_stage_weights.sql \
-  batch6_industries_26to30.sql fix_batch6_stage_weights.sql
-do
-  echo "== $f"
-  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f" || break
-done
+### Sequence privileges — read this before running anything
+
+Every file that inserts rows used to open with plain `setval()` calls to repair
+its sequences. **`setval()` needs UPDATE on the sequence. `INSERT` needs only
+USAGE, through `nextval()`.** So a migration role holding INSERT on the tables
+and USAGE on the sequences — an ordinary least-privilege arrangement, and the
+one in use here — could not run them, and the load died at the first statement:
+
+```
+ERROR: permission denied for sequence interventions_intervention_id_seq
 ```
 
-Add `fix_schema_widen_answers_score_label.sql` at the front only if
-`alembic_version` is older than `d4a91c7e2b83`.
+before a single row was inserted. This affected **thirteen files**: all six
+content batches (five `setval` calls each), the interventions file, and all six
+weight files. The AWS team hit it on the interventions file and flagged it.
 
-To go batch by batch instead, run one content file and its weight file, verify,
-then continue. Expected deltas per batch:
+Every one of those files now checks each sequence first and only calls
+`setval()` where the sequence genuinely sits behind `max(id)` — which happens
+only where rows arrived with explicit ids, as the original catalogue did.
+Three outcomes, all tested against a role with INSERT + USAGE and no sequence
+UPDATE:
 
-| | per batch | ×3 batches | ×6 batches |
-|---|---|---|---|
+- **every sequence already ahead** → skipped entirely, **no privilege needed**,
+  load proceeds. This is the normal case.
+- **behind, and the role may `setval`** → repaired, with a notice saying how
+  many.
+- **behind, and the role may not** → **fails before changing anything**, and
+  lists each affected sequence with its highest id, plus both remedies: the
+  `GRANT USAGE, UPDATE ON ALL SEQUENCES IN SCHEMA public TO current_user` or
+  the exact `SELECT setval(…)` statements for the table owner to run.
+
+Verified by running the complete set — interventions, then all six content
+batches each followed by its weight file — as that restricted role, start to
+finish. All thirteen succeeded, and the sequences ended level with their
+tables (problems max 1374 / sequence 1374; questions 8649 / 8649;
+root_cause_weights 22737 / 22737), so nothing is left primed to collide.
+
+---|---|---|---|
 | problems | +45 | +135 | +270 |
 | root causes | +135 | +405 | +810 |
 | questions | +270 | +810 | +1,620 |

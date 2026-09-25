@@ -23,11 +23,66 @@ BEGIN;
 -- Push each sequence above its table's current max. Harmless if already ahead;
 -- repairs the case where an earlier explicit-id load left the sequence behind,
 -- which would otherwise make the inserts below collide.
-select setval(pg_get_serial_sequence('problems','problem_id'), greatest((select coalesce(max(problem_id),0) from problems), 1));
-select setval(pg_get_serial_sequence('root_causes','root_cause_id'), greatest((select coalesce(max(root_cause_id),0) from root_causes), 1));
-select setval(pg_get_serial_sequence('questions','question_id'), greatest((select coalesce(max(question_id),0) from questions), 1));
-select setval(pg_get_serial_sequence('interventions','intervention_id'), greatest((select coalesce(max(intervention_id),0) from interventions), 1));
-select setval(pg_get_serial_sequence('question_industry_mapping','id'), greatest((select coalesce(max(id),0) from question_industry_mapping), 1));
+-- Repair each sequence ONLY if it is actually behind its own table.
+--
+-- These used to be plain setval() calls. setval() requires UPDATE on the
+-- sequence; INSERT requires only USAGE, through nextval(). So a migration role
+-- holding INSERT on the tables and USAGE on the sequences -- an ordinary
+-- least-privilege arrangement -- could not run them, and the load failed at
+-- the first statement with "permission denied for sequence ..." before
+-- inserting a single row. Raised by the AWS team from a real block.
+--
+-- The repair is only needed where a sequence sits behind max(id), which
+-- happens when rows were loaded with explicit ids, as the original catalogue
+-- was. If every sequence is already ahead, this needs no privilege at all.
+do $$
+declare
+  r      record;
+  seq    text;
+  mx     bigint;
+  cur    bigint;
+  fixed  int := 0;
+  behind text[] := '{}';
+begin
+  for r in select * from (values ('problems','problem_id'), ('root_causes','root_cause_id'), ('questions','question_id'), ('interventions','intervention_id'), ('question_industry_mapping','id')) as v(tbl, col) loop
+    seq := pg_get_serial_sequence(r.tbl, r.col);
+    if seq is null then
+      continue;   -- no sequence on this column; nothing to repair
+    end if;
+
+    execute format('select coalesce(max(%I), 0) from %I', r.col, r.tbl) into mx;
+    cur := pg_sequence_last_value(seq::regclass);
+
+    if cur is not null and cur >= mx then
+      continue;   -- already ahead, no privilege needed
+    end if;
+
+    begin
+      perform setval(seq, greatest(mx, 1));
+      fixed := fixed + 1;
+    exception
+      when insufficient_privilege then
+        behind := behind || format('%s (highest id %s, sequence at %s) -- SELECT setval(''%s'', %s);',
+                                   seq, mx, coalesce(cur::text, 'unused'), seq, greatest(mx, 1));
+    end;
+  end loop;
+
+  if array_length(behind, 1) > 0 then
+    raise exception
+      'These sequences are behind their tables and this role cannot run setval on them, '
+      'so inserting would collide on the primary key: %  '
+      'Either grant the privilege:  GRANT USAGE, UPDATE ON ALL SEQUENCES IN SCHEMA public TO current_user;  '
+      'or have the table owner run the setval statements listed above, then re-run this file. '
+      'Nothing has been changed.',
+      array_to_string(behind, '  |  ');
+  end if;
+
+  if fixed > 0 then
+    raise notice 'repaired % sequence(s) that were behind their table.', fixed;
+  else
+    raise notice 'all sequences are ahead of their tables -- no repair needed, no privilege used.';
+  end if;
+end $$;
 
 -- =============== Agriculture & AgriTech  (agritech) ===============
 

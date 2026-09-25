@@ -18,7 +18,66 @@
 -- content, no id conflict, idempotent on intervention_code.
 -- =====================================================================
 BEGIN;
-select setval(pg_get_serial_sequence('interventions','intervention_id'), greatest((select coalesce(max(intervention_id),0) from interventions), 1));
+-- Repair each sequence ONLY if it is actually behind its own table.
+--
+-- These used to be plain setval() calls. setval() requires UPDATE on the
+-- sequence; INSERT requires only USAGE, through nextval(). So a migration role
+-- holding INSERT on the tables and USAGE on the sequences -- an ordinary
+-- least-privilege arrangement -- could not run them, and the load failed at
+-- the first statement with "permission denied for sequence ..." before
+-- inserting a single row. Raised by the AWS team from a real block.
+--
+-- The repair is only needed where a sequence sits behind max(id), which
+-- happens when rows were loaded with explicit ids, as the original catalogue
+-- was. If every sequence is already ahead, this needs no privilege at all.
+do $$
+declare
+  r      record;
+  seq    text;
+  mx     bigint;
+  cur    bigint;
+  fixed  int := 0;
+  behind text[] := '{}';
+begin
+  for r in select * from (values ('interventions','intervention_id')) as v(tbl, col) loop
+    seq := pg_get_serial_sequence(r.tbl, r.col);
+    if seq is null then
+      continue;   -- no sequence on this column; nothing to repair
+    end if;
+
+    execute format('select coalesce(max(%I), 0) from %I', r.col, r.tbl) into mx;
+    cur := pg_sequence_last_value(seq::regclass);
+
+    if cur is not null and cur >= mx then
+      continue;   -- already ahead, no privilege needed
+    end if;
+
+    begin
+      perform setval(seq, greatest(mx, 1));
+      fixed := fixed + 1;
+    exception
+      when insufficient_privilege then
+        behind := behind || format('%s (highest id %s, sequence at %s) -- SELECT setval(''%s'', %s);',
+                                   seq, mx, coalesce(cur::text, 'unused'), seq, greatest(mx, 1));
+    end;
+  end loop;
+
+  if array_length(behind, 1) > 0 then
+    raise exception
+      'These sequences are behind their tables and this role cannot run setval on them, '
+      'so inserting would collide on the primary key: %  '
+      'Either grant the privilege:  GRANT USAGE, UPDATE ON ALL SEQUENCES IN SCHEMA public TO current_user;  '
+      'or have the table owner run the setval statements listed above, then re-run this file. '
+      'Nothing has been changed.',
+      array_to_string(behind, '  |  ');
+  end if;
+
+  if fixed > 0 then
+    raise notice 'repaired % sequence(s) that were behind their table.', fixed;
+  else
+    raise notice 'all sequences are ahead of their tables -- no repair needed, no privilege used.';
+  end if;
+end $$;
 insert into interventions (intervention_code, problem_id, root_cause_ids, capability_domain, section, recommended_frameworks, immediate_next_steps, framework_codes, stage_relevance, industry_relevance, design_principles, secondary_root_cause_ids) select 'INT-045', (select problem_id from problems where problem_code = 'SCL-001'), coalesce('["RC-661", "RC-662", "RC-663"]'::jsonb, '[]'::jsonb), 'Organizational Design', 'Scaling — Operational Scaling', coalesce('[{"name": "Operating Model Canvas", "brief": "Define decision rights, workflows, governance, and organizational structure as the business scales."}, {"name": "RACI Matrix", "brief": "Clarify ownership and accountability for cross-functional work."}, {"name": "Business Capability Mapping", "brief": "Organize work around business capabilities rather than individuals."}, {"name": "Team Topologies", "brief": "Structure teams around value streams while minimizing communication overhead."}]'::jsonb, '[]'::jsonb), coalesce('["Identify the five most critical business processes and assign clear ownership.", "Build a RACI matrix for one cross-functional workflow.", "List the top three recurring coordination bottlenecks and assign accountable owners."]'::jsonb, '[]'::jsonb), coalesce(NULL, '[]'::jsonb), coalesce('[5, 6, 7]'::jsonb, '[]'::jsonb), coalesce('["all"]'::jsonb, '["all"]'::jsonb), coalesce('["minimum_effective_dose", "evidence_based", "stage_contextualised"]'::jsonb, '[]'::jsonb), coalesce('[]'::jsonb, '[]'::jsonb) on conflict (intervention_code) do nothing;
 insert into interventions (intervention_code, problem_id, root_cause_ids, capability_domain, section, recommended_frameworks, immediate_next_steps, framework_codes, stage_relevance, industry_relevance, design_principles, secondary_root_cause_ids) select 'INT-046', (select problem_id from problems where problem_code = 'SCL-002'), coalesce('["RC-664", "RC-665", "RC-666"]'::jsonb, '[]'::jsonb), 'Process Scaling', 'Scaling — Operational Scaling', coalesce('[{"name": "Business Process Mapping (BPM)", "brief": "Document end-to-end workflows before they become inconsistent."}, {"name": "Standard Operating Procedures (SOPs)", "brief": "Standardize repeatable work to improve consistency."}, {"name": "Service Blueprinting", "brief": "Map customer-facing and internal operational activities together."}, {"name": "Continuous Improvement (PDCA Cycle)", "brief": "Continuously improve operational processes through iterative learning."}]'::jsonb, '[]'::jsonb), coalesce('["Document one high-volume operational workflow.", "Create an SOP for the highest-error process.", "Measure turnaround time before and after process standardization."]'::jsonb, '[]'::jsonb), coalesce('["FW-056", "FW-058"]'::jsonb, '[]'::jsonb), coalesce('[5, 6, 7]'::jsonb, '[]'::jsonb), coalesce('["all"]'::jsonb, '["all"]'::jsonb), coalesce('["minimum_effective_dose", "evidence_based", "stage_contextualised"]'::jsonb, '[]'::jsonb), coalesce('[]'::jsonb, '[]'::jsonb) on conflict (intervention_code) do nothing;
 insert into interventions (intervention_code, problem_id, root_cause_ids, capability_domain, section, recommended_frameworks, immediate_next_steps, framework_codes, stage_relevance, industry_relevance, design_principles, secondary_root_cause_ids) select 'INT-047', (select problem_id from problems where problem_code = 'SCL-003'), coalesce('["RC-667", "RC-668", "RC-669"]'::jsonb, '[]'::jsonb), 'Knowledge Management', 'Scaling — Operational Scaling', coalesce('[{"name": "Knowledge Management System", "brief": "Centralize documentation into a searchable repository."}, {"name": "Process Documentation Framework", "brief": "Document recurring workflows using consistent templates."}, {"name": "Playbook Framework", "brief": "Convert tribal knowledge into repeatable operating playbooks."}, {"name": "Documentation-as-Code Mindset", "brief": "Keep documentation continuously updated alongside operational changes."}]'::jsonb, '[]'::jsonb), coalesce('["Document the ten most frequently repeated processes.", "Create one central knowledge repository.", "Assign documentation ownership for every core function."]'::jsonb, '[]'::jsonb), coalesce(NULL, '[]'::jsonb), coalesce('[5, 6, 7]'::jsonb, '[]'::jsonb), coalesce('["all"]'::jsonb, '["all"]'::jsonb), coalesce('["minimum_effective_dose", "evidence_based", "stage_contextualised"]'::jsonb, '[]'::jsonb), coalesce('[]'::jsonb, '[]'::jsonb) on conflict (intervention_code) do nothing;
