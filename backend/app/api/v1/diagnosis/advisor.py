@@ -31,7 +31,19 @@ from app.services.llm import (
     LLMRole,
 )
 
-_VALID_LABELS = {"green", "amber", "red"}
+#: The advisor may return the same four bands the stored classifier uses.
+#:
+#: "not_applicable" was missing here, and that was the whole bug behind N/A
+#: answers scoring Red. ScoreLabel.NOT_APPLICABLE, the reasoning engines and
+#: the answers_score_label_check constraint have supported a fourth UNSCORED
+#: state all along -- diagnostic.py excludes it from both the numerator and the
+#: denominator, symptom_detection.py does not count it as a symptom, and
+#: root_cause.py never turns it into evidence. But the ADVISOR is what writes
+#: answers.score_label whenever ADAPTIVE_QUESTIONS is on, and it only knew
+#: three. So "N/A -- we have no free tier" came back Red, the strongest
+#: negative signal available, and was then quoted to the founder as a symptom.
+#: Measured on a keyed run: both N/A answers scored red at score 2.0.
+_VALID_LABELS = {"green", "amber", "red", "not_applicable"}
 #: answers.score is a 0/1/2 CHECK carrying RISK, not health: HIGHER IS WORSE.
 #:
 #: This is not a local convention -- it is the scoring schema, stored in
@@ -49,6 +61,10 @@ _VALID_LABELS = {"green", "amber", "red"}
 #: who had never spoken to a customer was told all six pillars were "Strong".
 #: business_health.py's own docstring names the failure exactly: "an
 #: exactly-backwards score that still looks plausible".
+#: "not_applicable" is deliberately absent: `.score` uses .get(), so it
+#: yields None rather than a number. None, never zero -- zero is Green's
+#: band, and scoring an inapplicable question as Green would be just as
+#: wrong as scoring it Red.
 _LABEL_TO_SCORE = {"green": 0, "amber": 1, "red": 2}
 
 
@@ -156,29 +172,44 @@ class LLMNextQuestionAdvisor(NextQuestionAdvisor):
         )
         system = (
             "You are guiding a startup founder's diagnostic interview. Read the "
-            "founder's latest answer, judge how strong it is (Green = concrete "
-            "evidence/ownership, Amber = partial/vague, Red = no real evidence/"
-            "avoidance). "
-            # A founder saying a question does not apply is not avoiding it --
-            # they are telling us something true about their business, and it is
-            # often the most accurate answer available. Measured on a keyed run:
-            # a pre-revenue founder with no free tier answered "N/A" to three
-            # free-plan questions and all three came back RED, fed his pillar
-            # scores, and were quoted back to him in the report as symptoms of
-            # declining average selling price -- on a business with no revenue.
+            "founder's latest answer and classify it. "
+            # THE N/A CASE, and why this now uses the fourth label rather than
+            # Amber.
             #
-            # AMBER rather than a fourth label on purpose. There is no
+            # session_01J2N7sy5i6pf8RBY96jGBtU found this bug and fixed it by
+            # scoring N/A as Amber, for a stated reason: "There is no
             # not_applicable in _VALID_LABELS, and adding one reaches the stored
-            # classifier, category risk, pillar banding and the report. Amber is
-            # already what this codebase uses for "we could not assess this":
-            # see _apply_fallback_score, which picks it so an unassessable answer
-            # "neither manufactures a clean signal (green) nor invents a problem
-            # the founder may not have (red)". Same reasoning, same choice.
+            # classifier, category risk, pillar banding and the report."
+            #
+            # That reasoning was right about the blast radius and wrong about the
+            # blast: every one of those readers was already built for the fourth
+            # band and handles it correctly. diagnostic.py excludes
+            # NOT_APPLICABLE from BOTH the numerator and the denominator of the
+            # pillar score, symptom_detection.py does not count it as a symptom,
+            # root_cause.py never turns it into evidence, and _LABEL_TO_SCORE
+            # maps it to None rather than zero.
+            #
+            # What actually blocked it was narrower and invisible:
+            # answers.score_label was varchar(10) and 'not_applicable' is
+            # fourteen characters, so migration c7d18a3f420b added the value to
+            # the CHECK constraint but never widened the column. Every write
+            # failed with StringDataRightTruncation and took the whole session
+            # down with a 500. Migration d4a91c7e2b83 widens it.
+            #
+            # With the column fixed, the fourth label is the better answer:
+            # Amber still carries score 1, so an inapplicable question still
+            # drags the pillar it landed in downwards. NOT_APPLICABLE is
+            # excluded from the denominator, which is the treatment "this does
+            # not apply to my business" actually deserves. The instruction text
+            # below is kept almost verbatim from that session's fix -- it is
+            # specific and well chosen -- with the band changed.
             "An answer that says the question does not apply to this business -- "
             "\"N/A\", \"we don't have that\", \"there is no free tier\" -- is NOT "
-            "avoidance and must NEVER be Red. Score it Amber: it is a true "
-            "statement about the business, not a failure to answer. Judge it Red "
-            "only when the founder dodges a question that DOES apply to them. "
+            "avoidance and must NEVER be Red. Label it not_applicable: it is a "
+            "true statement about the business, not a failure to answer, and that "
+            "band is excluded from the diagnosis rather than counted against "
+            "them. Judge it Red only when the founder dodges a question that DOES "
+            "apply to them. "
             "Then choose which of the CANDIDATE questions to ask next -- "
             "the one that will most improve the diagnosis given what they just said "
             "(e.g. probe deeper on a weak/avoidant answer, move on after a strong one). "
@@ -189,6 +220,50 @@ class LLMNextQuestionAdvisor(NextQuestionAdvisor):
             "something they have already told us. "
             "You MUST pick next_question_id from the candidate ids listed; never invent "
             "one.\n"
+            # This rubric is deliberately the same one
+            # reasoning/engines/diagnostic.py uses for the stored classifier.
+            # It used to be a single parenthetical here -- "Green = concrete
+            # evidence/ownership" -- and that was measurably too generous.
+            # On a keyed run, of eight answers a human author had graded weak,
+            # this advisor returned FOUR green: among them "No. Every demo is
+            # me. I've tried to write down what I say but it's still in my
+            # head, so if I'm not on the call there is no call", which
+            # describes total founder dependency, and "Zero paid, zero
+            # committed." The old wording rewarded candour and specificity
+            # instead of judging what the answer said about the business.
+            "CLASSIFY BY SEMANTIC STATE FIRST. These are distinct and must not "
+            "be collapsed:\n"
+            "  POSITIVE_EVIDENCE   -- the thing asked about is in good shape, "
+            "and the answer shows it with specifics.\n"
+            "  NEGATIVE_EVIDENCE   -- the thing asked about is weak, missing or "
+            "unmanaged.\n"
+            "  UNKNOWN/NOT_MEASURED -- the thing EXISTS for this business but "
+            "the founder does not track or know it.\n"
+            "  NOT_APPLICABLE      -- the thing asked about is not part of how "
+            "this business works at all.\n"
+            "  AMBIGUOUS           -- partial or mixed.\n"
+            "Then map the state to a label:\n"
+            "- green: POSITIVE_EVIDENCE.\n"
+            "- amber: AMBIGUOUS.\n"
+            "- red: NEGATIVE_EVIDENCE, or UNKNOWN/NOT_MEASURED -- not knowing "
+            "something your business depends on IS a real gap.\n"
+            "- not_applicable: NOT_APPLICABLE only. It carries NO score and is "
+            "excluded from the diagnosis rather than counted against the "
+            "founder.\n"
+            "NOT_APPLICABLE IS NARROW. Use it ONLY when the subject genuinely "
+            "does not exist in this business -- free-plan questions to a "
+            "business with no free tier, hiring questions to a founder with no "
+            "employees, app-onboarding questions to a company with no app. It "
+            "is NOT for something they simply have not built yet, do not "
+            "measure, or would rather not answer: those are red or amber.\n"
+            "SPECIFICITY IS NOT HEALTH. An articulate, honest, self-aware "
+            "account of a problem is still a problem. Judge WHAT THE ANSWER "
+            "DESCRIBES about the business, not how well it is expressed. "
+            "\"Every demo is me, so if I am not on the call there is no call\" "
+            "is specific, honest and owned -- and it is NEGATIVE_EVIDENCE, so "
+            "it is red. \"Zero paid, zero committed\" is an admirable admission "
+            "and still red. Reserve green for answers describing something that "
+            "is actually working.\n"
             "Also judge whether the answer is RESPONSIVE: whether it is an attempt "
             "to answer THIS question at all, as opposed to text about a different "
             "topic, the question pasted back, or filler. Judge TOPIC ONLY, never "
@@ -197,7 +272,7 @@ class LLMNextQuestionAdvisor(NextQuestionAdvisor):
             "score_label rather than here. Set responsive=false ONLY when the "
             "answer does not engage with what was asked. When in doubt, true.\n"
             "Respond with a single JSON object and nothing else: "
-            '{"score_label":"green|amber|red","confidence":0.0-1.0,'
+            '{"score_label":"green|amber|red|not_applicable","confidence":0.0-1.0,'
             '"next_question_id":<candidate id>,"rationale":"one sentence",'
             '"responsive":true|false}'
         )

@@ -179,6 +179,26 @@ class BusinessHealthScorer:
             pillar_id = problem_to_pillar.get(question.problem_id)
             if pillar_id is None:
                 continue
+            # NOT_APPLICABLE is excluded from BOTH the numerator and the
+            # denominator, which is the whole reason it exists as a band rather
+            # than being folded into Amber: "this does not apply to my business"
+            # must not drag the pillar down, and it must not dilute it either.
+            #
+            # Two things went wrong without this guard. c.score is None for the
+            # unscored band, so `sum(answer_scores)` in
+            # RiskInversionPillarScoreStrategy raised on the None; and even had
+            # it not, `len(answer_scores)` counted the answer, inflating
+            # `answered_count * 2` and quietly pulling the pillar's risk ratio
+            # down as though an inapplicable question were a Green one.
+            #
+            # Unreachable until migration d4a91c7e2b83 widened
+            # answers.score_label from varchar(10), since 'not_applicable' is
+            # fourteen characters and no row could carry it. The equivalent
+            # filter has always been present in diagnostic.py's category-risk
+            # loop (`if question is not None and c.label.is_scored`); this one
+            # was never updated alongside it.
+            if not c.label.is_scored:
+                continue
             scores_by_pillar[pillar_id].append(c.score)
 
         # Which of each pillar's Part 2 dimensions this founder's STAGE covers.

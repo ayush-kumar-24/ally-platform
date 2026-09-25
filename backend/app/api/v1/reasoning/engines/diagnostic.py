@@ -89,7 +89,10 @@ class StoredScoreAnswerClassifier(AnswerClassifier):
             answer_id=answer.answer_id,
             question_id=answer.question_id,
             label=label,
-            score=Decimal(score),
+            # None stays None: AnswerClassification.score is `Decimal | None`
+            # precisely so NOT_APPLICABLE can be carried without a number, and
+            # Decimal(None) would raise here instead.
+            score=Decimal(score) if score is not None else None,
             is_distress_flagged=answer.is_distress_flagged,
             is_follow_up=answer.is_follow_up,
             triggered_follow_up_id=answer.triggered_follow_up_id,
@@ -102,11 +105,29 @@ class StoredScoreAnswerClassifier(AnswerClassifier):
             return ScoreLabel.AMBER
         return ScoreLabel.GREEN
 
-    def _score_for_label(self, label: ScoreLabel, bands) -> Decimal:
+    def _score_for_label(self, label: ScoreLabel, bands) -> Decimal | None:
+        """The numeric band for a label, or None for the unscored one.
+
+        NOT_APPLICABLE was missing here and this dict subscript raised
+        `KeyError: <ScoreLabel.NOT_APPLICABLE: 'not_applicable'>`, which the
+        reasoning pipeline swallows into `reasoning_error` -- so the session
+        completed, the founder waited on the Thinking screen, and no report was
+        ever built.
+
+        It was unreachable until now: answers.score_label was varchar(10) and
+        'not_applicable' is fourteen characters, so no row could carry the band
+        for this method to read (migration d4a91c7e2b83 widens it). The sibling
+        map in _parse_response has always had the NOT_APPLICABLE entry; this one
+        was simply never updated alongside it.
+
+        None, never zero, for the same reason _parse_response gives: zero is
+        Green's band and would enter the risk numerator as positive evidence.
+        """
         return {
             ScoreLabel.GREEN: bands.green,
             ScoreLabel.AMBER: bands.amber,
             ScoreLabel.RED: bands.red,
+            ScoreLabel.NOT_APPLICABLE: None,
         }[label]
 
 
