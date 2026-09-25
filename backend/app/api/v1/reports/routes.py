@@ -146,7 +146,18 @@ def _report_narrator(db: Session):
         from app.services.llm import LLMTask, provider_for_task
         from app.services.llm.text import make_sync_text
         provider = provider_for_task(db, LLMTask.REPORT_NARRATIVE)
-        return LLMSectionNarrator(make_sync_text(provider, max_tokens=400))
+        # Two budgets, because two different jobs. 400 is right for one
+        # section of prose. The Founder-DNA summariser returns a JSON object
+        # covering every dimension the founder answered -- a dozen or more --
+        # and at 400 tokens that reply was being cut off mid-object every
+        # time, so the parse failed and every card fell back to the founder's
+        # raw answer trimmed to its first sentence ("Core Motivation: The
+        # bridge."). It is one call per report, so the larger cap costs a
+        # fraction of a pipeline that already runs for ~200s.
+        return LLMSectionNarrator(
+            make_sync_text(provider, max_tokens=400),
+            long_llm=make_sync_text(provider, max_tokens=2000),
+        )
     except Exception:  # no key / no routing -> template (recorded as 'template')
         from app.core.logger import logger
         logger.warning("report narrative LLM unavailable; using template narrator")
