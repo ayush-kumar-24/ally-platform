@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Ally × NyayaSetu AI</title>
+<style>
+@font-face{font-family:"Playfair";src:url("fonts/playfair-normal.woff2") format("woff2");font-weight:400 900;font-style:normal}
+@font-face{font-family:"Playfair";src:url("fonts/playfair-italic.woff2") format("woff2");font-weight:400 900;font-style:italic}
+@font-face{font-family:"Inter";src:url("fonts/inter/InterVariable.ttf") format("truetype");font-weight:100 900;font-style:normal}
+@font-face{font-family:"Inter";src:url("fonts/inter/InterVariable-Italic.ttf") format("truetype");font-weight:100 900;font-style:italic}
+
+:root{
+  --bg:#0a1a13; --bg2:#0c2119; --card:#0f261c; --card2:#0c2017; --line:#1c3d2e;
+  --emerald:#2ecc71; --mint:#bfe8d2; --text:#f3efe6; --muted:#8fa69a; --dim:#5f7a6d;
+  --attn:#c8664a; --dev:#c9973c;
+  --serif:"Playfair",Georgia,serif; --sans:"Inter",system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--bg);color:var(--text);font-family:var(--sans);-webkit-font-smoothing:antialiased}
+.stage{position:relative;overflow:hidden;background:radial-gradient(120% 90% at 78% 40%,#0f2a1f 0%,#0b1d15 45%,#081510 100%)}
+.stage.wide{width:2000px;height:1125px}
+.stage.portrait{width:1080px;height:1350px}
+.contours{position:absolute;inset:0;width:100%;height:100%}
+.top{position:absolute;display:flex;justify-content:space-between;align-items:center;font-size:19px;letter-spacing:.32em;color:var(--text);font-weight:600}
+.wide .top{left:116px;right:116px;top:74px}
+.portrait .top{left:72px;right:72px;top:64px;font-size:17px}
+.brand{display:flex;align-items:center;gap:22px}
+.brand .sep{width:1px;height:26px;background:#2a4a3a}
+.brand .mark{width:26px;height:26px;margin-right:10px;vertical-align:middle}
+.url{font-weight:400;letter-spacing:.3em;color:var(--muted);font-size:16px}
+
+/* left copy */
+.copy{position:absolute}
+.wide .copy{left:116px;top:300px;width:820px}
+.portrait .copy{left:72px;top:150px;width:940px}
+.eyebrow{display:flex;align-items:center;gap:18px;color:var(--mint);font-size:16px;letter-spacing:.34em;text-transform:uppercase;font-weight:500}
+.eyebrow:before{content:"";width:34px;height:1px;background:var(--emerald)}
+h1{font-family:var(--serif);font-weight:400;color:var(--text);letter-spacing:-.015em;line-height:.96}
+.wide h1{font-size:148px;margin-top:34px}
+.portrait h1{font-size:80px;margin-top:22px}
+h1 em{font-style:italic;color:var(--mint)}
+.rule{width:76px;height:1px;background:var(--emerald);margin:34px 0 34px}
+.portrait .rule{margin:26px 0 22px}
+.compass-label{color:var(--emerald);font-size:28px;letter-spacing:.3em;font-weight:500}
+.portrait .compass-label{font-size:22px}
+.sub{margin-top:36px;font-size:30px;line-height:1.4;color:var(--muted);font-weight:400}
+.portrait .sub{margin-top:20px;font-size:23px}
+.sub b{color:var(--text);font-weight:600}
+.process{margin-top:64px;display:flex;align-items:center;gap:22px;white-space:nowrap;font-size:15px;letter-spacing:.3em;color:var(--dim);font-weight:500}
+.portrait .process{margin-top:28px;gap:14px;font-size:12px;letter-spacing:.24em}
+.process i{width:34px;height:1px;background:#2a4a3a;display:inline-block}
+.process .on{color:var(--text)}
+
+/* laptop */
+.laptop{position:absolute;transform-style:preserve-3d}
+.wide .laptop{left:1060px;top:135px;width:860px;transform:perspective(2600px) rotateY(-8deg) rotateX(2deg)}
+.portrait .laptop{left:64px;top:600px;width:952px;transform:none}
+.frame{background:#040c09;border:1.5px solid #213f31;border-radius:18px;padding:12px;box-shadow:0 60px 120px rgba(0,0,0,.55),0 0 0 1px rgba(46,204,113,.06)}
+.base{height:14px;margin:0 -60px;background:linear-gradient(#183328,#0a1a13);border-radius:0 0 14px 14px;border-top:1px solid #2a4a3a}
+.portrait .base{margin:0 -30px}
+.screen{background:#07130e;border-radius:9px;overflow:hidden;display:grid;grid-template-columns:140px 1fr;height:650px}
+.portrait .screen{height:625px;grid-template-columns:150px 1fr}
+.side{border-right:1px solid #16302400;background:#061109;padding:22px 18px;display:flex;flex-direction:column;border-right:1px solid #132a1e}
+.side .logo{display:flex;align-items:center;gap:8px;font-size:11px;letter-spacing:.24em;font-weight:700;color:var(--text)}
+.side .logo svg{width:16px;height:16px}
+.nav{margin-top:34px;display:flex;flex-direction:column;gap:14px;font-size:11.5px;color:var(--dim)}
+.nav div{display:flex;align-items:center;gap:9px}
+.nav div:before{content:"";width:5px;height:5px;border-radius:50%;background:#1f3d2f}
+.nav .act{color:var(--text);background:#0e2418;margin:0 -10px;padding:6px 10px;border-radius:5px}
+.nav .act:before{background:var(--emerald);box-shadow:0 0 8px var(--emerald)}
+.side .foot{margin-top:auto;font-size:9px;letter-spacing:.16em;color:var(--dim);white-space:nowrap}
+.side .foot .bar{margin-top:8px;height:2px;background:#163025;position:relative}
+.side .foot .bar:after{content:"";position:absolute;left:0;top:0;bottom:0;width:100%;background:var(--emerald)}
+.main{padding:20px 22px 18px;display:flex;flex-direction:column;gap:12px}
+.hdr{display:flex;justify-content:space-between;align-items:flex-start}
+.hdr h2{font-family:var(--serif);font-weight:400;font-size:22px;color:var(--text)}
+.hdr p{font-size:10.5px;color:var(--dim);margin-top:3px}
+.pill{border:1px solid #2b8a56;color:var(--emerald);font-size:9px;letter-spacing:.18em;padding:6px 12px;border-radius:999px;font-weight:600;white-space:nowrap;margin-top:2px}
+.cards{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.card{background:linear-gradient(180deg,#0f261c,#0b1f16);border:1px solid #173629;border-radius:9px;padding:12px 14px}
+.lbl{font-size:8.5px;letter-spacing:.2em;color:var(--dim);font-weight:600;display:flex;justify-content:space-between}
+.lbl span{letter-spacing:.06em;font-weight:400;text-transform:none;color:var(--dim)}
+.big{font-family:var(--serif);font-size:23px;color:var(--text);margin-top:9px;line-height:1}
+.big small{font-family:var(--sans);font-size:10px;color:var(--dim);margin-left:6px}
+.track{height:3px;background:#163025;border-radius:3px;margin-top:10px;position:relative;overflow:hidden}
+.track i{position:absolute;left:0;top:0;bottom:0;border-radius:3px;background:var(--emerald)}
+.track.attn i{background:var(--attn)}
+.track.dev i{background:var(--dev)}
+.note{font-size:9px;color:var(--dim);margin-top:7px;line-height:1.35}
+.row2{display:grid;grid-template-columns:1fr 1.25fr;gap:10px}
+.pillars{margin-top:11px;display:flex;flex-direction:column;gap:9px}
+.pl{display:grid;grid-template-columns:1fr 64px 84px;align-items:center;gap:8px;font-size:10px;color:var(--text);white-space:nowrap}
+.pl .w{color:var(--dim);font-size:9px}
+.pl .track{margin:0}
+.pl .st{font-size:9px;font-weight:600;text-align:right}
+.st.attn{color:var(--attn)} .st.dev{color:var(--dev)} .st.ns{color:var(--attn)}
+.rc{margin-top:11px;display:flex;flex-direction:column;gap:9px}
+.rc .it{display:grid;grid-template-columns:18px 1fr 84px;align-items:center;gap:8px}
+.rc .n{font-size:9px;color:var(--dim)}
+.rc .t{font-size:11px;color:var(--text);font-weight:600;line-height:1.2}
+.rc .t em{display:block;font-style:normal;font-weight:400;font-size:9px;color:var(--dim);margin-top:2px}
+.rc .tag{font-size:8.5px;letter-spacing:.12em;color:var(--dim);text-align:right;font-weight:600}
+.rc .tag.p{color:var(--emerald)}
+.rc .it.primary{background:#0d2419;margin:0 -8px;padding:7px 8px;border-radius:6px;border:1px solid #1a3d2c}
+.row3{display:grid;grid-template-columns:1.35fr 1fr;gap:10px;flex:1}
+.acts{margin-top:9px;display:flex;flex-direction:column}
+.act{display:grid;grid-template-columns:14px 1fr 46px;gap:10px;align-items:center;padding:6px 0;border-top:1px solid #142b1f}
+.act:first-child{border-top:0}
+.act .bx{width:11px;height:11px;border:1px solid #2b5a42;border-radius:3px}
+.act .bx.on{background:var(--emerald);border-color:var(--emerald)}
+.act .t{font-size:10.5px;color:var(--text);font-weight:600;line-height:1.25}
+.act .t em{display:block;font-style:normal;font-weight:400;font-size:9px;color:var(--dim);margin-top:1px}
+.act .wk{font-size:8.5px;letter-spacing:.14em;color:var(--dim);text-align:right;font-weight:600}
+.act .wk.on{color:var(--emerald)}
+.insight{margin-top:10px;border-left:2px solid var(--emerald);padding-left:10px;font-size:10.5px;line-height:1.45;color:var(--muted)}
+.insight b{color:var(--text)}
+
+/* feature row */
+.features{position:absolute;display:grid;grid-template-columns:repeat(5,1fr);gap:40px}
+.wide .features{left:116px;right:116px;bottom:70px}
+.portrait .features{display:none}
+.f{display:flex;gap:14px;align-items:flex-start}
+.f svg{width:26px;height:26px;flex:none;margin-top:2px}
+.f b{display:block;font-size:15px;letter-spacing:.26em;font-weight:600;color:var(--text)}
+.f span{display:block;font-size:15px;color:var(--muted);margin-top:6px}
+.pfoot{display:none}
+.portrait .pfoot{display:flex;position:absolute;left:72px;right:72px;bottom:44px;justify-content:space-between;font-size:15px;letter-spacing:.3em;color:var(--dim);font-weight:600}
+.portrait .pfoot span{color:var(--mint);font-weight:400}
+</style>
+</head>
+<body>
+<div class="stage wide" id="stage">
+  <svg class="contours" id="contours" viewBox="0 0 2000 1125" preserveAspectRatio="xMidYMid slice"></svg>
+
+  <div class="top">
+    <div class="brand"><span>G O X L</span><span class="sep"></span>
+      <svg class="mark" viewBox="0 0 24 24" fill="none" stroke="#2ecc71" stroke-width="2.2" stroke-linecap="round"><path d="M12 3v18M3 12h18M6 6l12 12M18 6L6 18"/><circle cx="12" cy="12" r="3.2" fill="#0a1a13"/></svg><span>ALLY</span></div>
+    <div class="url">goxlally.ai</div>
+  </div>
+
+  <div class="copy" id="copy"></div>
+
+  <div class="laptop">
+    <div class="frame"><div class="screen">
+      <div class="side">
+        <div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="#2ecc71" stroke-width="2.4" stroke-linecap="round"><path d="M12 3v18M3 12h18M6 6l12 12M18 6L6 18"/><circle cx="12" cy="12" r="3.2" fill="#061109"/></svg>ALLY</div>
+        <div class="nav"><div>Compass</div><div>Founder DNA</div><div>Business DNA</div><div class="act">Clarity Report</div><div>Next Move</div><div>Knowledge</div></div>
+        <div class="foot">DIAGNOSIS · 30 / 30<div class="bar"></div></div>
+      </div>
+      <div class="main">
+        <div class="hdr">
+          <div><h2>Clarity Report</h2><p>Founder Diagnosis · NyayaSetu AI · 30 answers · 15 dimensions · 6 pillars</p></div>
+          <div class="pill">SEP 2026 · PROVISIONAL READ</div>
+        </div>
+        <div class="cards">
+          <div class="card"><div class="lbl">BUSINESS HEALTH</div><div class="big">Needs Attention</div><div class="track attn"><i style="width:32%"></i></div><div class="note">Where you are today — not a verdict on whether this works.</div></div>
+          <div class="card"><div class="lbl">ROOT CAUSE CONFIDENCE</div><div class="big">Moderate<small>unconfirmed</small></div><div class="track"><i style="width:50%"></i></div><div class="note">The next steps are what would settle it.</div></div>
+          <div class="card"><div class="lbl">RED FLAG PILLARS</div><div class="big">3<small>of 6 pillars</small></div><div class="note" style="margin-top:12px">Founder Readiness · Revenue Maturity · Strategic Clarity</div></div>
+        </div>
+        <div class="row2">
+          <div class="card"><div class="lbl">BUSINESS DNA <span>six pillars · lowest first</span></div>
+            <div class="pillars">
+              <div class="pl"><div>Revenue Maturity <span class="w">20%</span></div><div class="track attn"><i style="width:12%"></i></div><div class="st ns">Not started yet</div></div>
+              <div class="pl"><div>Founder Readiness <span class="w">25%</span></div><div class="track attn"><i style="width:32%"></i></div><div class="st attn">Needs Attention</div></div>
+              <div class="pl"><div>Strategic Clarity <span class="w">10%</span></div><div class="track attn"><i style="width:32%"></i></div><div class="st attn">Needs Attention</div></div>
+              <div class="pl"><div>Team &amp; Leadership <span class="w">10%</span></div><div class="track attn"><i style="width:32%"></i></div><div class="st attn">Needs Attention</div></div>
+              <div class="pl"><div>Market Clarity <span class="w">20%</span></div><div class="track attn"><i style="width:32%"></i></div><div class="st attn">Needs Attention</div></div>
+              <div class="pl"><div>Product &amp; Execution <span class="w">15%</span></div><div class="track dev"><i style="width:56%"></i></div><div class="st dev">Developing</div></div>
+            </div>
+          </div>
+          <div class="card"><div class="lbl">ROOT CAUSE ANALYSIS <span>ranked by evidence</span></div>
+            <div class="rc">
+              <div class="it primary"><div class="n">01</div><div class="t">Building Is the Safe Place<em>Founder Psychology · carried the heaviest risk of every dimension</em></div><div class="tag p">PRIMARY</div></div>
+              <div class="it"><div class="n">02</div><div class="t">Lack of Data<em>Showed up behind the finding above · worth watching</em></div><div class="tag">SUPPORTING</div></div>
+              <div class="it"><div class="n">03</div><div class="t">No System for Tracking Real Behavior<em>Business Model Design · worth watching, not yet a conclusion</em></div><div class="tag">SUPPORTING</div></div>
+            </div>
+            <div class="note" style="margin-top:10px">Ruled out: Product &amp; Execution scored higher — not a capability gap.</div>
+          </div>
+        </div>
+        <div class="row3">
+          <div class="card"><div class="lbl">PRIORITISED NEXT ACTIONS <span>confirm first · two weeks</span></div>
+            <div class="acts">
+              <div class="act"><div class="bx on"></div><div class="t">Write the problem you solve in one sentence<em>Who has it, and what changes for them — before naming what you built.</em></div><div class="wk on">NOW</div></div>
+              <div class="act"><div class="bx"></div><div class="t">List your three strongest claims<em>Beside each, the thing outside your own opinion that backs it. Mark the ones with nothing.</em></div><div class="wk">WEEK 1</div></div>
+              <div class="act"><div class="bx"></div><div class="t">Explain the business out loud to a stranger<em>Write down the exact moment they looked lost.</em></div><div class="wk">WEEK 1</div></div>
+            </div>
+          </div>
+          <div class="card"><div class="lbl">FOUNDER INSIGHT</div>
+            <div class="insight"><b>Problem Solver archetype, driven by purpose.</b> The last thing shipped was the NyayaSetu prototype. The biggest problem named: users. What's in the way looks like Building Is the Safe Place — not yet confirmed.</div>
+          </div>
+        </div>
+      </div>
+    </div></div>
+    <div class="base"></div>
+  </div>
+
+  <div class="features">
+    <div class="f"><svg viewBox="0 0 24 24" fill="none" stroke="#2ecc71" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M8.5 9.5l7 5M15.5 9.5l-7 5"/></svg><div><b>FOUNDER DNA</b><span>Who you are, mapped in 15 dimensions</span></div></div>
+    <div class="f"><svg viewBox="0 0 24 24" fill="none" stroke="#2ecc71" stroke-width="1.6"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/></svg><div><b>BUSINESS DNA</b><span>Six pillars, scoped to your stage</span></div></div>
+    <div class="f"><svg viewBox="0 0 24 24" fill="none" stroke="#2ecc71" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1" fill="#2ecc71"/></svg><div><b>ROOT CAUSE</b><span>The one thing under the symptoms</span></div></div>
+    <div class="f"><svg viewBox="0 0 24 24" fill="none" stroke="#2ecc71" stroke-width="1.6"><path d="M6 3h9l4 4v14H6z"/><path d="M9 11h7M9 15h7"/></svg><div><b>CLARITY REPORT</b><span>What is true, and what to ignore</span></div></div>
+    <div class="f"><svg viewBox="0 0 24 24" fill="none" stroke="#2ecc71" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg><div><b>NEXT MOVE</b><span>One prioritised action, not a list</span></div></div>
+  </div>
+  <div class="pfoot"><div>GOXL | ALLY</div><div><span>02 / 06</span></div></div>
+</div>
+
+<script>
+const q = new URLSearchParams(location.search);
+const layout = q.get('layout') || 'wide';
+const variant = q.get('variant') || 'hero';
+const stage = document.getElementById('stage');
+stage.className = 'stage ' + layout;
+const copies = {
+  hero: `<div class="eyebrow">Founder Diagnosis &amp; Clarity</div>
+    <h1>Introducing<br><em>Ally.</em></h1>
+    <div class="rule"></div>
+    <div class="compass-label">THE FOUNDER’S COMPASS</div>
+    <div class="sub">You don’t need all the answers.<br><b>You need to know your next move.</b></div>
+    <div class="process">UNDERSTAND<i></i>DIAGNOSE<i></i>ROOT CAUSE<i></i>CLARITY<i></i><span class="on">NEXT MOVE</span></div>`,
+  story: `<div class="eyebrow">Founder Clarity Report · Sep 2026</div>
+    <h1>I became<br><em>Ally’s user.</em></h1>
+    <div class="rule"></div>
+    <div class="compass-label">NYAYASETU AI × ALLY</div>
+    <div class="sub">Here’s what Ally found when I ran<br><b>NyayaSetu AI through the diagnosis.</b></div>
+    <div class="process">UNDERSTAND<i></i>DIAGNOSE<i></i><span class="on">ROOT CAUSE</span><i></i>CLARITY<i></i>NEXT MOVE</div>`
+};
+document.getElementById('copy').innerHTML = copies[variant];
+
+// topographic contours + faint compass ring
+const svg = document.getElementById('contours');
+const W = layout==='wide'?2000:1080, H = layout==='wide'?1125:1350;
+svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+const cx = layout==='wide'?1500:540, cy = layout==='wide'?520:1000;
+let s = '';
+for(let k=1;k<=16;k++){
+  const r0 = 90*k;
+  let d='';
+  for(let a=0;a<=360;a+=3){
+    const t=a*Math.PI/180;
+    const r = r0 + 38*Math.sin(3*t+k*.7) + 26*Math.sin(5*t-k*1.3) + 18*Math.sin(9*t+k*2.1);
+    const x = cx + r*Math.cos(t), y = cy + r*Math.sin(t)*0.82;
+    d += (a?'L':'M')+x.toFixed(1)+' '+y.toFixed(1);
+  }
+  s += `<path d="${d}Z" fill="none" stroke="#2a5a42" stroke-width="1" opacity="${(0.22-k*0.009).toFixed(3)}"/>`;
+}
+// compass ring
+const R = layout==='wide'?430:330;
+s += `<circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="#2ecc71" stroke-width="1" opacity=".07"/>`;
+s += `<circle cx="${cx}" cy="${cy}" r="${R-26}" fill="none" stroke="#2ecc71" stroke-width=".7" opacity=".05"/>`;
+for(let a=0;a<360;a+=5){
+  const t=a*Math.PI/180, L=a%45===0?18:8;
+  s += `<line x1="${(cx+(R-L)*Math.cos(t)).toFixed(1)}" y1="${(cy+(R-L)*Math.sin(t)).toFixed(1)}" x2="${(cx+R*Math.cos(t)).toFixed(1)}" y2="${(cy+R*Math.sin(t)).toFixed(1)}" stroke="#2ecc71" stroke-width="1" opacity=".08"/>`;
+}
+s += `<text x="${cx}" y="${cy-R-14}" text-anchor="middle" font-family="Inter" font-size="14" letter-spacing="4" fill="#2ecc71" opacity=".18">N</text>`;
+svg.innerHTML = s;
+</script>
+</body>
+</html>
