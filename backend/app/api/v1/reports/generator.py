@@ -375,7 +375,27 @@ class ReportNarrativeGenerator:
     # --- slots + facts per section ---------------------------------------
     def _slots_and_facts(self, key: str, p: ReportPayload, separate_identity: bool):
         if key == "founder_summary":
-            return {"founder_name": p.founder_name}, {}
+            # This used to hand over the NAME and nothing else, so the section
+            # could only ever be a greeting -- and it was: "Sumit, Here is a
+            # structured read on the business and where it stands." followed by
+            # nothing, on a report built from 49 answers. The LLM narrator did
+            # no better, because there was nothing in the slots to write from.
+            #
+            # Everything below is already computed elsewhere in this report.
+            # Passing it here lets the opening say what the reader is about to
+            # read, and lets the template fallback do the same without an LLM.
+            top = next((rc for rc in p.top_root_causes if rc.name), None)
+            worst = min((pl for pl in p.pillars if pl.score is not None),
+                        key=lambda pl: pl.score, default=None)
+            return (
+                {"founder_name": p.founder_name,
+                 "overall_band": p.business_health_band,
+                 "primary_finding": top.name if top else None,
+                 "finding_status": top.confirmation_status if top else None,
+                 "weakest_pillar": worst.name if worst else None,
+                 "stated_symptom": p.stated_symptom,
+                 "answers": p.diagnosis_answers},
+                {})
 
         if key == "founder_dna":
             # Open set of dimensions -- archetype plus whichever of the newer

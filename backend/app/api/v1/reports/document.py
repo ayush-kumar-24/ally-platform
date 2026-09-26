@@ -231,7 +231,14 @@ def _hero(name: str, health: Mapping[str, Any], categories: Sequence[Mapping[str
 
     headline = (f"{e(name)}, here&rsquo;s what&rsquo;s actually in your way"
                 if has_root_cause else f"{e(name)}, here&rsquo;s where you stand")
-    lede = f"Ally scanned {len(categories)} business dimensions and {len(pillars)} pillars"
+    # ASSESSED pillars, not every pillar in the model. `pillars` carries a row
+    # for each of the six with score None where the stage put it out of scope,
+    # and the Business DNA section below filters those out -- so the hero said
+    # "6 pillars" over a page showing two. Same filter, one number.
+    assessed = [p for p in pillars if p.get("score") is not None]
+    n_pillars = len(assessed) or len(pillars)
+    lede = (f"Ally scanned {len(categories)} business dimensions and "
+            f"{n_pillars} pillar{'s' if n_pillars != 1 else ''}")
     lede += (", and traced what&rsquo;s holding you back to one root cause."
              if has_root_cause
              else ". No single root cause separated out clearly &mdash; what "
@@ -474,7 +481,20 @@ def _root_cause(narrative, causes: Sequence[Mapping[str, Any]],
     # founder to read 62% as a mark rather than as how much evidence there was.
     status = str(primary.get("confirmation_status") or "").replace("_", " ").strip()
 
-    strongest = sorted(pillars, key=lambda p: _num(p.get("score")), reverse=True)[:3]
+    # "Ruled out" has to mean ruled out. This took the top three pillars by
+    # score with no floor and no regard for their red flags, so on a founder
+    # whose pillars were all weak it named pillars that the SAME PAGE lists
+    # under Red Flag Pillars -- "Founder Readiness, Market Clarity all scored
+    # higher. This is not a discipline or capability gap", directly above a red
+    # flag on both.
+    #
+    # A pillar can only be ruled out if it is not flagged and actually cleared
+    # a band. When nothing qualifies, the step is dropped: the trail is honest
+    # with four steps and dishonest with five.
+    strongest = [
+        p for p in sorted(pillars, key=lambda p: _num(p.get("score")), reverse=True)
+        if not p.get("red_flag_triggered") and _num(p.get("score")) >= _STRENGTH_MIN
+    ][:3]
     worst_cat = max(categories, key=lambda c: _pct(c.get("risk")), default=None)
 
     steps: list[tuple[str, str]] = []
@@ -658,12 +678,28 @@ def _three_steps(
 
 
 def _step_rows(steps: Sequence[tuple[str, str]]) -> str:
+    """The numbered steps, badged Confirm/Solve -- but only when both exist.
+
+    The badge earns its place by DISTINGUISHING two kinds of step. When the
+    engine produced only confirm-type actions, which is the normal case while
+    every root cause is still unconfirmed, every row carried an identical
+    CONFIRM tag directly under a heading that already says to confirm first.
+    It told the founder nothing, and it read as a claim about steps that
+    plainly were not tests -- "run weekly 1:1s", "send a team survey" -- which
+    is how it was reported.
+
+    So: badge them when there is a distinction to draw, and drop the column
+    when there is not.
+    """
+    kinds = {kind for _t, kind in steps}
+    show_badge = len(kinds) > 1
     return "".join(
         f'<div class="action"><span class="action-num">{i}</span>'
         f'<div class="action-body"><div class="action-text">{e(text)}</div>'
-        f'<div class="action-meta"><span class="tag '
-        f'{"tag-high" if kind == "Confirm" else "tag-med"}">{e(kind)}</span>'
-        f'</div></div></div>'
+        + (f'<div class="action-meta"><span class="tag '
+           f'{"tag-high" if kind == "Confirm" else "tag-med"}">{e(kind)}</span>'
+           f'</div>' if show_badge else "")
+        + '</div></div>'
         for i, (text, kind) in enumerate(steps, start=1)
     )
 
