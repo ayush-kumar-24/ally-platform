@@ -85,12 +85,41 @@ def ensure_dna_summaries(db: Session, report: FounderReport) -> None:
         logger.warning("founder DNA summaries unavailable: %s", exc)
         return
 
+    # ATTEMPTED, NOT JUST PRODUCED.
+    #
+    # `missing` is "every dimension with no summary yet", so a dimension the
+    # model declines to summarise is missing again on the next read -- and the
+    # one after that. The docstring's "a run that only half-succeeded is
+    # completed by the next read" is the intent, and it is right for a call that
+    # timed out; it is wrong for a dimension the model will never summarise.
+    #
+    # Those exist and are ordinary: the summariser is asked to turn a
+    # dimension's answers into a few bullets, and a live report's dimensions
+    # included "Monday.", "The bridge" and "It doesn't end." There is nothing to
+    # summarise there, the model correctly returns nothing for them, and the
+    # card falls back to the answer itself -- which is the right page. The cost
+    # was that the call was made AGAIN on every subsequent view of that
+    # founder's Founder DNA, synchronously, against a 25-second timeout, for a
+    # result that was never going to arrive.
+    #
+    # Recording an empty list for an attempted dimension fixes it in one line
+    # of intent: `code not in existing` is then False, so it is not re-sent, and
+    # every reader already treats an empty list as no summary (payload.py's
+    # dimension_summaries filters falsy bullets, and the card renders the
+    # answers). One call per report, which is what the module docstring
+    # promised.
+    # ONLY after a call that actually came back with something. A total failure
+    # -- no provider, a timeout, a malformed reply -- also returns {}, and
+    # marking every dimension attempted off one network blip would disable this
+    # founder's summaries permanently. An empty result still retries; a partial
+    # one records what it declined.
     if not produced:
         return
+    attempted = {code: list(produced.get(code) or ()) for code in missing}
 
     try:
         merged = dict(founder_dna)
-        merged[SUMMARIES_KEY] = {**existing, **produced}
+        merged[SUMMARIES_KEY] = {**existing, **attempted, **produced}
         report.founder_dna = merged
         flag_modified(report, "founder_dna")
         db.commit()
