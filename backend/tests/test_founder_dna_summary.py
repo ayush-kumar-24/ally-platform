@@ -135,3 +135,93 @@ def test_only_lists_of_answers_are_summarised():
         "core_values": ["one", "two"],
         "stress_response": ["three"],
     }
+
+
+# --- the cache, and the call it stopped repeating ---------------------------
+#
+# ensure_dna_summaries had no test at all, which is how a synchronous LLM call
+# on every single view of a page went unnoticed.
+
+class _Session:
+    """Just enough Session for ensure_dna_summaries: it only commits."""
+
+    def __init__(self):
+        self.commits = 0
+        self.rollbacks = 0
+
+    def commit(self):
+        self.commits += 1
+
+    def rollback(self):
+        self.rollbacks += 1
+
+
+class _Report:
+    def __init__(self, founder_dna):
+        self.founder_id = 1
+        self.report_id = 1
+        self.founder_dna = founder_dna
+
+
+def _run(monkeypatch, report, produced, *, calls):
+    """Run ensure_dna_summaries with the provider and summariser stubbed."""
+    from app.api.v1.reports import dna_summaries as mod
+
+    monkeypatch.setattr(mod.settings, "FOUNDER_DNA_SUMMARY_LLM", True, raising=False)
+    monkeypatch.setattr(mod, "provider_for_task", lambda *a, **k: object())
+
+    def _summarise(_provider, dimensions):
+        calls.append(sorted(dimensions))
+        return {c: b for c, b in produced.items() if c in dimensions}
+
+    monkeypatch.setattr(mod, "summarise_dimensions", _summarise)
+    mod.ensure_dna_summaries(_Session(), report)
+
+
+def test_a_dimension_the_model_declines_is_not_asked_about_again(monkeypatch):
+    """The bug: "Monday." and "The bridge" cannot be summarised and never will
+    be, so leaving them out of the cache re-ran a 25-second-timeout LLM call on
+    every view of that founder's Founder DNA page, forever."""
+    report = _Report({"core_values": ["a real paragraph"], "focus_attention": ["Monday."]})
+    calls = []
+
+    _run(monkeypatch, report, {"core_values": ["Pulled a batch over seal strength"]},
+         calls=calls)
+    assert calls == [["core_values", "focus_attention"]]
+
+    summaries = report.founder_dna["_summaries"]
+    assert summaries["core_values"] == ["Pulled a batch over seal strength"]
+    assert summaries["focus_attention"] == []          # attempted, nothing to say
+
+    # Second view: nothing left to ask about.
+    _run(monkeypatch, report, {"core_values": ["x"]}, calls=calls)
+    assert len(calls) == 1, "the declined dimension was re-sent"
+
+
+def test_a_total_failure_still_retries_on_the_next_view(monkeypatch):
+    """A timeout or a missing provider also yields {}. Marking every dimension
+    attempted off one blip would disable this founder's summaries for good."""
+    report = _Report({"core_values": ["a real paragraph"]})
+    calls = []
+
+    _run(monkeypatch, report, {}, calls=calls)
+    assert "_summaries" not in report.founder_dna
+
+    _run(monkeypatch, report, {"core_values": ["got there in the end"]}, calls=calls)
+    assert len(calls) == 2
+    assert report.founder_dna["_summaries"]["core_values"] == ["got there in the end"]
+
+
+def test_an_empty_summary_is_never_offered_as_a_summary(monkeypatch):
+    """The stored empty list marks the dimension attempted. It must not reach
+    the report AS a summary -- the card falls back to the founder's own words,
+    which is what payload.dimension_summaries' falsy filter already does."""
+    report = _Report({"core_values": ["a real paragraph"], "focus_attention": ["Monday."]})
+    _run(monkeypatch, report, {"core_values": ["Pulled a batch"]}, calls=[])
+
+    stored = report.founder_dna["_summaries"]
+    assert stored["focus_attention"] == []
+    # The same filter payload.py applies when it builds dimension_summaries.
+    assert {c: tuple(b) for c, b in stored.items() if b} == {
+        "core_values": ("Pulled a batch",)
+    }
