@@ -23,6 +23,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Any, Mapping, Sequence
 
 from app.api.v1.reports.document_style import PRINT_ONLY, STYLE, font_face_css
+from app.api.v1.reports.non_answers import is_non_answer
 
 # --- band thresholds ---------------------------------------------------------
 # Shared by every bar and chip so a 42 is the same colour wherever it appears.
@@ -440,7 +441,9 @@ def _working(strengths: Sequence[Mapping[str, Any]]) -> str:
         question = str(item.get("question") or "").strip()
         answer = str(item.get("answer") or "").strip()
         category = str(item.get("category") or "").strip()
-        if not question or not answer:
+        # A green grade on a declined answer is a grading question, not a
+        # reason to print "I'm not sure" under "what is already working".
+        if not question or is_non_answer(answer):
             continue
         # Long answers are trimmed, not summarised -- a paraphrase here would
         # be the report putting words in the founder's mouth on the one page
@@ -565,10 +568,22 @@ def _heard(symptoms: Sequence[Mapping[str, Any]]) -> str:
         category = str(entry.get("category") or "").strip()
         if not evidence:
             continue
-        pair = evidence[0]
-        if not isinstance(pair, (list, tuple)) or len(pair) < 2:
+        # "These moments carried the most weight" has to be true of the moment
+        # it prints. A live report quoted two answers of "I'm not sure" under
+        # that heading -- the founder declining to answer, presented back as
+        # the evidence the diagnosis rests on. The answer still SCORED; it is
+        # just not a quote, so this takes the first piece of evidence that
+        # actually said something rather than the first one in the list.
+        question = answer = None
+        for candidate in evidence:
+            if not isinstance(candidate, (list, tuple)) or len(candidate) < 2:
+                continue
+            if is_non_answer(candidate[1]):
+                continue
+            question, answer = candidate[0], candidate[1]
+            break
+        if answer is None:
             continue
-        question, answer = pair[0], pair[1]
 
         # The generic catalogue PATTERN line is gone.
         #
