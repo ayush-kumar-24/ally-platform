@@ -323,12 +323,27 @@ def _standing(pillars: Sequence[Mapping[str, Any]], bands: Mapping[str, str]) ->
             f'<div class="bars">{bars}</div>')
 
 
-def _high_low(categories: Sequence[Mapping[str, Any]]) -> str:
+def _high_low(categories: Sequence[Mapping[str, Any]],
+              watched: Sequence[str] = ()) -> str:
     """Strengths and gaps, from the same category risks.
 
     Risk is stored 0..1 where 1 is worst, so strength is its inverse. Showing
     both halves matters: a report that lists only what is broken is a report a
     founder stops opening.
+
+    `watched` is whatever the Areas to Monitor section is naming on this same
+    page, and none of it may appear here. The two sections pick from opposite
+    ends of one list -- this one takes the four LOWEST risks that clear the
+    bar, that one the three HIGHEST still under the flag threshold -- which
+    cannot collide on a long list and always does on a short one. A live
+    all-green report with six dimensions printed Operations & Systems as a chip
+    under "Lean on this ... these are working" and, four lines down, told the
+    same founder to keep an eye on it.
+
+    Monitoring wins. It is the more cautious of the two claims, and it is the
+    one the narrator has already written into prose above these chips -- so
+    dropping the chip leaves the page consistent, while dropping the prose
+    would leave a heading over a contradiction.
     """
     if not categories:
         return ""
@@ -378,7 +393,10 @@ def _high_low(categories: Sequence[Mapping[str, Any]]) -> str:
     # the `or scored[-3:]` fallback filled "Fix this first" with the bottom
     # three whatever their band. Live report, 25 Aug: "Fix this first --
     # Team & Leadership: Strong".
-    strengths = [p for p in scored if p[1] >= _STRENGTH_MIN and p[0] in evidenced][:4]
+    watched_names = {str(w) for w in watched}
+    strengths = [p for p in scored
+                 if p[1] >= _STRENGTH_MIN and p[0] in evidenced
+                 and p[0] not in watched_names][:4]
     gaps = [p for p in reversed(scored) if p[1] < _WATCH_MAX][:6]
 
     # Nothing genuinely weak is a real result, and saying so is better than
@@ -1019,7 +1037,8 @@ def _section_body(key: str, narrative, ctx: Mapping[str, Any]) -> str:
         extra = (_standing(ctx["pillars"], ctx["bands"])
                  + _pillar_verdicts(bdna.get("pillars") or [],
                                     hedged=bool(ctx.get("hedged")))
-                 + _high_low(ctx["categories"])
+                 + _high_low(ctx["categories"],
+                             _facts(narrative, "areas_to_monitor").get("categories") or ())
                  + _working(bdna.get("strength_evidence") or []))
     elif key == "problem_path":
         # The narrative's prose is rendered INSIDE _root_cause (it leads the
@@ -1179,9 +1198,19 @@ def build_report_document(
         # stage change is intended but unbuilt; until it exists, the closing
         # line points at the surfaces that DO keep moving.
         '<div class="close"><div><h3>This report is yours to keep.</h3>'
-        '<p>Work through the actions above in Next steps &mdash; that is where '
-        'this picture actually moves. Ally knows what is in this report, so you '
-        'can talk any of it through whenever you want.</p></div>'
+        # "Work through the actions above in Next steps" on a report that has
+        # NEITHER. A no-root-cause report carries no priority actions and no
+        # roadmap -- the correct outcome for a founder with nothing broken --
+        # and it still closed by pointing at a section that was not on the
+        # page. Pointing at nothing is the same failure as inventing a finding,
+        # just quieter.
+        + ('<p>Work through the actions above in Next steps &mdash; that is where '
+           'this picture actually moves. Ally knows what is in this report, so you '
+           'can talk any of it through whenever you want.</p></div>'
+           if actions else
+           '<p>There are no actions to work through this time, and that is the '
+           'finding rather than an omission. Ally knows what is in this report, '
+           'so you can talk any of it through whenever you want.</p></div>')
         + ('<button class="btn btn-dark" data-report-action="download">Download PDF</button>'
            if (with_actions and not for_print) else "")
         + '</div>',
