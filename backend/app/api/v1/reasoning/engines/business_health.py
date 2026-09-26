@@ -88,6 +88,32 @@ _EARLY_BOTTOM_BAND = "Not started yet"
 _BOTTOM_BAND = "Critical Gap"
 
 
+def _flag_agrees_with_band(band: str | None) -> bool:
+    """Whether a red flag may fire on a pillar showing `band`.
+
+    readiness_pillars.red_flag_threshold is a fixed number per pillar; the band
+    is decided separately by `_band_for`, which lowers the floors by
+    _BAND_FLOOR_SHIFT and renames the bottom band at early stages. The two were
+    never reconciled, so the same score got two verdicts on one page:
+
+      * a live ideation report called all four pillars "Not started yet" or
+        "Needs Attention" and then listed all four under RED FLAG PILLARS;
+      * a live growth-stage report flagged three pillars reading "Needs
+        Attention" -- the threshold is 40 and that band starts at 36.
+
+    A red flag is the report's strongest claim: this one is WRONG. It cannot
+    sit beside a band that says otherwise. So the flag is allowed only where
+    the page already says the pillar is at the bottom -- which is also the
+    honest reading at ideation, where a pillar with nothing in it is the stage
+    rather than a fault.
+
+    The threshold still decides WHETHER to flag within that band; this decides
+    only where flagging is permitted at all. A pillar with no band (under the
+    evidence floor) is never flagged, which is what already happened.
+    """
+    return band in (_BOTTOM_BAND, _EARLY_BOTTOM_BAND)
+
+
 def _stage_order(context) -> int | None:
     """The founder's stage ORDER, not their stage id.
 
@@ -322,15 +348,17 @@ class BusinessHealthScorer:
 
             # The per-pillar 0-100 score is the injected business rule.
             health = _int(self.pillar_score_strategy.score(pillar, answer_scores, context))
+            band = _band_for(pillar.score_bands, health, stage_order)
             threshold = pillar.red_flag_threshold
-            flagged = threshold is not None and health <= threshold
+            flagged = (threshold is not None and health <= threshold
+                       and _flag_agrees_with_band(band))
             pillar_scores.append(
                 PillarScore(
                     pillar_id=pillar.pillar_id,
                     pillar_name=pillar.pillar_name,
                     weight=pillar.pillar_weightage,
                     score=health,
-                    band=_band_for(pillar.score_bands, health, stage_order),
+                    band=band,
                     red_flag_triggered=flagged,
                     red_flag_note=pillar.red_flag_note if flagged else None,
                     assessed_question_count=len(answer_scores),

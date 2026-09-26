@@ -15,6 +15,7 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.api.v1.reports.non_answers import is_non_answer, said_something
 from app.repositories import intelligence_repository
 
 # Dimension codes the Founder DNA phase writes as LISTS of answer text.
@@ -350,15 +351,28 @@ def build_report_payload(db: Session, report) -> ReportPayload:
             core_motivation=a.get("core_motivation"),
             is_confident=bool(a.get("is_confident")), fit_score=a.get("fit_score"),
         )
+    # A dimension the founder declined is ABSENT, not a card reading "i dont
+    # remember". The cards print the founder's own words back to them as who
+    # they are, so a non-answer rendered there is the report inventing a value
+    # from a skip -- a live ideation report did exactly that, under CORE VALUES
+    # and STRENGTHS BLIND SPOTS, and again in the prose. A dimension with
+    # nothing left after this filter simply has no key, which the card grid
+    # already handles (see generator.py's founder_dna branch).
     founder_origin = (fd.get("origin") or "").strip() or None
+    if is_non_answer(founder_origin):
+        founder_origin = None
     founder_vision = (fd.get("vision") or "").strip() or None
-    strengths_blind_spots = tuple(fd.get("strengths_blind_spots") or ())
-    stress_response = tuple(fd.get("stress_response") or ())
-    communication_preference = tuple(fd.get("communication_preference") or ())
+    if is_non_answer(founder_vision):
+        founder_vision = None
+    strengths_blind_spots = tuple(filter(said_something, fd.get("strengths_blind_spots") or ()))
+    stress_response = tuple(filter(said_something, fd.get("stress_response") or ()))
+    communication_preference = tuple(filter(said_something, fd.get("communication_preference") or ()))
     phase2_dimensions = {
-        code: tuple(values)
+        code: kept
         for code, values in fd.items()
         if code in _PHASE2_DIMENSION_CODES and values
+        for kept in (tuple(filter(said_something, values)),)
+        if kept
     }
     _summaries = fd.get("_summaries")
     dimension_summaries = {
