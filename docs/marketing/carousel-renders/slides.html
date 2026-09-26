@@ -1,0 +1,334 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Ally carousel</title><style>
+@font-face{font-family:"Playfair";src:url("fonts/playfair-normal.woff2") format("woff2");font-weight:400 900;font-style:normal}
+@font-face{font-family:"Playfair";src:url("fonts/playfair-italic.woff2") format("woff2");font-weight:400 900;font-style:italic}
+@font-face{font-family:"Inter";src:url("fonts/inter/InterVariable.ttf") format("truetype");font-weight:100 900;font-style:normal}
+@font-face{font-family:"Inter";src:url("fonts/inter/InterVariable-Italic.ttf") format("truetype");font-weight:100 900;font-style:italic}
+
+:root{
+  --bg:#0a1a13; --bg2:#0c2119; --card:#0f261c; --card2:#0c2017; --line:#1c3d2e;
+  --emerald:#2ecc71; --mint:#bfe8d2; --text:#f3efe6; --muted:#8fa69a; --dim:#5f7a6d;
+  --attn:#c8664a; --dev:#c9973c;
+  --serif:"Playfair",Georgia,serif; --sans:"Inter",system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--bg);color:var(--text);font-family:var(--sans);-webkit-font-smoothing:antialiased}
+.stage{position:relative;overflow:hidden;background:radial-gradient(120% 90% at 78% 40%,#0f2a1f 0%,#0b1d15 45%,#081510 100%)}
+.stage.wide{width:2000px;height:1125px}
+.stage.portrait{width:1080px;height:1350px}
+.contours{position:absolute;inset:0;width:100%;height:100%}
+.top{position:absolute;display:flex;justify-content:space-between;align-items:center;font-size:19px;letter-spacing:.32em;color:var(--text);font-weight:600}
+.wide .top{left:116px;right:116px;top:74px}
+.portrait .top{left:72px;right:72px;top:64px;font-size:17px}
+.brand{display:flex;align-items:center;gap:22px}
+.brand .sep{width:1px;height:26px;background:#2a4a3a}
+.brand .mark{width:26px;height:26px;margin-right:10px;vertical-align:middle}
+.url{font-weight:400;letter-spacing:.3em;color:var(--muted);font-size:16px}
+
+/* left copy */
+.copy{position:absolute}
+.wide .copy{left:116px;top:300px;width:820px}
+.portrait .copy{left:72px;top:150px;width:940px}
+.eyebrow{display:flex;align-items:center;gap:18px;color:var(--mint);font-size:16px;letter-spacing:.34em;text-transform:uppercase;font-weight:500}
+.eyebrow:before{content:"";width:34px;height:1px;background:var(--emerald)}
+h1{font-family:var(--serif);font-weight:400;color:var(--text);letter-spacing:-.015em;line-height:.96}
+.wide h1{font-size:148px;margin-top:34px}
+.portrait h1{font-size:80px;margin-top:22px}
+h1 em{font-style:italic;color:var(--mint)}
+.rule{width:76px;height:1px;background:var(--emerald);margin:34px 0 34px}
+.portrait .rule{margin:26px 0 22px}
+.compass-label{color:var(--emerald);font-size:28px;letter-spacing:.3em;font-weight:500}
+.portrait .compass-label{font-size:22px}
+.sub{margin-top:36px;font-size:30px;line-height:1.4;color:var(--muted);font-weight:400}
+.portrait .sub{margin-top:20px;font-size:23px}
+.sub b{color:var(--text);font-weight:600}
+.process{margin-top:64px;display:flex;align-items:center;gap:22px;white-space:nowrap;font-size:15px;letter-spacing:.3em;color:var(--dim);font-weight:500}
+.portrait .process{margin-top:28px;gap:14px;font-size:12px;letter-spacing:.24em}
+.process i{width:34px;height:1px;background:#2a4a3a;display:inline-block}
+.process .on{color:var(--text)}
+
+/* laptop */
+.laptop{position:absolute;transform-style:preserve-3d}
+.wide .laptop{left:1060px;top:135px;width:860px;transform:perspective(2600px) rotateY(-8deg) rotateX(2deg)}
+.portrait .laptop{left:64px;top:600px;width:952px;transform:none}
+.frame{background:#040c09;border:1.5px solid #213f31;border-radius:18px;padding:12px;box-shadow:0 60px 120px rgba(0,0,0,.55),0 0 0 1px rgba(46,204,113,.06)}
+.base{height:14px;margin:0 -60px;background:linear-gradient(#183328,#0a1a13);border-radius:0 0 14px 14px;border-top:1px solid #2a4a3a}
+.portrait .base{margin:0 -30px}
+.screen{background:#07130e;border-radius:9px;overflow:hidden;display:grid;grid-template-columns:140px 1fr;height:650px}
+.portrait .screen{height:625px;grid-template-columns:150px 1fr}
+.side{border-right:1px solid #16302400;background:#061109;padding:22px 18px;display:flex;flex-direction:column;border-right:1px solid #132a1e}
+.side .logo{display:flex;align-items:center;gap:8px;font-size:11px;letter-spacing:.24em;font-weight:700;color:var(--text)}
+.side .logo svg{width:16px;height:16px}
+.nav{margin-top:34px;display:flex;flex-direction:column;gap:14px;font-size:11.5px;color:var(--dim)}
+.nav div{display:flex;align-items:center;gap:9px}
+.nav div:before{content:"";width:5px;height:5px;border-radius:50%;background:#1f3d2f}
+.nav .act{color:var(--text);background:#0e2418;margin:0 -10px;padding:6px 10px;border-radius:5px}
+.nav .act:before{background:var(--emerald);box-shadow:0 0 8px var(--emerald)}
+.side .foot{margin-top:auto;font-size:9px;letter-spacing:.16em;color:var(--dim);white-space:nowrap}
+.side .foot .bar{margin-top:8px;height:2px;background:#163025;position:relative}
+.side .foot .bar:after{content:"";position:absolute;left:0;top:0;bottom:0;width:100%;background:var(--emerald)}
+.main{padding:20px 22px 18px;display:flex;flex-direction:column;gap:12px}
+.hdr{display:flex;justify-content:space-between;align-items:flex-start}
+.hdr h2{font-family:var(--serif);font-weight:400;font-size:22px;color:var(--text)}
+.hdr p{font-size:10.5px;color:var(--dim);margin-top:3px}
+.pill{border:1px solid #2b8a56;color:var(--emerald);font-size:9px;letter-spacing:.18em;padding:6px 12px;border-radius:999px;font-weight:600;white-space:nowrap;margin-top:2px}
+.cards{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.card{background:linear-gradient(180deg,#0f261c,#0b1f16);border:1px solid #173629;border-radius:9px;padding:12px 14px}
+.lbl{font-size:8.5px;letter-spacing:.2em;color:var(--dim);font-weight:600;display:flex;justify-content:space-between}
+.lbl span{letter-spacing:.06em;font-weight:400;text-transform:none;color:var(--dim)}
+.big{font-family:var(--serif);font-size:23px;color:var(--text);margin-top:9px;line-height:1}
+.big small{font-family:var(--sans);font-size:10px;color:var(--dim);margin-left:6px}
+.track{height:3px;background:#163025;border-radius:3px;margin-top:10px;position:relative;overflow:hidden}
+.track i{position:absolute;left:0;top:0;bottom:0;border-radius:3px;background:var(--emerald)}
+.track.attn i{background:var(--attn)}
+.track.dev i{background:var(--dev)}
+.note{font-size:9px;color:var(--dim);margin-top:7px;line-height:1.35}
+.row2{display:grid;grid-template-columns:1fr 1.25fr;gap:10px}
+.pillars{margin-top:11px;display:flex;flex-direction:column;gap:9px}
+.pl{display:grid;grid-template-columns:1fr 64px 84px;align-items:center;gap:8px;font-size:10px;color:var(--text);white-space:nowrap}
+.pl .w{color:var(--dim);font-size:9px}
+.pl .track{margin:0}
+.pl .st{font-size:9px;font-weight:600;text-align:right}
+.st.attn{color:var(--attn)} .st.dev{color:var(--dev)} .st.ns{color:var(--attn)}
+.rc{margin-top:11px;display:flex;flex-direction:column;gap:9px}
+.rc .it{display:grid;grid-template-columns:18px 1fr 84px;align-items:center;gap:8px}
+.rc .n{font-size:9px;color:var(--dim)}
+.rc .t{font-size:11px;color:var(--text);font-weight:600;line-height:1.2}
+.rc .t em{display:block;font-style:normal;font-weight:400;font-size:9px;color:var(--dim);margin-top:2px}
+.rc .tag{font-size:8.5px;letter-spacing:.12em;color:var(--dim);text-align:right;font-weight:600}
+.rc .tag.p{color:var(--emerald)}
+.rc .it.primary{background:#0d2419;margin:0 -8px;padding:7px 8px;border-radius:6px;border:1px solid #1a3d2c}
+.row3{display:grid;grid-template-columns:1.35fr 1fr;gap:10px;flex:1}
+.acts{margin-top:9px;display:flex;flex-direction:column}
+.act{display:grid;grid-template-columns:14px 1fr 46px;gap:10px;align-items:center;padding:6px 0;border-top:1px solid #142b1f}
+.act:first-child{border-top:0}
+.act .bx{width:11px;height:11px;border:1px solid #2b5a42;border-radius:3px}
+.act .bx.on{background:var(--emerald);border-color:var(--emerald)}
+.act .t{font-size:10.5px;color:var(--text);font-weight:600;line-height:1.25}
+.act .t em{display:block;font-style:normal;font-weight:400;font-size:9px;color:var(--dim);margin-top:1px}
+.act .wk{font-size:8.5px;letter-spacing:.14em;color:var(--dim);text-align:right;font-weight:600}
+.act .wk.on{color:var(--emerald)}
+.insight{margin-top:10px;border-left:2px solid var(--emerald);padding-left:10px;font-size:10.5px;line-height:1.45;color:var(--muted)}
+.insight b{color:var(--text)}
+
+/* feature row */
+.features{position:absolute;display:grid;grid-template-columns:repeat(5,1fr);gap:40px}
+.wide .features{left:116px;right:116px;bottom:70px}
+.portrait .features{display:none}
+.f{display:flex;gap:14px;align-items:flex-start}
+.f svg{width:26px;height:26px;flex:none;margin-top:2px}
+.f b{display:block;font-size:15px;letter-spacing:.26em;font-weight:600;color:var(--text)}
+.f span{display:block;font-size:15px;color:var(--muted);margin-top:6px}
+.pfoot{display:none}
+.portrait .pfoot{display:flex;position:absolute;left:72px;right:72px;bottom:44px;justify-content:space-between;font-size:15px;letter-spacing:.3em;color:var(--dim);font-weight:600}
+.portrait .pfoot span{color:var(--mint);font-weight:400}
+
+/* ---- slides ---- */
+.stage.portrait{width:1080px;height:1350px}
+.portrait .copy{top:150px}
+.portrait h1.xl{font-size:92px}
+.portrait h1.l{font-size:84px}
+.grid{position:absolute;inset:0;pointer-events:none}
+.pfoot .l{color:var(--dim);font-weight:600}
+/* slide 3 steps */
+.steps{position:relative;margin-top:44px;padding-left:44px}
+.steps:before{content:"";position:absolute;left:5px;top:10px;bottom:16px;width:1px;background:var(--emerald);opacity:.7}
+.step{position:relative;margin-bottom:46px}
+.step:before{content:"";position:absolute;left:-44px;top:6px;width:11px;height:11px;border-radius:50%;background:var(--emerald);box-shadow:0 0 0 5px #0b1f17}
+.step .k{font-size:20px;letter-spacing:.3em;color:var(--mint);font-weight:600}
+.step .v{font-size:26px;color:var(--text);margin-top:8px;line-height:1.35;font-weight:400}
+.step .v span{color:var(--muted)}
+/* slide 4 cards */
+.bigcard{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:30px 34px;margin-top:22px}
+.bigcard .h{font-size:17px;letter-spacing:.3em;color:var(--dim);font-weight:600}
+.bigcard .h.on{color:var(--emerald)}
+.bigcard .r{font-size:24px;color:var(--text);margin-top:16px;line-height:1.35;display:flex;align-items:center;gap:14px}
+.bigcard .r .track{flex:none;width:110px;margin:0;height:5px}
+.bigcard .r .st{font-size:18px;font-weight:600}
+.bigcard .r .num{font-family:var(--serif);color:var(--emerald);font-size:24px;flex:none;width:36px}
+.arrow{text-align:center;color:var(--emerald);font-size:34px;margin:14px 0 0;line-height:1}
+.quote{font-family:var(--serif);font-style:italic;color:var(--mint);font-size:29px;padding-right:40px;line-height:1.35;margin-top:34px}
+/* slide 5 loop */
+.loop{margin-top:34px;position:relative}
+.loop .lr{display:grid;grid-template-columns:1fr auto;align-items:baseline;padding:22px 0 20px 30px;border-top:1px solid rgba(28,61,46,.7);position:relative}
+.loop .lr:first-child{border-top:0}
+.loop .lr .k{font-size:27px;letter-spacing:.24em;color:var(--text);font-weight:600}
+.loop .lr .s{font-size:21px;font-weight:600;color:var(--mint)}
+.loop .lr .s.done{color:var(--emerald)}
+.loop .lr .v{grid-column:1/3;font-size:21px;color:var(--muted);margin-top:8px}
+.loop .lr.done{opacity:.62}
+.loop .lr.open:before{content:"";position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--emerald)}
+/* slide 6 */
+.lines{margin-top:56px}
+.lines div{font-family:var(--serif);font-size:44px;color:var(--text);line-height:1.55}
+
+body{display:flex;flex-direction:column;gap:40px;padding:40px}
+</style></head><body><div class="stage portrait" id="s1">
+  <svg class="contours" data-c="1"></svg>
+  <div class="top">
+    <div class="brand"><span>G O X L</span><span class="sep"></span>
+      <svg class="mark" viewBox="0 0 24 24" fill="none" stroke="#2ecc71" stroke-width="2.2" stroke-linecap="round"><path d="M12 3v18M3 12h18M6 6l12 12M18 6L6 18"/><circle cx="12" cy="12" r="3.2" fill="#0a1a13"/></svg><span>ALLY</span></div>
+    <div class="url">goxlally.ai</div>
+  </div>
+  <div class="copy"><div class="eyebrow">A founder’s note · Sep 2026</div>
+<h1 class="xl" style="margin-top:210px">I built an AI<br>diagnosis engine.<br>Then I used it on<br><em>my own startup.</em></h1>
+<div class="rule"></div>
+<div class="sub" style="margin-top:0;color:var(--muted);font-size:30px;letter-spacing:.02em">NyayaSetu AI × Ally</div></div>
+  <div class="pfoot"><div class="l">GOXL | ALLY</div><div><span>01 / 06</span></div></div>
+</div><div class="stage portrait" id="s2">
+  <svg class="contours" data-c="2"></svg>
+  <div class="top">
+    <div class="brand"><span>G O X L</span><span class="sep"></span>
+      <svg class="mark" viewBox="0 0 24 24" fill="none" stroke="#2ecc71" stroke-width="2.2" stroke-linecap="round"><path d="M12 3v18M3 12h18M6 6l12 12M18 6L6 18"/><circle cx="12" cy="12" r="3.2" fill="#0a1a13"/></svg><span>ALLY</span></div>
+    <div class="url">goxlally.ai</div>
+  </div>
+  <div class="copy"><div class="eyebrow">Founder Clarity Report · Sep 2026</div>
+<h1 class="l">I became<br><em>Ally’s user.</em></h1>
+<div class="rule"></div>
+<div class="compass-label">NYAYASETU AI × ALLY</div>
+<div class="sub">Here’s what Ally found when I ran<br><b>NyayaSetu AI through the diagnosis.</b></div>
+<div class="process">UNDERSTAND<i></i>DIAGNOSE<i></i><span class="on">ROOT CAUSE</span><i></i>CLARITY<i></i>NEXT MOVE</div></div>
+  <div class="laptop">
+    <div class="frame"><div class="screen">
+      <div class="side">
+        <div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="#2ecc71" stroke-width="2.4" stroke-linecap="round"><path d="M12 3v18M3 12h18M6 6l12 12M18 6L6 18"/><circle cx="12" cy="12" r="3.2" fill="#061109"/></svg>ALLY</div>
+        <div class="nav"><div>Compass</div><div>Founder DNA</div><div>Business DNA</div><div class="act">Clarity Report</div><div>Next Move</div><div>Knowledge</div></div>
+        <div class="foot">DIAGNOSIS · 30 / 30<div class="bar"></div></div>
+      </div>
+      <div class="main">
+        <div class="hdr">
+          <div><h2>Clarity Report</h2><p>Founder Diagnosis · NyayaSetu AI · 30 answers · 15 dimensions · 6 pillars</p></div>
+          <div class="pill">SEP 2026 · PROVISIONAL READ</div>
+        </div>
+        <div class="cards">
+          <div class="card"><div class="lbl">BUSINESS HEALTH</div><div class="big">Needs Attention</div><div class="track attn"><i style="width:32%"></i></div><div class="note">Where you are today — not a verdict on whether this works.</div></div>
+          <div class="card"><div class="lbl">ROOT CAUSE CONFIDENCE</div><div class="big">Moderate<small>unconfirmed</small></div><div class="track"><i style="width:50%"></i></div><div class="note">The next steps are what would settle it.</div></div>
+          <div class="card"><div class="lbl">RED FLAG PILLARS</div><div class="big">3<small>of 6 pillars</small></div><div class="note" style="margin-top:12px">Founder Readiness · Revenue Maturity · Strategic Clarity</div></div>
+        </div>
+        <div class="row2">
+          <div class="card"><div class="lbl">BUSINESS DNA <span>six pillars · lowest first</span></div>
+            <div class="pillars">
+              <div class="pl"><div>Revenue Maturity <span class="w">20%</span></div><div class="track attn"><i style="width:12%"></i></div><div class="st ns">Not started yet</div></div>
+              <div class="pl"><div>Founder Readiness <span class="w">25%</span></div><div class="track attn"><i style="width:32%"></i></div><div class="st attn">Needs Attention</div></div>
+              <div class="pl"><div>Strategic Clarity <span class="w">10%</span></div><div class="track attn"><i style="width:32%"></i></div><div class="st attn">Needs Attention</div></div>
+              <div class="pl"><div>Team &amp; Leadership <span class="w">10%</span></div><div class="track attn"><i style="width:32%"></i></div><div class="st attn">Needs Attention</div></div>
+              <div class="pl"><div>Market Clarity <span class="w">20%</span></div><div class="track attn"><i style="width:32%"></i></div><div class="st attn">Needs Attention</div></div>
+              <div class="pl"><div>Product &amp; Execution <span class="w">15%</span></div><div class="track dev"><i style="width:56%"></i></div><div class="st dev">Developing</div></div>
+            </div>
+          </div>
+          <div class="card"><div class="lbl">ROOT CAUSE ANALYSIS <span>ranked by evidence</span></div>
+            <div class="rc">
+              <div class="it primary"><div class="n">01</div><div class="t">Building Is the Safe Place<em>Founder Psychology · carried the heaviest risk of every dimension</em></div><div class="tag p">PRIMARY</div></div>
+              <div class="it"><div class="n">02</div><div class="t">Lack of Data<em>Showed up behind the finding above · worth watching</em></div><div class="tag">SUPPORTING</div></div>
+              <div class="it"><div class="n">03</div><div class="t">No System for Tracking Real Behavior<em>Business Model Design · worth watching, not yet a conclusion</em></div><div class="tag">SUPPORTING</div></div>
+            </div>
+            <div class="note" style="margin-top:10px">Ruled out: Product &amp; Execution scored higher — not a capability gap.</div>
+          </div>
+        </div>
+        <div class="row3">
+          <div class="card"><div class="lbl">PRIORITISED NEXT ACTIONS <span>confirm first · two weeks</span></div>
+            <div class="acts">
+              <div class="act"><div class="bx on"></div><div class="t">Write the problem you solve in one sentence<em>Who has it, and what changes for them — before naming what you built.</em></div><div class="wk on">NOW</div></div>
+              <div class="act"><div class="bx"></div><div class="t">List your three strongest claims<em>Beside each, the thing outside your own opinion that backs it. Mark the ones with nothing.</em></div><div class="wk">WEEK 1</div></div>
+              <div class="act"><div class="bx"></div><div class="t">Explain the business out loud to a stranger<em>Write down the exact moment they looked lost.</em></div><div class="wk">WEEK 1</div></div>
+            </div>
+          </div>
+          <div class="card"><div class="lbl">FOUNDER INSIGHT</div>
+            <div class="insight"><b>Problem Solver archetype, driven by purpose.</b> The last thing shipped was the NyayaSetu prototype. The biggest problem named: users. What's in the way looks like Building Is the Safe Place — not yet confirmed.</div>
+          </div>
+        </div>
+      </div>
+    </div></div>
+    <div class="base"></div>
+  </div><div class="pfoot"><div class="l">GOXL | ALLY</div><div><span>02 / 06</span></div></div>
+</div><div class="stage portrait" id="s3">
+  <svg class="contours" data-c="3"></svg>
+  <div class="top">
+    <div class="brand"><span>G O X L</span><span class="sep"></span>
+      <svg class="mark" viewBox="0 0 24 24" fill="none" stroke="#2ecc71" stroke-width="2.2" stroke-linecap="round"><path d="M12 3v18M3 12h18M6 6l12 12M18 6L6 18"/><circle cx="12" cy="12" r="3.2" fill="#0a1a13"/></svg><span>ALLY</span></div>
+    <div class="url">goxlally.ai</div>
+  </div>
+  <div class="copy"><div class="eyebrow">How the diagnosis works</div>
+<h1 class="l">Not another<br><em>AI chat.</em></h1>
+<div class="rule"></div>
+<div class="sub" style="margin-top:0">From my context to one root cause, in five steps.<br><b>NyayaSetu AI as the worked example.</b></div>
+<div class="steps">
+ <div class="step"><div class="k">UNDERSTAND</div><div class="v">4 answers in my own words. Then 30 diagnosis answers.</div></div>
+ <div class="step"><div class="k">DIAGNOSE</div><div class="v">15 dimensions, 6 pillars. <span>Business Health: Needs Attention.</span></div></div>
+ <div class="step"><div class="k">ROOT CAUSE</div><div class="v">Building Is the Safe Place. <span>Moderate confidence, unconfirmed.</span></div></div>
+ <div class="step"><div class="k">CLARITY</div><div class="v">Not a capability gap. <span>Product &amp; Execution scored higher.</span></div></div>
+ <div class="step"><div class="k">NEXT MOVE</div><div class="v">Two weeks, one question to answer.</div></div>
+</div></div>
+  <div class="pfoot"><div class="l">GOXL | ALLY</div><div><span>03 / 06</span></div></div>
+</div><div class="stage portrait" id="s4">
+  <svg class="contours" data-c="4"></svg>
+  <div class="top">
+    <div class="brand"><span>G O X L</span><span class="sep"></span>
+      <svg class="mark" viewBox="0 0 24 24" fill="none" stroke="#2ecc71" stroke-width="2.2" stroke-linecap="round"><path d="M12 3v18M3 12h18M6 6l12 12M18 6L6 18"/><circle cx="12" cy="12" r="3.2" fill="#0a1a13"/></svg><span>ALLY</span></div>
+    <div class="url">goxlally.ai</div>
+  </div>
+  <div class="copy"><div class="eyebrow">NyayaSetu AI · in progress</div>
+<h1 class="l" style="font-size:72px">Diagnosis is done.<br><em>Now the real work begins.</em></h1>
+<div class="bigcard" style="margin-top:38px"><div class="h">WHERE I AM</div>
+ <div class="r">Prototype live on the website.</div>
+ <div class="r">Early users through direct outreach and my own network.</div>
+ <div class="r"><span>Product &amp; Execution</span><div class="track dev"><i style="width:56%"></i></div><span class="st dev">Developing</span></div>
+ <div class="r"><span>Business Health</span><div class="track attn"><i style="width:32%"></i></div><span class="st attn">Needs Attention</span></div>
+</div>
+<div class="arrow">↓</div>
+<div class="bigcard" style="margin-top:14px"><div class="h on">WHAT I WORK ON NEXT</div>
+ <div class="r"><span class="num">01</span><span>Write the problem I solve in one plain sentence — who has it, what changes for them.</span></div>
+ <div class="r"><span class="num">02</span><span>List my three strongest claims and what, outside my own opinion, backs each one.</span></div>
+ <div class="r"><span class="num">03</span><span>Explain NyayaSetu out loud to someone who doesn’t know it. Note where they get lost.</span></div>
+</div>
+<div class="quote">“Building a good product doesn’t automatically mean people will use it.”</div></div>
+  <div class="pfoot"><div class="l">GOXL | ALLY</div><div><span>04 / 06</span></div></div>
+</div><div class="stage portrait" id="s5">
+  <svg class="contours" data-c="5"></svg>
+  <div class="top">
+    <div class="brand"><span>G O X L</span><span class="sep"></span>
+      <svg class="mark" viewBox="0 0 24 24" fill="none" stroke="#2ecc71" stroke-width="2.2" stroke-linecap="round"><path d="M12 3v18M3 12h18M6 6l12 12M18 6L6 18"/><circle cx="12" cy="12" r="3.2" fill="#0a1a13"/></svg><span>ALLY</span></div>
+    <div class="url">goxlally.ai</div>
+  </div>
+  <div class="copy"><div class="eyebrow">The operating loop</div>
+<h1 class="xl">Now, <em>I build.</em></h1>
+<div class="rule"></div>
+<div class="loop">
+ <div class="lr done"><div class="k">DIAGNOSE</div><div class="s done">✓ Complete</div><div class="v">30 answers. One root cause named, still to be confirmed.</div></div>
+ <div class="lr done"><div class="k">UNDERSTAND</div><div class="s done">✓ Complete</div><div class="v">Not a capability gap. The safe place is building.</div></div>
+ <div class="lr open"><div class="k">BUILD</div><div class="s">→ Continuing</div><div class="v">Iterating the NyayaSetu prototype.</div></div>
+ <div class="lr open"><div class="k">VALIDATE</div><div class="s">→ Continuing</div><div class="v">The number I watch: weekly users who come back.</div></div>
+ <div class="lr open"><div class="k">SHIP</div><div class="s">→ Continuing</div><div class="v">Prototype is on the website. Next iteration follows.</div></div>
+ <div class="lr open"><div class="k">LEARN</div><div class="s">→ Continuing</div><div class="v">A good product doesn’t mean people will use it. Testing that.</div></div>
+</div></div>
+  <div class="pfoot"><div class="l">GOXL | ALLY</div><div><span>05 / 06</span></div></div>
+</div><div class="stage portrait" id="s6">
+  <svg class="contours" data-c="6"></svg>
+  <div class="top">
+    <div class="brand"><span>G O X L</span><span class="sep"></span>
+      <svg class="mark" viewBox="0 0 24 24" fill="none" stroke="#2ecc71" stroke-width="2.2" stroke-linecap="round"><path d="M12 3v18M3 12h18M6 6l12 12M18 6L6 18"/><circle cx="12" cy="12" r="3.2" fill="#0a1a13"/></svg><span>ALLY</span></div>
+    <div class="url">goxlally.ai</div>
+  </div>
+  <div class="copy"><div class="eyebrow">Introducing Ally</div>
+<h1 class="l" style="margin-top:120px">Let’s start the hustle<br><em>with Ally.</em></h1>
+<div class="rule"></div>
+<div class="compass-label">THE FOUNDER’S COMPASS</div>
+<div class="lines"><div>Understand.</div><div>Diagnose.</div><div>Find the root cause.</div><div>Get clarity.</div><div>Know your next move.</div></div></div>
+  <div class="pfoot"><div class="l">GOXL × ALLY</div><div><span>goxlally.ai</span></div></div>
+</div>
+<script>
+document.querySelectorAll('svg.contours').forEach(svg=>{
+  const n=+svg.dataset.c, W=1080,H=1350; svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+  const cx = n===2?540:820, cy = n===2?1000:(n===1||n===6?300:1150);
+  let s='';
+  for(let k=1;k<=16;k++){const r0=90*k;let d='';
+    for(let a=0;a<=360;a+=3){const t=a*Math.PI/180;const r=r0+38*Math.sin(3*t+k*.7)+26*Math.sin(5*t-k*1.3)+18*Math.sin(9*t+k*2.1);
+      d+=(a?'L':'M')+(cx+r*Math.cos(t)).toFixed(1)+' '+(cy+r*Math.sin(t)*0.82).toFixed(1);}
+    s+=`<path d="${d}Z" fill="none" stroke="#2a5a42" stroke-width="1" opacity="${(0.22-k*0.009).toFixed(3)}"/>`;}
+  const R=330; s+=`<circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="#2ecc71" stroke-width="1" opacity=".07"/><circle cx="${cx}" cy="${cy}" r="${R-26}" fill="none" stroke="#2ecc71" stroke-width=".7" opacity=".05"/>`;
+  for(let a=0;a<360;a+=5){const t=a*Math.PI/180,L=a%45===0?18:8;s+=`<line x1="${(cx+(R-L)*Math.cos(t)).toFixed(1)}" y1="${(cy+(R-L)*Math.sin(t)).toFixed(1)}" x2="${(cx+R*Math.cos(t)).toFixed(1)}" y2="${(cy+R*Math.sin(t)).toFixed(1)}" stroke="#2ecc71" stroke-width="1" opacity=".08"/>`;}
+  if(n===1||n===6){ // faint 12-col grid
+    for(let i=1;i<12;i++){const x=88+(W-176)*i/12;s+=`<line x1="${x}" y1="0" x2="${x}" y2="${H}" stroke="#1c3d2e" stroke-width="1" opacity=".35"/>`;}
+  }
+  svg.innerHTML=s;
+});
+</script></body></html>
