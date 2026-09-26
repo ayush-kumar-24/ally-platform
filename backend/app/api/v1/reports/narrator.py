@@ -171,13 +171,49 @@ class TemplateNarrator:
 
     # --- sections --------------------------------------------------------
     def _founder_summary(self, s, tone):
+        """The opening, said with the report's own findings in it.
+
+        This was a greeting and nothing more -- one sentence promising a read
+        and then no read, at the top of a report built from dozens of answers.
+        It now says what the reader is about to see: how much they answered,
+        where the business came out, what the leading finding is and where the
+        weight sits. Every value is one the report states again later, so this
+        can only summarise, never introduce a claim.
+        """
         name = s.get("founder_name") or "there"
         lead = {
             "Validator": "Here is what your answers say about where you stand.",
             "Compass": "Here is a read on your direction and what to focus on next.",
             "Auditor": "Here is a structured read on the business and where it stands.",
         }.get(tone.persona, "Here is your clarity report.")
-        return f"{name}, {lead}"
+
+        bits: list[str] = []
+        answers = int(s.get("answers") or 0)
+        band = str(s.get("overall_band") or "").strip()
+        if answers and band:
+            bits.append(f"Across {answers} answers, your business health reads "
+                        f"as {band}.")
+        elif band:
+            bits.append(f"Your business health reads as {band}.")
+
+        worst = str(s.get("weakest_pillar") or "").strip()
+        if worst:
+            bits.append(f"{worst} is carrying the most weight.")
+
+        finding = str(s.get("primary_finding") or "").strip()
+        if finding:
+            # Never state an untested finding as settled -- the same rule the
+            # root-cause section works under.
+            settled = str(s.get("finding_status") or "") == "confirmed"
+            bits.append(
+                f"The leading explanation is {finding}."
+                if settled else
+                f"The leading explanation is {finding}, and it is not "
+                "confirmed yet -- the next steps are what would settle it.")
+
+        if not bits:
+            return f"{name}, {lead}"
+        return f"{name}, {lead} " + " ".join(bits)
 
     def _founder_dna(self, s, tone):
         # Archetype drives the lead sentence when present; the newer dimensions
@@ -304,15 +340,38 @@ class TemplateNarrator:
         intro = {"Validator": "What your answers point to: ",
                  "Auditor": "The diagnostic picture: ",
                  "Compass": "Here is the through-line: "}.get(tone.persona, "")
+        # Rank matters as much as status here. "unconfirmed" is the ORDINARY
+        # state of a finding this engine produces -- confirmation needs the
+        # follow-up actions to come back -- so describing every unconfirmed
+        # cause as "a secondary consideration" described the PRIMARY finding as
+        # secondary, in the same section that had just named it the primary
+        # finding. Live, all three hypotheses carried the identical sentence
+        # under a heading announcing the first of them.
+        #
+        # "eased when probed" was also saying something untrue: unconfirmed
+        # means not yet tested, not that the evidence weakened.
         lines = []
         for rc in s.get("root_causes", []):
             nm, status = rc.get("name"), rc.get("confirmation_status")
             if not nm:
                 continue
+            try:
+                primary = int(rc.get("rank") or 0) == 1
+            except (TypeError, ValueError):
+                primary = False
             if status == "confirmed":
-                lines.append(f"We confirmed {nm} through repeated probing -- a primary driver to act on.")
+                lines.append(
+                    f"We confirmed {nm} through repeated probing -- "
+                    + ("the primary driver to act on." if primary
+                       else "a driver to act on."))
             elif status == "unconfirmed":
-                lines.append(f"{nm} surfaced but eased when probed -- a secondary consideration, not a settled finding.")
+                lines.append(
+                    f"{nm} is the strongest read your answers support, and it "
+                    "is not yet confirmed -- the steps below are what would "
+                    "settle it."
+                    if primary else
+                    f"{nm} also showed up, behind the finding above -- worth "
+                    "watching, not yet a conclusion.")
             else:  # not_tested
                 lines.append(f"{nm} is a possibility we did not directly test this session -- an area to explore, not a conclusion.")
 
@@ -368,8 +427,15 @@ class TemplateNarrator:
             # interview having been thrown away.
             bits = []
             if probes:
+                # The stated symptom is ALSO a question they answered in their
+                # own words -- payload splits it out of `probes` because the
+                # root-cause section quotes it separately, not because the
+                # founder did not answer it. Counting only the probes told a
+                # founder who had answered four that the report read from
+                # three.
+                asked = len(probes) + (1 if str(s.get("stated_symptom") or "").strip() else 0)
                 bits.append(
-                    f"{len(probes)} question{'s' if len(probes) != 1 else ''} "
+                    f"{asked} question{'s' if asked != 1 else ''} "
                     "in your own words before the diagnosis started"
                 )
             if answered:

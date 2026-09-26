@@ -556,15 +556,25 @@ export default function DiagnosisChat() {
 
       <LiveKnowledgeGraph phase="diagnosis" messages={messages} resolved={done} />
 
-      {/* Asked once, the moment the diagnosis ends. Holds the hand-off to the
-          report interstitial so the dialog is not navigated out from under
-          them, and resolves straight through if they have already answered. */}
+      {/* Asked once, the moment the diagnosis ends, and it holds the hand-off
+          to the report interstitial so the dialog is not navigated out from
+          under them.
+
+          It does NOT ask about the report, and that distinction is the whole
+          reason it sits here: this is the only moment the founder has just
+          experienced the questions, which is what it asks about. Reported as
+          "modal overlays report generation" -- true of the timing, but moving
+          it after the report would change the subject to the report and lose
+          the answer to the question actually being asked. What it can do is
+          say plainly that the report is building behind it, so the founder is
+          not left thinking the dialog is in the way of something. */}
       <FeedbackPrompt
         type={FEEDBACK.DIAGNOSIS}
         when={done}
         sessionId={sessionId}
         title="How was that diagnosis?"
-        subtitle="You just answered a lot of questions. Were they the right ones?"
+        subtitle={'Your report is building now — this takes a few seconds. '
+          + 'While it does: were those the right questions?'}
         onResolved={() => navigate('/app/thinking')}
       />
     </div>

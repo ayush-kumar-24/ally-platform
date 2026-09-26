@@ -318,11 +318,27 @@ export default function FounderDnaChat() {
         role="status"
       >
         <div style={{ fontSize: '40px' }} aria-hidden="true">🧬</div>
-        <h2 style={{ margin: 0 }}>Your Founder DNA is mapped</h2>
+        {/* "Your Founder DNA is mapped" over "11 of 15 dimensions understood"
+            says two different things, and the founder is left wondering what
+            happened to the other four. They were asked about -- the interview
+            only stops once every dimension has had its turn -- but an answer
+            that stays general does not settle one, and the engine moves on
+            rather than pressing. That is a deliberate choice and it should be
+            said out loud, not left as an unexplained number. */}
+        <h2 style={{ margin: 0 }}>
+          {resolved.length >= TOTAL_DIMENSIONS
+            ? 'Your Founder DNA is mapped'
+            : 'That is your Founder DNA'}
+        </h2>
         <p style={{ color: 'var(--muted-2)', margin: 0 }}>
-          {resolved.length} of {TOTAL_DIMENSIONS} dimensions understood. Next, tell
-          Ally what you think the problem is — then it goes looking for what's
-          actually causing it.
+          {resolved.length >= TOTAL_DIMENSIONS
+            ? `All ${TOTAL_DIMENSIONS} dimensions understood.`
+            : `${resolved.length} of ${TOTAL_DIMENSIONS} dimensions came through clearly. `
+              + `Ally asked about the rest too — your answers there stayed general, `
+              + `so it moved on rather than pressing. Nothing is missing that it `
+              + `needed.`}
+          {' '}Next, tell Ally what you think the problem is — then it goes
+          looking for what's actually causing it.
         </p>
         <div style={{ display: 'flex', gap: '10px', marginTop: '8px', flexWrap: 'wrap', justifyContent: 'center' }}>
           <button type="button" className="btn-primary" onClick={() => navigate('/app/current-problem')}>
