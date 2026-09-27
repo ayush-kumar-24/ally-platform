@@ -4,6 +4,9 @@
 
 The ₹1 offer is the doorway. The hero is trust: an ally is someone who stands with you.
 
+
+**Brand source.** Colours, fonts and the logo lockup are taken directly from the platform: `frontend/src/styles/tokens.css` (forest-night #06140d, forest-deep #0E2A1C, emerald #10B981, emerald-bright #34d399, on-dark #eaf3ee, on-dark-muted #a7c0b4, on-dark-dim #7d9488), `frontend/src/index.css` (Fraunces serif, Inter body, Inter Tight display), and `frontend/public/ally-logo-mark-on-dark.png` with the sidebar lockup from `PlatformLayout.jsx`.
+
 ---
 
 ## 1. Final copy per slide
@@ -82,15 +85,15 @@ All slides: 88 px margins, top bar (GOXL ⁕ ALLY left, goxlally.ai right), eyeb
 | Level | Face | Size | Colour | Use |
 |---|---|---|---|---|
 | Eyebrow | Inter 500, caps, +30% tracking | 20 px | mint | Orientation |
-| Headline | Playfair Display 400 (italic for emphasis words) | 84–104 px | off-white, emphasis in mint | The story beat |
-| Headline caps variant | Playfair Display 500, caps, +6% tracking | 68–76 px | off-white | Slides 1, 6, 7 |
+| Headline | Fraunces 400 (italic for emphasis words) | 84–104 px | off-white, emphasis in mint | The story beat |
+| Headline caps variant | Fraunces 500, caps, +6% tracking | 68–76 px | off-white | Slides 1, 6, 7 |
 | Supporting | Inter 400 | 28–30 px | muted, key line in off-white 600 | One or two lines |
 | Sequence chips | Inter 600, caps, +24% tracking | 20–22 px | off-white on card | Process steps |
 | UI text | Inter 400/500 | 12–16 px | off-white / muted | Interface fragments |
-| Numeral | Playfair Display 400 | 320 px | off-white | Slide 6 |
+| Numeral | Fraunces 400 | 320 px | off-white | Slide 6 |
 | Footer | Inter 600, caps, +30% tracking | 15 px | dim, URL in mint | Brand line |
 
-Colour tokens: bg #0B1F17 · card #12291F · line #1C3D2E · emerald #2ECC71 · mint #BFE8D2 · text #F3EFE6 · muted #8FA69A · dim #5F7A6D. No other colours anywhere in this campaign.
+Colour tokens: bg #06140d · card #0E2A1C · line rgba(255,255,255,.10) · emerald #10B981 · mint #7fe9c2 · text #eaf3ee · muted #a7c0b4 · dim #7d9488. No other colours anywhere in this campaign.
 
 ---
 
@@ -98,11 +101,11 @@ Colour tokens: bg #0B1F17 · card #12291F · line #1C3D2E · emerald #2ECC71 · 
 
 Shared prefix for every prompt:
 
-> Premium editorial LinkedIn carousel slide, 1080 by 1350 portrait, near-black forest green background (#0B1F17) with faint topographic contour lines in #2A5A42 at 10–20% opacity and a ghosted compass ring in emerald at 7% opacity. Top-left "GOXL ⁕ ALLY" in small letterspaced caps, top-right "goxlally.ai" in green-grey. A small mint caps eyebrow with a short emerald dash. High-contrast editorial serif (Playfair Display) for headlines in warm off-white (#F3EFE6) with emphasis words in soft mint (#BFE8D2) italic. Clean grotesque sans (Inter) for everything else. Emerald (#2ECC71) is the only saturated colour, used sparingly. Generous negative space. McKinsey × Linear × Stripe restraint. Negative: robots, humanoid figures, hands, handshakes, stock photos, neon, cyberpunk, glassmorphism, 3D renders, decorative gradients, icons beyond arrows, clutter.
+> Premium editorial LinkedIn carousel slide, 1080 by 1350 portrait, near-black forest green background (#06140d) with faint topographic contour lines in #2A5A42 at 10–20% opacity and a ghosted compass ring in emerald at 7% opacity. Top-left the real Ally mark (ally-logo-mark-on-dark.png) with "GoXL Ally" in Inter Tight 800 and "by GoXL Entrepreneurship" beneath, top-right "goxlally.ai" in green-grey. A small mint caps eyebrow with a short emerald dash. High-contrast editorial serif (Fraunces) for headlines in warm off-white (#eaf3ee) with emphasis words in soft mint (#7fe9c2) italic. Clean grotesque sans (Inter) for everything else. Emerald (#10B981) is the only saturated colour, used sparingly. Generous negative space. McKinsey × Linear × Stripe restraint. Negative: robots, humanoid figures, hands, handshakes, stock photos, neon, cyberpunk, glassmorphism, 3D renders, decorative gradients, icons beyond arrows, clutter.
 
 1. **Hook.** Eyebrow "GOXL × ALLY". Serif caps headline "YOU DON'T HAVE TO / BUILD ALONE." at 76 px in the upper half. Beneath, "That's what an Ally is for." in green-grey sans. Lower half: a single line drawing of two thin lines entering from bottom-left and bottom-right, curving toward each other and continuing upward as one emerald line; behind it, the word "ALLY" in mint at 14% opacity, very large and letterspaced. Footer "GOXL × ALLY" left, "01 / 07" right.
-2. **What Ally means.** Eyebrow "WHAT ALLY MEANS". Serif headline "An ally / stands with you." with the second line in mint italic. Three short sans lines: "Not ahead of you. / Not above you. / Beside you." Body line in green-grey. Middle-lower: a horizontal founder journey line in #1C3D2E with five small emerald ticks labelled IDEA, FIRST PRODUCT, FIRST CUSTOMERS, TRACTION, SCALING; a parallel mint line runs just beneath it, labelled "ALLY", travelling alongside and never merging. Footer "02 / 07".
-3. **First, we understand you.** Eyebrow "STEP ONE". Serif headline "First, we / understand you." Five stacked sans lines "Your journey. Your business. Your challenges. Your stage. Your context." Body: "Because the right recommendation starts with the right understanding." Lower-right: a dark UI card (#12291F, 1 px #1C3D2E border, 20 px radius) titled "FOUNDER CONTEXT" with five labelled empty input fields — "Where you are", "What you're building", "Your biggest challenge right now", "Your 90-day goal", "How you like to be told things" — the first showing a blinking emerald cursor. No chat bubbles. Footer "03 / 07".
+2. **What Ally means.** Eyebrow "WHAT ALLY MEANS". Serif headline "An ally / stands with you." with the second line in mint italic. Three short sans lines: "Not ahead of you. / Not above you. / Beside you." Body line in green-grey. Middle-lower: a horizontal founder journey line in rgba(255,255,255,.10) with five small emerald ticks labelled IDEA, FIRST PRODUCT, FIRST CUSTOMERS, TRACTION, SCALING; a parallel mint line runs just beneath it, labelled "ALLY", travelling alongside and never merging. Footer "02 / 07".
+3. **First, we understand you.** Eyebrow "STEP ONE". Serif headline "First, we / understand you." Five stacked sans lines "Your journey. Your business. Your challenges. Your stage. Your context." Body: "Because the right recommendation starts with the right understanding." Lower-right: a dark UI card (#0E2A1C, 1 px rgba(255,255,255,.10) border, 20 px radius) titled "FOUNDER CONTEXT" with five labelled empty input fields — "Where you are", "What you're building", "Your biggest challenge right now", "Your 90-day goal", "How you like to be told things" — the first showing a blinking emerald cursor. No chat bubbles. Footer "03 / 07".
 4. **Underneath the symptoms.** Eyebrow "STEP TWO". Serif headline "Then we look / underneath the symptoms." Left: a vertical sequence UNDERSTAND → DIAGNOSE → ROOT CAUSE → CLARITY joined by a thin emerald line. Right: a UI card titled "ROOT CAUSE ANALYSIS" listing five reasoning labels "What you described / What Ally ruled out / The signal / The link to you / The conclusion" as numbered rows, and beneath a small list of six pillar names (Founder Readiness, Market Clarity, Revenue Maturity, Product & Execution, Team & Leadership, Strategic Clarity) each with an empty track. Body: "Ally doesn't just ask what's wrong. It helps you understand what's actually happening underneath." Footer "04 / 07".
 5. **Clarity should lead somewhere.** Eyebrow "STEP THREE". Serif headline "Clarity should / lead somewhere." Two sans lines: "Recommendations aren't the finish line." in green-grey and "Your next move is." in off-white. Middle: four bordered chips on one line — ROOT CAUSE → RECOMMENDATION → ACTION → LEARNING — with thin emerald arrows; the last chip outlined in emerald. Body: "Ally helps turn what you understand into practical next steps." Footer "05 / 07".
 6. **100 founders.** Eyebrow "AN INVITATION". Serif caps headline "WE WANT 100 FOUNDERS / TO BUILD THIS WITH US." A very large serif numeral "100" in off-white, roughly 320 px, centre-left. Beside and beneath: "1 month of Ally Pro for ₹1." in off-white sans 600, then three green-grey lines "Use it on your real business. / Give us your honest feedback. / Help us make Ally better for founders." Small caps line "INDIA · 100 FOUNDERS · EARLY FEEDBACK". No price-tag graphics, no badges, no strike-through prices. Footer "06 / 07".
@@ -114,7 +117,7 @@ Shared prefix for every prompt:
 
 - One content block per slide. If a second visual appears, remove it.
 - The journey/sequence motif appears on slides 1, 2, 4 and 5 with the same stroke weight (1 px lines, 11 px emerald dots).
-- The UI card style on slides 3 and 4 is identical to the NyayaSetu dashboard card: #12291F fill, 1 px #1C3D2E border, 20 px radius, no shadow.
+- The UI card style on slides 3 and 4 is identical to the NyayaSetu dashboard card: #0E2A1C fill, 1 px rgba(255,255,255,.10) border, 20 px radius, no shadow.
 - Slides 1, 6 and 7 use the serif caps headline; slides 2 to 5 use the serif sentence-case headline with a mint italic second line. This alternation marks the emotional slides from the explanatory ones.
 - No UI fragment shows a real founder's data. Fields are empty and reasoning labels are structural. That keeps the campaign honest and avoids implying a result.
 - Nothing promises growth. "Grow with Ally" is not used on any slide; the closest line is "Let's figure out the next move — together."

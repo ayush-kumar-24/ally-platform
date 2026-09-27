@@ -1,14 +1,19 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><title>Ally carousel</title><style>
+
+@font-face{font-family:"Fraunces";src:url("fonts/fraunces-normal.woff2") format("woff2");font-weight:100 900;font-style:normal}
+@font-face{font-family:"Fraunces";src:url("fonts/fraunces-italic.woff2") format("woff2");font-weight:100 900;font-style:italic}
+@font-face{font-family:"Inter Tight";src:url("fonts/intertight-normal.woff2") format("woff2");font-weight:100 900;font-style:normal}
+@font-face{font-family:"Montserrat";src:url("fonts/montserrat-normal.woff2") format("woff2");font-weight:100 900;font-style:normal}
 @font-face{font-family:"Playfair";src:url("fonts/playfair-normal.woff2") format("woff2");font-weight:400 900;font-style:normal}
 @font-face{font-family:"Playfair";src:url("fonts/playfair-italic.woff2") format("woff2");font-weight:400 900;font-style:italic}
 @font-face{font-family:"Inter";src:url("fonts/inter/InterVariable.ttf") format("truetype");font-weight:100 900;font-style:normal}
 @font-face{font-family:"Inter";src:url("fonts/inter/InterVariable-Italic.ttf") format("truetype");font-weight:100 900;font-style:italic}
 
 :root{
-  --bg:#0a1a13; --bg2:#0c2119; --card:#0f261c; --card2:#0c2017; --line:#1c3d2e;
-  --emerald:#2ecc71; --mint:#bfe8d2; --text:#f3efe6; --muted:#8fa69a; --dim:#5f7a6d;
+  --bg:#06140d; --bg2:#0a2016; --card:#0E2A1C; --card2:#0b2418; --line:rgba(255,255,255,.10); --line2:rgba(255,255,255,.13);
+  --emerald:#10B981; --bright:#34d399; --mint:#7fe9c2; --text:#eaf3ee; --muted:#a7c0b4; --dim:#7d9488;
   --attn:#c8664a; --dev:#c9973c;
-  --serif:"Playfair",Georgia,serif; --sans:"Inter",system-ui,sans-serif;
+  --serif:"Fraunces",Georgia,serif; --sans:"Inter",system-ui,sans-serif; --tight:"Inter Tight","Inter",system-ui,sans-serif;
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{background:var(--bg);color:var(--text);font-family:var(--sans);-webkit-font-smoothing:antialiased}
@@ -162,23 +167,41 @@ h1 em{font-style:italic;color:var(--mint)}
 .lines div{font-family:var(--serif);font-size:44px;color:var(--text);line-height:1.55}
 
 body{display:flex;flex-direction:column;gap:40px;padding:40px}
+
+/* platform lockup (from PlatformLayout .sb-brand) */
+.lock{display:flex;align-items:center;gap:12px;line-height:1;letter-spacing:0;text-transform:none}
+.lock img{width:38px;height:38px;object-fit:contain;display:block}
+.lock .w{display:flex;flex-direction:column}
+.lock .m{font-family:var(--tight);font-weight:800;font-size:22px;letter-spacing:-.02em;color:#fff;white-space:nowrap}
+.lock .m i{font-style:normal;font-weight:600;color:var(--muted)}
+.lock .s{font-family:var(--sans);font-size:10px;letter-spacing:.06em;color:var(--dim);font-weight:500;margin-top:5px;white-space:nowrap}
+.top .url{font-family:var(--sans);font-weight:500;letter-spacing:.14em;color:var(--dim);font-size:15px;text-transform:none}
+.pfoot .l,.pfoot{font-family:var(--tight);letter-spacing:.06em!important;font-weight:600}
+h1,.big,.hdr h2,.quote,.last,.hundred,.box div.r,.lines div,.rc .n{font-family:var(--serif)}
+h1{font-variation-settings:"opsz" 60,"SOFT" 0,"WONK" 0;font-weight:430;letter-spacing:-.01em}
+h1.caps{font-weight:560}
+.hundred,.box div.r{font-variation-settings:"opsz" 60;font-weight:430}
+h1 em{font-style:italic;color:var(--mint)}
+.compass-label,.eyebrow{color:var(--bright)}
+.eyebrow:before,.rule{background:var(--emerald)}
+.side .logo{font-family:var(--tight);font-weight:800;font-size:12px;letter-spacing:-.02em;color:#fff;text-transform:none;gap:7px}
+.side .logo i{font-style:normal;font-weight:600;color:var(--muted)}
+.side .logo img{width:20px;height:20px;object-fit:contain}
 </style></head><body><div class="stage portrait" id="s1">
   <svg class="contours" data-c="1"></svg>
   <div class="top">
-    <div class="brand"><span>G O X L</span><span class="sep"></span>
-      <svg class="mark" viewBox="0 0 24 24" fill="none" stroke="#2ecc71" stroke-width="2.2" stroke-linecap="round"><path d="M12 3v18M3 12h18M6 6l12 12M18 6L6 18"/><circle cx="12" cy="12" r="3.2" fill="#0a1a13"/></svg><span>ALLY</span></div>
+    <div class="lock"><img src="assets/ally-logo-mark-on-dark.png" alt=""><span class="w"><span class="m">GoXL <i>Ally</i></span><span class="s">by GoXL Entrepreneurship</span></span></div>
     <div class="url">goxlally.ai</div>
   </div>
   <div class="copy"><div class="eyebrow">A founder’s note · Sep 2026</div>
 <h1 class="xl" style="margin-top:210px">I built an AI<br>diagnosis engine.<br>Then I used it on<br><em>my own startup.</em></h1>
 <div class="rule"></div>
 <div class="sub" style="margin-top:0;color:var(--muted);font-size:30px;letter-spacing:.02em">NyayaSetu AI × Ally</div></div>
-  <div class="pfoot"><div class="l">GOXL | ALLY</div><div><span>01 / 06</span></div></div>
+  <div class="pfoot"><div class="l">GoXL Ally · The Founder’s Compass</div><div><span>01 / 06</span></div></div>
 </div><div class="stage portrait" id="s2">
   <svg class="contours" data-c="2"></svg>
   <div class="top">
-    <div class="brand"><span>G O X L</span><span class="sep"></span>
-      <svg class="mark" viewBox="0 0 24 24" fill="none" stroke="#2ecc71" stroke-width="2.2" stroke-linecap="round"><path d="M12 3v18M3 12h18M6 6l12 12M18 6L6 18"/><circle cx="12" cy="12" r="3.2" fill="#0a1a13"/></svg><span>ALLY</span></div>
+    <div class="lock"><img src="assets/ally-logo-mark-on-dark.png" alt=""><span class="w"><span class="m">GoXL <i>Ally</i></span><span class="s">by GoXL Entrepreneurship</span></span></div>
     <div class="url">goxlally.ai</div>
   </div>
   <div class="copy"><div class="eyebrow">Founder Clarity Report · Sep 2026</div>
@@ -190,7 +213,7 @@ body{display:flex;flex-direction:column;gap:40px;padding:40px}
   <div class="laptop">
     <div class="frame"><div class="screen">
       <div class="side">
-        <div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="#2ecc71" stroke-width="2.4" stroke-linecap="round"><path d="M12 3v18M3 12h18M6 6l12 12M18 6L6 18"/><circle cx="12" cy="12" r="3.2" fill="#061109"/></svg>ALLY</div>
+        <div class="logo"><img src="assets/ally-logo-mark-on-dark.png" alt="">GoXL <i>Ally</i></div>
         <div class="nav"><div>Compass</div><div>Founder DNA</div><div>Business DNA</div><div class="act">Clarity Report</div><div>Next Move</div><div>Knowledge</div></div>
         <div class="foot">DIAGNOSIS · 30 / 30<div class="bar"></div></div>
       </div>
@@ -239,12 +262,11 @@ body{display:flex;flex-direction:column;gap:40px;padding:40px}
       </div>
     </div></div>
     <div class="base"></div>
-  </div><div class="pfoot"><div class="l">GOXL | ALLY</div><div><span>02 / 06</span></div></div>
+  </div><div class="pfoot"><div class="l">GoXL Ally · The Founder’s Compass</div><div><span>02 / 06</span></div></div>
 </div><div class="stage portrait" id="s3">
   <svg class="contours" data-c="3"></svg>
   <div class="top">
-    <div class="brand"><span>G O X L</span><span class="sep"></span>
-      <svg class="mark" viewBox="0 0 24 24" fill="none" stroke="#2ecc71" stroke-width="2.2" stroke-linecap="round"><path d="M12 3v18M3 12h18M6 6l12 12M18 6L6 18"/><circle cx="12" cy="12" r="3.2" fill="#0a1a13"/></svg><span>ALLY</span></div>
+    <div class="lock"><img src="assets/ally-logo-mark-on-dark.png" alt=""><span class="w"><span class="m">GoXL <i>Ally</i></span><span class="s">by GoXL Entrepreneurship</span></span></div>
     <div class="url">goxlally.ai</div>
   </div>
   <div class="copy"><div class="eyebrow">How the diagnosis works</div>
@@ -258,12 +280,11 @@ body{display:flex;flex-direction:column;gap:40px;padding:40px}
  <div class="step"><div class="k">CLARITY</div><div class="v">Not a capability gap. <span>Product &amp; Execution scored higher.</span></div></div>
  <div class="step"><div class="k">NEXT MOVE</div><div class="v">Two weeks, one question to answer.</div></div>
 </div></div>
-  <div class="pfoot"><div class="l">GOXL | ALLY</div><div><span>03 / 06</span></div></div>
+  <div class="pfoot"><div class="l">GoXL Ally · The Founder’s Compass</div><div><span>03 / 06</span></div></div>
 </div><div class="stage portrait" id="s4">
   <svg class="contours" data-c="4"></svg>
   <div class="top">
-    <div class="brand"><span>G O X L</span><span class="sep"></span>
-      <svg class="mark" viewBox="0 0 24 24" fill="none" stroke="#2ecc71" stroke-width="2.2" stroke-linecap="round"><path d="M12 3v18M3 12h18M6 6l12 12M18 6L6 18"/><circle cx="12" cy="12" r="3.2" fill="#0a1a13"/></svg><span>ALLY</span></div>
+    <div class="lock"><img src="assets/ally-logo-mark-on-dark.png" alt=""><span class="w"><span class="m">GoXL <i>Ally</i></span><span class="s">by GoXL Entrepreneurship</span></span></div>
     <div class="url">goxlally.ai</div>
   </div>
   <div class="copy"><div class="eyebrow">NyayaSetu AI · in progress</div>
@@ -281,12 +302,11 @@ body{display:flex;flex-direction:column;gap:40px;padding:40px}
  <div class="r"><span class="num">03</span><span>Explain NyayaSetu out loud to someone who doesn’t know it. Note where they get lost.</span></div>
 </div>
 <div class="quote">“Building a good product doesn’t automatically mean people will use it.”</div></div>
-  <div class="pfoot"><div class="l">GOXL | ALLY</div><div><span>04 / 06</span></div></div>
+  <div class="pfoot"><div class="l">GoXL Ally · The Founder’s Compass</div><div><span>04 / 06</span></div></div>
 </div><div class="stage portrait" id="s5">
   <svg class="contours" data-c="5"></svg>
   <div class="top">
-    <div class="brand"><span>G O X L</span><span class="sep"></span>
-      <svg class="mark" viewBox="0 0 24 24" fill="none" stroke="#2ecc71" stroke-width="2.2" stroke-linecap="round"><path d="M12 3v18M3 12h18M6 6l12 12M18 6L6 18"/><circle cx="12" cy="12" r="3.2" fill="#0a1a13"/></svg><span>ALLY</span></div>
+    <div class="lock"><img src="assets/ally-logo-mark-on-dark.png" alt=""><span class="w"><span class="m">GoXL <i>Ally</i></span><span class="s">by GoXL Entrepreneurship</span></span></div>
     <div class="url">goxlally.ai</div>
   </div>
   <div class="copy"><div class="eyebrow">The operating loop</div>
@@ -300,12 +320,11 @@ body{display:flex;flex-direction:column;gap:40px;padding:40px}
  <div class="lr open"><div class="k">SHIP</div><div class="s">→ Continuing</div><div class="v">Prototype is on the website. Next iteration follows.</div></div>
  <div class="lr open"><div class="k">LEARN</div><div class="s">→ Continuing</div><div class="v">A good product doesn’t mean people will use it. Testing that.</div></div>
 </div></div>
-  <div class="pfoot"><div class="l">GOXL | ALLY</div><div><span>05 / 06</span></div></div>
+  <div class="pfoot"><div class="l">GoXL Ally · The Founder’s Compass</div><div><span>05 / 06</span></div></div>
 </div><div class="stage portrait" id="s6">
   <svg class="contours" data-c="6"></svg>
   <div class="top">
-    <div class="brand"><span>G O X L</span><span class="sep"></span>
-      <svg class="mark" viewBox="0 0 24 24" fill="none" stroke="#2ecc71" stroke-width="2.2" stroke-linecap="round"><path d="M12 3v18M3 12h18M6 6l12 12M18 6L6 18"/><circle cx="12" cy="12" r="3.2" fill="#0a1a13"/></svg><span>ALLY</span></div>
+    <div class="lock"><img src="assets/ally-logo-mark-on-dark.png" alt=""><span class="w"><span class="m">GoXL <i>Ally</i></span><span class="s">by GoXL Entrepreneurship</span></span></div>
     <div class="url">goxlally.ai</div>
   </div>
   <div class="copy"><div class="eyebrow">Introducing Ally</div>
@@ -313,7 +332,7 @@ body{display:flex;flex-direction:column;gap:40px;padding:40px}
 <div class="rule"></div>
 <div class="compass-label">THE FOUNDER’S COMPASS</div>
 <div class="lines"><div>Understand.</div><div>Diagnose.</div><div>Find the root cause.</div><div>Get clarity.</div><div>Know your next move.</div></div></div>
-  <div class="pfoot"><div class="l">GOXL × ALLY</div><div><span>goxlally.ai</span></div></div>
+  <div class="pfoot"><div class="l">GoXL Ally · The Founder’s Compass</div><div><span>goxlally.ai</span></div></div>
 </div>
 <script>
 document.querySelectorAll('svg.contours').forEach(svg=>{
