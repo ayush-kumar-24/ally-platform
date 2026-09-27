@@ -868,6 +868,17 @@ class Settings(BaseSettings):
     # UNAVAILABLE and confidence renormalises over the other four inputs, as before.
     ANSWER_CONSISTENCY_LLM: bool = False
 
+    # A second pass over the WHOLE graded session, after every answer has been
+    # graded on its own. The per-answer classifier sees one answer at a time and
+    # so cannot tell "early but organised" from "in trouble" -- both mis-readings
+    # have shipped, in both directions. Off => the per-answer grades stand
+    # exactly as today, which is why this is its own flag and defaults off.
+    #
+    # It can move a grade one band and no further, never touches
+    # not_applicable, and is discarded entirely if it wants to change more than
+    # a third of the session. See engines/calibration.py.
+    SESSION_CALIBRATION_LLM: bool = False
+
     # Distress LANGUAGE detection (#11). Off => the deterministic distress proxy
     # (distress-tagged Red answers). On => the LLM reads the founder's words and
     # FAILS CLOSED (a detector error routes the session to wellbeing support).

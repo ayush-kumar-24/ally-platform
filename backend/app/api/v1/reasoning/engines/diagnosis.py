@@ -26,10 +26,14 @@ class DeterministicDiagnosisEngine:
         category_engine: StandardDiagnosticEngine,
         stage_detector: StageDetector,
         symptom_detector: SymptomDetector,
+        calibrator=None,
     ):
         self.category_engine = category_engine
         self.stage_detector = stage_detector
         self.symptom_detector = symptom_detector
+        #: Optional whole-session grade review. Defaults to None so every
+        #: existing caller and test constructs this engine unchanged.
+        self.calibrator = calibrator
 
     async def diagnose(
         self,
@@ -45,6 +49,18 @@ class DeterministicDiagnosisEngine:
         unscored = tuple(
             a.answer_id for a in answers if a.answer_id not in classified_ids
         )
+
+        # 1b. The whole set, reviewed together -- BEFORE anything is computed
+        # from it. Category risk, stage, symptoms, root cause, confidence and
+        # the pillar scores all derive from these labels, so a label changed
+        # after this point would leave every one of them disagreeing with the
+        # grade the founder is shown. Never raises; returns the originals on
+        # any failure.
+        if self.calibrator is not None:
+            classifications = await self.calibrator.calibrate(
+                list(classifications), answers, questions,
+                context.config.question_scores,
+            )
 
         category_risks = self.category_engine.compute_category_risks(
             classifications, questions, context

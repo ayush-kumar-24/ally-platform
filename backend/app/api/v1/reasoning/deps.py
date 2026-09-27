@@ -164,6 +164,7 @@ def get_diagnosis_engine(
         category_engine=StandardDiagnosticEngine(get_answer_classifier(db)),
         stage_detector=build_stage_detector(db, repository),
         symptom_detector=SymptomDetector(repository),
+        calibrator=build_session_calibrator(db),
     )
 
 
@@ -219,6 +220,7 @@ def build_reasoning_service(db: Session) -> ReasoningService:
         category_engine=StandardDiagnosticEngine(get_answer_classifier(db)),
         stage_detector=build_stage_detector(db, repository),
         symptom_detector=SymptomDetector(repository),
+        calibrator=build_session_calibrator(db),
     )
     return ReasoningService(
         db=db,
@@ -303,6 +305,24 @@ def _build_action_plan_balancer(db: Session):
     return LLMActionPlanBalancer(
         provider_for_task(db, LLMTask.DIAGNOSIS_REASONING),
     )
+
+
+def build_session_calibrator(db: Session):
+    """Whole-session grade review when SESSION_CALIBRATION_LLM is on, else None.
+
+    None rather than a no-op object: DeterministicDiagnosisEngine checks for it
+    once, and a null implementation would hide an accidental misconfiguration
+    behind a pass that silently did nothing.
+
+    Reuses DIAGNOSIS_REASONING rather than introducing a new LLMTask, matching
+    build_recommendation_fallback and build_stage_detector: a new task value
+    needs a model_task_routing row to exist before it resolves, and adding one
+    here would make this fail for a reason unrelated to what it does.
+    """
+    if not settings.SESSION_CALIBRATION_LLM:
+        return None
+    from app.api.v1.reasoning.engines.calibration import SessionCalibrator
+    return SessionCalibrator(provider_for_task(db, LLMTask.DIAGNOSIS_REASONING))
 
 
 def build_stage_detector(db: Session, repository: ReasoningRepository) -> StageDetector:
