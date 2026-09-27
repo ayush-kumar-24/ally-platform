@@ -83,7 +83,31 @@ _BAND_FLOOR_SHIFT = Decimal("15")
 #: itself -- "Revenue Maturity is not expected at this stage. The score here
 #: measures intent." Telling a founder four months into an idea that she has a
 #: "Critical Gap" describes being early as being broken.
-_EARLY_STAGE_ORDERS = frozenset({1, 2})
+#:
+#: ORDERS 1-3, NOT 1-2. This was {1, 2} and it split a band the rest of the
+#: system does not split. stage_scope maps orders 2, 3 and 4 to ONE scope --
+#: "Part 3 treats these as ONE band with one dimension set" -- on one
+#: 30-question budget, and onboarding offers them as one choice ("Building from
+#: 0 -> 1"). So Validation and Prototype/MVP founders are asked the same
+#: questions, scored the same way, and then told opposite things about the same
+#: number: "Not started yet" at order 2, "Critical Gap" at order 3. A live
+#: report did exactly that to a founder whose own words were "I still don't
+#: know if enough real customers actually want it" -- four of her six pillars
+#: read Critical Gap.
+#:
+#: Order 3 belongs with them by the product's own description of it: "Building
+#: the first working version". Nothing has been sold yet, so Revenue Maturity
+#: at the bottom is the stage, not a fault -- the same argument that put orders
+#: 1 and 2 here.
+#:
+#: Order 4 stays out, deliberately. Early Traction is "First customers and
+#: early revenue": a founder who IS selling and whose Revenue Maturity is at
+#: the floor has tried and it is not working, which is what the bottom band's
+#: words are for.
+#:
+#: Wording only. The score is untouched, and _flag_agrees_with_band permits a
+#: red flag on either bottom band, so nothing here changes what is flagged.
+_EARLY_STAGE_ORDERS = frozenset({1, 2, 3})
 _EARLY_BOTTOM_BAND = "Not started yet"
 _BOTTOM_BAND = "Critical Gap"
 
