@@ -57,85 +57,52 @@ def _int(value: Decimal) -> Decimal:
     return value.quantize(_ONE, rounding=ROUND_HALF_UP)
 
 
-#: How far the band floors are lowered, so that a founder who answers amber to
-#: everything reads as Developing rather than Needs Attention.
+#: The bottom band, by name, so `_flag_agrees_with_band` can ask whether a red
+#: flag may fire without re-deriving it from the catalogue rows.
 #:
-#: The scoring formula is (1 - sum/(count*2)) * 100 with green 0, amber 1, red
-#: 2, so all-amber lands on exactly 50 -- and the catalogue's bands put 50 in
-#: "Needs Attention". Amber means a real practice with a real gap, which is the
-#: ordinary state of a working business, so the effect was that a fairly graded
-#: session still read as a warning from end to end.
+#: NO STAGE ADJUSTMENT HERE, DELIBERATELY. Two used to live at this spot: a
+#: 15-point shift of the middle band floors, and a rename of the bottom band to
+#: "Not started yet" for early-stage founders. Both were priors -- decisions
+#: about what a founder's report would say, made from their stage, before a
+#: single answer of theirs was read.
 #:
-#: Measured, not chosen. A keyed ideation run graded 5 red / 7 amber / 1 green
-#: -- a spread with genuine variation in it -- and produced Market Clarity 42
-#: ("Needs Attention"), Strategic Clarity 17, and an overall of 34: one point
-#: under the Critical Gap line. The grading was right. The bands sat above
-#: where honest grading lands.
+#: They were removed on the product owner's call, and the reasoning is theirs:
+#: the report is built from the founder's answers and the diagnosis that came
+#: out of them, so nothing should sit on top of the score deciding what a stage
+#: is allowed to read. The numbers behind both (15 points; orders 1-3) were
+#: judgement calls with no source in the catalogue or the spec, which is the
+#: other half of why they are gone.
 #:
-#: Applied here rather than by editing readiness_pillars.score_bands, because
-#: those rows are content the team edits directly and carry the written band
-#: descriptions with them. This moves only where the boundaries fall, leaves
-#: the prose alone, and keeps the change in one reviewable place.
-_BAND_FLOOR_SHIFT = Decimal("15")
-
-#: The bottom band's wording is written for a business that has tried and is
-#: failing. At ideation nothing is built yet, and readiness_pillars says so
-#: itself -- "Revenue Maturity is not expected at this stage. The score here
-#: measures intent." Telling a founder four months into an idea that she has a
-#: "Critical Gap" describes being early as being broken.
-#:
-#: ORDERS 1-3, NOT 1-2. This was {1, 2} and it split a band the rest of the
-#: system does not split. stage_scope maps orders 2, 3 and 4 to ONE scope --
-#: "Part 3 treats these as ONE band with one dimension set" -- on one
-#: 30-question budget, and onboarding offers them as one choice ("Building from
-#: 0 -> 1"). So Validation and Prototype/MVP founders are asked the same
-#: questions, scored the same way, and then told opposite things about the same
-#: number: "Not started yet" at order 2, "Critical Gap" at order 3. A live
-#: report did exactly that to a founder whose own words were "I still don't
-#: know if enough real customers actually want it" -- four of her six pillars
-#: read Critical Gap.
-#:
-#: Order 3 belongs with them by the product's own description of it: "Building
-#: the first working version". Nothing has been sold yet, so Revenue Maturity
-#: at the bottom is the stage, not a fault -- the same argument that put orders
-#: 1 and 2 here.
-#:
-#: Order 4 stays out, deliberately. Early Traction is "First customers and
-#: early revenue": a founder who IS selling and whose Revenue Maturity is at
-#: the floor has tried and it is not working, which is what the bottom band's
-#: words are for.
-#:
-#: Wording only. The score is untouched, and _flag_agrees_with_band permits a
-#: red flag on either bottom band, so nothing here changes what is flagged.
-_EARLY_STAGE_ORDERS = frozenset({1, 2, 3})
-_EARLY_BOTTOM_BAND = "Not started yet"
+#: The accepted cost, stated plainly at the time: an early founder whose pillar
+#: genuinely scores at the floor now reads "Critical Gap" for not having
+#: started yet. If that wording needs to change for early stages, it changes in
+#: readiness_pillars.score_bands -- content the team writes -- not here.
 _BOTTOM_BAND = "Critical Gap"
 
 
 def _flag_agrees_with_band(band: str | None) -> bool:
     """Whether a red flag may fire on a pillar showing `band`.
 
-    readiness_pillars.red_flag_threshold is a fixed number per pillar; the band
-    is decided separately by `_band_for`, which lowers the floors by
-    _BAND_FLOOR_SHIFT and renames the bottom band at early stages. The two were
-    never reconciled, so the same score got two verdicts on one page:
-
-      * a live ideation report called all four pillars "Not started yet" or
-        "Needs Attention" and then listed all four under RED FLAG PILLARS;
-      * a live growth-stage report flagged three pillars reading "Needs
-        Attention" -- the threshold is 40 and that band starts at 36.
+    readiness_pillars.red_flag_threshold is a fixed number per pillar and the
+    band comes from that pillar's score_bands rows, and the two were never
+    reconciled -- so the same score got two verdicts on one page. A live
+    growth-stage report flagged three pillars reading "Needs Attention": the
+    threshold is 40 and that band starts at 36.
 
     A red flag is the report's strongest claim: this one is WRONG. It cannot
-    sit beside a band that says otherwise. So the flag is allowed only where
-    the page already says the pillar is at the bottom -- which is also the
-    honest reading at ideation, where a pillar with nothing in it is the stage
-    rather than a fault.
+    sit beside a band that says otherwise, so the flag is allowed only where
+    the page already puts the pillar at the bottom.
 
     The threshold still decides WHETHER to flag within that band; this decides
     only where flagging is permitted at all. A pillar with no band (under the
     evidence floor) is never flagged, which is what already happened.
+
+    Matched by NAME against the catalogue's bottom band. If the team renames
+    that row, rename it here -- a rename would otherwise turn every red flag
+    off silently, which is why this is a named constant and not a string
+    inline.
     """
-    return band in (_BOTTOM_BAND, _EARLY_BOTTOM_BAND)
+    return band == _BOTTOM_BAND
 
 
 def _stage_order(context) -> int | None:
@@ -155,13 +122,13 @@ def _stage_order(context) -> int | None:
 
 
 def _band_for(score_bands, value: Decimal, stage_order: int | None = None) -> str | None:
-    """Return the band `level` for `value`, with the middle floors shifted down.
+    """Return the band `level` for `value`, straight from readiness_pillars.
 
-    The BOTTOM band keeps its floor at 0 -- there is nothing beneath it to
-    shift into -- and the TOP band keeps its own floor, so "Strong" is exactly
-    as hard to reach as it was. Only the boundaries in between move, and
-    ceilings follow from the floors so the bands still tile 0-100 with no gap
-    for a value to fall through.
+    The catalogue's own floors and ceilings, with nothing added. `stage_order`
+    is accepted and unused: it is what the removed stage adjustment read, and
+    every caller passes it. Kept in the signature so the band rule has one
+    obvious place to reach the stage again if the team ever decides it should
+    -- and so that removing it does not silently change a call site.
     """
     bands = list(score_bands or [])
     if not bands:
@@ -169,30 +136,15 @@ def _band_for(score_bands, value: Decimal, stage_order: int | None = None) -> st
     ordered = sorted(bands, key=lambda b: Decimal(str(b.get("range_min", 0))))
     last = len(ordered) - 1
 
-    floors: list[Decimal] = []
     for i, band in enumerate(ordered):
         low = Decimal(str(band.get("range_min", 0)))
-        if i == 0:
-            floors.append(Decimal("0"))
-        elif i == last:
-            floors.append(low)
-        else:
-            floors.append(max(Decimal("0"), low - _BAND_FLOOR_SHIFT))
-
-    level = None
-    for i, band in enumerate(ordered):
-        ceiling = (Decimal(str(band.get("range_max", 100))) if i == last
-                   else floors[i + 1] - 1)
-        if floors[i] <= value <= ceiling:
-            level = band.get("level")
-            break
-    if level is None:
-        level = ordered[last].get("level")
-
-    if (level == _BOTTOM_BAND and stage_order is not None
-            and stage_order in _EARLY_STAGE_ORDERS):
-        return _EARLY_BOTTOM_BAND
-    return level
+        high = Decimal(str(band.get("range_max", 100)))
+        if low <= value <= high:
+            return band.get("level")
+    # Above the top band's ceiling, or in a gap the rows leave between two
+    # bands: the highest band is the only honest answer for a value that
+    # cleared every floor below it.
+    return ordered[last].get("level")
 
 
 @runtime_checkable
