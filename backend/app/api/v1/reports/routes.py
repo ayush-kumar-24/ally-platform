@@ -10,7 +10,8 @@ from __future__ import annotations
 
 import secrets
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import (APIRouter, BackgroundTasks, Depends, HTTPException, Request,
+                     Response, status)
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
@@ -21,7 +22,9 @@ from app.api.v1.entitlement_gates import require_recommendations, require_report
 from app.core.container import container
 from app.plans.catalog import Feature
 from app.api.v1.reports.document import build_report_document
-from app.api.v1.reports.dna_summaries import ensure_dna_summaries
+from app.api.v1.reports.dna_summaries import (
+    current_summaries, ensure_dna_summaries, pending_dimensions,
+)
 from app.api.v1.reports.generator import ReportNarrative, ReportNarrativeGenerator
 from app.api.v1.reports.payload import build_report_payload
 from app.api.v1.reports.pdf_delivery import (
@@ -36,7 +39,7 @@ from app.api.v1.reports.schemas import (
     SharedReportView, SharedSection,
 )
 from app.core.logger import logger
-from app.db.session import get_db, set_admin_rls_context
+from app.db.session import SessionLocal, get_db, set_admin_rls_context
 from app.models import Founder, FounderReport
 
 
@@ -372,16 +375,63 @@ def full_report(
     )
 
 
+def _fill_dna_summaries(report_id: int) -> None:
+    """Generate this report's card previews, after its response has been sent.
+
+    Its own session: the request's is closed by the time a background task runs.
+    Never raises -- ensure_dna_summaries swallows everything already, and a
+    failure here must not reach the founder, who has their page.
+    """
+    db = SessionLocal()
+    try:
+        report = db.get(FounderReport, report_id)
+        if report is not None:
+            ensure_dna_summaries(db, report)
+    except Exception as exc:  # noqa: BLE001 -- a cache fill, off the request
+        logger.warning("founder DNA summary task failed for report %s: %s", report_id, exc)
+    finally:
+        db.close()
+
+
 @router.get("/{report_id}/founder-dna", response_model=SectionSlice)
-def founder_dna(report_id: int, founder: Founder = Depends(get_founder_record),
+def founder_dna(report_id: int, background: BackgroundTasks,
+                      founder: Founder = Depends(get_founder_record),
                       db: Session = Depends(get_db)) -> SectionSlice:
+    """The Founder DNA section, with whatever card previews exist right now.
+
+    THE PREVIEWS ARE NOT GENERATED HERE. They were, and it cost 7.7s and 10.1s
+    on two calls in a single live page load, against 399ms for the Business DNA
+    section beside it -- a synchronous LLM call on a 25-second timeout, sitting
+    in front of the response.
+
+    Worse, most of those calls could not affect the page even in principle. The
+    narrative is cached on narrative_snapshot the first time a report is opened
+    and the previews are baked into it, so once that snapshot exists a preview
+    written now reaches nothing. Reading them back from the report at response
+    time removes that trap: the cache fills after the response, and the next
+    view picks it up without the snapshot having to be rebuilt.
+
+    First view shows the founder's own answers. That is the fallback
+    dna_summaries.py already documents for a dimension it cannot summarise, and
+    it is a plainer page, never a broken one.
+    """
     report = _owned_report(db, founder, report_id)
-    # Fills a cache on the report the first time it is read, so the cards can
-    # preview each dimension in a few bullets instead of a wall of prose. Never
-    # raises and never changes what the founder said -- see dna_summaries.py.
-    ensure_dna_summaries(db, report)
     n = _build_narrative(db, report)
-    return SectionSlice(report_id=report_id, section=_section(n, "founder_dna"))
+    section = _section(n, "founder_dna")
+    if section is not None:
+        summaries = current_summaries(report)
+        facts = dict(section.facts or {})
+        # Absent rather than empty: the frontend renders the answers when there
+        # is no `_summaries` key, and an empty dict is not the same as "none".
+        if summaries:
+            facts["_summaries"] = summaries
+        else:
+            facts.pop("_summaries", None)
+        section = SectionOut(key=section.key, heading=section.heading,
+                             prose=section.prose, facts=facts)
+    if pending_dimensions(report):
+        background.add_task(_fill_dna_summaries, report.report_id)
+    return SectionSlice(report_id=report_id, section=section)
 
 
 @router.get("/{report_id}/business-dna", response_model=SectionSlice)

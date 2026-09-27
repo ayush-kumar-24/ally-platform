@@ -52,6 +52,43 @@ def _dimensions(founder_dna: dict) -> dict[str, list[str]]:
     return out
 
 
+def current_summaries(report: FounderReport) -> dict[str, list[str]]:
+    """The card previews stored on this report right now, minus the empty ones.
+
+    Read at RESPONSE time rather than taken from the narrative. The narrative is
+    cached on narrative_snapshot the first time a report is opened, and the
+    summaries are baked into it -- so a summary written afterwards could never
+    reach the page, and filling the cache on a report whose snapshot already
+    existed was work whose result nothing would ever read.
+    """
+    stored = (report.founder_dna or {}).get(SUMMARIES_KEY)
+    if not isinstance(stored, dict):
+        return {}
+    return {
+        code: [str(b) for b in bullets if isinstance(b, str) and b.strip()]
+        for code, bullets in stored.items()
+        if isinstance(bullets, list) and bullets
+    }
+
+
+def pending_dimensions(report: FounderReport) -> dict[str, list[str]]:
+    """Dimensions with no summary attempt recorded yet -- what a run would send.
+
+    Public so the endpoint can decide whether there is any work AT ALL before
+    scheduling it, rather than starting a task that opens a database session to
+    discover there is nothing to do.
+    """
+    if not settings.FOUNDER_DNA_SUMMARY_LLM:
+        return {}
+    founder_dna = report.founder_dna or {}
+    dimensions = _dimensions(founder_dna)
+    if not dimensions:
+        return {}
+    existing = founder_dna.get(SUMMARIES_KEY)
+    existing = existing if isinstance(existing, dict) else {}
+    return {code: answers for code, answers in dimensions.items() if code not in existing}
+
+
 def ensure_dna_summaries(db: Session, report: FounderReport) -> None:
     """Fill in any missing card previews for this report. Never raises.
 
@@ -59,20 +96,21 @@ def ensure_dna_summaries(db: Session, report: FounderReport) -> None:
     dimension later pays for that one rather than for all of them again, and a
     run that only half-succeeded is completed by the next read rather than
     redone.
-    """
-    if not settings.FOUNDER_DNA_SUMMARY_LLM:
-        return
 
+    NOT ON THE REQUEST PATH. This is a synchronous LLM call against a 25-second
+    timeout: live-measured at 7.7s and 10.1s on two calls in ONE page load,
+    beside 399ms for the Business DNA section that does everything else the same
+    way. The endpoint schedules it after the response instead -- the first view
+    of a report renders the founder's own answers, which is the documented
+    fallback, and the view after that has the previews.
+    """
     founder_dna = report.founder_dna or {}
-    dimensions = _dimensions(founder_dna)
-    if not dimensions:
+    missing = pending_dimensions(report)
+    if not missing:
         return
 
     existing = founder_dna.get(SUMMARIES_KEY)
     existing = existing if isinstance(existing, dict) else {}
-    missing = {code: answers for code, answers in dimensions.items() if code not in existing}
-    if not missing:
-        return
 
     try:
         provider = provider_for_task(

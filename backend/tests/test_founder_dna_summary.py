@@ -225,3 +225,44 @@ def test_an_empty_summary_is_never_offered_as_a_summary(monkeypatch):
     assert {c: tuple(b) for c, b in stored.items() if b} == {
         "core_values": ("Pulled a batch",)
     }
+
+
+# --- what the endpoint reads back, and what it no longer waits for ----------
+
+def test_only_non_empty_previews_are_offered_to_the_page():
+    """An attempted-but-unsummarised dimension is stored as [] so it is not
+    re-sent. It must not travel to the page as a preview -- the card renders
+    the founder's own answer instead."""
+    from app.api.v1.reports.dna_summaries import current_summaries
+
+    report = _Report({
+        "core_values": ["a real paragraph"],
+        "focus_attention": ["Monday."],
+        "_summaries": {"core_values": ["Pulled a batch"], "focus_attention": []},
+    })
+    assert current_summaries(report) == {"core_values": ["Pulled a batch"]}
+
+
+def test_nothing_is_scheduled_once_every_dimension_has_been_attempted(monkeypatch):
+    """The endpoint asks this before scheduling the background fill. It was the
+    7.7s and 10.1s on the request path, twice in one page load."""
+    from app.api.v1.reports import dna_summaries as mod
+
+    monkeypatch.setattr(mod.settings, "FOUNDER_DNA_SUMMARY_LLM", True, raising=False)
+
+    done = _Report({
+        "core_values": ["a real paragraph"],
+        "focus_attention": ["Monday."],
+        "_summaries": {"core_values": ["Pulled a batch"], "focus_attention": []},
+    })
+    assert mod.pending_dimensions(done) == {}
+
+    fresh = _Report({"core_values": ["a real paragraph"]})
+    assert mod.pending_dimensions(fresh) == {"core_values": ["a real paragraph"]}
+
+
+def test_the_feature_flag_off_schedules_nothing(monkeypatch):
+    from app.api.v1.reports import dna_summaries as mod
+
+    monkeypatch.setattr(mod.settings, "FOUNDER_DNA_SUMMARY_LLM", False, raising=False)
+    assert mod.pending_dimensions(_Report({"core_values": ["a real paragraph"]})) == {}
