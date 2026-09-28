@@ -30,7 +30,9 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.schemas.founder import BusinessRealityCheck, CleanStrList, FounderRealityCheck  # noqa: F401 (re-exported for callers of this module)
+from app.schemas.founder import (  # noqa: F401 (re-exported for callers of this module)
+    BusinessRealityCheck, CleanStrList, FounderRealityCheck, TeamSize,
+)
 
 # Mirrors the founders experience_level CHECK, so a bad value is a clean 422
 # at the API instead of a 500 from the database.
@@ -75,6 +77,7 @@ class BusinessInfoRead(BaseModel):
     product_description: str | None = None
     problem_statement: str | None = None
     current_revenue: str | None = None
+    team_size: str | None = None
     customer_segment: list[str] | None = None
     customer_segment_other: str | None = None
     industry: str | None = None
@@ -91,6 +94,16 @@ class BusinessInfoUpdate(BaseModel):
     # The client sends a stage name or label ("Validation", "Stage 0->1"); the
     # route resolves it to stage_id. Sending a bad value is a 422.
     stage: str | None = Field(default=None, min_length=1, max_length=50)
+    # HOW MANY PEOPLE WORK HERE. The column and its six coded values have
+    # existed since the original schema; nothing ever asked for them, so every
+    # founder row holds NULL -- and the diagnosis, which has no other way to
+    # know, walks a solo founder through questions about how their team
+    # communicates and how they delegate.
+    #
+    # `TeamSize` is reused from schemas.founder rather than redeclared, so this
+    # and PATCH /profile (FounderUpdate, which has accepted team_size all
+    # along) cannot drift from each other or from the column's CHECK.
+    team_size: TeamSize | None = None
     building_summary: str | None = Field(default=None, max_length=5000)
     # Path 2's "What is it?" -- distinct from building_summary (the name).
     product_description: str | None = Field(default=None, max_length=5000)
