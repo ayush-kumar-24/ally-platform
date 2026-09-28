@@ -97,6 +97,34 @@ _INTERNAL_FACT_KEYS = frozenset({
 })
 
 
+#: One answer's worth of card. Long enough for a couple of plain sentences;
+#: past that a card stops being a card. Matches narrator._DIMENSION_SUMMARY_CHARS,
+#: but applied PER ANSWER rather than to all of a dimension's answers joined.
+_ANSWER_CHARS = 220
+
+
+def _trim_each(value):
+    """Trim each answer in a dimension, keeping them separate.
+
+    The alternative -- joining them and trimming the result -- is what produced
+    "Steering alone Hiring for the Chakan plant in 2023." and, worse, dropped
+    whichever answers fell past the cut entirely.
+
+    Cut on a word boundary: a card ending mid-word reads as a bug rather than
+    as a trim.
+    """
+    values = value if isinstance(value, (list, tuple)) else [value]
+    out = []
+    for item in values:
+        if not isinstance(item, str) or not item.strip():
+            continue
+        text = " ".join(item.split())
+        if len(text) > _ANSWER_CHARS:
+            text = text[:_ANSWER_CHARS].rsplit(" ", 1)[0] + "\u2026"
+        out.append(text)
+    return out
+
+
 def _founder_facts(facts: dict) -> dict:
     """Drop internal routing keys and empty values from founder-facing facts.
 
@@ -244,8 +272,29 @@ class ReportNarrativeGenerator:
         summarise = getattr(self.narrator, "summarise_dimensions", None)
         if not callable(summarise):
             return facts
+        # A dimension whose questions we have is NOT summarised.
+        #
+        # summarise_dimensions takes a dimension's list of answers and returns
+        # ONE string for it. For the template narrator that means joining them:
+        # Decision Style held "Steering alone" and "Hiring for the Chakan plant
+        # in 2023" -- answers to two unrelated questions -- and the card read
+        # "Steering alone Hiring for the Chakan plant in 2023." Two true
+        # answers merged into one sentence that says neither.
+        #
+        # Where we have the question behind each answer, pairing them is
+        # strictly better than merging them, so those dimensions keep their
+        # lists and the document renders question-then-answer. The problem
+        # summarising solved -- one card carrying three paragraphs -- is handled
+        # by trimming each ANSWER instead, below.
+        asked = facts.get("_questions") or {}
+        paired = {k for k in facts if isinstance(asked.get(k), (list, tuple))
+                  and any(str(q).strip() for q in asked[k])}
         prose_facts = {k: v for k, v in facts.items()
-                       if k not in self._DNA_STRUCTURED_FACTS}
+                       if k not in self._DNA_STRUCTURED_FACTS
+                       and not str(k).startswith("_")
+                       and k not in paired}
+        if paired:
+            facts = {**facts, **{k: _trim_each(facts[k]) for k in paired}}
         if not prose_facts:
             return facts
         try:
@@ -461,6 +510,19 @@ class ReportNarrativeGenerator:
             }
             if summaries:
                 facts["_summaries"] = summaries
+            # The question behind each answer, so a card can show what was
+            # asked. Underscore-prefixed for the same reason _summaries is:
+            # factList() on the frontend and _facts_html in the document both
+            # skip these keys as machinery, and each looks the map up by the
+            # dimension it is rendering rather than treating it as a dimension
+            # of its own.
+            asked = {
+                code: list(questions)
+                for code, questions in p.dimension_questions.items()
+                if code in facts and questions
+            }
+            if asked:
+                facts["_questions"] = asked
             return slots, facts
 
         if key == "psychological_note":
@@ -639,8 +701,16 @@ class ReportNarrativeGenerator:
             slots = {"stated_symptom": p.stated_symptom, "probes": probes,
                      "root_causes": causes,
                      "diagnosis_answers": p.diagnosis_answers}
-            facts = {"probes": probes, "root_causes": causes,
-                     "diagnosis_answers": p.diagnosis_answers}
+            # `diagnosis_answers` is a SLOT, not a fact. As a fact it rendered a
+            # labelled row of its own reading "Diagnosis Answers / 30", and it
+            # said nothing: a completed session answers exactly its stage's
+            # question budget, so the number is 30 on every growth-stage report
+            # and 20 on every ideation one. A founder reading several reports
+            # saw the same badge every time and reasonably asked what it was
+            # for. The prose above it already gives the count IN CONTEXT --
+            # "this reads from 4 questions in your own words and 30 diagnosis
+            # answers" -- which is where a count belongs.
+            facts = {"probes": probes, "root_causes": causes}
             return slots, facts
 
         if key == "recommended_roadmap":

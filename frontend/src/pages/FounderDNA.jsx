@@ -160,7 +160,12 @@ function FounderDNAView({ section, report }) {
                       is scannable at rest and every answer is still visible;
                       "Read more" opens them in full. Nothing is summarised,
                       rewritten or cut -- not here and not in storage. */}
-                  <ClampedList items={f.items} summary={summaries[f.key]} lines={2} />
+                  <ClampedList
+                    items={f.items}
+                    questions={f.questions}
+                    summary={summaries[f.key]}
+                    lines={2}
+                  />
                 </div>
               ))}
             </div>

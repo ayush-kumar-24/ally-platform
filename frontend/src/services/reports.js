@@ -202,6 +202,19 @@ export function factList(facts) {
          answer. A single-string fact is a one-item list, so callers do not
          need to branch. */
       items: (Array.isArray(value) ? value : [value]).map(readable).filter(Boolean),
+      /* THE QUESTION EACH ANSWER ANSWERS, index-aligned with `items`.
+         These questions ask for a specific moment -- "when did you last lose a
+         day to something that did not matter?" -- so the answers are specific
+         moments, and a card showing the answer alone reads as a non-sequitur
+         under its heading. A live report's Focus Attention card said "Monday.";
+         What drives you said "The bridge".
+         Written by the backend under `_questions`, keyed by dimension code, so
+         it is skipped by the filter above like every other underscore key. */
+      questions: (() => {
+        const asked = facts._questions && facts._questions[key];
+        if (!Array.isArray(asked)) return [];
+        return asked.map((q) => (typeof q === 'string' ? q.trim() : ''));
+      })(),
     }))
     .filter(f => f.value !== '');
 }

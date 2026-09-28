@@ -353,6 +353,19 @@
    card already carries its accent on the icon. */
 .fd-bullets li::marker { color: var(--ink, #16241c); }
 
+/* The question each answer answers. Quieter than the answer on purpose: the
+   founder's own words are the content, and this is the context that makes them
+   readable. Block, so a long question wraps above the answer rather than
+   running into it. */
+.fd-bullet-q {
+  display: block;
+  font-size: 12.5px;
+  line-height: 1.45;
+  font-style: italic;
+  color: var(--muted, #556458);
+  margin: 0 0 3px;
+}
+
 .fd-bullet-text {
   /* Founders' answers arrive as one unbroken run with no paragraph breaks of
      their own, so long ones need both of these to wrap rather than to set the

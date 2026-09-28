@@ -434,9 +434,14 @@ def _high_low(categories: Sequence[Mapping[str, Any]],
                      'will use to fix the column on the right.</p>')
 
     return (
-        "<p>Every part of your business we looked at, in order. On the left is what "
-        "is working that you can build on. On the right is what needs your "
-        "attention next.</p>"
+        # NO "left" AND "right". The two panels are a 1fr 1fr grid above 860px
+        # and stack into one column below it -- and the PDF stacks them too, so
+        # this sentence was wrong in the one place a founder is most likely to
+        # read it slowly. Each panel already carries its own heading; the copy
+        # names them instead of pointing at where they sit.
+        "<p>Every part of your business we looked at, in order. First what is "
+        "working that you can build on, then what needs your attention "
+        "next.</p>"
         '<div class="split">'
         '<div class="panel panel-strength"><div class="panel-title"><span class="dot"></span>'
         f'Lean on this</div>{left_body}</div>'
@@ -856,6 +861,47 @@ def _fact_value(value: Any) -> str:
     return e(value)
 
 
+def _asked_for(facts: Mapping[str, Any], key: str) -> list[str]:
+    """The questions behind this fact's answers, index-aligned with them.
+
+    A list, not one string. A dimension holds up to three answers and they come
+    from DIFFERENT questions -- Decision Style held "Steering alone" and
+    "Hiring for the Chakan plant in 2023", which answer two unrelated things.
+    One question printed above both would explain the first and misattribute
+    the second.
+    """
+    asked = (facts or {}).get("_questions")
+    if not isinstance(asked, dict):
+        return []
+    questions = asked.get(key)
+    if isinstance(questions, str):
+        return [questions.strip()]
+    if isinstance(questions, (list, tuple)):
+        return [q.strip() if isinstance(q, str) else "" for q in questions]
+    return []
+
+
+def _asked_and_answered(value: Any, questions: Sequence[str]) -> str:
+    """Answers paired with the question each one actually answers.
+
+    Falls back to plain rendering when the shapes do not line up -- a stored
+    report from before questions were carried, or a dimension whose lists
+    somehow differ in length. A card that shows the answers alone is the old
+    behaviour; one that pairs them wrongly is worse than either.
+    """
+    if not isinstance(value, (list, tuple)):
+        return ""
+    answers = [str(v).strip() for v in value
+               if isinstance(v, (str, int, float)) and str(v).strip()]
+    if not answers or len(questions) < len(answers):
+        return ""
+    items = []
+    for answer, question in zip(answers, questions):
+        asked = (f'<div class="fact-q">{e(question)}</div>' if question else "")
+        items.append(f'<li>{asked}<span class="fact-a">{e(answer)}</span></li>')
+    return '<ul class="fact-list qa">' + "".join(items) + "</ul>"
+
+
 def _facts_html(facts: Mapping[str, Any], skip: Sequence[str] = ()) -> str:
     """Founder-facing facts as labelled rows. Internal keys are already stripped
     upstream by generator._founder_facts; this only shapes what is left."""
@@ -887,8 +933,21 @@ def _facts_html(facts: Mapping[str, Any], skip: Sequence[str] = ()) -> str:
         # printed under a title-cased version of its own name.
         if not label:
             continue
+        # THE QUESTION, WHERE THERE IS ONE. A Founder DNA card is the founder's
+        # own answer, and these questions ask for a specific moment -- so the
+        # answers are specific moments. A live report's FOCUS ATTENTION card
+        # read "Monday."; CORE MOTIVATION read "The bridge"; EMOTIONAL
+        # INTELLIGENCE read "Our Halol plant head, Ramesh, 2022." Every one is
+        # a true answer, and none of them means anything under a heading alone.
+        #
+        # Read out of the same facts mapping rather than passed in, because the
+        # generator files it beside the dimension it belongs to and this loop
+        # already has the key to look it up with.
+        questions = _asked_for(facts, key)
+        paired = _asked_and_answered(value, questions) if questions else ""
+        body = paired or rendered
         rows.append(f'<div class="fact"><span class="fact-k">{e(label)}</span>'
-                    f'<div class="fact-v">{rendered}</div></div>')
+                    f'<div class="fact-v">{body}</div></div>')
     return f'<div class="facts">{"".join(rows)}</div>' if rows else ""
 
 

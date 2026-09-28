@@ -309,6 +309,11 @@ STYLE = """
 }
 .rp .fact-k{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
   color:var(--signal);overflow-wrap:anywhere;}
+.rp .fact-q{font-size:12.5px;line-height:1.45;color:var(--ink-faint);font-style:italic;margin:0 0 3px;}
+.rp .fact-list.qa{list-style:none;padding:0;margin:0;}
+.rp .fact-list.qa li{margin:0 0 12px;padding:0;}
+.rp .fact-list.qa li:last-child{margin-bottom:0;}
+.rp .fact-a{display:block;}
 .rp .fact-v{font-size:14.5px;line-height:1.55;color:var(--ink-soft);
   min-width:0;overflow-wrap:anywhere;}
 .rp .fact-list{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:7px;
