@@ -201,3 +201,61 @@ def test_the_read_leads_the_card_and_the_answers_back_it_up():
     assert "A sales manager gave 9% away without asking." in html
     # The read comes first: it is what the heading promises.
     assert html.index("You mind more") < html.index("In your words")
+
+
+# --- the pillar card says what put the area where it is ---------------------
+
+def test_a_pillar_card_carries_the_answer_that_put_it_there():
+    """The band text is catalogue prose -- the same five sentences about
+    co-founder conflict reach every founder in that band. A founder asked us to
+    fix the content, and he was right: nothing in it was about him."""
+    from app.api.v1.reports.document import _pillar_verdicts
+
+    html = _pillar_verdicts([{
+        "pillar_name": "Team & Leadership", "band": "Critical Gap",
+        "band_description": "The team is dysfunctional or non-existent.",
+        "evidence": [{"question": "Where does the same problem keep resurfacing?",
+                      "answer": "Every fix dies when I stop driving it."}],
+    }], hedged=False)
+
+    assert "What this usually means" in html, "the calibration stays"
+    assert "What put it here" in html
+    assert "Every fix dies when I stop driving it." in html
+    assert "Where does the same problem keep resurfacing?" in html
+    # The general text first, then theirs: one is about businesses in this
+    # band, the other is about them.
+    assert html.index("What this usually means") < html.index("What put it here")
+
+
+def test_a_pillar_with_no_evidence_renders_exactly_as_before():
+    """An older report carries no pillar evidence, and a pillar whose answers
+    all came back green has none to carry."""
+    from app.api.v1.reports.document import _pillar_verdicts
+
+    html = _pillar_verdicts([{
+        "pillar_name": "Market Clarity", "band": "Strong",
+        "band_description": "Deep, validated market knowledge.",
+    }], hedged=False)
+    assert "What put it here" not in html
+    assert "Deep, validated market knowledge." in html
+
+
+def test_the_root_cause_prose_does_not_repeat_its_boilerplate():
+    """Three causes used to produce the secondaries' identical sentence twice
+    in consecutive breaths, in a block a founder told us he would not read."""
+    from app.api.v1.reports.narrator import TemplateNarrator
+    from types import SimpleNamespace
+
+    prose = TemplateNarrator()._problem_path(
+        {"root_causes": [
+            {"name": "Lack of Trust", "rank": 1, "confirmation_status": "unconfirmed"},
+            {"name": "Poor User Experience", "rank": 2, "confirmation_status": "unconfirmed"},
+            {"name": "Founder Bypasses Managers", "rank": 3, "confirmation_status": "unconfirmed"},
+        ], "stated_symptom": "Margins are slipping."},
+        SimpleNamespace(persona="Auditor"))
+
+    assert prose.count("worth an eye on") == 1, "the boilerplate is said once"
+    assert "Poor User Experience and Founder Bypasses Managers" in prose
+    # And the quote is not repeated here: document._root_cause already opens
+    # its trail with the same words.
+    assert "Margins are slipping" not in prose

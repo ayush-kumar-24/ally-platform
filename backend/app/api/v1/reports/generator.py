@@ -637,8 +637,26 @@ class ReportNarrativeGenerator:
             # source instead, and leave `slots` intact -- the narrator may
             # legitimately use the note as guidance for prose it then writes in
             # the founder's own language.
+            # THE FOUNDER'S OWN WORDS ON EACH AREA, beside the band.
+            #
+            # Every one of these cards showed the same thing to every founder:
+            # score_bands[].description, catalogue text written before any
+            # founder existed. A founder read five sentences about co-founder
+            # conflict and micro-management under Team & Leadership and asked
+            # us to fix the content -- and he was right, because nothing in it
+            # was about him.
+            #
+            # It stays (it is the calibration, and it is labelled as such), and
+            # his own weakest answer in that area now sits under it. One quote:
+            # the card explains a band, and a second turns it back into the wall
+            # of text this is fixing.
             founder_facing = [
                 {k: v for k, v in pillar.items() if k != "red_flag_note"}
+                | ({"evidence": [{"question": q, "answer": a}
+                                 for q, a in p.pillar_evidence.get(
+                                     str(pillar.get("pillar_name") or ""), ())]}
+                   if p.pillar_evidence.get(str(pillar.get("pillar_name") or ""))
+                   else {})
                 for pillar in pillars
             ]
             # Hard rule 2 in the facts: red-flag pillars are listed even when the

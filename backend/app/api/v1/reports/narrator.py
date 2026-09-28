@@ -64,6 +64,21 @@ def _is_question(text: str) -> bool:
 _DIMENSION_SUMMARY_CHARS = 220
 
 
+def _join_names(names: Sequence[str]) -> str:
+    """"A", "A and B", "A, B and C" -- so one sentence can carry the lot.
+
+    Written out rather than ", ".join()-ed because these are read aloud in the
+    founder's head as part of a sentence, and "Poor User Experience, Founder
+    Bypasses Managers came up behind it" is not a sentence.
+    """
+    kept = [n for n in names if n]
+    if not kept:
+        return ""
+    if len(kept) == 1:
+        return kept[0]
+    return ", ".join(kept[:-1]) + " and " + kept[-1]
+
+
 def _answer_text(value: Any) -> str:
     """A dimension's raw material as one string, minus any stored question.
 
@@ -359,7 +374,21 @@ class TemplateNarrator:
         #
         # "eased when probed" was also saying something untrue: unconfirmed
         # means not yet tested, not that the evidence weakened.
-        lines = []
+        # THE PRIMARY GETS A SENTENCE. THE REST GET A LIST.
+        #
+        # Every cause used to get its own full sentence, and the secondaries'
+        # sentence was the same words each time -- so a founder with three
+        # causes read "came up too, behind the one above. Worth keeping an eye
+        # on, not something we are sure of." twice, in consecutive breaths, in
+        # a nine-line block he told us he had no interest in reading.
+        #
+        # The boilerplate is said ONCE and the names are collected into it.
+        # Nothing is lost: which is primary, whether it is tested, and what the
+        # others are, are all still there -- in two sentences instead of four
+        # paragraphs' worth of repetition.
+        primary_line = ""
+        also: list[str] = []
+        untested: list[str] = []
         for rc in s.get("root_causes", []):
             nm, status = rc.get("name"), rc.get("confirmation_status")
             if not nm:
@@ -368,20 +397,30 @@ class TemplateNarrator:
                 primary = int(rc.get("rank") or 0) == 1
             except (TypeError, ValueError):
                 primary = False
-            if status == "confirmed":
-                lines.append(
-                    f"We asked about {nm} more than once and it held up -- "
-                    + ("this is the one to act on." if primary
-                       else "worth acting on."))
-            elif status == "unconfirmed":
-                lines.append(
-                    f"{nm} is our best guess from what you told us. We have not "
-                    "tested it yet -- the steps below are how you would find out."
-                    if primary else
-                    f"{nm} came up too, behind the one above. Worth keeping an eye "
-                    "on, not something we are sure of.")
-            else:  # not_tested
-                lines.append(f"{nm} might be part of it, but we did not ask about it directly this time -- something to look into, not a conclusion.")
+            if primary and not primary_line:
+                if status == "confirmed":
+                    primary_line = (f"We asked about {nm} more than once and it "
+                                    "held up. This is the one to act on.")
+                elif status == "unconfirmed":
+                    primary_line = (f"{nm} is our best guess from what you told "
+                                    "us. We have not tested it yet -- the steps "
+                                    "below are how you would find out.")
+                else:
+                    primary_line = (f"{nm} might be part of it, but we did not "
+                                    "ask about it directly this time.")
+            elif status == "not_tested":
+                untested.append(str(nm))
+            else:
+                also.append(str(nm))
+
+        lines = [primary_line] if primary_line else []
+        if also:
+            lines.append(
+                f"{_join_names(also)} came up behind it -- worth an eye on, not "
+                "something we are sure of.")
+        if untested:
+            lines.append(
+                f"We did not ask directly about {_join_names(untested)} this time.")
 
         # Open by quoting the founder's own framing back to them, the way
         # every Page 3 in the Stage-Adaptive doc does. This template can only
@@ -408,7 +447,14 @@ class TemplateNarrator:
                 # rather than returning nothing, so Page 3 still opens on
                 # their words.
                 return opener
-            return f"{opener} {intro}{' '.join(lines)}"
+            # THE QUOTE IS NOT REPEATED HERE when the trail below already
+            # carries it. `_root_cause` in document.py opens its numbered trail
+            # with "What you described --" and the same 240 characters of the
+            # founder's own words, so printing them again immediately above is
+            # the same quote twice on one screen, and it is most of what made
+            # this read as a wall. The prose says the finding; the trail says
+            # where it came from, starting from what they said.
+            return f"{intro}{' '.join(lines)}"
 
         if not lines:
             return ""

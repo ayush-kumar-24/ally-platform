@@ -209,6 +209,15 @@ jobs:
           # made here deliberately: generic-but-relevant beats absent, and the
           # alternative is writing interventions for every uncovered cause.
           #
+          # FOUNDER_DNA_READS_LLM makes each Founder DNA card lead with a line
+          # on what the founder's answers show about them, instead of a shorter
+          # copy of the answer. It is the first thing here that makes a CLAIM
+          # ABOUT A PERSON, which is why the engine is allowed to say nothing:
+          # a facet whose answers name a moment without describing it gets no
+          # read and no card, rather than an invented founder. Measured on the
+          # report that prompted it, 14 cards became 7 -- and the 7 dropped were
+          # the ones a founder had pointed at as meaningless.
+          #
           # PUBLIC_LAUNCH empties the Free tier. A founder with no plan is sent
           # to the plans page on sign-in, and every feature gate closes at once
           # rather than one route staying open because somebody forgot it. It
@@ -225,7 +234,8 @@ jobs:
               {"name": "ADAPTIVE_QUESTIONS", "value": "true"},
               {"name": "PUBLIC_LAUNCH", "value": "true"},
               {"name": "STAGE_INFERENCE_LLM", "value": "true"},
-              {"name": "RECOMMENDATION_FALLBACK_LLM", "value": "true"}
+              {"name": "RECOMMENDATION_FALLBACK_LLM", "value": "true"},
+              {"name": "FOUNDER_DNA_READS_LLM", "value": "true"}
             ]' \
             '
             .containerDefinitions |= map(

@@ -272,6 +272,36 @@ def _pillar_bands(narrative) -> dict[str, str]:
     return out
 
 
+def _pillar_quote(pillar: Mapping[str, Any]) -> str:
+    """The founder's own answer that put this area where it is, or "".
+
+    One quote, under the general band text rather than instead of it: the band
+    text is the calibration ("businesses here usually look like this") and this
+    is the part that is about them. Absent on a report generated before pillar
+    evidence was carried, and on a pillar whose answers all came back green --
+    both render the card exactly as before.
+    """
+    evidence = pillar.get("evidence")
+    if not isinstance(evidence, (list, tuple)):
+        return ""
+    for item in evidence:
+        if not isinstance(item, Mapping):
+            continue
+        answer = str(item.get("answer") or "").strip()
+        if not answer:
+            continue
+        question = str(item.get("question") or "").strip()
+        # Trimmed to keep the card a card. The full answer is in the evidence
+        # section, which exists for exactly that.
+        if len(answer) > 260:
+            answer = answer[:260].rsplit(" ", 1)[0] + "…"
+        asked = (f'<div class="verdict-q">{e(question)}</div>' if question else "")
+        return ('<div class="verdict-mine">'
+                '<span class="verdict-mine-k">What put it here</span>'
+                f'{asked}<p class="verdict-a">&ldquo;{e(answer)}&rdquo;</p></div>')
+    return ""
+
+
 def _coverage_note(pillar: Mapping[str, Any]) -> str:
     """"Execution Velocity only", when the stage covers part of this pillar.
 
@@ -1097,6 +1127,12 @@ def _pillar_verdicts(pillars: Sequence[Mapping[str, Any]],
             + (f'<p class="verdict-desc"><span class="verdict-desc-lede">'
                f'What this usually means:</span> {e(desc)}</p>'
                if desc else "")
+            # AND WHAT PUT THIS AREA HERE, in the founder's own words. The
+            # general text above says what the band usually looks like; this
+            # says what it is about for them. Without it the card is five
+            # sentences that could belong to anyone, which is what a founder
+            # told us made the section not worth reading.
+            + _pillar_quote(p)
             + '</li>'
         )
     # Say it where the verdicts are, not only at the top of the report. A
