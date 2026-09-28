@@ -218,6 +218,17 @@ class Settings(BaseSettings):
     # pays for it once. It fails to the un-summarised cards on any error.
     FOUNDER_DNA_SUMMARY_LLM: bool = False
 
+    # The one-line READ on each Founder DNA card -- what the founder's answers
+    # show about them on that facet, rather than a shorter copy of the answer
+    # (engines/founder_dna_reads.py). Off => cards show the founder's own
+    # answers with the question above them, which is today's behaviour.
+    #
+    # ON, a dimension the model cannot honestly read gets NO CARD at all: a
+    # heading like EMOTIONAL INTELLIGENCE over "Our Halol plant head, Ramesh,
+    # 2022" is what this exists to stop, and printing fewer, meaningful cards
+    # is the point rather than a side effect.
+    FOUNDER_DNA_READS_LLM: bool = False
+
     # Let a model choose each founder's two dashboard lines from the shortlist
     # the catalogue and their profile produce. Off => the deterministic pick,
     # which is still per-founder and still stage-filtered -- the model is

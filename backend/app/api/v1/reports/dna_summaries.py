@@ -24,6 +24,7 @@ from __future__ import annotations
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
+from app.api.v1.reasoning.engines.founder_dna_reads import read_dimensions
 from app.api.v1.reasoning.engines.founder_dna_summary import summarise_dimensions
 from app.core.config import settings
 from app.core.logger import logger
@@ -37,6 +38,15 @@ from app.services.llm.tasks import provider_for_task
 _NOT_A_DIMENSION = frozenset({"archetype", "origin", "vision", "chronic_state"})
 
 SUMMARIES_KEY = "_summaries"
+
+#: Where the one-line reads live -- the same jsonb, the same underscore rule.
+READS_KEY = "_reads"
+
+#: Where the questions live, written by
+#: reasoning/engines/founder_dna_extras.resolve_phase2_dimensions. A read cannot
+#: be written without them: "The bridge" is a founder picking one of two futures
+#: they were offered, and without the offer it is a noun.
+QUESTIONS_KEY = "_questions"
 
 
 def _dimensions(founder_dna: dict) -> dict[str, list[str]]:
@@ -87,6 +97,117 @@ def pending_dimensions(report: FounderReport) -> dict[str, list[str]]:
     existing = founder_dna.get(SUMMARIES_KEY)
     existing = existing if isinstance(existing, dict) else {}
     return {code: answers for code, answers in dimensions.items() if code not in existing}
+
+
+def _readable_dimensions(founder_dna: dict) -> dict[str, list[str]]:
+    """Everything a card is drawn from, including origin and vision.
+
+    `_dimensions` excludes those two because they are single strings rather
+    than answer lists, and the summariser only handles lists. A read does not
+    care about the shape, and it has to cover them: "Origin: 2013." is the
+    card a founder pointed at first.
+
+    `archetype` stays out -- it is a structured dict with a name and a
+    motivation, and its card already says what it means.
+    """
+    out = dict(_dimensions(founder_dna))
+    for code in ("origin", "vision"):
+        value = (founder_dna or {}).get(code)
+        if isinstance(value, str) and value.strip():
+            out[code] = [value.strip()]
+    return out
+
+
+def current_reads(report: FounderReport) -> dict[str, str]:
+    """The one-line reads stored on this report right now.
+
+    Read at response time for the same reason `current_summaries` is: the
+    narrative is cached on first open with these baked in, so a read written
+    afterwards could never reach the page.
+    """
+    stored = (report.founder_dna or {}).get(READS_KEY)
+    if not isinstance(stored, dict):
+        return {}
+    return {code: line.strip() for code, line in stored.items()
+            if isinstance(line, str) and line.strip()}
+
+
+def pending_reads(report: FounderReport) -> dict[str, dict]:
+    """Dimensions with no read ATTEMPT recorded yet, shaped for the engine.
+
+    Same attempted-not-produced rule as the summaries: a dimension the model
+    declines is recorded as "" so it is never re-sent. Without that, the
+    dimensions that cannot be read -- which are exactly the ones this exists to
+    handle -- would be re-sent on every single view.
+    """
+    if not settings.FOUNDER_DNA_READS_LLM:
+        return {}
+    founder_dna = report.founder_dna or {}
+    dimensions = _readable_dimensions(founder_dna)
+    if not dimensions:
+        return {}
+    existing = founder_dna.get(READS_KEY)
+    existing = existing if isinstance(existing, dict) else {}
+    questions = founder_dna.get(QUESTIONS_KEY)
+    questions = questions if isinstance(questions, dict) else {}
+    out: dict[str, dict] = {}
+    for code, answers in dimensions.items():
+        if code in existing:
+            continue
+        asked = questions.get(code)
+        first = ""
+        if isinstance(asked, list):
+            first = next((str(q).strip() for q in asked if str(q).strip()), "")
+        elif isinstance(asked, str):
+            first = asked.strip()
+        out[code] = {"question": first, "answers": answers}
+    return out
+
+
+def ensure_dna_reads(db: Session, report: FounderReport) -> None:
+    """Fill in any missing card reads for this report. Never raises.
+
+    Off the request path, like the summaries -- see ensure_dna_summaries.
+    """
+    founder_dna = report.founder_dna or {}
+    missing = pending_reads(report)
+    if not missing:
+        return
+
+    existing = founder_dna.get(READS_KEY)
+    existing = existing if isinstance(existing, dict) else {}
+
+    try:
+        provider = provider_for_task(
+            db, LLMTask.FOUNDER_DNA_DIMENSION_RESOLUTION,
+            founder_id=report.founder_id,
+        )
+        produced = read_dimensions(provider, missing)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("founder DNA reads unavailable: %s", exc)
+        return
+
+    # An empty result can mean two different things and they must not be
+    # confused. A failed CALL returns {} and has to be retried; a successful
+    # call on answers that support no read ALSO returns {}, and retrying that
+    # forever is the bug this rule exists to prevent. There is no way to tell
+    # them apart from the outside, so `read_dimensions` returning nothing at
+    # all is treated as the failure and retried, while a partial result records
+    # the declines. One extra call per report in the all-declined case, against
+    # a permanent one per view in the other direction.
+    if not produced:
+        return
+    attempted = {code: produced.get(code, "") for code in missing}
+
+    try:
+        merged = dict(founder_dna)
+        merged[READS_KEY] = {**existing, **attempted}
+        report.founder_dna = merged
+        flag_modified(report, "founder_dna")
+        db.commit()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("could not store founder DNA reads: %s", exc)
+        db.rollback()
 
 
 def ensure_dna_summaries(db: Session, report: FounderReport) -> None:

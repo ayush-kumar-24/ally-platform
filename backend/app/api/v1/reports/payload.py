@@ -204,6 +204,18 @@ class ReportPayload:
     #: "Our Halol plant head, Ramesh, 2022." All three are true answers. None
     #: of them means anything without the question above it.
     dimension_questions: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    #: `{dimension_code: read}` -- one line on what this dimension's answers
+    #: show about the founder, which is what the card's heading promises. Empty
+    #: for a report generated before reads shipped and for every dimension the
+    #: model declined; `reads_attempted` tells those two apart.
+    dimension_reads: dict[str, str] = field(default_factory=dict)
+    #: Whether a read was ATTEMPTED for this report at all.
+    #:
+    #: Load-bearing: it is the difference between "we tried and this dimension
+    #: cannot be read, so drop the card" and "we never tried, so show the
+    #: answers as before". Without it an old report would silently lose most of
+    #: its Founder DNA section.
+    reads_attempted: bool = False
 
     # --- Current Problem (app/api/v1/current_problem/) ---
     # The founder's own words for what they think is wrong, captured BEFORE
@@ -391,6 +403,14 @@ def build_report_payload(db: Session, report) -> ReportPayload:
         if isinstance(qs, list) and any(str(q).strip() for q in qs)
     } if isinstance(_questions, dict) else {}
 
+    _reads = fd.get("_reads")
+    dimension_reads = {
+        code: line.strip()
+        for code, line in (_reads or {}).items()
+        if isinstance(line, str) and line.strip()
+    } if isinstance(_reads, dict) else {}
+    reads_attempted = isinstance(_reads, dict) and bool(_reads)
+
     _summaries = fd.get("_summaries")
     dimension_summaries = {
         code: tuple(str(b) for b in bullets if isinstance(b, str) and b.strip())
@@ -464,6 +484,7 @@ def build_report_payload(db: Session, report) -> ReportPayload:
         communication_preference=communication_preference,
         phase2_dimensions=phase2_dimensions,
         dimension_questions=dimension_questions,
+        dimension_reads=dimension_reads, reads_attempted=reads_attempted,
         dimension_summaries=dimension_summaries,
         stated_symptom=stated_symptom, symptom_probes=symptom_probes,
         top_root_causes=top_root_causes,

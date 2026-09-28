@@ -313,6 +313,13 @@ STYLE = """
 /* The question/answer variant keeps `.fact-list`'s bullet grid exactly as it
    is -- it only needs more room between entries, because each one is now two
    lines rather than one. `.fact-qa` is the single grid child that holds both. */
+/* The read: the card's own sentence, in the report's body voice rather than
+   the quieter tone the evidence under it uses. */
+.rp .fact-read{font-size:14.5px;line-height:1.55;color:var(--ink);margin:0 0 12px;}
+.rp .fact-evidence{padding-top:10px;border-top:1px solid var(--rule,#e3e1d8);}
+.rp .fact-evidence-k{display:block;font-size:10.5px;font-weight:700;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--ink-faint);
+  margin:0 0 6px;}
 .rp .fact-list.qa{gap:14px;}
 .rp .fact-qa{min-width:0;}
 .rp .fact-a{display:block;}

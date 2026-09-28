@@ -881,6 +881,20 @@ def _asked_for(facts: Mapping[str, Any], key: str) -> list[str]:
     return []
 
 
+def _read_for(facts: Mapping[str, Any], key: str) -> str:
+    """The one-line read for this dimension, or "" when there is not one.
+
+    Absent is the ordinary case, not an error: a dimension whose answers name a
+    moment without describing it has no read, and the generator drops that card
+    entirely rather than rendering a heading over a fragment.
+    """
+    reads = (facts or {}).get("_reads")
+    if not isinstance(reads, dict):
+        return ""
+    line = reads.get(key)
+    return line.strip() if isinstance(line, str) else ""
+
+
 def _asked_and_answered(value: Any, questions: Sequence[str]) -> str:
     """Answers paired with the question each one actually answers.
 
@@ -954,6 +968,16 @@ def _facts_html(facts: Mapping[str, Any], skip: Sequence[str] = ()) -> str:
         questions = _asked_for(facts, key)
         paired = _asked_and_answered(value, questions) if questions else ""
         body = paired or rendered
+        # THE READ LEADS THE CARD when there is one -- it is what the heading
+        # promises. The founder's own words stay underneath as the evidence
+        # they can check it against, which is the only reason a read is safe to
+        # print at all: nothing is asserted that the reader cannot audit one
+        # line down.
+        read = _read_for(facts, key)
+        if read:
+            body = (f'<p class="fact-read">{e(read)}</p>'
+                    f'<div class="fact-evidence"><span class="fact-evidence-k">'
+                    f'In your words</span>{body}</div>')
         rows.append(f'<div class="fact"><span class="fact-k">{e(label)}</span>'
                     f'<div class="fact-v">{body}</div></div>')
     return f'<div class="facts">{"".join(rows)}</div>' if rows else ""

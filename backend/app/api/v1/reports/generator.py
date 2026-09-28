@@ -498,6 +498,36 @@ class ReportNarrativeGenerator:
                 slots["communication_preference"] = facts["communication_preference"] = list(p.communication_preference)
             for dimension_code, answers in p.phase2_dimensions.items():
                 slots[dimension_code] = facts[dimension_code] = list(answers)
+
+            # NO READ AND WE TRIED = NO CARD.
+            #
+            # One pass over every card rather than inside the loop above,
+            # because origin, vision, strengths/blind spots, stress response
+            # and communication preference are assigned separately and are
+            # exactly as affected: "Origin: 2013." and "Communication
+            # Preference: Daily" were two of the cards a founder pointed at.
+            #
+            # A heading like EMOTIONAL INTELLIGENCE over "Our Halol plant head,
+            # Ramesh, 2022" is what this drops. That answer names a moment
+            # without describing it, so there is nothing to say about the
+            # founder from it, and the card is a promise its content cannot
+            # keep. Fewer cards that mean something is the intent, not a side
+            # effect.
+            #
+            # `archetype` is never dropped: it is a structured finding with its
+            # own name and motivation, not a quoted answer, and its card
+            # already says what it means.
+            #
+            # Gated on reads_attempted so a report generated before reads
+            # shipped keeps every card rather than silently losing most of its
+            # Founder DNA section.
+            if p.reads_attempted:
+                for dimension_code in list(facts):
+                    if dimension_code == "archetype":
+                        continue
+                    if dimension_code not in p.dimension_reads:
+                        facts.pop(dimension_code, None)
+                        slots.pop(dimension_code, None)
             # The card previews, under ONE underscore-prefixed key rather than
             # one key per dimension: factList() on the frontend turns every
             # non-underscore key into a card of its own, so "core_values" and
@@ -523,6 +553,13 @@ class ReportNarrativeGenerator:
             }
             if asked:
                 facts["_questions"] = asked
+            # The reads, keyed by dimension. Underscore-prefixed like the rest:
+            # the card looks its own read up rather than this becoming a
+            # dimension of its own on the generic grid.
+            reads = {code: line for code, line in p.dimension_reads.items()
+                     if code in facts and line}
+            if reads:
+                facts["_reads"] = reads
             return slots, facts
 
         if key == "psychological_note":
