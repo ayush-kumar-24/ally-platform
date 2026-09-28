@@ -27,20 +27,29 @@ from app.core.logger import logger
 from app.api.v1.reports.payload import ReportPayload
 from app.api.v1.reports.variants import ReportVariant, select_variant
 
+#: Section headings, in the founder's words. The KEYS are the narrative's
+#: contract and are read by the frontend, the document and the tests -- only the
+#: headings changed.
+#:
+#: "Business DNA" and "Founder DNA" stay as they are: the product owner's call,
+#: and the right one. They are names, not jargon -- a founder learns what they
+#: mean once and they are what the app's own navigation calls these pages.
+#: "Root cause" and "Psychological state note" are different: nobody learns
+#: those, they just read them and feel talked down to.
 _HEADINGS = {
-    "founder_summary": "Founder summary",
+    "founder_summary": "Where you stand",
     "founder_dna": "Founder DNA",
-    "psychological_note": "Psychological state note",
+    "psychological_note": "Before the business — how you are doing",
     "business_dna": "Business DNA",
-    "problem_path": "Root cause",
-    "areas_to_monitor": "Areas to monitor",
-    "priority_actions": "Priority actions",
+    "problem_path": "What is really holding you back",
+    "areas_to_monitor": "Worth keeping an eye on",
+    "priority_actions": "What to do next",
     "supporting_evidence": "What this is based on",
-    "recommended_roadmap": "How to sequence this",
+    "recommended_roadmap": "The order to do it in",
     "why_steps": "Why these steps",
     "acknowledgement": "Before we begin",
     "support_recommendation": "A first step for you",
-    "hedge": "A note on certainty",
+    "hedge": "How sure we are",
     "discovery_cta": "Your next move with Ally",
 }
 

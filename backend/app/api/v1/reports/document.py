@@ -24,6 +24,9 @@ from typing import Any, Mapping, Sequence
 
 from app.api.v1.reports.document_style import PRINT_ONLY, STYLE, font_face_css
 from app.api.v1.reports.non_answers import is_non_answer
+from app.api.v1.reports.plain_words import (
+    band_words, confidence_words, fact_label, status_words,
+)
 
 # --- band thresholds ---------------------------------------------------------
 # Shared by every bar and chip so a 42 is the same colour wherever it appears.
@@ -79,7 +82,8 @@ def _tone(score: int) -> str:
 #: page and the PDF contradicted the flag the API set on the very same report.
 #: Real bands come from readiness_pillars.score_bands via the narrative; these
 #: are the fallback for a pillar the narrative did not describe.
-_BAND_WORDS = {"t-critical": "Critical gap", "t-watch": "Developing", "t-ok": "Strong"}
+_BAND_WORDS = {"t-critical": "Not working yet", "t-watch": "Coming along",
+               "t-ok": "Working well"}
 
 #: Same spelling-out the narrator uses, so the page and the prose count the
 #: same pillars the same way. Falls back to the digit outside the range,
@@ -145,7 +149,7 @@ def _bar(name: str, score: int, sub: str = "", band: str | None = None) -> str:
         f'<div class="bar-row {_tone(score)}">'
         f'<div class="bar-name">{e(name)}{sub_html}</div>'
         f'<div class="bar-track"><div class="bar-fill" style="width:{max(score, 0)}%"></div></div>'
-        f'<div class="bar-val">{e(band or _band_word(score))}</div></div>'
+        f'<div class="bar-val">{e(band_words(band) or _band_word(score))}</div></div>'
     )
 
 
@@ -187,7 +191,7 @@ def _ring(band: str, score: int) -> str:
         f'stroke-width="11"></circle>'
         f'<circle cx="93" cy="93" r="{radius}" fill="none" stroke="{stroke}" stroke-width="11" '
         f'stroke-linecap="round" stroke-dasharray="{dash:.1f} {circumference}"></circle></svg>'
-        f'<div class="ring-face"><div class="ring-band">{e(band)}</div>'
+        f'<div class="ring-face"><div class="ring-band">{e(band_words(band))}</div>'
         f'<div class="ring-sub">Business Health</div></div></div>'
         '<div class="ring-note">Where you are today &mdash; not a verdict on whether '
         'this works.</div></div>'
@@ -238,12 +242,12 @@ def _hero(name: str, health: Mapping[str, Any], categories: Sequence[Mapping[str
     # "6 pillars" over a page showing two. Same filter, one number.
     assessed = [p for p in pillars if p.get("score") is not None]
     n_pillars = len(assessed) or len(pillars)
-    lede = (f"Ally scanned {len(categories)} business dimensions and "
-            f"{n_pillars} pillar{'s' if n_pillars != 1 else ''}")
-    lede += (", and traced what&rsquo;s holding you back to one root cause."
+    lede = (f"Ally looked at {len(categories)} parts of your business and "
+            f"{n_pillars} main area{'s' if n_pillars != 1 else ''}")
+    lede += (", and found one thing that explains most of what is in your way."
              if has_root_cause
-             else ". No single root cause separated out clearly &mdash; what "
-                  "follows is what the scan did show.")
+             else ". Nothing stood out as the single thing in your way &mdash; "
+                  "what follows is what we did find.")
     return (
         f'<header class="hero"><div>'
         f'<span class="eyebrow">Founder Clarity Report &middot; {e(when)}</span>'
@@ -317,9 +321,10 @@ def _standing(pillars: Sequence[Mapping[str, Any]], bands: Mapping[str, str]) ->
     # four bars is the same overstatement the per-pillar coverage note exists to
     # prevent, one level up.
     count = _WORDS.get(len(ranked), str(len(ranked))).capitalize()
-    noun = "pillar" if len(ranked) == 1 else "pillars"
-    return (f"<p>{count} {noun}, weighted by how much each one decides survival at "
-            "your stage. Lowest first &mdash; that is also the order to work in.</p>"
+    noun = "area" if len(ranked) == 1 else "areas"
+    return (f"<p>{count} {noun} of your business, ordered by how much each one "
+            "matters where you are now. Weakest first &mdash; that is also the "
+            "order to work in.</p>"
             f'<div class="bars">{bars}</div>')
 
 
@@ -429,8 +434,9 @@ def _high_low(categories: Sequence[Mapping[str, Any]],
                      'will use to fix the column on the right.</p>')
 
     return (
-        "<p>Every business dimension we scanned, ranked. The left column is what you can "
-        "lean on right now; the right is what will decide the next few months.</p>"
+        "<p>Every part of your business we looked at, in order. On the left is what "
+        "is working that you can build on. On the right is what needs your "
+        "attention next.</p>"
         '<div class="split">'
         '<div class="panel panel-strength"><div class="panel-title"><span class="dot"></span>'
         f'Lean on this</div>{left_body}</div>'
@@ -525,20 +531,20 @@ def _root_cause(narrative, causes: Sequence[Mapping[str, Any]],
                       ("…" if len(stated) > 240 else "")))
     if strongest:
         names = ", ".join(str(p.get("pillar_name")) for p in strongest)
-        steps.append(("What Ally ruled out",
-                      f"{names} all scored higher. This is not a discipline or "
-                      f"capability gap."))
+        steps.append(("What we ruled out",
+                      f"{names} all came back stronger, so this is not about how "
+                      f"hard you are working or what you can do."))
     if worst_cat is not None:
-        steps.append(("The signal",
-                      f"{worst_cat.get('category')} carried the heaviest risk of every "
-                      f"dimension we scanned."))
+        steps.append(("What stood out",
+                      f"Of everything we looked at, {worst_cat.get('category')} came "
+                      f"back weakest."))
     if len(causes) > 1:
         steps.append(("The link to you",
                       "The same pattern showed up across answers that were not about "
                       "the same topic."))
-    steps.append(("The conclusion",
-                  f"One mechanism explains the rest: {label}."
-                  + (f" Status: {status}." if status else "")))
+    steps.append(("What we think it is",
+                  f"One thing explains most of the rest: {label}."
+                  + (f" This one is {status_words(status)}." if status else "")))
 
     trail = "".join(
         f'<div class="trail-step"><span class="step-num">{i}</span>'
@@ -550,8 +556,8 @@ def _root_cause(narrative, causes: Sequence[Mapping[str, Any]],
         f'{e(c.get("category") or "Pattern")}</span>'
         f'<span class="cause-name">{e(c.get("label") or c.get("name"))}</span>'
         f'<span class="cause-conf">'
-        f'{e(str(c.get("confirmation_status") or "").replace("_", " ") or "not tested")}'
-        f' &middot; {"primary" if i == 0 else "supporting"}</span></div>'
+        f'{e(status_words(c.get("confirmation_status")) or "not tested yet")}'
+        f' &middot; {"the main one" if i == 0 else "also showed up"}</span></div>'
         for i, c in enumerate(causes[:3])
     )
     strength = "High" if conf >= 75 else ("Moderate" if conf >= 50 else "Early")
@@ -559,17 +565,17 @@ def _root_cause(narrative, causes: Sequence[Mapping[str, Any]],
 
     return (
         f'<div class="finding"><div class="finding-tag"><span class="dot"></span>'
-        f'Ally&rsquo;s finding &middot; {e(strength)} confidence</div>'
-        f'<h3>What&rsquo;s in the way looks like <em>{e(label)}</em>.</h3>'
+        f'What Ally found &middot; {e(confidence_words(strength))}</div>'
+        f'<h3>What looks like it is in your way: <em>{e(label)}</em>.</h3>'
         # The bar stays (it shows how settled the read is at a glance); the
         # number beside it does not.
         f'<div class="conf-row"><div class="conf-track">'
         f'<div class="conf-fill" style="width:{conf}%"></div></div>'
-        f'<span class="conf-num">{e(strength)}</span></div></div>'
+        f'<span class="conf-num">{e(confidence_words(strength))}</span></div></div>'
         f'{lead}'
-        f'<div class="trail"><div class="trail-head">Why Ally reached this conclusion</div>'
+        f'<div class="trail"><div class="trail-head">How Ally got here</div>'
         f'{trail}</div>'
-        + (f'<p>Patterns supporting this read:</p><div class="cause-grid">{cards}</div>'
+        + (f'<p>What else pointed the same way:</p><div class="cause-grid">{cards}</div>'
            if cards else ""))
 
 
@@ -787,7 +793,7 @@ def _actions(narrative, actions: Sequence[Mapping[str, Any]]) -> str:
 # little it can know past the next test.
 _ROAD_STAGES = (
     ("Week 1", "First moves"),
-    ("Week 2", "Read the signal"),
+    ("Week 2", "See what comes back"),
 )
 
 
@@ -875,7 +881,12 @@ def _facts_html(facts: Mapping[str, Any], skip: Sequence[str] = ()) -> str:
         rendered = _fact_value(value)
         if not rendered:
             continue
-        label = str(key).replace("_", " ").strip().title()
+        label = fact_label(key)
+        # An empty label means the key is machinery with no founder-facing
+        # caption at all (intervention ids, for one) -- skipped rather than
+        # printed under a title-cased version of its own name.
+        if not label:
+            continue
         rows.append(f'<div class="fact"><span class="fact-k">{e(label)}</span>'
                     f'<div class="fact-v">{rendered}</div></div>')
     return f'<div class="facts">{"".join(rows)}</div>' if rows else ""
@@ -974,7 +985,7 @@ def _pillar_verdicts(pillars: Sequence[Mapping[str, Any]],
         items.append(
             f'<li class="verdict {tone}">'
             f'<div class="verdict-head"><span class="verdict-name">{e(name)}</span>'
-            f'<span class="verdict-band">{e(band)}</span></div>'
+            f'<span class="verdict-band">{e(band_words(band))}</span></div>'
             + (f'<span class="verdict-scope">{e(note)}</span>' if note else "")
             # Labelled as what it IS. `readiness_pillars.score_bands`
             # descriptions are catalogue text written before any founder
@@ -993,16 +1004,16 @@ def _pillar_verdicts(pillars: Sequence[Mapping[str, Any]],
             # look like X" against their own situation; they cannot weigh a
             # sentence that claims to be about them.
             + (f'<p class="verdict-desc"><span class="verdict-desc-lede">'
-               f'What this band usually looks like:</span> {e(desc)}</p>'
+               f'What this usually means:</span> {e(desc)}</p>'
                if desc else "")
             + '</li>'
         )
     # Say it where the verdicts are, not only at the top of the report. A
     # caveat eleven pages earlier does not travel with a founder who opens the
     # PDF at the pillar they were worried about.
-    lede = ('<p class="verdict-provisional">These bands come from a session that '
-            'did not gather enough answers to be confident. Read them as a '
-            'first reading to check, not a settled score.</p>'
+    lede = ('<p class="verdict-provisional">These come from a session with too '
+            'few answers for us to be sure. Read them as a first look to check '
+            'against, not a final score.</p>'
             if hedged else "")
     return f'{lede}<ul class="verdicts">{"".join(items)}</ul>'
 

@@ -164,7 +164,8 @@ def test_a_concern_line_carries_the_qualifier():
     verdicts = _pillar_verdicts([pillar])
 
     assert "Execution Velocity only" in verdicts
-    assert "Needs Attention" in verdicts
+    # The stored level is "Needs Attention"; the founder reads plain words.
+    assert "Needs work" in verdicts
 
 
 def test_the_strongest_list_carries_the_qualifier_too():
@@ -199,7 +200,7 @@ def test_a_fully_scoped_report_reads_exactly_as_it_did():
     verdicts = _pillar_verdicts(pillars)
     assert "only" not in verdicts
     assert "Team &amp; Leadership" in verdicts
-    assert "Critical Gap" in verdicts
+    assert "Not working yet" in verdicts
 
 
 # --- the HTML document ------------------------------------------------------
@@ -229,7 +230,7 @@ def test_the_bar_name_stays_unqualified_so_the_band_lookup_still_works():
           **_p("Product & Execution", ["Execution Velocity"], 3)}],
         {"Product & Execution": "Needs Attention"},
     )
-    assert "Needs Attention" in html
+    assert "Needs work" in html
 
 
 def test_an_unassessed_pillar_never_renders_as_a_critical_gap():
@@ -252,10 +253,10 @@ def test_the_document_counts_the_pillars_it_actually_shows():
     """Not hardcoded "Six". Four at ideation, fewer once thin pillars drop."""
     two = _standing([{"pillar_name": "A", "score": 70, "weight": 20},
                      {"pillar_name": "B", "score": 50, "weight": 20}], {})
-    assert "Two pillars, weighted by" in two
+    assert "Two areas of your business, ordered by" in two
 
     one = _standing([{"pillar_name": "A", "score": 70, "weight": 20}], {})
-    assert "One pillar, weighted by" in one
+    assert "One area of your business, ordered by" in one
 
 
 def test_a_page_with_nothing_assessed_renders_nothing():

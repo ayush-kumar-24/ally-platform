@@ -92,7 +92,10 @@ def test_recommended_roadmap_orders_confirm_before_solve():
     section = _sections()["recommended_roadmap"]
     assert section.facts["confirm_steps"][0]["next_actions"] == ["Cost one bedcover end to end"]
     assert section.facts["solve_steps"][0]["next_actions"] == ["Interview five non-buyers"]
-    assert "confirm" in section.prose.lower()
+    # The prose says find out first and fix second. It no longer says
+    # "confirm", which is the word the founder had to decode.
+    assert "find out what is actually true" in section.prose.lower()
+    assert "then fix it" in section.prose.lower()
 
 
 def test_roadmap_prose_contains_no_digits():

@@ -17,6 +17,10 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Callable, Protocol
 
+from app.api.v1.reports.plain_words import (
+    HOW_TO_WRITE, band_words, plain_slots,
+)
+
 
 _QUOTE_MAX_CHARS = 160
 
@@ -182,23 +186,27 @@ class TemplateNarrator:
         """
         name = s.get("founder_name") or "there"
         lead = {
-            "Validator": "Here is what your answers say about where you stand.",
-            "Compass": "Here is a read on your direction and what to focus on next.",
-            "Auditor": "Here is a structured read on the business and where it stands.",
-        }.get(tone.persona, "Here is your clarity report.")
+            "Validator": "here is what your answers say about where you are.",
+            "Compass": "here is where your business is right now, and what to work "
+                       "on next.",
+            "Auditor": "here is where your business stands, based on what you told "
+                       "us.",
+        }.get(tone.persona, "here is your clarity report.")
 
         bits: list[str] = []
         answers = int(s.get("answers") or 0)
         band = str(s.get("overall_band") or "").strip()
+        # Quoted, because the plain words are a LABEL and read as a fragment
+        # without them: "overall your business is needs work" is not a sentence.
         if answers and band:
-            bits.append(f"Across {answers} answers, your business health reads "
-                        f"as {band}.")
+            bits.append(f'From your {answers} answers, overall your business is '
+                        f'"{band_words(band)}".')
         elif band:
-            bits.append(f"Your business health reads as {band}.")
+            bits.append(f'Overall, your business is "{band_words(band)}".')
 
         worst = str(s.get("weakest_pillar") or "").strip()
         if worst:
-            bits.append(f"{worst} is carrying the most weight.")
+            bits.append(f"{worst} is the part holding you back most.")
 
         finding = str(s.get("primary_finding") or "").strip()
         if finding:
@@ -206,10 +214,10 @@ class TemplateNarrator:
             # root-cause section works under.
             settled = str(s.get("finding_status") or "") == "confirmed"
             bits.append(
-                f"The leading explanation is {finding}."
+                f"What is behind it looks like {finding}."
                 if settled else
-                f"The leading explanation is {finding}, and it is not "
-                "confirmed yet -- the next steps are what would settle it.")
+                f"Our best guess is {finding}. We have not tested that yet -- "
+                "the next steps are how you would find out.")
 
         if not bits:
             return f"{name}, {lead}"
@@ -287,8 +295,9 @@ class TemplateNarrator:
         if s.get("brief"):
             if not band:
                 return ""
-            return (f'A brief note on the business: overall it reads as "{band}". '
-                    "There is more detail when you are ready for it -- it can wait.")
+            return (f'A quick note on the business: overall it is '
+                    f'"{band_words(band)}". There is more detail when you are '
+                    "ready for it, and it can wait.")
         parts = []
         if band:
             # NOT hardcoded "six". Stage scoping means an ideation founder is
@@ -300,20 +309,20 @@ class TemplateNarrator:
             total = s.get("pillars_total") or 6
             assessed = s.get("pillars_assessed") or total
             scope = (
-                f"Across all {_WORDS.get(total, total)} readiness pillars"
+                f"Looking at all {_WORDS.get(total, total)} areas of your business"
                 if assessed >= total
-                else f"Across the {_WORDS.get(assessed, assessed)} readiness "
-                     f"pillars that apply at your stage"
+                else f"Looking at the {_WORDS.get(assessed, assessed)} areas that "
+                     f"matter most where you are now"
             )
-            subject = {"Auditor": "business health reads as",
-                       "Validator": "where you stand reads as"
-                       }.get(tone.persona, "your business health reads as")
-            parts.append(f'{scope}, {subject} "{band}".')
+            subject = {"Auditor": "things are",
+                       "Validator": "you are",
+                       }.get(tone.persona, "things are")
+            parts.append(f'{scope}, {subject} "{band_words(band)}".')
         pillars = s.get("pillars", [])
         strong = [p for p in pillars if p.get("band") == "Strong"]
         if strong:
             parts.append(
-                "Strongest: " + ", ".join(_pillar_label(p) for p in strong) + "."
+                "Working well: " + ", ".join(_pillar_label(p) for p in strong) + "."
             )
         # A red-flagged pillar is named in the prose itself. The rest of the
         # verdicts are not: the list below carries them (see below), but a red
@@ -325,7 +334,7 @@ class TemplateNarrator:
                    if p.get("red_flag_triggered") and p.get("pillar_name")]
         if flagged:
             parts.append(
-                "Flagged for immediate attention: " + ", ".join(flagged) + "."
+                "Start here: " + ", ".join(flagged) + "."
             )
         # The per-pillar verdicts are NOT prose. Each one is a name, a band and
         # a paragraph of description, and joining six of them with spaces
@@ -338,8 +347,8 @@ class TemplateNarrator:
 
     def _problem_path(self, s, tone):
         intro = {"Validator": "What your answers point to: ",
-                 "Auditor": "The diagnostic picture: ",
-                 "Compass": "Here is the through-line: "}.get(tone.persona, "")
+                 "Auditor": "What your answers point to: ",
+                 "Compass": "Here is the thread running through it: "}.get(tone.persona, "")
         # Rank matters as much as status here. "unconfirmed" is the ORDINARY
         # state of a finding this engine produces -- confirmation needs the
         # follow-up actions to come back -- so describing every unconfirmed
@@ -361,19 +370,18 @@ class TemplateNarrator:
                 primary = False
             if status == "confirmed":
                 lines.append(
-                    f"We confirmed {nm} through repeated probing -- "
-                    + ("the primary driver to act on." if primary
-                       else "a driver to act on."))
+                    f"We asked about {nm} more than once and it held up -- "
+                    + ("this is the one to act on." if primary
+                       else "worth acting on."))
             elif status == "unconfirmed":
                 lines.append(
-                    f"{nm} is the strongest read your answers support, and it "
-                    "is not yet confirmed -- the steps below are what would "
-                    "settle it."
+                    f"{nm} is our best guess from what you told us. We have not "
+                    "tested it yet -- the steps below are how you would find out."
                     if primary else
-                    f"{nm} also showed up, behind the finding above -- worth "
-                    "watching, not yet a conclusion.")
+                    f"{nm} came up too, behind the one above. Worth keeping an eye "
+                    "on, not something we are sure of.")
             else:  # not_tested
-                lines.append(f"{nm} is a possibility we did not directly test this session -- an area to explore, not a conclusion.")
+                lines.append(f"{nm} might be part of it, but we did not ask about it directly this time -- something to look into, not a conclusion.")
 
         # Open by quoting the founder's own framing back to them, the way
         # every Page 3 in the Stage-Adaptive doc does. This template can only
@@ -452,8 +460,8 @@ class TemplateNarrator:
             # Never let an untested cause read as settled -- the confirm actions
             # exist precisely to test these.
             parts.append(
-                "Still to be tested: " + ", ".join(unconfirmed)
-                + ". Treat these as the leading hypotheses, not verdicts."
+                "Still to check: " + ", ".join(unconfirmed)
+                + ". These are our best guesses so far, not final answers."
             )
         return " ".join(parts)
 
@@ -473,16 +481,16 @@ class TemplateNarrator:
         solve = s.get("solve_steps") or []
         if confirm and solve:
             return (
-                "Work this in two passes. First confirm what is actually true, "
-                "then fix it -- the solve steps depend on what the confirm steps "
-                "turn up, so running them out of order means solving for a "
-                "problem you have not verified yet."
+                "Do this in two rounds. First find out what is actually true, "
+                "then fix it. The fixes depend on what you find, so doing them "
+                "the other way round means fixing something you have not "
+                "checked yet."
             )
         if confirm:
             return (
-                "Start by confirming what is actually true. The fixes come after "
-                "and depend on what you find, so there is nothing to sequence "
-                "past this until these come back."
+                "Start by finding out what is actually true. The fixes come next "
+                "and depend on what you find, so there is nothing to plan past "
+                "this until these come back."
             )
         if solve:
             return "These are the moves, in the order they build on each other."
@@ -496,9 +504,9 @@ class TemplateNarrator:
         causes = s.get("root_causes") or []
         if not causes:
             return ""
-        lead = {"Auditor": "These steps target",
-                "Validator": "These steps come from"}.get(tone.persona, "These steps are aimed at")
-        return f"{lead} what the diagnosis pointed to: " + ", ".join(causes) + "."
+        lead = {"Auditor": "These steps are for",
+                "Validator": "These steps come from"}.get(tone.persona, "These steps are for")
+        return f"{lead} what your answers pointed to: " + ", ".join(causes) + "."
 
     def _acknowledgement(self, s, tone):
         # Founder-facing copy that FOLLOWS the distress protocol -- it never quotes it.
@@ -520,8 +528,9 @@ class TemplateNarrator:
 
     def _hedge(self, s, tone):
         return (
-            "One caveat up front: we did not gather enough signal this session to be "
-            "confident. Read the below as a provisional draft, not a settled diagnosis."
+            "One thing to say first: you did not answer enough questions this time "
+            "for us to be sure. Treat what follows as a first read to check "
+            "against, not a final answer."
         )
 
     def _priority_actions(self, s, tone):
@@ -685,6 +694,12 @@ class LLMSectionNarrator:
         directives = [
             "You are writing ONE section of a founder's clarity report. Write 1-3 warm, "
             "plain sentences. Persona: " + (tone.persona or "neutral") + ".",
+            # The shared writing rule, so this surface and the support bot are
+            # held to the same standard. Without it this prompt said only
+            # "warm, plain sentences" -- and was then handed facts full of
+            # "pillar", "band" and "confirmation_status", which the model
+            # dutifully repeated back to the founder.
+            HOW_TO_WRITE,
             "Use ONLY the facts in the JSON below. Never invent or change a number, name, "
             "score or claim. If a value is missing, do not mention it or the topic it "
             "would have covered -- do not guess, infer, or fill the gap with a plausible-"
@@ -697,8 +712,8 @@ class LLMSectionNarrator:
             # pillar breakdown.
             directives.append(
                 "IMPORTANT: this section must be BRIEF -- exactly ONE short sentence "
-                "naming only the overall band, plus one line saying more detail can "
-                "wait. Do NOT list individual pillars, bands, or descriptions."
+                "saying overall where they stand, plus one line saying more detail "
+                "can wait. Do NOT list the individual areas or their descriptions."
             )
         if section_key == "founder_dna":
             # This section's slots are the founder's raw answers, and quoting
@@ -749,7 +764,7 @@ class LLMSectionNarrator:
             )
         prompt = (
             "\n".join(directives)
-            + f"\nSECTION: {section_key}\nFACTS: {json.dumps(slots, default=str)}"
+            + f"\nSECTION: {section_key}\nFACTS: {json.dumps(plain_slots(slots), default=str)}"
         )
         try:
             out = (self.llm(prompt) or "").strip()
