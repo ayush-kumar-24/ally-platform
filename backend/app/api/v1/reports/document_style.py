@@ -310,9 +310,11 @@ STYLE = """
 .rp .fact-k{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
   color:var(--signal);overflow-wrap:anywhere;}
 .rp .fact-q{font-size:12.5px;line-height:1.45;color:var(--ink-faint);font-style:italic;margin:0 0 3px;}
-.rp .fact-list.qa{list-style:none;padding:0;margin:0;}
-.rp .fact-list.qa li{margin:0 0 12px;padding:0;}
-.rp .fact-list.qa li:last-child{margin-bottom:0;}
+/* The question/answer variant keeps `.fact-list`'s bullet grid exactly as it
+   is -- it only needs more room between entries, because each one is now two
+   lines rather than one. `.fact-qa` is the single grid child that holds both. */
+.rp .fact-list.qa{gap:14px;}
+.rp .fact-qa{min-width:0;}
 .rp .fact-a{display:block;}
 .rp .fact-v{font-size:14.5px;line-height:1.55;color:var(--ink-soft);
   min-width:0;overflow-wrap:anywhere;}

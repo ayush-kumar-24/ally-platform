@@ -895,10 +895,18 @@ def _asked_and_answered(value: Any, questions: Sequence[str]) -> str:
                if isinstance(v, (str, int, float)) and str(v).strip()]
     if not answers or len(questions) < len(answers):
         return ""
+    # ONE child element per <li>, not two.
+    #
+    # `.fact-list li` is a two-column grid -- a 14px bullet column and the
+    # content column -- and `::before` draws the dot into the first. An <li>
+    # with the question and the answer as separate children puts a third item
+    # in a two-column grid, so the answer lands back in the 14px column and
+    # renders one character per line. It did exactly that.
     items = []
     for answer, question in zip(answers, questions):
         asked = (f'<div class="fact-q">{e(question)}</div>' if question else "")
-        items.append(f'<li>{asked}<span class="fact-a">{e(answer)}</span></li>')
+        items.append(f'<li><div class="fact-qa">{asked}'
+                     f'<div class="fact-a">{e(answer)}</div></div></li>')
     return '<ul class="fact-list qa">' + "".join(items) + "</ul>"
 
 
