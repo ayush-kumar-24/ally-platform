@@ -139,22 +139,6 @@ class ReportPayload:
     #: session already gathered, not a new claim about the founder.
     strength_evidence: tuple[tuple[str, str, str], ...] = ()
 
-    #: `{pillar_name: ((question, answer), ...)}` -- the founder's own weakest
-    #: answers in each area of the business.
-    #:
-    #: The Business DNA cards had nothing of the founder in them. Each one shows
-    #: `readiness_pillars.score_bands[].description`, which is catalogue text
-    #: written before any founder existed: the same five sentences about
-    #: co-founder conflict and micro-management reach every founder whose Team &
-    #: Leadership lands in that band, whether or not they have a co-founder. It
-    #: is labelled honestly ("What this usually means") and it is still generic,
-    #: which is what a founder told us made the section not worth reading.
-    #:
-    #: These are their own words on that area, so the card can show what the
-    #: band is actually about FOR THEM. Weakest first, because the card's job is
-    #: to explain a band and the band is driven by the weak answers.
-    pillar_evidence: dict[str, tuple[tuple[str, str], ...]] = field(default_factory=dict)
-
     #: Answers to questions actually TAGGED as distress indicators
     #: (questions.is_distress_tagged) that came back red or amber. The
     #: wellbeing narrative used to lead on category risk in "Founder
@@ -298,52 +282,6 @@ class ReportPayload:
             return float(v)
         except (TypeError, ValueError):
             return None
-
-
-#: How many of the founder's own answers a pillar card carries. One is the
-#: point: the card explains a band, and a second quote turns it back into the
-#: wall of text this replaced.
-_PILLAR_QUOTES = 1
-
-
-def _pillar_evidence(db: Session, session_id: int) -> dict[str, tuple[tuple[str, str], ...]]:
-    """The founder's weakest answers, grouped by the area they belong to.
-
-    answers -> questions -> problems -> readiness_pillars, which is the same
-    chain the scorer walks to build the band in the first place
-    (reasoning/engines/business_health.py). Quoting from it means the card's
-    evidence and the card's band cannot disagree about which area an answer
-    counted toward.
-
-    Red before amber, then oldest first, so `_PILLAR_QUOTES` takes the answer
-    that did most to put the pillar where it is. Green answers are excluded:
-    they have their own section, and a card explaining why an area is weak
-    should not quote the one thing going well in it.
-    """
-    rows = db.execute(
-        text("select rp.pillar_name, q.question_text, a.answer_text "
-             "from answers a "
-             "join questions q on q.question_id = a.question_id "
-             "join problems pr on pr.problem_id = q.problem_id "
-             "join readiness_pillars rp on rp.pillar_id = pr.pillar_id "
-             "where a.session_id = :sid "
-             "and a.score_label in ('red', 'amber') "
-             "and coalesce(btrim(a.answer_text), '') <> '' "
-             "order by rp.pillar_name, "
-             "case a.score_label when 'red' then 0 else 1 end, a.answered_at"),
-        {"sid": session_id},
-    ).mappings().all()
-
-    out: dict[str, list[tuple[str, str]]] = {}
-    for row in rows:
-        name = str(row["pillar_name"] or "").strip()
-        if not name:
-            continue
-        kept = out.setdefault(name, [])
-        if len(kept) >= _PILLAR_QUOTES:
-            continue
-        kept.append((str(row["question_text"] or ""), str(row["answer_text"] or "")))
-    return {name: tuple(quotes) for name, quotes in out.items() if quotes}
 
 
 def _actions(raw) -> tuple[ActionItem, ...]:
@@ -554,7 +492,6 @@ def build_report_payload(db: Session, report) -> ReportPayload:
         solve_actions=_actions(report.solve_actions),
         category_risk_scores=dict(sess.get("category_risk_scores") or {}),
         diagnosis_answers=int(sess.get("questions_answered_count") or 0),
-        pillar_evidence=_pillar_evidence(db, report.session_id),
         strength_evidence=tuple(
             (str(r["category"] or ""), str(r["question_text"] or ""),
              str(r["answer_text"] or ""))

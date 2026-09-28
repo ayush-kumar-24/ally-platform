@@ -18,6 +18,7 @@ font CDN and the PDF cannot silently render in a fallback face.
 from __future__ import annotations
 
 import html
+import re
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any, Mapping, Sequence
@@ -272,34 +273,42 @@ def _pillar_bands(narrative) -> dict[str, str]:
     return out
 
 
-def _pillar_quote(pillar: Mapping[str, Any]) -> str:
-    """The founder's own answer that put this area where it is, or "".
+#: A band description shorter than this is one thought, and one thought does
+#: not want a bullet in front of it.
+_MIN_BULLETS = 2
 
-    One quote, under the general band text rather than instead of it: the band
-    text is the calibration ("businesses here usually look like this") and this
-    is the part that is about them. Absent on a report generated before pillar
-    evidence was carried, and on a pillar whose answers all came back green --
-    both render the card exactly as before.
+
+def _band_bullets(desc: str) -> str:
+    """The band description as bullets, one per sentence.
+
+    A founder said these cards were "so big and uninteresting to read, just a
+    full paragraph" -- and they were: four or five sentences in one block, per
+    card, six cards. The text is now three short statements
+    (migration e7c2a94f1b58) and each gets its own line, so the card can be
+    skimmed rather than read.
+
+    Split on the sentence, not stored as a list, because
+    `score_bands[].description` is a string everywhere that reads it -- the
+    payload, the frontend, the PDF -- and changing that shape to win a bullet
+    would be a schema change for a layout.
+
+    One sentence stays a paragraph: a bullet in front of a single thought is
+    just an indent. Text with no sentence end at all also stays a paragraph, so
+    a description the team writes without full stops still renders.
     """
-    evidence = pillar.get("evidence")
-    if not isinstance(evidence, (list, tuple)):
+    text = " ".join((desc or "").split())
+    if not text:
         return ""
-    for item in evidence:
-        if not isinstance(item, Mapping):
-            continue
-        answer = str(item.get("answer") or "").strip()
-        if not answer:
-            continue
-        question = str(item.get("question") or "").strip()
-        # Trimmed to keep the card a card. The full answer is in the evidence
-        # section, which exists for exactly that.
-        if len(answer) > 260:
-            answer = answer[:260].rsplit(" ", 1)[0] + "…"
-        asked = (f'<div class="verdict-q">{e(question)}</div>' if question else "")
-        return ('<div class="verdict-mine">'
-                '<span class="verdict-mine-k">What put it here</span>'
-                f'{asked}<p class="verdict-a">&ldquo;{e(answer)}&rdquo;</p></div>')
-    return ""
+    lede = ('<span class="verdict-desc-lede">What this usually means:</span>')
+    # Only on ". " -- not on "?" or "!", which do not appear in these, and not
+    # on a full stop with no space after it, which is how "2.5%" and "Rs 1.5
+    # crore" survive if a description ever carries one.
+    parts = [p.strip() for p in re.split(r"(?<=\.)\s+", text) if p.strip()]
+    if len(parts) < _MIN_BULLETS:
+        return f'<p class="verdict-desc">{lede} {e(text)}</p>'
+    items = "".join(f"<li>{e(p)}</li>" for p in parts)
+    return (f'<div class="verdict-desc">{lede}'
+            f'<ul class="verdict-points">{items}</ul></div>')
 
 
 def _coverage_note(pillar: Mapping[str, Any]) -> str:
@@ -1124,15 +1133,7 @@ def _pillar_verdicts(pillars: Sequence[Mapping[str, Any]],
             # verdict. The reader can weigh "businesses in this band usually
             # look like X" against their own situation; they cannot weigh a
             # sentence that claims to be about them.
-            + (f'<p class="verdict-desc"><span class="verdict-desc-lede">'
-               f'What this usually means:</span> {e(desc)}</p>'
-               if desc else "")
-            # AND WHAT PUT THIS AREA HERE, in the founder's own words. The
-            # general text above says what the band usually looks like; this
-            # says what it is about for them. Without it the card is five
-            # sentences that could belong to anyone, which is what a founder
-            # told us made the section not worth reading.
-            + _pillar_quote(p)
+            + _band_bullets(desc)
             + '</li>'
         )
     # Say it where the verdicts are, not only at the top of the report. A

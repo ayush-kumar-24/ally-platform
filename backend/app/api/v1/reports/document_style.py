@@ -138,17 +138,12 @@ STYLE = """
 .rp .quote-good{border-left-color:var(--ok,#3f8f5f);}
 .rp .verdict-provisional{margin:0 0 10px;padding:8px 11px;border-radius:7px;background:var(--wash,#f6f5ef);border:1px solid var(--rule,#e3e1d8);font-size:12.5px;line-height:1.5;color:var(--ink-soft,#4a4a44);}
 .rp .verdict-desc-lede{display:block;font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;font-weight:700;color:var(--ink-faint,#8a8a80);margin-bottom:2px;}
-/* The founder's own answer under a pillar's band: what put this area here.
-   Set apart from the general band text above it, because the two are different
-   kinds of claim -- one is about businesses in this band, one is about them. */
-.rp .verdict-mine{margin:10px 0 0;padding:10px 12px;border-radius:8px;
-  background:rgba(0,0,0,.025);}
-.rp .verdict-mine-k{display:block;font-size:10.5px;letter-spacing:.07em;
-  text-transform:uppercase;font-weight:700;color:var(--ink-faint,#8a8a80);
-  margin-bottom:4px;}
-.rp .verdict-q{font-size:12.5px;line-height:1.45;font-style:italic;
-  color:var(--ink-faint,#8a8a80);margin:0 0 4px;}
-.rp .verdict-a{font-size:13.5px;line-height:1.55;color:var(--ink-soft,#4a5a50);margin:0;}
+/* The band description as bullets rather than a block. Same type size as the
+   paragraph it replaces -- what changed is that each statement can be skimmed
+   on its own line. */
+.rp .verdict-points{margin:4px 0 0;padding:0 0 0 18px;list-style:disc;}
+.rp .verdict-points li{margin:0 0 4px;line-height:1.5;}
+.rp .verdict-points li:last-child{margin-bottom:0;}
 .rp .bar-track{position:relative;height:9px;border-radius:999px;background:#E7E1D6;overflow:hidden;}
 .rp .bar-fill{height:100%;border-radius:999px;}
 .rp .bar-val{text-align:right;font-size:13px;line-height:1.25;font-weight:700;hyphens:none;overflow-wrap:normal;word-break:keep-all;}
