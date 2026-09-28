@@ -1358,6 +1358,7 @@ class Questions(Base):
         # place -- which is why the column below is still Optional here.
         CheckConstraint('primary_stage_group IS NOT NULL', name='questions_stage_group_required'),
         CheckConstraint("priority::text = ANY (ARRAY['CORE'::character varying, 'SUPPLEMENTARY'::character varying]::text[])", name='questions_priority_check'),
+        CheckConstraint("min_team_size IS NULL OR min_team_size IN ('solo', '2_5', '6_10', '11_25', '26_50', '50_plus')", name='questions_min_team_size_check'),
         CheckConstraint("question_type::text = ANY (ARRAY['open_text'::character varying, 'rating_scale'::character varying, 'yes_no'::character varying, 'multiple_choice'::character varying]::text[])", name='questions_question_type_check'),
         ForeignKeyConstraint(['follow_up_question_id'], ['questions.question_id'], name='questions_follow_up_question_id_fkey'),
         ForeignKeyConstraint(['problem_id'], ['problems.problem_id'], name='questions_problem_id_fkey'),
@@ -1370,6 +1371,7 @@ class Questions(Base):
         Index('idx_questions_embedding', 'embedding', postgresql_ops={'embedding': 'vector_cosine_ops'}, postgresql_using='hnsw', postgresql_where='(embedding IS NOT NULL)'),
         Index('idx_questions_priority', 'priority'),
         Index('idx_questions_stage_group', 'primary_stage_group'),
+        Index('idx_questions_min_team_size', 'min_team_size', postgresql_where='(min_team_size IS NOT NULL)'),
     )
 
     question_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -1389,6 +1391,24 @@ class Questions(Base):
     created_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True), server_default=text('now()'))
     updated_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True), server_default=text('now()'))
     primary_stage_group: Mapped[Optional[str]] = mapped_column(String(20))
+    #: The smallest `founders.team_size` band that can answer this question.
+    #: NULL means anyone can, including someone working alone.
+    #:
+    #: Team-dependence varies WITHIN a problem, which is why this sits here and
+    #: not on `problems` the way `dimension_code` does -- under one Decision
+    #: Rights problem, "Can anyone besides you agree a price?" needs another
+    #: person and "Do you know the lowest price you can accept?" does not. See
+    #: migration d4a1f8c62b73.
+    #:
+    #: Every Team & Leadership question carries a value: '2_5' is that pillar's
+    #: reviewed default, since all three of its Business DNA dimensions
+    #: presuppose people other than the founder, and the Stage 0 questions read
+    #: and judged answerable alone were opened back to 'solo'. Elsewhere the
+    #: column is NULL.
+    #:
+    #: The values are founders.team_size's own six, so a question can never
+    #: require a size a founder has no way to state.
+    min_team_size: Mapped[Optional[str]] = mapped_column(String(20))
 
     follow_up_question: Mapped[Optional['Questions']] = relationship('Questions', remote_side=[question_id], back_populates='follow_up_question_reverse')
     follow_up_question_reverse: Mapped[list['Questions']] = relationship('Questions', remote_side=[follow_up_question_id], back_populates='follow_up_question')
