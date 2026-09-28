@@ -42,31 +42,32 @@ def _slots(assessed, total=6, band="Developing", pillars=None):
 
 def test_a_full_assessment_still_says_all_six():
     prose = TemplateNarrator()._business_dna(_slots(6), TONE)
-    assert "all six readiness pillars" in prose
+    assert "all six areas of your business" in prose
 
 
 def test_a_partial_assessment_says_how_many_applied():
     """The bug. A Validation founder was told six pillars had been read."""
     prose = TemplateNarrator()._business_dna(_slots(3), TONE)
 
-    assert "three readiness pillars that apply at your stage" in prose
+    assert "three areas that matter most where you are now" in prose
     assert "six" not in prose
 
 
 def test_a_prototype_founder_sees_four():
     prose = TemplateNarrator()._business_dna(_slots(4), TONE)
-    assert "four readiness pillars that apply at your stage" in prose
+    assert "four areas that matter most where you are now" in prose
 
 
 def test_the_count_is_spelled_out_not_printed_as_a_digit():
     prose = TemplateNarrator()._business_dna(_slots(3), TONE)
-    assert "3 readiness" not in prose
+    assert "3 areas" not in prose
 
 
 def test_the_band_still_leads_the_sentence():
     """The regression guard: the reading itself is unchanged, only its scope."""
     prose = TemplateNarrator()._business_dna(_slots(3, band="Strong"), TONE)
-    assert '"Strong"' in prose
+    # The stored level is "Strong"; what the founder reads is plain words for it.
+    assert '"Working well"' in prose
 
 
 def test_each_persona_keeps_its_own_voice():
@@ -74,10 +75,11 @@ def test_each_persona_keeps_its_own_voice():
     auditor = narrator._business_dna(_slots(3), SimpleNamespace(persona="Auditor"))
     validator = narrator._business_dna(_slots(3), SimpleNamespace(persona="Validator"))
 
-    assert "business health reads as" in auditor
-    assert "where you stand reads as" in validator
+    assert "things are" in auditor
+    assert "you are" in validator
+    assert auditor != validator, "the two personas must still read differently"
     for prose in (auditor, validator):
-        assert "three readiness pillars that apply at your stage" in prose
+        assert "three areas that matter most where you are now" in prose
 
 
 def test_missing_counts_fall_back_to_the_whole_model():
@@ -85,13 +87,14 @@ def test_missing_counts_fall_back_to_the_whole_model():
     rather than printing None."""
     prose = TemplateNarrator()._business_dna(
         {"overall_band": "Developing", "pillars": []}, TONE)
-    assert "all six readiness pillars" in prose
+    assert "all six areas of your business" in prose
     assert "None" not in prose
 
 
 def test_no_band_produces_no_claim_at_all():
     prose = TemplateNarrator()._business_dna(_slots(3, band=None), TONE)
-    assert "readiness pillars" not in prose
+    assert "areas of your business" not in prose
+    assert "areas that matter most" not in prose
 
 
 # --- the persisted snapshot carries the coverage --------------------------
@@ -156,7 +159,7 @@ def test_an_ideation_report_says_four_pillars_applied():
     """End of the chain: four in-scope pillars reach the founder as a sentence
     about four, not about six."""
     prose = TemplateNarrator()._business_dna(_slots(4), TONE)
-    assert "four readiness pillars that apply at your stage" in prose
+    assert "four areas that matter most where you are now" in prose
     assert "six" not in prose
 
 

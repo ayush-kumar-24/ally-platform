@@ -146,11 +146,11 @@ def test_no_clear_diagnosis_states_no_root_cause(insights):
     html = _doc(narrative, insights)
 
     assert "Small Sample Bias" not in html
-    assert "What&rsquo;s in the way looks like" not in html
-    assert "Why Ally reached this conclusion" not in html
+    assert "What looks like it is in your way" not in html
+    assert "How Ally got here" not in html
     # ...and the hero must not promise one either.
-    assert "traced what&rsquo;s holding you back" not in html
-    assert "No single root cause separated out clearly" in html
+    assert "explains most of what is in your way" not in html
+    assert "Nothing stood out as the single thing in your way" in html
 
 
 def test_distress_leads_with_wellbeing_not_the_business_ring(insights):

@@ -165,9 +165,14 @@ def test_internal_routing_keys_never_reach_the_page(narrative, insights):
 
 
 def test_overall_score_is_shown_as_a_band_not_a_number(narrative, insights):
-    """Bands, not raw numbers: "31/100" hands a founder a grade."""
+    """Where you stand, not a raw number: "31/100" hands a founder a grade.
+
+    The stored level is still "Critical Gap" -- code matches on it -- and what
+    the founder reads is the plain words for it.
+    """
     html = _doc(narrative, insights)
-    assert "Critical Gap" in html
+    assert "Not working yet" in html
+    assert "Critical Gap" not in html
     assert "31/100" not in html
     assert ">31<" not in html          # never as the ring's own figure
 

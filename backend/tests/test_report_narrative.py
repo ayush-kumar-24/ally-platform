@@ -187,7 +187,11 @@ def test_not_tested_reads_differently_from_confirmed():
     # Hard rule 5.
     n = _gen(_payload())
     pp = next(s for s in n.sections if s.key == "problem_path").prose.lower()
-    assert "confirmed" in pp and ("did not directly test" in pp or "not directly test" in pp)
+    # "held up" is the confirmed wording now, "did not ask about it directly"
+    # the not-tested one. The point is that the two read differently, not which
+    # words do it.
+    assert "held up" in pp
+    assert "did not ask about it directly" in pp
 
 
 # Feedback #2: bands + descriptions, never raw numbers.
