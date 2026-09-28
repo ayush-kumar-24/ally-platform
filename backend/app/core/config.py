@@ -218,6 +218,17 @@ class Settings(BaseSettings):
     # pays for it once. It fails to the un-summarised cards on any error.
     FOUNDER_DNA_SUMMARY_LLM: bool = False
 
+    # The one-line READ on each Founder DNA card -- what the founder's answers
+    # show about them on that facet, rather than a shorter copy of the answer
+    # (engines/founder_dna_reads.py). Off => cards show the founder's own
+    # answers with the question above them, which is today's behaviour.
+    #
+    # ON, a dimension the model cannot honestly read gets NO CARD at all: a
+    # heading like EMOTIONAL INTELLIGENCE over "Our Halol plant head, Ramesh,
+    # 2022" is what this exists to stop, and printing fewer, meaningful cards
+    # is the point rather than a side effect.
+    FOUNDER_DNA_READS_LLM: bool = False
+
     # Let a model choose each founder's two dashboard lines from the shortlist
     # the catalogue and their profile produce. Off => the deterministic pick,
     # which is still per-founder and still stage-filtered -- the model is
@@ -867,6 +878,17 @@ class Settings(BaseSettings):
     # Answer-consistency detector (input (c) of confidence). Off => the signal stays
     # UNAVAILABLE and confidence renormalises over the other four inputs, as before.
     ANSWER_CONSISTENCY_LLM: bool = False
+
+    # A second pass over the WHOLE graded session, after every answer has been
+    # graded on its own. The per-answer classifier sees one answer at a time and
+    # so cannot tell "early but organised" from "in trouble" -- both mis-readings
+    # have shipped, in both directions. Off => the per-answer grades stand
+    # exactly as today, which is why this is its own flag and defaults off.
+    #
+    # It can move a grade one band and no further, never touches
+    # not_applicable, and is discarded entirely if it wants to change more than
+    # a third of the session. See engines/calibration.py.
+    SESSION_CALIBRATION_LLM: bool = False
 
     # Distress LANGUAGE detection (#11). Off => the deterministic distress proxy
     # (distress-tagged Red answers). On => the LLM reads the founder's words and

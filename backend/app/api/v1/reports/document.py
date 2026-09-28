@@ -18,6 +18,7 @@ font CDN and the PDF cannot silently render in a fallback face.
 from __future__ import annotations
 
 import html
+import re
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any, Mapping, Sequence
@@ -272,6 +273,44 @@ def _pillar_bands(narrative) -> dict[str, str]:
     return out
 
 
+#: A band description shorter than this is one thought, and one thought does
+#: not want a bullet in front of it.
+_MIN_BULLETS = 2
+
+
+def _band_bullets(desc: str) -> str:
+    """The band description as bullets, one per sentence.
+
+    A founder said these cards were "so big and uninteresting to read, just a
+    full paragraph" -- and they were: four or five sentences in one block, per
+    card, six cards. The text is now three short statements
+    (migration e7c2a94f1b58) and each gets its own line, so the card can be
+    skimmed rather than read.
+
+    Split on the sentence, not stored as a list, because
+    `score_bands[].description` is a string everywhere that reads it -- the
+    payload, the frontend, the PDF -- and changing that shape to win a bullet
+    would be a schema change for a layout.
+
+    One sentence stays a paragraph: a bullet in front of a single thought is
+    just an indent. Text with no sentence end at all also stays a paragraph, so
+    a description the team writes without full stops still renders.
+    """
+    text = " ".join((desc or "").split())
+    if not text:
+        return ""
+    lede = ('<span class="verdict-desc-lede">What this usually means:</span>')
+    # Only on ". " -- not on "?" or "!", which do not appear in these, and not
+    # on a full stop with no space after it, which is how "2.5%" and "Rs 1.5
+    # crore" survive if a description ever carries one.
+    parts = [p.strip() for p in re.split(r"(?<=\.)\s+", text) if p.strip()]
+    if len(parts) < _MIN_BULLETS:
+        return f'<p class="verdict-desc">{lede} {e(text)}</p>'
+    items = "".join(f"<li>{e(p)}</li>" for p in parts)
+    return (f'<div class="verdict-desc">{lede}'
+            f'<ul class="verdict-points">{items}</ul></div>')
+
+
 def _coverage_note(pillar: Mapping[str, Any]) -> str:
     """"Execution Velocity only", when the stage covers part of this pillar.
 
@@ -434,9 +473,14 @@ def _high_low(categories: Sequence[Mapping[str, Any]],
                      'will use to fix the column on the right.</p>')
 
     return (
-        "<p>Every part of your business we looked at, in order. On the left is what "
-        "is working that you can build on. On the right is what needs your "
-        "attention next.</p>"
+        # NO "left" AND "right". The two panels are a 1fr 1fr grid above 860px
+        # and stack into one column below it -- and the PDF stacks them too, so
+        # this sentence was wrong in the one place a founder is most likely to
+        # read it slowly. Each panel already carries its own heading; the copy
+        # names them instead of pointing at where they sit.
+        "<p>Every part of your business we looked at, in order. First what is "
+        "working that you can build on, then what needs your attention "
+        "next.</p>"
         '<div class="split">'
         '<div class="panel panel-strength"><div class="panel-title"><span class="dot"></span>'
         f'Lean on this</div>{left_body}</div>'
@@ -856,6 +900,69 @@ def _fact_value(value: Any) -> str:
     return e(value)
 
 
+def _asked_for(facts: Mapping[str, Any], key: str) -> list[str]:
+    """The questions behind this fact's answers, index-aligned with them.
+
+    A list, not one string. A dimension holds up to three answers and they come
+    from DIFFERENT questions -- Decision Style held "Steering alone" and
+    "Hiring for the Chakan plant in 2023", which answer two unrelated things.
+    One question printed above both would explain the first and misattribute
+    the second.
+    """
+    asked = (facts or {}).get("_questions")
+    if not isinstance(asked, dict):
+        return []
+    questions = asked.get(key)
+    if isinstance(questions, str):
+        return [questions.strip()]
+    if isinstance(questions, (list, tuple)):
+        return [q.strip() if isinstance(q, str) else "" for q in questions]
+    return []
+
+
+def _read_for(facts: Mapping[str, Any], key: str) -> str:
+    """The one-line read for this dimension, or "" when there is not one.
+
+    Absent is the ordinary case, not an error: a dimension whose answers name a
+    moment without describing it has no read, and the generator drops that card
+    entirely rather than rendering a heading over a fragment.
+    """
+    reads = (facts or {}).get("_reads")
+    if not isinstance(reads, dict):
+        return ""
+    line = reads.get(key)
+    return line.strip() if isinstance(line, str) else ""
+
+
+def _asked_and_answered(value: Any, questions: Sequence[str]) -> str:
+    """Answers paired with the question each one actually answers.
+
+    Falls back to plain rendering when the shapes do not line up -- a stored
+    report from before questions were carried, or a dimension whose lists
+    somehow differ in length. A card that shows the answers alone is the old
+    behaviour; one that pairs them wrongly is worse than either.
+    """
+    if not isinstance(value, (list, tuple)):
+        return ""
+    answers = [str(v).strip() for v in value
+               if isinstance(v, (str, int, float)) and str(v).strip()]
+    if not answers or len(questions) < len(answers):
+        return ""
+    # ONE child element per <li>, not two.
+    #
+    # `.fact-list li` is a two-column grid -- a 14px bullet column and the
+    # content column -- and `::before` draws the dot into the first. An <li>
+    # with the question and the answer as separate children puts a third item
+    # in a two-column grid, so the answer lands back in the 14px column and
+    # renders one character per line. It did exactly that.
+    items = []
+    for answer, question in zip(answers, questions):
+        asked = (f'<div class="fact-q">{e(question)}</div>' if question else "")
+        items.append(f'<li><div class="fact-qa">{asked}'
+                     f'<div class="fact-a">{e(answer)}</div></div></li>')
+    return '<ul class="fact-list qa">' + "".join(items) + "</ul>"
+
+
 def _facts_html(facts: Mapping[str, Any], skip: Sequence[str] = ()) -> str:
     """Founder-facing facts as labelled rows. Internal keys are already stripped
     upstream by generator._founder_facts; this only shapes what is left."""
@@ -887,8 +994,31 @@ def _facts_html(facts: Mapping[str, Any], skip: Sequence[str] = ()) -> str:
         # printed under a title-cased version of its own name.
         if not label:
             continue
+        # THE QUESTION, WHERE THERE IS ONE. A Founder DNA card is the founder's
+        # own answer, and these questions ask for a specific moment -- so the
+        # answers are specific moments. A live report's FOCUS ATTENTION card
+        # read "Monday."; CORE MOTIVATION read "The bridge"; EMOTIONAL
+        # INTELLIGENCE read "Our Halol plant head, Ramesh, 2022." Every one is
+        # a true answer, and none of them means anything under a heading alone.
+        #
+        # Read out of the same facts mapping rather than passed in, because the
+        # generator files it beside the dimension it belongs to and this loop
+        # already has the key to look it up with.
+        questions = _asked_for(facts, key)
+        paired = _asked_and_answered(value, questions) if questions else ""
+        body = paired or rendered
+        # THE READ LEADS THE CARD when there is one -- it is what the heading
+        # promises. The founder's own words stay underneath as the evidence
+        # they can check it against, which is the only reason a read is safe to
+        # print at all: nothing is asserted that the reader cannot audit one
+        # line down.
+        read = _read_for(facts, key)
+        if read:
+            body = (f'<p class="fact-read">{e(read)}</p>'
+                    f'<div class="fact-evidence"><span class="fact-evidence-k">'
+                    f'In your words</span>{body}</div>')
         rows.append(f'<div class="fact"><span class="fact-k">{e(label)}</span>'
-                    f'<div class="fact-v">{rendered}</div></div>')
+                    f'<div class="fact-v">{body}</div></div>')
     return f'<div class="facts">{"".join(rows)}</div>' if rows else ""
 
 
@@ -1003,9 +1133,7 @@ def _pillar_verdicts(pillars: Sequence[Mapping[str, Any]],
             # verdict. The reader can weigh "businesses in this band usually
             # look like X" against their own situation; they cannot weigh a
             # sentence that claims to be about them.
-            + (f'<p class="verdict-desc"><span class="verdict-desc-lede">'
-               f'What this usually means:</span> {e(desc)}</p>'
-               if desc else "")
+            + _band_bullets(desc)
             + '</li>'
         )
     # Say it where the verdicts are, not only at the top of the report. A

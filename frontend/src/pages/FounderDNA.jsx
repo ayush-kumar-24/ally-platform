@@ -81,10 +81,21 @@ function FounderDNAView({ section, report }) {
      answers themselves. */
   const summaries = facts._summaries || {};
 
-  const operateFacts = factList(facts).filter(
-    (f) => !['Archetype', 'Origin', 'Vision', ' origin text', ' vision text']
-      .some((k) => f.label.toLowerCase() === k.toLowerCase().trim())
-  );
+  /* A dimension with no read is not shown.
+     `_reads` present at all means the backend tried; a dimension missing from
+     it is one whose answers could not honestly be read, and a heading like
+     Emotional Intelligence over "Our Halol plant head, Ramesh, 2022" is what
+     this drops. Fewer cards that mean something.
+     Gated on `_reads` existing, so a report generated before reads shipped
+     keeps every card rather than silently losing most of this page. */
+  const readsAttempted = !!facts._reads && Object.keys(facts._reads).length > 0;
+
+  const operateFacts = factList(facts)
+    .filter(
+      (f) => !['Archetype', 'Origin', 'Vision', ' origin text', ' vision text']
+        .some((k) => f.label.toLowerCase() === k.toLowerCase().trim())
+    )
+    .filter((f) => !readsAttempted || f.read);
 
   return (
     <div className="fd-container">
@@ -160,7 +171,19 @@ function FounderDNAView({ section, report }) {
                       is scannable at rest and every answer is still visible;
                       "Read more" opens them in full. Nothing is summarised,
                       rewritten or cut -- not here and not in storage. */}
-                  <ClampedList items={f.items} summary={summaries[f.key]} lines={2} />
+                  {/* The read leads the card; the founder's own words sit
+                      under it as the evidence they can check it against --
+                      which is the only reason a read is safe to print at all.
+                      Nothing is asserted the reader cannot audit one line
+                      down. */}
+                  {f.read ? <p className="fd-card-read">{f.read}</p> : null}
+                  {f.read ? <span className="fd-evidence-k">In your words</span> : null}
+                  <ClampedList
+                    items={f.items}
+                    questions={f.questions}
+                    summary={summaries[f.key]}
+                    lines={2}
+                  />
                 </div>
               ))}
             </div>

@@ -140,3 +140,141 @@ def test_a_founders_own_words_are_never_censored():
     page, it is only excluded from what this test polices."""
     page = _report_html()
     assert "I do not know what to charge." in page
+
+
+# --- a card that cannot say anything is not printed --------------------------
+
+def _dna_facts(**payload_kw):
+    from app.api.v1.reports.generator import ReportNarrativeGenerator
+    payload = ReportPayload(
+        report_id=1, founder_id=1, session_id=1, founder_name="Test",
+        tone_code="T", tone_persona="Auditor", session_state="stable",
+        distress_acknowledged_first=False, overall_confidence_score=62.0,
+        business_health_overall=31, business_health_band="Critical Gap",
+        pillars=(), red_flag_pillars=(), archetype=None, top_root_causes=(),
+        confirm_actions=(), solve_actions=(),
+        founder_origin="2013.",
+        phase2_dimensions={
+            "core_values": ("A sales manager gave 9% away without asking.",),
+            "emotional_intelligence": ("Our Halol plant head, Ramesh, 2022.",),
+            "focus_attention": ("Monday.",),
+        },
+        **payload_kw,
+    )
+    slots, facts = ReportNarrativeGenerator()._slots_and_facts(
+        "founder_dna", payload, False)
+    return facts
+
+
+def test_a_dimension_with_no_read_is_not_given_a_card():
+    """EMOTIONAL INTELLIGENCE over "Our Halol plant head, Ramesh, 2022" is what
+    this drops: the answer names a moment without describing it, so there is
+    nothing to say about the founder from it."""
+    facts = _dna_facts(
+        reads_attempted=True,
+        dimension_reads={"core_values": "You mind more about the promise."},
+    )
+    assert "core_values" in facts
+    assert "emotional_intelligence" not in facts
+    assert "focus_attention" not in facts
+    assert "origin" not in facts, "origin is a card too, and 2013. is not a read"
+
+
+def test_a_report_from_before_reads_keeps_every_card():
+    """Gated on reads_attempted, so an old report does not silently lose most
+    of its Founder DNA section."""
+    facts = _dna_facts(reads_attempted=False, dimension_reads={})
+    for key in ("core_values", "emotional_intelligence", "focus_attention", "origin"):
+        assert key in facts
+
+
+def test_the_read_leads_the_card_and_the_answers_back_it_up():
+    from app.api.v1.reports.document import _facts_html
+
+    html = _facts_html({
+        "core_values": ["A sales manager gave 9% away without asking."],
+        "_reads": {"core_values": "You mind more about the promise than the quarter."},
+        "_questions": {"core_values": ["Tell me about a line someone crossed."]},
+    })
+    assert "You mind more about the promise than the quarter." in html
+    assert "In your words" in html
+    assert "A sales manager gave 9% away without asking." in html
+    # The read comes first: it is what the heading promises.
+    assert html.index("You mind more") < html.index("In your words")
+
+
+def test_the_root_cause_prose_does_not_repeat_its_boilerplate():
+    """Three causes used to produce the secondaries' identical sentence twice
+    in consecutive breaths, in a block a founder told us he would not read."""
+    from app.api.v1.reports.narrator import TemplateNarrator
+    from types import SimpleNamespace
+
+    prose = TemplateNarrator()._problem_path(
+        {"root_causes": [
+            {"name": "Lack of Trust", "rank": 1, "confirmation_status": "unconfirmed"},
+            {"name": "Poor User Experience", "rank": 2, "confirmation_status": "unconfirmed"},
+            {"name": "Founder Bypasses Managers", "rank": 3, "confirmation_status": "unconfirmed"},
+        ], "stated_symptom": "Margins are slipping."},
+        SimpleNamespace(persona="Auditor"))
+
+    assert prose.count("worth an eye on") == 1, "the boilerplate is said once"
+    assert "Poor User Experience and Founder Bypasses Managers" in prose
+    # And the quote is not repeated here: document._root_cause already opens
+    # its trail with the same words.
+    assert "Margins are slipping" not in prose
+
+
+# --- the band description reads as bullets, not a block ---------------------
+
+def test_a_band_description_becomes_one_bullet_per_statement():
+    """A founder said these cards were "so big and uninteresting to read, just
+    a full paragraph"."""
+    from app.api.v1.reports.document import _band_bullets
+
+    html = _band_bullets(
+        "Your team is pulling in different directions. "
+        "You may be checking everything yourself. "
+        "That is usually why everything else moves slowly.")
+    assert html.count("<li>") == 3
+    assert "What this usually means" in html
+    assert "verdict-points" in html
+
+
+def test_one_sentence_stays_a_paragraph():
+    """A bullet in front of a single thought is just an indent."""
+    from app.api.v1.reports.document import _band_bullets
+
+    html = _band_bullets("Only one thought here.")
+    assert "<li>" not in html
+    assert "Only one thought here." in html
+
+
+def test_a_decimal_does_not_split_a_bullet():
+    """Split on a full stop FOLLOWED BY A SPACE, so "9.5%" survives."""
+    from app.api.v1.reports.document import _band_bullets
+
+    html = _band_bullets("Margin fell to 9.5% last year. That is the problem.")
+    assert html.count("<li>") == 2
+    assert "9.5%" in html
+
+
+def test_text_with_no_sentence_end_still_renders():
+    from app.api.v1.reports.document import _band_bullets
+
+    assert "no full stop at all" in _band_bullets("no full stop at all")
+    assert _band_bullets("") == ""
+    assert _band_bullets(None) == ""
+
+
+def test_the_pillar_card_carries_no_quote():
+    """Asked for and removed: the pillar cards were to be SHORTENED, not given
+    the founder's answers as well."""
+    from app.api.v1.reports.document import _pillar_verdicts
+
+    html = _pillar_verdicts([{
+        "pillar_name": "Team & Leadership", "band": "Critical Gap",
+        "band_description": "One thing. Another thing. A third thing.",
+        "evidence": [{"question": "q", "answer": "a"}],
+    }], hedged=False)
+    assert "What put it here" not in html
+    assert html.count("<li>") == 3

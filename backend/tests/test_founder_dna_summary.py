@@ -266,3 +266,125 @@ def test_the_feature_flag_off_schedules_nothing(monkeypatch):
 
     monkeypatch.setattr(mod.settings, "FOUNDER_DNA_SUMMARY_LLM", False, raising=False)
     assert mod.pending_dimensions(_Report({"core_values": ["a real paragraph"]})) == {}
+
+
+# --- the read on each card, and the card that is not printed ----------------
+#
+# The card's heading promises a read on the founder; the summariser is told
+# never to diagnose, so it could only ever produce a tidier quote. A founder
+# asked, about a card headed EMOTIONAL INTELLIGENCE holding "Our Halol plant
+# head, Ramesh, 2022": "what can we understand from this sentence about a
+# person's emotional intelligence?" Nothing, was the honest answer.
+
+def test_a_read_is_written_from_the_question_and_the_answer(monkeypatch):
+    from app.api.v1.reasoning.engines import founder_dna_reads as mod
+
+    captured = {}
+
+    def _fake(provider, request, timeout):
+        captured["body"] = request.messages[1].content
+        return '{"core_values": "You mind more about the promise than the quarter."}'
+
+    monkeypatch.setattr(mod, "run_sync", lambda coro: coro)
+    monkeypatch.setattr(mod, "_generate",
+                        lambda p, r, t: _fake(p, r, t))
+    out = mod.read_dimensions(object(), {
+        "core_values": {"question": "Tell me about a line someone crossed.",
+                        "answers": ["A sales manager gave 9% away without asking."]},
+    })
+    assert out == {"core_values": "You mind more about the promise than the quarter."}
+    # The QUESTION must be in the prompt. Without it "The bridge" is a noun,
+    # which is how two unrelated founders both previewed as "The bridge".
+    assert "Tell me about a line someone crossed." in captured["body"]
+    assert "A sales manager gave 9% away" in captured["body"]
+
+
+def test_a_facet_the_model_leaves_out_has_no_read(monkeypatch):
+    """Which is the whole safety of this: it may say nothing rather than
+    invent a founder from "Our Halol plant head, Ramesh, 2022."."""
+    from app.api.v1.reasoning.engines import founder_dna_reads as mod
+
+    monkeypatch.setattr(mod, "run_sync", lambda coro: coro)
+    monkeypatch.setattr(mod, "_generate", lambda p, r, t: '{}')
+    assert mod.read_dimensions(object(), {
+        "emotional_intelligence": {"question": "When did you misread someone?",
+                                   "answers": ["Our Halol plant head, Ramesh, 2022."]},
+    }) == {}
+
+
+def test_a_read_for_a_facet_we_did_not_ask_about_is_dropped(monkeypatch):
+    """It would render as a card of its own on the frontend's generic grid."""
+    from app.api.v1.reasoning.engines import founder_dna_reads as mod
+
+    monkeypatch.setattr(mod, "run_sync", lambda coro: coro)
+    monkeypatch.setattr(mod, "_generate",
+                        lambda p, r, t: '{"core_values": "ok", "invented": "no"}')
+    out = mod.read_dimensions(object(), {
+        "core_values": {"question": "q", "answers": ["a"]}})
+    assert out == {"core_values": "ok"}
+
+
+def test_a_provider_failure_yields_no_reads_rather_than_raising(monkeypatch):
+    from app.api.v1.reasoning.engines import founder_dna_reads as mod
+
+    def _boom(coro):
+        raise RuntimeError("provider is down")
+
+    monkeypatch.setattr(mod, "run_sync", _boom)
+    assert mod.read_dimensions(object(), {
+        "core_values": {"question": "q", "answers": ["a"]}}) == {}
+
+
+def test_origin_and_vision_are_readable_even_though_they_are_strings():
+    """`_dimensions` skips them because the summariser only handles lists. A
+    read has to cover them -- "Origin: 2013." is the card a founder pointed at
+    first."""
+    from app.api.v1.reports.dna_summaries import _dimensions, _readable_dimensions
+
+    founder_dna = {"origin": "2013.", "vision": "That customers still trust us.",
+                   "core_values": ["a real paragraph"], "archetype": {"x": 1}}
+    assert "origin" not in _dimensions(founder_dna)
+    readable = _readable_dimensions(founder_dna)
+    assert readable["origin"] == ["2013."]
+    assert readable["vision"] == ["That customers still trust us."]
+    assert "archetype" not in readable, "a structured finding is not a quoted answer"
+
+
+def test_a_declined_read_is_recorded_so_it_is_not_asked_again(monkeypatch):
+    from app.api.v1.reports import dna_summaries as mod
+
+    monkeypatch.setattr(mod.settings, "FOUNDER_DNA_READS_LLM", True, raising=False)
+    monkeypatch.setattr(mod, "provider_for_task", lambda *a, **k: object())
+
+    report = _Report({
+        "core_values": ["a real paragraph"],
+        "emotional_intelligence": ["Our Halol plant head, Ramesh, 2022."],
+        "_questions": {"core_values": ["q1"], "emotional_intelligence": ["q2"]},
+    })
+    calls = []
+
+    def _reads(_provider, items):
+        calls.append(sorted(items))
+        return {"core_values": "You mind more about the promise."}
+
+    monkeypatch.setattr(mod, "read_dimensions", _reads)
+    mod.ensure_dna_reads(_Session(), report)
+
+    stored = report.founder_dna["_reads"]
+    assert stored["core_values"] == "You mind more about the promise."
+    assert stored["emotional_intelligence"] == "", "declined, and recorded as such"
+
+    mod.ensure_dna_reads(_Session(), report)
+    assert len(calls) == 1, "the declined facet was asked about again"
+
+
+def test_a_total_failure_still_retries(monkeypatch):
+    from app.api.v1.reports import dna_summaries as mod
+
+    monkeypatch.setattr(mod.settings, "FOUNDER_DNA_READS_LLM", True, raising=False)
+    monkeypatch.setattr(mod, "provider_for_task", lambda *a, **k: object())
+    monkeypatch.setattr(mod, "read_dimensions", lambda p, i: {})
+
+    report = _Report({"core_values": ["a real paragraph"]})
+    mod.ensure_dna_reads(_Session(), report)
+    assert "_reads" not in report.founder_dna

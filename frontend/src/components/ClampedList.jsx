@@ -27,7 +27,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  * scrollHeight vs clientHeight asks the browser what actually happened, at the
  * width it actually happened at.
  */
-export default function ClampedList({ items, summary, lines = 2 }) {
+export default function ClampedList({ items, questions = [], summary, lines = 2 }) {
   const ref = useRef(null);
   const [expanded, setExpanded] = useState(false);
   const [overflows, setOverflows] = useState(false);
@@ -70,7 +70,10 @@ export default function ClampedList({ items, summary, lines = 2 }) {
           <div className="fd-answers">
             {items.map((text, i) => (
               // eslint-disable-next-line react/no-array-index-key -- answers are plain strings with no id, and two identical ones are possible
-              <p key={i} className="fd-card-desc">{text}</p>
+              <div key={i}>
+                {questions[i] ? <span className="fd-bullet-q">{questions[i]}</span> : null}
+                <p className="fd-card-desc">{text}</p>
+              </div>
             ))}
           </div>
         ) : (
@@ -93,7 +96,11 @@ export default function ClampedList({ items, summary, lines = 2 }) {
     );
   }
 
-  /* NO SUMMARY: the answers themselves, one bullet each, clamped. */
+  /* NO SUMMARY: the answers themselves, one bullet each, clamped.
+     Each with the question it answers above it, where we have it. Without the
+     question a bullet reading "Monday." under a heading called Focus Attention
+     is a true answer that says nothing -- which is what a founder told us made
+     these cards unreadable. */
   return (
     <>
       <ul className={`fd-bullets${expanded ? ' is-open' : ' is-clamped'}`} ref={ref}>
@@ -104,6 +111,7 @@ export default function ClampedList({ items, summary, lines = 2 }) {
           // the clamp was added to sit beside.
           // eslint-disable-next-line react/no-array-index-key -- answers are plain strings with no id, and two identical ones are possible
           <li key={i}>
+            {questions[i] ? <span className="fd-bullet-q">{questions[i]}</span> : null}
             <span
               className="fd-bullet-text"
               style={expanded ? undefined : { WebkitLineClamp: lines }}

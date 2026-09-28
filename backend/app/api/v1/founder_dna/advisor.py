@@ -91,6 +91,28 @@ class LLMDimensionResolutionAdvisor(DimensionResolutionAdvisor):
             "specific, non-generic picture of this facet -- a vague or "
             "surface-level answer is NOT resolved, ask more. Do not invent "
             "anything not in the transcript.\n"
+            # SPECIFICITY IS NOT SUBSTANCE, and this is where that was missed.
+            #
+            # These questions ask for a moment ("the last time you misread
+            # someone on your team, and what it cost"), so a founder can answer
+            # with the identifiers and stop: "Our Halol plant head, Ramesh,
+            # 2022." That is clear, specific and non-generic -- it passes all
+            # three words above -- and it says nothing whatsoever about the
+            # facet. It resolved the dimension, the interview moved on, and the
+            # report then printed it under EMOTIONAL INTELLIGENCE, where a
+            # founder read it and asked what it was supposed to tell him.
+            #
+            # The same rule the answer-grading rubric needed
+            # (diagnosis/advisor.py, "SPECIFICITY IS NOT HEALTH"): judge what
+            # the answer SAYS about the facet, not how precise it is.
+            "NAMING A MOMENT IS NOT DESCRIBING IT. A who, a when or a what with "
+            "no consequence, no choice and no reflection is NOT resolved, "
+            "however precise it is. \"Our plant head, Ramesh, 2022\" and "
+            "\"March, year-end\" are exact and empty: they identify an "
+            "episode without saying what happened in it, what the founder did, "
+            "or what it cost. Ask for that part. What resolves a facet is the "
+            "substance -- what they did, why, and what followed -- not the "
+            "precision of the label.\n"
             'Respond with a single JSON object and nothing else: '
             '{"resolved": true|false, "rationale": "one sentence"}'
         )

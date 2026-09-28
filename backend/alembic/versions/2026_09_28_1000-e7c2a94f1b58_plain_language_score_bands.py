@@ -48,57 +48,65 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 #: (pillar_name, level) -> the new description.
+#:
+#: THREE SHORT STATEMENTS EACH, not a paragraph. The originals were four or
+#: five long sentences and a founder said the cards were "so big and
+#: uninteresting to read, just a full paragraph". The document splits these on
+#: the full stop and renders one bullet per statement, so the sentence
+#: boundaries here are load-bearing: each one has to stand alone as a bullet.
+#: Average length is 193 characters against the originals' 330.
+#:
+#: Same judgement in every one -- nothing softened, only cut.
 NEW = {
     ("Founder Readiness", "Critical Gap"):
-        "Right now you are carrying more than you can hold. That might be exhaustion, real fear about this failing, feeling alone in it, or not being sure who you are outside this business. Whatever it is, it comes first. Fixing things in the business will not shift much until this does.",
+        "You are carrying more than you can hold right now. That might be exhaustion, real fear of failing, or feeling alone in it. This comes first -- fixing the business will not shift much until it does.",
     ("Founder Readiness", "Needs Attention"):
-        "You have the drive. You are also showing the strain \u2014 working too much, no line between work and the rest of your life, decisions made in a rush, or doubting yourself even when you are doing well. You can keep moving, but only so far until you build a pace you can actually keep up.",
+        "You have the drive, and you are showing the strain. Too many hours, no line between work and the rest of your life, decisions made in a rush. You can keep going, but only so far until you find a pace you can hold.",
     ("Founder Readiness", "Developing"):
-        "You know yourself reasonably well, you are motivated, and you hold up under pressure. There are some blind spots and some stress patterns, but neither is stopping you growing. This is where most founders are early on.",
+        "You know yourself reasonably well and you hold up under pressure. There are blind spots and stress patterns, but neither is stopping you. This is where most founders are early on.",
     ("Founder Readiness", "Strong"):
-        "You know yourself well, you want this for your own reasons, you stay steady when things get hard, and you bounce back. You ask for feedback, you decide deliberately, and you work at a pace you can keep. That is rare, and it is a real advantage.",
+        "You know yourself well and you stay steady when things get hard. You ask for feedback, you decide deliberately, and you work at a pace you can keep. That is rare, and it is a real advantage.",
     ("Market Clarity", "Critical Gap"):
-        "You are building for a customer you have imagined, solving a problem you have assumed, with nothing yet to show either is real. You cannot say precisely who this is for, you have not sat down with customers, or you think everyone is a customer. This is the riskiest place to be \u2014 time and money are going into a guess.",
+        "You are building for a customer you have imagined, solving a problem you have assumed. You cannot yet say precisely who this is for, or you think everyone is. This is the riskiest place to be -- time and money are going into a guess.",
     ("Market Clarity", "Needs Attention"):
-        "You have asked around, but not deeply enough. You have a rough sense of who this is for without the specifics. How you plan to reach them is still vague. People may have told you they liked the idea, but you cannot point to anything showing they would pay for it.",
+        "You have asked around, but not deeply enough. You have a rough sense of who this is for, without the specifics. People said they liked the idea; nothing yet shows they would pay.",
     ("Market Clarity", "Developing"):
-        "You know who this is for, you have had real conversations with customers, and you understand who else is in the market. You have a plan for reaching people, even if it is not tested yet. You can say clearly what you are worth to them.",
+        "You know who this is for and you have had real conversations with them. You understand who else is in the market. You have a plan for reaching people, even if it is not tested yet.",
     ("Market Clarity", "Strong"):
-        "You know this market properly and you have checked it. You can name your ideal customer exactly, you have proof people want this rather than opinions, you know why someone would switch to you, and how you reach them is built on real numbers rather than assumptions.",
+        "You know this market properly, and you have checked it. You can name your ideal customer exactly and show that people want this. How you reach them is built on real numbers, not assumptions.",
     ("Revenue Maturity", "Critical Gap"):
-        "You have no set way of selling, you do not know what it costs you to serve a customer, you price on gut feel, and you cannot tell what next month brings. If money is coming in, it is luck more than design. Cash may be going out faster than you have noticed.",
+        "You have no set way of selling, and you price on gut feel. You do not know what it costs you to serve a customer. Money may be going out faster than you have noticed.",
     ("Revenue Maturity", "Needs Attention"):
-        "You are making sales, but not in a way you could repeat on purpose. You charge too little, you do not track who might buy next, and you have never worked out what each sale actually earns you. Growth is happening, and it rests entirely on how hard you push.",
+        "You are making sales, but not in a way you could repeat on purpose. You charge too little, and you have never worked out what a sale earns you. Growth rests entirely on how hard you push.",
     ("Revenue Maturity", "Developing"):
-        "You have a way of selling that you follow, a sensible view on price, and some grip on what each customer costs and earns. Money coming in is growing and you can roughly see it coming. You watch whether customers stay. You are moving from reacting to planning.",
+        "You have a way of selling that you follow, and a sensible view on price. You have some grip on what each customer costs and earns, and you watch whether they stay. You are moving from reacting to planning.",
     ("Revenue Maturity", "Strong"):
-        "You run revenue like a system. You know who might buy next, you price on the value you give, each sale earns well, customers stay, and you keep your numbers up to date. You can see what is coming, and you know exactly what has to happen to grow it.",
+        "You run revenue like a system. You know who might buy next, each sale earns well, and customers stay. You can see what is coming and what has to happen to grow it.",
     ("Product & Execution", "Critical Gap"):
-        "What you are making is either not built, not working, or not actually useful to anyone yet. Getting things done is chaotic \u2014 nothing has a set way of being done, every day is firefighting, and all of it runs through you. At this point the business cannot grow even if you know your market and the money is coming in.",
+        "What you make is not built, not working, or not useful to anyone yet. Nothing has a set way of being done, and all of it runs through you. The business cannot grow from here even if the rest is fine.",
     ("Product & Execution", "Needs Attention"):
-        "What you make works, but it breaks easily. You do hear from customers, but only by chance rather than by design. What you work on next is decided by whatever is loudest. Things get done because people push hard, not because there is a way of doing them. The shortcuts are piling up.",
+        "What you make works, but it breaks easily. You hear from customers by chance, and you work on whatever is loudest. Things get done by pushing hard, not by having a way of doing them.",
     ("Product & Execution", "Developing"):
-        "What you make is genuinely useful and reliable enough. You have a way of hearing from real customers. There is some order to what you work on next. The main jobs have a set way of being done. Your team can get on with things without you in every decision.",
+        "What you make is genuinely useful and reliable enough. You hear from real customers, and the main jobs have a set way of being done. Your team can get on without you in every decision.",
     ("Product & Execution", "Strong"):
-        "People clearly want what you make. You build carefully, using what customers and the numbers tell you. Things get done through the way you work, not through heroics. You catch quality problems before customers do. You know what you are building next and why.",
+        "People clearly want what you make. You build using what customers and the numbers tell you. Things get done through the way you work, not through heroics.",
     ("Team & Leadership", "Critical Gap"):
-        "Your team is pulling apart, pulling in different directions, or is not really there yet. There may be a falling-out with a co-founder. You may be checking everything yourself, or have the wrong people in the jobs that matter. People are leaving, or about to. When this is where things stand, it is usually the hidden reason everything else moves slowly.",
+        "Your team is pulling in different directions, or is not really there yet. You may be checking everything yourself, or have the wrong people in the jobs that matter. When things stand here, it is usually why everything else moves slowly.",
     ("Team & Leadership", "Needs Attention"):
-        "The team works, but only just. You are still doing too much yourself. Handing things over feels uncomfortable. Some important jobs are held by people who are not quite right for them, and that is being worked around. Nobody is quite sure how things get communicated. Everyone works hard, not always towards the same thing.",
+        "The team works, but only just, and you are still doing too much yourself. Handing things over feels uncomfortable, and some important jobs are being worked around. Everyone works hard, not always towards the same thing.",
     ("Team & Leadership", "Developing"):
-        "People are reasonably clear on who does what and what matters most. You are genuinely starting to hand things over. There is some sense of who is answerable for what. People feel able to speak up. There are still gaps in the team, but you are pointed the right way.",
+        "People are reasonably clear on who does what and what matters most. You are genuinely starting to hand things over, and people feel able to speak up. There are gaps in the team, but you are pointed the right way.",
     ("Team & Leadership", "Strong"):
-        "Your team is good at what they do, pointed the same way, and able to get on without you in every conversation. You hire carefully. You genuinely hand things over. People can say hard things to each other and change course quickly. You are growing as a leader while the business grows.",
+        "Your team is good at what they do and pointed the same way. You hire carefully and you genuinely hand things over. People can say hard things to each other and change course quickly.",
     ("Strategic Clarity", "Critical Gap"):
-        "You are working without a clear direction. You react to what comes up and chase whatever appears, with no way of deciding what deserves your time. You cannot yet say what makes you hard to copy, or how you actually get from here to where you want to be. Everything feels equally urgent because nothing has been put in order.",
+        "You are working without a clear direction. You react to what comes up, with no way of deciding what deserves your time. Everything feels equally urgent because nothing has been put in order.",
     ("Strategic Clarity", "Needs Attention"):
-        "You have a picture of where this is going, but it is fuzzy, and your goals are either too big or impossible to measure. You have not worked out what makes you hard to copy. How you will fund this is decided as you go. You say yes to too much, because you have not decided what you are really aiming at.",
+        "You have a picture of where this is going, but it is fuzzy. Your goals are either too big or impossible to measure, and you have not worked out what makes you hard to copy. You say yes to too much.",
     ("Strategic Clarity", "Developing"):
-        "You know where you are going, your goals are realistic, and you have some way of choosing between options. You understand where you sit against others reasonably well. There is some thinking behind how you fund this. You can say what success looks like a year from now.",
+        "You know where you are going and your goals are realistic. You have some way of choosing between options, and you understand where you sit against others. You can say what success looks like a year from now.",
     ("Strategic Clarity", "Strong"):
-        "You think and act with a clear plan. You have a picture worth chasing, goals you can measure, a clear view of what makes you hard to copy, and a funding plan tied to what you are actually reaching. You say no without agonising. You think through what-ifs, and you change the plan when the facts change.",
+        "You think and act with a clear plan. You have goals you can measure and a clear view of what makes you hard to copy. You say no without agonising, and you change the plan when the facts change.",
 }
-
 
 #: The text this migration was written against, so a paragraph the team has
 #: edited since is skipped rather than overwritten -- and so downgrade can put

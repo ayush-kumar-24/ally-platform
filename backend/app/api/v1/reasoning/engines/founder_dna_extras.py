@@ -131,9 +131,29 @@ def resolve_phase2_dimensions(db: Session, founder_id: int) -> dict:
     `origin` and `vision` come back under `_origin_text` / `_vision_text` as
     single strings instead, so the caller can prefer a considered asked
     answer over the onboarding field without changing either one's shape.
+
+    THE QUESTIONS COME BACK TOO, under `_questions`, index-aligned with each
+    dimension's answers. They are what makes the answers mean anything. These
+    questions ask for a specific moment -- "when did you last lose a day to
+    something that did not matter?" -- and founders answer them the way anyone
+    would: "Monday." Stored as the answer alone and printed under a heading,
+    that produced a live report whose FOCUS ATTENTION card read "Monday.",
+    whose CORE MOTIVATION read "The bridge", and whose EMOTIONAL INTELLIGENCE
+    read "Our Halol plant head, Ramesh, 2022." Every one of those is a true
+    answer to a question the card did not show.
+
+    Under an underscore key, additively: the existing per-dimension lists keep
+    their shape exactly, so every reader that predates this -- the frontend's
+    factList(), ReportPayload, the summariser -- is unaffected, and the ones
+    that want the question can zip it on. Same convention `_summaries` already
+    uses.
     """
     stmt = (
-        select(FounderDnaQuestions.dimension_code, FounderDnaAnswers.answer_text)
+        select(
+            FounderDnaQuestions.dimension_code,
+            FounderDnaAnswers.answer_text,
+            FounderDnaQuestions.question_text,
+        )
         .join(
             FounderDnaAnswers,
             FounderDnaAnswers.founder_dna_question_id
@@ -143,15 +163,27 @@ def resolve_phase2_dimensions(db: Session, founder_id: int) -> dict:
         .order_by(FounderDnaAnswers.answered_at.asc())
     )
     by_dimension: dict[str, list[str]] = defaultdict(list)
-    for dimension_code, answer_text in db.execute(stmt).all():
+    questions: dict[str, list[str]] = defaultdict(list)
+    for dimension_code, answer_text, question_text in db.execute(stmt).all():
         if answer_text and answer_text.strip():
             by_dimension[dimension_code].append(answer_text.strip())
+            # Appended in the same step, so the two lists cannot drift out of
+            # alignment -- an answer with no question stored yields "" rather
+            # than shifting every later pairing by one.
+            questions[dimension_code].append((question_text or "").strip())
 
     out: dict = {
         code: answers[:_MAX_ITEMS]
         for code, answers in by_dimension.items()
         if code not in _RESERVED_KEYS
     }
+    asked = {
+        code: qs[:_MAX_ITEMS]
+        for code, qs in questions.items()
+        if code in out and any(q for q in qs[:_MAX_ITEMS])
+    }
+    if asked:
+        out["_questions"] = asked
     # Longest answer, not the first: these two are asked once per stage, but
     # a founder resuming or re-running leaves more than one, and the fuller
     # answer is the more useful one to show.

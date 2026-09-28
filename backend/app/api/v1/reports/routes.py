@@ -23,7 +23,8 @@ from app.core.container import container
 from app.plans.catalog import Feature
 from app.api.v1.reports.document import build_report_document
 from app.api.v1.reports.dna_summaries import (
-    current_summaries, ensure_dna_summaries, pending_dimensions,
+    current_reads, current_summaries, ensure_dna_reads, ensure_dna_summaries,
+    pending_dimensions, pending_reads,
 )
 from app.api.v1.reports.generator import ReportNarrative, ReportNarrativeGenerator
 from app.api.v1.reports.payload import build_report_payload
@@ -386,6 +387,11 @@ def _fill_dna_summaries(report_id: int) -> None:
     try:
         report = db.get(FounderReport, report_id)
         if report is not None:
+            # Reads FIRST: the card leads with the read and the summary is the
+            # evidence under it, and a dimension with no read has no card at
+            # all -- so summarising one before knowing that is work for a card
+            # that will not exist.
+            ensure_dna_reads(db, report)
             ensure_dna_summaries(db, report)
     except Exception as exc:  # noqa: BLE001 -- a cache fill, off the request
         logger.warning("founder DNA summary task failed for report %s: %s", report_id, exc)
@@ -420,7 +426,15 @@ def founder_dna(report_id: int, background: BackgroundTasks,
     section = _section(n, "founder_dna")
     if section is not None:
         summaries = current_summaries(report)
+        reads = current_reads(report)
         facts = dict(section.facts or {})
+        # Same response-time read-back as the summaries, for the same reason:
+        # the narrative is cached on first open with these baked in, so a read
+        # written afterwards would never reach the page.
+        if reads:
+            facts["_reads"] = reads
+        else:
+            facts.pop("_reads", None)
         # Absent rather than empty: the frontend renders the answers when there
         # is no `_summaries` key, and an empty dict is not the same as "none".
         if summaries:
@@ -429,7 +443,7 @@ def founder_dna(report_id: int, background: BackgroundTasks,
             facts.pop("_summaries", None)
         section = SectionOut(key=section.key, heading=section.heading,
                              prose=section.prose, facts=facts)
-    if pending_dimensions(report):
+    if pending_dimensions(report) or pending_reads(report):
         background.add_task(_fill_dna_summaries, report.report_id)
     return SectionSlice(report_id=report_id, section=section)
 
