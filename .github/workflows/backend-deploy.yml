@@ -193,6 +193,22 @@ jobs:
           # classifier. With it off, every one of those falls back to a
           # deterministic path and no founder context reaches question choice.
           #
+          # STAGE_INFERENCE_LLM works out the founder's stage from their own
+          # answers instead of leaving it at whatever the profile holds. NOTE
+          # WHAT IT DOES NOT DO: LLMStageInferenceStrategy defers to
+          # DeclaredStageStrategy and returns immediately when founders.stage_id
+          # is set, so a DECLARED stage is never inferred over. This covers
+          # founders whose profile was populated outside onboarding, which is
+          # measurably common, not founders who picked the wrong option.
+          #
+          # RECOMMENDATION_FALLBACK_LLM writes a recommendation when the curated
+          # intervention library covers none of a detected root cause. Off, that
+          # cause yields nothing, silently -- which is why reports have shown a
+          # tiffin cook "build a smoke test landing page". It produces advice
+          # with NO REVIEWED INTERVENTION BEHIND IT, which is the trade being
+          # made here deliberately: generic-but-relevant beats absent, and the
+          # alternative is writing interventions for every uncovered cause.
+          #
           # PUBLIC_LAUNCH empties the Free tier. A founder with no plan is sent
           # to the plans page on sign-in, and every feature gate closes at once
           # rather than one route staying open because somebody forgot it. It
@@ -207,7 +223,9 @@ jobs:
             --argjson FLAGS '[
               {"name": "ARCHETYPE_LLM", "value": "true"},
               {"name": "ADAPTIVE_QUESTIONS", "value": "true"},
-              {"name": "PUBLIC_LAUNCH", "value": "true"}
+              {"name": "PUBLIC_LAUNCH", "value": "true"},
+              {"name": "STAGE_INFERENCE_LLM", "value": "true"},
+              {"name": "RECOMMENDATION_FALLBACK_LLM", "value": "true"}
             ]' \
             '
             .containerDefinitions |= map(
