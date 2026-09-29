@@ -129,7 +129,13 @@ def resolve_founder_dna_stage_group(founder: Founders) -> str:
     starting this phase are in"; the code defaulted to whichever group the enum
     listed first, and nothing tied the two together.
     """
-    groups = resolve_stage_groups(founder)
+    # Founder DNA has no Exit bank -- only the diagnosis does -- so the Exit
+    # group is dropped before the count below is read. Without this, an Exit
+    # founder comes back with two groups, which is the signal this function
+    # uses to mean "the stage is unknown", and their whole Founder DNA phase
+    # would be resolved against the default as though they had never answered
+    # the stage question.
+    groups = [g for g in resolve_stage_groups(founder) if g != StageGroup.EXIT.value]
     if len(groups) == 1:
         return groups[0]
     return UNKNOWN_STAGE_DEFAULT_GROUP

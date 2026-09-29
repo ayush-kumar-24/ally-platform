@@ -51,6 +51,10 @@ def test_validation_prototype_and_early_traction_resolve_to_stage_0_to_1():
 
 
 def test_growth_and_beyond_resolve_to_stage_1_to_10_plus():
+    """Stage 8 is the one that needs saying. It draws from two DIAGNOSIS banks
+    -- 'Stage 1->10+' plus its own -- and Founder DNA has no Exit bank, so it
+    must still land on one group here rather than on the unknown-stage
+    default."""
     for stage_order in (5, 6, 7, 8):
         assert (
             resolve_founder_dna_stage_group(_founder(stage_order))

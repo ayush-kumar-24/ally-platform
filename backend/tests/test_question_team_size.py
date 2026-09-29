@@ -22,6 +22,7 @@ The offline half runs anywhere. The catalogue half needs a seeded database and
 skips without one, so this file still guards the constants in an offline run.
 """
 
+from types import SimpleNamespace
 from typing import get_args
 
 import pytest
@@ -290,9 +291,15 @@ def test_no_team_question_sits_in_a_stage_group_that_withholds_it(catalogue):
     stranded = []
     for group, category, n in rows:
         # Every stage whose founders are served this question's bank.
+        # Every stage whose founders are served this question's bank. Read
+        # through `stage_groups_for` rather than `_STAGE_ORDER_TO_GROUP`
+        # directly: an Exit founder draws from TWO groups, and walking the
+        # table alone reports the Exit bank as reachable by nobody.
+        from app.api.v1.diagnosis.engine import stage_groups_for
+
         orders = [
             order for order in SCOPE_BY_STAGE_ORDER
-            if next(g.value for m, g in _STAGE_ORDER_TO_GROUP if order <= m) == group
+            if group in stage_groups_for(SimpleNamespace(stage_order=order))
         ]
         reachable = False
         for order in orders:
