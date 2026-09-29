@@ -355,9 +355,12 @@ def test_questions_needing_an_organisation_are_not_put_to_a_small_team(catalogue
             sub=_retag_migration()._SUBCATEGORY,
         )
     }
-    assert bands and bands <= {"6_10", "11_25"}, (
+    # '26_50' joined the set with b93f5c07d2e1: SCL-166 and SCL-167 ask about
+    # teams competing for budget and about two teams disagreeing, which needs
+    # several teams rather than several managers.
+    assert bands and bands <= {"6_10", "11_25", "26_50"}, (
         f"People Management Complexity questions sized {sorted(bands)}; they "
-        "presuppose employees, and half of them presuppose managers"
+        "presuppose employees, and most of them presuppose managers"
     )
 
 
@@ -366,3 +369,114 @@ def test_the_growth_bank_solo_list_is_distinct_from_the_early_one():
     overlap = set(mig._SOLO) & set(mig._SOLO_GROWTH)
     assert not overlap, f"reviewed twice: {sorted(overlap)}"
     assert len(mig._SOLO_GROWTH) == len(set(mig._SOLO_GROWTH))
+
+
+# --- every answer onboarding offers has to mean something -------------------
+#
+# Onboarding offers six answers. Before b93f5c07d2e1 nothing in the bank was
+# labelled above '11_25', so picking "26-50 people" and "11-25 people" produced
+# an identical diagnosis -- two of the six were decoration. Worse, the
+# questions that DO presuppose an organisation ("Look at your leadership team",
+# "If two department heads both wanted resources") sat under Revenue Maturity,
+# Market Clarity and Founder Readiness, where d4a1f8c62b73's pillar 5 defaults
+# never reached them, so a three-person company was asked all of them.
+
+ONBOARDING_QUESTIONS = "frontend/src/data/onboardingQuestions.js"
+
+
+def _onboarding_team_size_values():
+    """The values the live onboarding control writes, read from the question
+    set itself -- the one place a founder's answer is defined."""
+    import re
+
+    from app.core.paths import BACKEND_DIR
+
+    path = BACKEND_DIR.parent / ONBOARDING_QUESTIONS
+    if not path.exists():
+        pytest.skip("frontend/ not in this checkout (backend-only build context)")
+    source = path.read_text(encoding="utf-8")
+    block = re.search(
+        r"field:\s*'team_size'.*?options:\s*\[(.*?)\]", source, re.S
+    )
+    assert block, "the team_size question or its options moved"
+    return tuple(re.findall(r"value:\s*'([^']+)'", block.group(1)))
+
+
+def test_onboarding_offers_exactly_the_bands_the_bank_uses():
+    """An option a founder can pick that the schema does not accept is a 422 at
+    the end of onboarding; one the bank never reads is a question that changes
+    nothing."""
+    from typing import get_args
+
+    from app.schemas.founder import TeamSize
+
+    assert _onboarding_team_size_values() == get_args(TeamSize)
+
+
+def test_the_onboarding_options_are_offered_smallest_first():
+    """The control is read top to bottom, and "Just me" is the answer this
+    whole mechanism exists to act on."""
+    from typing import get_args
+
+    from app.schemas.founder import TeamSize
+
+    values = _onboarding_team_size_values()
+    assert values[0] == "solo"
+    assert list(values) == sorted(values, key=list(get_args(TeamSize)).index)
+
+
+def test_a_bigger_team_is_never_asked_fewer_questions(catalogue):
+    """Monotonicity, which is the whole meaning of `min_team_size`: the bands
+    nest, so growing can only ever add questions."""
+    from typing import get_args
+
+    from app.api.v1.diagnosis.team_scope import can_answer
+    from app.schemas.founder import TeamSize
+
+    rows = _rows("SELECT min_team_size, count(*) FROM questions GROUP BY 1")
+    counts = []
+    for band in get_args(TeamSize):
+        counts.append(sum(n for req, n in rows if can_answer(req, band)))
+    assert counts == sorted(counts), (
+        f"question counts by band are not monotonic: "
+        f"{dict(zip(get_args(TeamSize), counts))}"
+    )
+
+
+def test_the_middle_bands_actually_change_the_diagnosis(catalogue):
+    """'6_10', '11_25' and '26_50' each have to withhold something the band
+    below does not, or the answer a founder gave was pointless to collect.
+
+    '50_plus' is deliberately absent from this list: no question in the bank
+    distinguishes a thirty-person company from a sixty-person one, so it
+    behaves like '26_50' on purpose. See migration b93f5c07d2e1."""
+    used = {
+        r[0] for r in _rows(
+            "SELECT DISTINCT min_team_size FROM questions WHERE min_team_size IS NOT NULL"
+        )
+    }
+    for band in ("6_10", "11_25", "26_50"):
+        assert band in used, (
+            f"no question requires '{band}', so picking it in onboarding gives "
+            "the same diagnosis as the band below it"
+        )
+
+
+def test_questions_naming_a_leadership_team_are_not_put_to_a_small_company(catalogue):
+    """The narrowest statement of the defect b93f5c07d2e1 fixes, and the one a
+    founder would notice: a company of three has no leadership team."""
+    from app.api.v1.diagnosis.team_scope import can_answer
+
+    rows = _rows(
+        """
+        SELECT question_code, min_team_size FROM questions
+        WHERE question_text ~* '(your|the) leadership team'
+           OR question_text ~* 'department heads'
+        """
+    )
+    assert rows, "no leadership-team questions found -- has the bank changed?"
+    leaked = [code for code, band in rows if can_answer(band, "2_5")]
+    assert not leaked, (
+        f"questions about a leadership team still reaching a 2-5 person "
+        f"company: {sorted(leaked)}"
+    )
