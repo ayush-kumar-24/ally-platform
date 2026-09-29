@@ -279,3 +279,74 @@ def test_founder_dna_still_places_an_exit_founder():
     founder = SimpleNamespace(stage=SimpleNamespace(stage_order=EXIT_ORDER))
     assert (resolve_founder_dna_stage_group(founder)
             == StageGroup.STAGE_1_TO_10_PLUS.value)
+
+
+# --- the bank has to actually be ASKED, not merely be reachable -------------
+#
+# Found by running a real diagnosis rather than by reading the code. An Exit
+# founder in manufacturing had all 200 Exit questions in their candidate pool
+# and was asked ZERO of them across a full 30-question diagnosis. Nothing was
+# out of scope; they lost every round.
+#
+# Two terms sit above the tie-break and both preferred the industry bank. The
+# Exit questions are universal content, so `relevance_ranker` scores them
+# UNIVERSAL_RANK against the founder's own industry at PRIMARY_RANK -- and the
+# opening block, 14 of a 30-question budget, promotes industry-owned questions
+# outright. To an Exit founder their own bank is not generic: "Would your
+# biggest customer stay if you sold the business?" is more unmistakably theirs
+# than anything written for manufacturing at large.
+
+def test_the_exit_bank_ranks_with_the_founders_own_industry():
+    from decimal import Decimal
+    from types import SimpleNamespace
+
+    from app.api.v1.diagnosis.industry_scope import PRIMARY_RANK, UNIVERSAL_RANK
+
+    exit_q = SimpleNamespace(question_id=1, primary_stage_group=EXIT_GROUP)
+    other = SimpleNamespace(question_id=2, primary_stage_group="Stage 1→10+")
+
+    # A ranker that knows nothing about either -- both would be UNIVERSAL.
+    def industry_rank(_q):
+        return (UNIVERSAL_RANK, Decimal(0))
+
+    def relevance(question):
+        if getattr(question, "primary_stage_group", None) == EXIT_GROUP:
+            return (PRIMARY_RANK, Decimal(0))
+        return industry_rank(question)
+
+    assert relevance(exit_q) < relevance(other)
+    assert relevance(exit_q)[0] == PRIMARY_RANK
+
+
+def test_the_engine_promotes_the_exit_bank_in_both_ranking_terms():
+    """One without the other leaves it invisible: the opening block alone still
+    loses every later round, and the relevance term alone still loses the first
+    fourteen questions."""
+    import inspect
+
+    from app.api.v1.diagnosis.engine import QuestionSelectionEngine
+
+    round_robin = inspect.getsource(QuestionSelectionEngine._round_robin_key_for)
+    opening = inspect.getsource(QuestionSelectionEngine._opening_block_key)
+    assert "StageGroup.EXIT.value" in round_robin, (
+        "the relevance term no longer promotes the Exit bank"
+    )
+    assert "StageGroup.EXIT.value" in opening, (
+        "the opening block no longer lets the Exit bank open the diagnosis"
+    )
+
+
+def test_the_promotion_reads_the_question_defensively():
+    """Every other ranking term reads a question with getattr. Using attribute
+    access here raised on the fake questions the industry-ranking tests build,
+    which is how it was caught -- 33 of them at once."""
+    import inspect
+
+    from app.api.v1.diagnosis.engine import QuestionSelectionEngine
+
+    for fn in (QuestionSelectionEngine._round_robin_key_for,
+               QuestionSelectionEngine._opening_block_key):
+        source = inspect.getsource(fn)
+        assert 'getattr(question, "primary_stage_group", None)' in source, (
+            f"{fn.__name__} reads primary_stage_group directly"
+        )
