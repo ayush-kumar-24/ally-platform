@@ -13,7 +13,16 @@ MIGRATION = "c5e18b3f9a04"
 
 #: Questions that test whether a founder knows a term. Explaining the term
 #: in brackets would answer the question for them.
-_TESTS_THE_TERM = {"FIN-201": "fixed costs"}
+_TESTS_THE_TERM = {
+    "FIN-201": "fixed costs",
+    "GTM-033": "go-to-market strategy",
+    "S10-FIN-055": "unit economics",
+    "S0-BFS-001": "RBI, IRDAI or SEBI",
+}
+
+#: Knowledge tests whose only rewrite explained the answer, so the current
+#: text stays. Pinned so a later edit does not reintroduce the giveaway.
+_LEFT_ALONE = {"SAL-012", "S0-BFS-010"}
 
 
 def _migration():
@@ -79,6 +88,11 @@ def test_questions_that_test_a_term_do_not_explain_it():
         if code in by_code:
             assert term in by_code[code]
             assert "(" not in by_code[code], code
+
+
+def test_knowledge_tests_that_could_not_be_reworded_stay_as_they_are():
+    codes = {code for code, _, _ in _rewrites()}
+    assert not codes & _LEFT_ALONE
 
 
 def test_it_follows_the_previous_head():
