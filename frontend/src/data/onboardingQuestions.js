@@ -224,6 +224,33 @@ export const QUESTIONS = [
         q: 'Where are you on your entrepreneurial journey?',
       },
       {
+        key: 'teamSize',
+        field: 'team_size',
+        label: 'Team Size',
+        type: 'single',
+        paths: BOTH,
+        q: 'And how many people are working on this with you?',
+        prompt: 'Count everyone working on it regularly — co-founders, employees, long-term freelancers.',
+        // The only place a founder ever states this. founders.team_size and
+        // its six coded values have existed since the original schema, but
+        // nothing asked for them, so every row held NULL -- and the diagnosis,
+        // with no other way to know, asked solo founders how they delegate and
+        // how their team communicates. Values match the column's CHECK; see
+        // TeamSize in backend/app/schemas/founder.py.
+        //
+        // Asked on BOTH paths on purpose: an ideation founder can still have a
+        // co-founder, and "solo" is exactly the answer the diagnosis needs
+        // from them.
+        options: [
+          { label: 'Just me', value: 'solo' },
+          { label: '2-5 people', value: '2_5' },
+          { label: '6-10 people', value: '6_10' },
+          { label: '11-25 people', value: '11_25' },
+          { label: '26-50 people', value: '26_50' },
+          { label: 'More than 50 people', value: '50_plus' },
+        ],
+      },
+      {
         key: 'experience',
         field: 'experience_level',
         label: 'Experience Level',

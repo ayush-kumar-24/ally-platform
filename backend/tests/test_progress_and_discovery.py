@@ -83,9 +83,9 @@ def test_progress_before_stage_only_counts_path_agnostic_fields(founder_client):
     r = founder_client.get("/api/v1/profile/progress")
     assert r.status_code == 200
     body = r.json()
-    # ALWAYS_REQUIRED (9) + OPTIONAL_FIELDS (1) -- no path-specific fields
-    # until stage is known.
-    assert body["total"] == 10
+    # ALWAYS_REQUIRED (9) + OPTIONAL_FIELDS (2: Social Handle, Team Size) --
+    # no path-specific fields until stage is known.
+    assert body["total"] == 11
     start = body["filled"]
 
     founder_client.patch("/api/v1/profile/business", json={"problem_statement": "fix churn"})

@@ -56,6 +56,13 @@ PATH_1_REQUIRED: list[tuple[str, str, str]] = [
 # Never required -- shown in the progress list, never blocks completion.
 OPTIONAL_FIELDS: list[tuple[str, str, str]] = [
     ("linkedin_url", "Social Handle", "personal"),
+    # Asked of everyone from 2026-09-28 (the Team Size part of Section 1's
+    # stage question), but deliberately NOT required: every founder who
+    # onboarded before that date has team_size NULL, and requiring it would
+    # flip their profile_completed to false the next time they edited
+    # anything. Whatever reads team_size has to treat NULL as "not known"
+    # regardless, so blocking completion buys nothing.
+    ("team_size", "Team Size", "personal"),
 ]
 
 

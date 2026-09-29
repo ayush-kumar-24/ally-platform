@@ -48,6 +48,9 @@ function fieldOrder(path) {
   if (path === PATH_2) rows.push(['oneYearSuccess', 'One-Year Vision', { edit: true }]);
   else if (path === PATH_1) rows.push(['ninetyDayGoal', '90-Day Goal', { edit: true }]);
   rows.push(['experience', 'Experience Level']);
+  // Asked on both paths -- an ideation founder can have a co-founder, and
+  // "Just me" is the answer the diagnosis most needs to know.
+  rows.push(['teamSize', 'Team Size']);
   return rows;
 }
 

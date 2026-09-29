@@ -30,6 +30,7 @@ EXPECTED_SECTION = {
     "Stage": "personal",
     "Experience": "personal",
     "Monthly Revenue": "personal",
+    "Team Size": "personal",
     "Social Handle": "personal",
     "Problem": "where_you_are",
     "What you're building": "where_you_are",
@@ -62,6 +63,7 @@ def _founder(stage_order, **overrides):
         customer_segment=["mid-size manufacturers"],
         industry="SaaS",
         current_revenue="1L_5L",
+        team_size="2_5",
         founder_reality_signals={"decisive": True},
         business_reality_signals={"revenue_predictable": False},
         invisible_gaps=["No clear roadmap"],
@@ -196,3 +198,44 @@ def test_candidate_query_still_filters_on_the_founders_stage_group():
     assert "primary_stage_group IN" in sql, sql
     assert "'Stage 0'" in sql, sql
 
+
+
+# --- Team size (added 2026-09-28) -------------------------------------------
+#
+# founders.team_size and its six coded values shipped with the original
+# schema, and nothing ever asked a founder for them, so every row held NULL.
+# The diagnosis has no other way to know how many people work somewhere, so it
+# put team and delegation questions to solo founders. Onboarding now asks, as a
+# part of Section 1's stage question; these pin the three things that made the
+# column useless before: that the API accepts it, that a wrong value is a 422
+# rather than a CHECK violation, and that requiring it never becomes the reason
+# an existing founder's finished profile turns incomplete.
+
+TEAM_SIZES = ["solo", "2_5", "6_10", "11_25", "26_50", "50_plus"]
+
+
+@pytest.mark.parametrize("value", TEAM_SIZES)
+def test_business_update_accepts_every_team_size(value):
+    assert BusinessInfoUpdate(team_size=value).team_size == value
+
+
+@pytest.mark.parametrize("value", ["1", "just me", "SOLO", "6-10", "100_plus"])
+def test_business_update_rejects_an_unknown_team_size(value):
+    """The column has a CHECK; without the Literal these reach it and come
+    back as a 500 instead of telling the client what was wrong."""
+    with pytest.raises(ValidationError):
+        BusinessInfoUpdate(team_size=value)
+
+
+def test_team_size_is_shown_in_progress_and_never_required():
+    rows = {row["label"]: row for row in compute_progress(_founder(5))["fields"]}
+    assert "Team Size" in rows, "onboarding asks for it but progress never lists it"
+    assert rows["Team Size"]["required"] is False
+    assert rows["Team Size"]["field"] == "team_size"
+
+
+def test_a_profile_without_team_size_is_still_valid():
+    """Every founder who onboarded before 2026-09-28 has team_size NULL.
+    Requiring it would flip their profile_completed to false the next time they
+    edited anything, and whatever reads the column has to handle NULL anyway."""
+    assert validate_profile(_founder(5, team_size=None))["valid"] is True

@@ -66,6 +66,9 @@ const BUSINESS = {
   buildingDescription: 'product_description',
   problem: 'problem_statement',
   revenue: 'current_revenue',
+  // The only question that writes founders.team_size. Everything that
+  // scopes questions by how many people work here reads it.
+  teamSize: 'team_size',
   audience: 'customer_segment',
   audienceOther: 'customer_segment_other',
   industry: 'industry',
@@ -128,6 +131,7 @@ export function toGuidedAnswers(profile) {
     stage: profile.stage_name || '',
     experience: profile.experience_level || '',
     revenue: profile.current_revenue || '',
+    teamSize: profile.team_size || '',
     buildingName: profile.building_summary || '',
     buildingDescription: profile.product_description || '',
     problem: profile.problem_statement || '',
