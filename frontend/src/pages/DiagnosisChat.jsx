@@ -258,7 +258,24 @@ export default function DiagnosisChat() {
             + 'again by refreshing, and nothing you have answered will be lost.',
         }]);
       }
-    } catch {
+    } catch (error) {
+      /* The same two consent gates the start effect handles, reached here
+         instead. A session already in progress is resumed through GET
+         /diagnosis/current, which is deliberately ungated -- so a founder
+         without diagnosis consent lands mid-diagnosis and only meets the gate
+         on POST /diagnosis/answer. Live-reproduced: every answer then 403'd in
+         ~50ms and fell through to "That didn't save", which is untrue (nothing
+         was going to save) and gave no way forward. Same screen as the start
+         path, so "Give consent and continue" is one click away. */
+      if (error?.code === 'DiagnosisConsentMissingError'
+          || error?.code === 'ProcessingRestrictedError') {
+        setBlocked({
+          kind: error.code === 'ProcessingRestrictedError' ? 'restricted' : 'consent',
+          text: error.detail
+            || 'Ally needs your consent to run a diagnosis on your answers. You can give it from your profile.',
+        });
+        return;
+      }
       // Live-reproduced: a client-side timeout on this call does not mean the
       // server failed -- the answer-scoring pipeline routinely runs 12-15s and
       // has hit 23s, and the server goes on to save successfully after the
