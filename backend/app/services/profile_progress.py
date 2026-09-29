@@ -42,10 +42,23 @@ ALWAYS_REQUIRED: list[tuple[str, str, str]] = [
 
 # Path 2 (beyond Stage 0) only.
 PATH_2_REQUIRED: list[tuple[str, str, str]] = [
-    ("current_revenue", "Monthly Revenue", "personal"),
     ("product_description", "What It Is", "where_you_are"),
     ("business_reality_signals", "Business Reality", "what_you_know"),
     ("vision_1_year", "One-Year Vision", "final"),
+]
+
+#: Required from a STAGE ORDER onwards, which is finer than either path.
+#:
+#: Validation, Prototype/MVP and Early Traction are all Path 2 and share a
+#: question bank, but they are not the same business. A founder at Validation
+#: is testing whether anyone wants this and has no monthly revenue to report,
+#: for the same reason a Stage 0 founder has none -- so onboarding stops asking
+#: them (the `minStageOrder` on the revenue part in onboardingQuestions.js) and
+#: this stops requiring it. The two boundaries must be the same number: require
+#: what is never asked and a Validation founder's profile can never be
+#: complete, which is how `valid` became permanently unreachable once before.
+STAGE_ORDER_REQUIRED: list[tuple[int, str, str, str]] = [
+    (3, "current_revenue", "Monthly Revenue", "personal"),
 ]
 
 # Path 1 (Stage 0 / Ideation) only.
@@ -94,9 +107,19 @@ def _all_fields(founder: Founder) -> list[tuple[str, str, str, bool]]:
     required varies by path, so this is computed per founder, not a static
     module-level list the way it used to be."""
     path_required = _path_required(founder)
+    # Stage order, where it is known. Unknown means "not far enough along to
+    # owe this yet" rather than "owes everything": the same fail-open reading
+    # _path_required gives a founder whose stage is not recorded.
+    order = getattr(getattr(founder, "stage", None), "stage_order", None)
+    by_stage = [
+        (column, label, section)
+        for minimum, column, label, section in STAGE_ORDER_REQUIRED
+        if isinstance(order, int) and order >= minimum
+    ]
     return (
         [(c, l, s, True) for c, l, s in ALWAYS_REQUIRED]
         + [(c, l, s, True) for c, l, s in path_required]
+        + [(c, l, s, True) for c, l, s in by_stage]
         + [(c, l, s, False) for c, l, s in OPTIONAL_FIELDS]
     )
 

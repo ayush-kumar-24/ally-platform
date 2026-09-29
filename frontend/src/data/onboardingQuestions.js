@@ -156,11 +156,26 @@ export function activeOptions(question, path) {
   return options.filter((o) => typeof o === 'string' || !o.paths || o.paths.includes(path));
 }
 
-/** The parts of a `group` question asked on `path` (all of them when null). */
-export function activeParts(question, path) {
+/** The parts of a `group` question asked on `path` (all of them when null).
+ *
+ * `stageOrder` is a SECOND branching axis, and it exists because one of the
+ * three stages behind PATH_2 cannot answer something the other two can. Path
+ * alone cannot say that: Validation, Prototype/MVP and Early Traction share a
+ * path, and a founder still testing whether anyone wants the idea has no
+ * monthly revenue to report, any more than a Stage 0 founder does.
+ *
+ * Null means the stage is not known yet -- the founder has not reached the
+ * stage picker, or the caller has no reason to care -- and every part is
+ * returned. Same fail-open rule as `path`: narrowing on an answer we do not
+ * have would hide a question the founder should be asked.
+ */
+export function activeParts(question, path, stageOrder = null) {
   const parts = question?.parts || [];
   if (!path) return parts;
-  return parts.filter((p) => !p.paths || p.paths.includes(path));
+  return parts.filter((p) => (
+    (!p.paths || p.paths.includes(path))
+    && (p.minStageOrder == null || stageOrder == null || stageOrder >= p.minStageOrder)
+  ));
 }
 
 export const QUESTIONS = [
@@ -279,6 +294,13 @@ export const QUESTIONS = [
         // Stage 0 founders are pre-revenue by definition -- never asked, and
         // the column stays NULL rather than being written a 6th "none" band.
         paths: [PATH_2],
+        // Validation is pre-revenue for the same reason Ideation is. A founder
+        // testing whether anyone wants this has nothing to report, and asking
+        // their monthly revenue reads as an accusation that they should have
+        // some. Asked from Prototype/MVP on, where a first sale is real.
+        // profile_progress must stop REQUIRING it at the same boundary, or a
+        // Validation founder's profile can never be complete.
+        minStageOrder: 3,
         q: 'And what is your monthly revenue right now?',
         // The existing coded bands on founders.current_revenue, kept rather
         // than the spec's proposed new boundaries -- explicit product call
@@ -663,9 +685,9 @@ export function askableByKey(key) {
  * Every guided key a question can write, including a group's parts. Used by
  * the resume path to decide whether a question has already been answered.
  */
-export function questionKeys(question, path) {
+export function questionKeys(question, path, stageOrder = null) {
   if (question.type !== 'group') return [question.key];
-  return activeParts(question, path).map((p) => p.key);
+  return activeParts(question, path, stageOrder).map((p) => p.key);
 }
 
 /**

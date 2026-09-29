@@ -132,6 +132,10 @@ def test_stage_0_profile_is_complete_without_revenue_or_business_reality():
     assert result["valid"], result["missing"]
 
 
+#: Monthly Revenue is no longer among them at Validation -- see below.
+BEYOND_STAGE_0_MUST_REQUIRE = PATH_1_MUST_NOT_REQUIRE - {"Monthly Revenue"}
+
+
 @pytest.mark.parametrize("stage_order", [2, 5, 8])
 def test_beyond_stage_0_still_requires_the_business_questions(stage_order):
     """The mirror of the test above -- path filtering has to narrow Path 1
@@ -144,10 +148,60 @@ def test_beyond_stage_0_still_requires_the_business_questions(stage_order):
         vision_1_year=None,
     )
     missing = {row["label"] for row in validate_profile(founder)["missing"]}
-    assert PATH_1_MUST_NOT_REQUIRE <= missing, (
-        f"stage {stage_order} should still require {sorted(PATH_1_MUST_NOT_REQUIRE)}, "
-        f"missing only reports {sorted(missing)}"
+    assert BEYOND_STAGE_0_MUST_REQUIRE <= missing, (
+        f"stage {stage_order} should still require "
+        f"{sorted(BEYOND_STAGE_0_MUST_REQUIRE)}, missing only reports "
+        f"{sorted(missing)}"
     )
+
+
+# --- revenue is asked from Prototype/MVP on, not from Validation ------------
+#
+# Validation, Prototype/MVP and Early Traction are all Path 2 and share a
+# question bank, but they are not the same business. A founder at Validation is
+# testing whether anyone wants this and has no monthly revenue to report, for
+# the same reason a Stage 0 founder has none. Onboarding stops asking them (the
+# `minStageOrder` on the revenue part) and this stops requiring it. The two
+# boundaries have to be the same number, or the profile can never be completed.
+
+def test_validation_is_not_asked_for_monthly_revenue():
+    founder = _founder(2, current_revenue=None)
+    missing = {row["label"] for row in validate_profile(founder)["missing"]}
+    assert "Monthly Revenue" not in missing
+
+
+def test_a_validation_founder_can_finish_onboarding_without_revenue():
+    """The failure this guards: requiring what is never asked makes `valid`
+    permanently unreachable, which is how Path 1 broke once before."""
+    assert validate_profile(_founder(2, current_revenue=None))["valid"] is True
+
+
+@pytest.mark.parametrize("stage_order", [3, 4, 5, 8])
+def test_prototype_onwards_is_still_asked_for_monthly_revenue(stage_order):
+    founder = _founder(stage_order, current_revenue=None)
+    missing = {row["label"] for row in validate_profile(founder)["missing"]}
+    assert "Monthly Revenue" in missing
+
+
+def test_the_onboarding_boundary_matches_the_required_boundary():
+    """Read off both files rather than restated, so they cannot drift."""
+    import re
+
+    from app.core.paths import BACKEND_DIR
+    from app.services.profile_progress import STAGE_ORDER_REQUIRED
+
+    required_from = {
+        column: minimum for minimum, column, _l, _s in STAGE_ORDER_REQUIRED
+    }
+    path = BACKEND_DIR.parent / "frontend/src/data/onboardingQuestions.js"
+    if not path.exists():
+        pytest.skip("frontend/ not in this checkout (backend-only build context)")
+    block = re.search(
+        r"field:\s*'current_revenue'.*?minStageOrder:\s*(\d+)",
+        path.read_text(encoding="utf-8"), re.S,
+    )
+    assert block, "the revenue part lost its minStageOrder, or moved"
+    assert int(block.group(1)) == required_from["current_revenue"]
 
 
 # --- The diagnosis bank: an untagged question reaches nobody ----------------

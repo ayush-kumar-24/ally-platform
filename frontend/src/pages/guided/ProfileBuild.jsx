@@ -62,19 +62,19 @@ const optLabel = (o) => (typeof o === 'string' ? o : (o.label ?? o.value));
 const optValue = (o) => (typeof o === 'string' ? o : o.value);
 
 /** The control awaiting an answer: a plain question, or a group's active part. */
-function controlFor(question, path, idx) {
+function controlFor(question, path, idx, stageOrder) {
   if (!question) return null;
   if (question.type !== 'group') return question;
-  return activeParts(question, path)[idx] || null;
+  return activeParts(question, path, stageOrder)[idx] || null;
 }
 
 /* The DNA side panel lists FACTS, not questions -- a group's parts each earn
    their own row (Stage, Experience, Monthly Revenue) even though the three are
    one question in the flow. Parts inherit their group's section. */
-function panelRowsFor(questions, path) {
+function panelRowsFor(questions, path, stageOrder) {
   return questions.flatMap((x) => (
     x.type === 'group'
-      ? activeParts(x, path).map((part) => ({ ...part, section: x.section }))
+      ? activeParts(x, path, stageOrder).map((part) => ({ ...part, section: x.section }))
       : [x]
   ));
 }
@@ -139,7 +139,7 @@ function resumePoint(active, path, answers) {
   const found = firstUnresolved(active, path, answers);
   const startAt = found === -1 ? active.length : found;
   const question = active[startAt];
-  const parts = question && question.type === 'group' ? activeParts(question, path) : [];
+  const parts = question && question.type === 'group' ? activeParts(question, path, stageOrderRef.current) : [];
   const startPart = Math.max(0, parts.findIndex((pt) => !isFilled(answers[pt.key])));
   const buf = Object.fromEntries(
     parts.slice(0, startPart)
@@ -220,6 +220,9 @@ export default function ProfileBuild() {
      and part filters during render; kept as a ref rather than state because
      every write to it is immediately followed by a setActiveQ that re-renders. */
   const pathRef = useRef(null);
+  // The second branching axis, refining pathRef. Null until the founder
+  // picks a stage; see activeParts on why null must show everything.
+  const stageOrderRef = useRef(null);
   const awaitingRef = useRef(false);
   const profileRef = useRef({});
   // What each answered field showed in the transcript/side panel (the founder's
@@ -254,7 +257,7 @@ export default function ProfileBuild() {
      once activeQ has been set. */
   useEffect(() => {
     if (activeQ < 0) return;
-    const ctl = controlFor(questionsRef.current[activeQ], pathRef.current, partIdx);
+    const ctl = controlFor(questionsRef.current[activeQ], pathRef.current, partIdx, stageOrderRef.current);
     if (!ctl) return;
     const { type } = ctl;
     if (type === 'short' || type === 'long' || type === 'url') taRef.current?.focus();
@@ -393,7 +396,7 @@ export default function ProfileBuild() {
     await sleep(820); if (!alive.current) return;
     setTyping(false);
     if (q.type === 'group') {
-      const parts = activeParts(q, pathRef.current);
+      const parts = activeParts(q, pathRef.current, stageOrderRef.current);
       const first = parts[startPart];
       // The group's own headline is worth saying only when it adds something:
       // not when it repeats the first part's wording (Q3), and not when the
@@ -483,12 +486,22 @@ export default function ProfileBuild() {
     let cleared = null;
     if (ctl.type === 'stage' && !opts.clear) {
       const path = STAGE_BY_NAME[stored]?.path || null;
-      if (path !== pathRef.current) {
-        const before = panelRowsFor(questionsRef.current, pathRef.current);
+      const order = STAGE_BY_NAME[stored]?.order ?? null;
+      // `before` has to be read on the OLD stage, or a founder moving from
+      // Prototype back to Validation would not be told their revenue answer
+      // no longer applies -- the row would already be missing from both sides.
+      const before = panelRowsFor(questionsRef.current, pathRef.current, stageOrderRef.current);
+      const prevOrder = stageOrderRef.current;
+      stageOrderRef.current = order;
+      /* The ORDER matters as well as the path. Prototype/MVP and Validation
+         share PATH_2, so moving back to Validation changes no path -- but it
+         does stop the revenue question being asked, and a revenue figure left
+         behind in a founder's profile is read by the diagnosis as real. */
+      if (path !== pathRef.current || order !== prevOrder) {
         pathRef.current = path;
         questionsRef.current = effectiveQuestions(path);
         profileRef.current.path = path;
-        const after = panelRowsFor(questionsRef.current, path);
+        const after = panelRowsFor(questionsRef.current, path, order);
         const live = new Set(after.map((x) => x.key));
 
         // Whole answers with no question behind them on the new path.
@@ -594,14 +607,14 @@ export default function ProfileBuild() {
     for (let i = 0; i < active.length; i += 1) {
       const x = active[i];
       if (x.type === 'group') {
-        const at = activeParts(x, pathRef.current).findIndex((pt) => pt.key === key);
+        const at = activeParts(x, pathRef.current, stageOrderRef.current).findIndex((pt) => pt.key === key);
         if (at >= 0) { qi = i; pi = at; break; }
       } else if (x.key === key) { qi = i; break; }
     }
     // Not a question this founder is asked any more (their stage changed since
     // the bubble was written). Nothing to edit; the bubble is already gone.
     if (qi < 0) return;
-    const ctl = controlFor(active[qi], pathRef.current, pi);
+    const ctl = controlFor(active[qi], pathRef.current, pi, stageOrderRef.current);
     if (!ctl) return;
 
     editRef.current = {
@@ -672,7 +685,7 @@ export default function ProfileBuild() {
     const isGroup = q.type === 'group';
     // What was actually just answered: the question itself, or the group's
     // current part. Everything below keys off this, not off `q`.
-    const ctl = controlFor(q, pathRef.current, partIdxRef.current);
+    const ctl = controlFor(q, pathRef.current, partIdxRef.current, stageOrderRef.current);
     // Arrays (multi-select) and plain objects (the 'yesno' reality-check
     // blocks) are stored as-is; everything else is a string.
     const stored = (Array.isArray(value) || isObj) ? value : String(value).trim();
@@ -714,7 +727,7 @@ export default function ProfileBuild() {
       // Recomputed AFTER the narrowing above, so answering "Stage 0" here
       // removes the revenue part from this very group rather than one question
       // too late.
-      const parts = activeParts(q, pathRef.current);
+      const parts = activeParts(q, pathRef.current, stageOrderRef.current);
       const nextPart = partIdxRef.current + 1;
       if (nextPart < parts.length) {
         // Still inside the same question: advance the part, stay on the index.
@@ -802,10 +815,10 @@ export default function ProfileBuild() {
     const q = questionsRef.current[i];
     // Captured before the part index advances below, so a skipped answer's
     // bubble still names the fact it stands for and stays editable.
-    const ctl = controlFor(q, pathRef.current, partIdxRef.current);
+    const ctl = controlFor(q, pathRef.current, partIdxRef.current, stageOrderRef.current);
 
     if (q.type === 'group') {
-      const parts = activeParts(q, pathRef.current);
+      const parts = activeParts(q, pathRef.current, stageOrderRef.current);
       const nextPart = partIdxRef.current + 1;
       if (nextPart < parts.length) {
         addMe('Skipped', ctl?.key);
@@ -876,7 +889,7 @@ export default function ProfileBuild() {
       // The flat list of facts behind those questions -- a group's parts each
       // have their own saved answer, so resume reasons in parts and only
       // rolls up to questions when deciding where to restart.
-      const rows = panelRowsFor(active, path);
+      const rows = panelRowsFor(active, path, stageOrderRef.current);
 
       // startAt === active.length means every mapped field is already
       // filled/resolved -- treated as done rather than looping past the end of
@@ -950,7 +963,7 @@ export default function ProfileBuild() {
   /* The control on screen. For a `group` question that is its current part --
      everything below (the input type, its options, its cap, its Skip button)
      belongs to the part, not to the question wrapping it. */
-  const ctrl = controlFor(q, pathRef.current, partIdx);
+  const ctrl = controlFor(q, pathRef.current, partIdx, stageOrderRef.current);
   const isText = ctrl && (ctrl.type === 'short' || ctrl.type === 'long' || ctrl.type === 'url');
 
   /** A light heuristic, not a validator -- the backend's _validate_social_url
@@ -1062,7 +1075,7 @@ export default function ProfileBuild() {
 
   /* Facts, not questions -- Q3 contributes Stage, Experience and (on Path 2)
      Monthly Revenue as three separate rows a founder watches fill in. */
-  const panelRows = panelRowsFor(questionsRef.current, pathRef.current);
+  const panelRows = panelRowsFor(questionsRef.current, pathRef.current, stageOrderRef.current);
 
   /* Chapter eyebrow + progress bar (spec v2.4 s2). The eyebrow shifts at each
      section boundary so four sections read as one continuous conversation
