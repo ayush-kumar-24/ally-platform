@@ -30,6 +30,7 @@ from app.api.v1.diagnosis.industry_scope import (
 )
 from app.api.v1.diagnosis.repository import DiagnosisRepository
 from app.api.v1.diagnosis.stage_scope import ALL_PILLARS, resolve_scope
+from app.api.v1.diagnosis.team_scope import gate as team_size_gate
 from app.core.config import settings
 from app.core.logger import logger
 from app.models import (
@@ -558,6 +559,14 @@ class QuestionSelectionEngine:
         # stage-scope fallback below returns this name, so a stage-scope data
         # problem must not re-admit another industry's bank.
         candidates = self._industry_gated(candidates, founder, session)
+
+        # TEAM SIZE last of the three, and outside the short-circuit for the
+        # same reason as the other two: a founder working alone at Growth has
+        # not outgrown "can your staff approve a discount without you", and it
+        # was not written for another industry. There is nobody it is about.
+        # Rebinding `candidates` again, so a stage-scope data problem below
+        # cannot re-admit a question the founder has no way to answer.
+        candidates = team_size_gate(candidates, founder)
 
         scope = resolve_scope(founder)
         if scope is None or scope.withholds_nothing:
