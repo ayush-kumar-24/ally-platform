@@ -21,6 +21,11 @@ _BASE_HEADERS = {
     # Opts out of the FLoC-successor topics/attribution APIs; this API has no
     # use for them and shouldn't be silently enrolled.
     "Permissions-Policy": "browsing-topics=()",
+    # The API host is infrastructure, not a public content surface. Keep every
+    # endpoint out of search results while still allowing crawlers to fetch a
+    # response and observe this directive (robots.txt blocking would prevent
+    # Google from seeing the noindex header).
+    "X-Robots-Tag": "noindex, nofollow, noarchive",
 }
 
 
