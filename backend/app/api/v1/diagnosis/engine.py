@@ -14,12 +14,15 @@ and inventing a trigger rule now would bake in behaviour the scoring engine
 would have to unpick later.
 """
 
+from decimal import Decimal
+
 from app.api.v1.diagnosis.context_scope import (
     context_tokens,
     gated_problem_codes,
     gated_root_cause_codes,
 )
 from app.api.v1.diagnosis.industry_scope import (
+    PRIMARY_RANK,
     SUPPORTING_RANK,
     excluded_question_ids,
     industry_id_for,
@@ -259,6 +262,28 @@ class QuestionSelectionEngine:
         # anything, because question_id is a total order.
         industry_rank = self._industry_rank_for(session, founder)
 
+        # A question from the founder's OWN stage bank is as specific to them as
+        # one written for their industry, so it ranks alongside rather than
+        # below. Only Exit has such a bank, and only an Exit founder has those
+        # questions in their pool, so this changes nothing for anybody else.
+        #
+        # Without it the Exit bank is unreachable in practice. It is universal
+        # content, so `relevance_ranker` scores it UNIVERSAL_RANK, and this term
+        # sits above the tie-break -- a manufacturing founder's own 60 industry
+        # questions win every round first. Measured on a full 30-question
+        # diagnosis for an Exit founder: 1 of the 200 was asked. They were never
+        # out of scope; they simply never won a round.
+        exit_group = StageGroup.EXIT.value
+        own_bank_rank = (PRIMARY_RANK, Decimal(0))
+
+        def relevance(question: Question):
+            # getattr, not attribute access: every other ranking term reads a
+            # question defensively, and a candidate that cannot say which bank
+            # it came from is simply not from the Exit one.
+            if getattr(question, "primary_stage_group", None) == exit_group:
+                return own_bank_rank
+            return industry_rank(question)
+
         def key(question: Question):
             pillar_id = problem_to_pillar.get(question.problem_id)
             # A question with no pillar cannot advance pillar coverage, so it
@@ -266,11 +291,11 @@ class QuestionSelectionEngine:
             # for a round it does not belong to.
             if pillar_id is None:
                 return (len(per_pillar) + 1_000, 0,
-                        industry_rank(question), *_sort_key(question))
+                        relevance(question), *_sort_key(question))
             return (
                 per_pillar.get(pillar_id, 0),
                 per_cat.get((pillar_id, question.category), 0),
-                industry_rank(question),
+                relevance(question),
                 *_sort_key(question),
             )
 
@@ -356,12 +381,23 @@ class QuestionSelectionEngine:
 
         rank = self._industry_rank_for(session, founder)
 
+        exit_group = StageGroup.EXIT.value
+
         def key(question: Question):
             # Only the industry's OWN questions open the diagnosis -- a
             # universal question whose problem the industry merely weights
             # heavily is not what makes the founder feel read. Those still win
             # their ties through the fourth term inside `base`.
-            owned = rank(question)[0] <= SUPPORTING_RANK
+            #
+            # The founder's own STAGE bank opens it too, for the same reason it
+            # ranks with industry inside `base`: to an Exit founder, "Would your
+            # biggest customer stay if you sold the business?" is more
+            # unmistakably theirs than anything written for manufacturing in
+            # general. Without this the block -- 14 of a 30-question budget for
+            # a well-stocked industry -- spends half the diagnosis before the
+            # Exit bank can win anything.
+            owned = (getattr(question, "primary_stage_group", None) == exit_group
+                     or rank(question)[0] <= SUPPORTING_RANK)
             return (0 if owned else 1, *base(question))
 
         return key
