@@ -60,7 +60,11 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "b93f5c07d2e1"
-down_revision: Union[str, Sequence[str], None] = "c58d1e7b0a94"
+# Runs after the plain-language pass rather than beside it. Both branched
+# from c58d1e7b0a94; this chain was re-pointed so there is one line of
+# migrations instead of two heads. Order is safe either way -- that pass
+# rewrites question TEXT and everything below matches on question_code.
+down_revision: Union[str, Sequence[str], None] = "c5e18b3f9a04"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

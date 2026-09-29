@@ -315,6 +315,17 @@ class BusinessHealthScorer:
             withheld = score_is_withheld(
                 pillar.pillar_id, getattr(context, "founder", None)
             )
+            # A pillar the STAGE does not assess never gets a band either,
+            # however many answers arrived. Normally none do, because the
+            # pillar filter withheld its questions -- but
+            # StageScope.ADMITTED_DESPITE_PILLAR lets an ideation founder be
+            # asked the `Idea & Validation` questions that happen to sit under
+            # Revenue Maturity problems ("Where would you actually get your
+            # product from?"). Those answers belong in the diagnosis; a
+            # Revenue Maturity band on a founder with no revenue does not, and
+            # the report has already told them that pillar was not assessed.
+            if scope is not None and not scope.withholds_nothing:
+                withheld = withheld or pillar.pillar_id not in scope.pillars
             if withheld or len(answer_scores) < minimum:
                 pillar_scores.append(
                     PillarScore(

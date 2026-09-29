@@ -170,6 +170,51 @@ class StageScope:
         """
         return ALL_DIMENSION_CODES - self.dimensions
 
+    #: The one place a question may be asked although its pillar is withheld.
+    #:
+    #: 139 questions sit under Revenue Maturity problems and are categorised
+    #: `Idea & Validation`. Their text is not about revenue at all -- "Where
+    #: would you actually get your product from?", "Do you know what one piece
+    #: would cost you to buy?", "How would the product reach the customer, and
+    #: who pays for that?", "What happens if a customer wants to return the
+    #: product?" -- and they are written for someone with an idea and nothing
+    #: built. They exist in thirty industry flavours, so they are the only
+    #: industry-specific validation content an ideation founder can get.
+    #:
+    #: Ideation withholds Revenue Maturity, correctly: an idea-stage founder
+    #: has no revenue to assess. That rule was locking these out as a side
+    #: effect of where their problems happen to be filed, not because of what
+    #: they ask. This is the same observation `business_dna` records in the
+    #: other direction, where 90 Marketing Execution questions sit under Market
+    #: Clarity: pillar membership does not mean what the pillar's NAME means.
+    #:
+    #: Deliberately narrow. One pillar, one category, one stage. A wider rule
+    #: -- "admit any withheld pillar's Idea & Validation questions" -- would
+    #: also re-admit Team & Leadership's, and a founder with no team has no
+    #: more business answering those than a founder with no revenue has
+    #: answering about pricing.
+    #:
+    #: THE PILLAR IS STILL NOT SCORED. See `_business_dna` and
+    #: `business_health`: a pillar the stage does not assess never gets a band,
+    #: however many answers arrive. Admitting the questions puts their evidence
+    #: into the diagnosis -- problems, root causes, recommendations -- without
+    #: publishing a Revenue Maturity verdict on a founder who has no revenue,
+    #: which is what the withheld pillar promised and what the report says.
+    ADMITTED_DESPITE_PILLAR: frozenset[tuple[int, str]] = frozenset(
+        {(3, "Idea & Validation")}
+    )
+
+    def admits(self, pillar_id: int, category: str | None) -> bool:
+        """Whether a question with this pillar and category may be asked.
+
+        The pillar test, plus the one exception above. `_in_scope` calls this
+        instead of testing `pillar_id in self.pillars` directly, so the
+        exception cannot be forgotten by one caller and honoured by another.
+        """
+        if pillar_id in self.pillars:
+            return True
+        return (pillar_id, category) in self.ADMITTED_DESPITE_PILLAR
+
     def coverage_of(self, pillar_id: int) -> tuple[tuple[str, ...], int]:
         """(names of this pillar's live dimensions, how many it has in total).
 
