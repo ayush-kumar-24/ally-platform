@@ -114,7 +114,10 @@ export default function DiagnosisChat() {
                 // No question count. The engine picks adaptively and stops when
                 // it has enough, so any number here is a promise the diagnosis
                 // does not make -- and one a founder would hold it to.
-                text: "Hi, I'm Ally. Let's get started — answer honestly and we'll get to your report as fast as your answers let us." }];
+                // The second sentence is the only way a founder learns they can
+                // ask: a question they do not understand is explained again in
+                // simpler words rather than scored (see diagnosis/advisor.py).
+                text: "Hi, I'm Ally. Let's get started — answer honestly and we'll get to your report as fast as your answers let us. If a question isn't clear, just tell me and I'll explain it more simply." }];
           setMessages([...opening, ...past, { role: 'ally', text: session.question.text, time: clock() }]);
         }
       })

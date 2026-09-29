@@ -66,6 +66,9 @@ _VALID_LABELS = {"green", "amber", "red", "not_applicable"}
 #: band, and scoring an inapplicable question as Green would be just as
 #: wrong as scoring it Red.
 _LABEL_TO_SCORE = {"green": 0, "amber": 1, "red": 2}
+#: Longest clarification shown to a founder. Three short sentences fit well
+#: inside this; anything longer is a model ignoring the brief.
+_MAX_CLARIFICATION_CHARS = 600
 
 
 @dataclass(frozen=True)
@@ -88,6 +91,19 @@ class AnswerInsight:
     #: a founder wrote something irrelevant, and refusing a real answer is far
     #: worse than accepting a poor one.
     responsive: bool = True
+    #: Did the founder say they do not understand the QUESTION, instead of
+    #: answering it?
+    #:
+    #: Kept apart from `responsive` because the two need opposite treatment.
+    #: "I don't know" is an answer about the business and is scored; "I don't
+    #: understand what you're asking" is about the wording, and scoring it
+    #: marked founders Red for Ally's unclear phrasing. Same fail-open rule as
+    #: above: only an explicit `true` counts.
+    confused: bool = False
+    #: The question said again in plainer words, for Ally to reply with when
+    #: `confused` is set. None when the model gave none; the caller then falls
+    #: back to a fixed line.
+    clarification: str | None = None
 
     @property
     def score(self) -> int | None:
@@ -320,10 +336,31 @@ class LLMNextQuestionAdvisor(NextQuestionAdvisor):
             "and an explicit \"I don't know\" are all responsive, and belong in "
             "score_label rather than here. Set responsive=false ONLY when the "
             "answer does not engage with what was asked. When in doubt, true.\n"
+            # Founders reported not understanding the questions. Before this,
+            # "I don't understand the question" was either scored like "I don't
+            # know" -- Red, for Ally's own wording -- or rejected with a line
+            # telling them they had answered a different question.
+            "Also judge whether the founder is CONFUSED BY THE QUESTION: they "
+            "say they do not understand it, ask what it means or what a word "
+            "in it means, or ask you to explain or rephrase it, INSTEAD of "
+            "answering. Set confused=true only then. \"I don't know\", \"we "
+            "have never measured that\" or \"not sure, maybe 10%\" are answers "
+            "about the business, not confusion -- they stay confused=false. "
+            "When in doubt, false.\n"
+            "When confused=true, write clarification: what Ally says back, in "
+            "plain everyday English a first-time founder reading English as a "
+            "second language would follow. Two or three short sentences: a "
+            "friendly acknowledgement, what the question means in simple "
+            "words (explain any term they asked about), then the question "
+            "again in simpler words. It must ask exactly the same thing. Never "
+            "hint at what a good or bad answer is, never give an example "
+            "answer, never mention scoring. When confused=false, "
+            "clarification is null.\n"
             "Respond with a single JSON object and nothing else: "
             '{"score_label":"green|amber|red|not_applicable","confidence":0.0-1.0,'
             '"next_question_id":<candidate id>,"rationale":"one sentence",'
-            '"responsive":true|false}'
+            '"responsive":true|false,"confused":true|false,'
+            '"clarification":"text"|null}'
         )
         # First, so the model reads who it is talking to before it reads what
         # they just said. Omitted entirely when empty rather than sent as a bare
@@ -363,10 +400,29 @@ class LLMNextQuestionAdvisor(NextQuestionAdvisor):
         # Absent or non-boolean -> True. Only an explicit `false` rejects an
         # answer; see AnswerInsight.responsive for why this fails open.
         responsive = data.get("responsive") is not False
+        # The mirror image: absent or non-boolean -> False. Only an explicit
+        # `true` holds an answer back as confusion.
+        confused = data.get("confused") is True
+        clarification = self._coerce_clarification(data.get("clarification"))
         return AnswerInsight(
             score_label=label, confidence=confidence, next_question_id=nid,
             rationale=rationale, responsive=responsive,
+            confused=confused, clarification=clarification if confused else None,
         )
+
+    @staticmethod
+    def _coerce_clarification(value) -> str | None:
+        """Founder-facing text, so anything odd is dropped rather than shown.
+
+        Capped because it is rendered as a chat bubble: a runaway reply is
+        worse than the fixed fallback line the caller uses on None.
+        """
+        if not isinstance(value, str):
+            return None
+        text = " ".join(value.split())
+        if not text or len(text) > _MAX_CLARIFICATION_CHARS:
+            return None
+        return text
 
     @staticmethod
     def _coerce_int(value) -> int | None:
