@@ -145,6 +145,20 @@ class StageScope:
     #: the decision unexpressible.
     emits_business_health: bool
 
+    #: Categories this stage withholds ON TOP of whatever its dimension set
+    #: already implies. Empty for every stage but Exit.
+    #:
+    #: `withheld_categories_for` answers one question -- is this ideation? --
+    #: and returns the execution families or nothing. That is the right shape
+    #: for Part 3, which scopes by dimension, and the wrong shape for Exit,
+    #: whose difference from Growth is not dimensional at all. A founder
+    #: handing the business on is assessed on the same six pillars; what
+    #: changes is that nobody needs to push them to find a new market or test a
+    #: new idea. Only a third of this bank carries a dimension_code, so the
+    #: dimension set cannot express that even in principle -- category can,
+    #: because every question has one.
+    extra_withheld_categories: frozenset[str] = frozenset()
+
     @cached_property
     def pillars(self) -> frozenset[int]:
         """Pillars with at least one live dimension. Filtered on."""
@@ -157,7 +171,7 @@ class StageScope:
         Empty for every stage from Validation on. A deny-list rather than an
         allow-list, for the reason recorded on EXECUTION_CATEGORIES.
         """
-        return withheld_categories_for(self.dimensions)
+        return withheld_categories_for(self.dimensions) | self.extra_withheld_categories
 
     @cached_property
     def excluded_dimensions(self) -> frozenset[str]:
@@ -275,9 +289,47 @@ _EARLY = StageScope(
 )
 
 _FULL = StageScope(
-    label="Growth through Exit",
+    label="Growth / Expansion / Maturity",
     dimensions=ALL_DIMENSION_CODES - STAGE_1_TO_10_PLUS_EXCLUDED,
     emits_business_health=True,
+)
+
+#: What a founder preparing to hand the business on does not need pushing on.
+#:
+#: Exit shares Growth's pillars and dimensions -- a buyer cares about the same
+#: six things, and several of them harder: does it run without the founder, is
+#: the revenue concentrated, is anything written down. What it does not share
+#: is the forward-leaning half of the bank. "Have you started building a
+#: pipeline of new markets?", "What did you build in the last month that almost
+#: nobody used?" and "Is there a specific reason you have avoided paid ads?"
+#: are questions for someone with years ahead of them in this business.
+#:
+#: FUNDRAISING IS DELIBERATELY NOT HERE, and it was, until a test explained
+#: why it must not be. The category is already withheld from any founder who
+#: has not said they are raising, by `context_scope`, and at a finer grain than
+#: a category: FND-005 "Weak Pitch and Story" is kept OUT of that gate on
+#: purpose, because it is about the account a founder gives of their business
+#: to a capable outsider, which every founder gives whether or not they ever
+#: meet an investor. For a founder selling the business, explaining it clearly
+#: to a sharp outsider is the whole job -- so withholding the category here
+#: would take away the one fundraising question that matters most at Exit, to
+#: gate something already gated better elsewhere.
+#:
+#: Measured before choosing: this withholds 424 of 2,838 questions and leaves
+#: every pillar far above MIN_ANSWERS_PER_PILLAR_SCORE, and every team-size
+#: band above it too, including a solo pre-revenue founder.
+EXIT_WITHHELD_CATEGORIES: frozenset[str] = frozenset({
+    "Idea & Validation",
+    "Go-To-Market",
+    "Marketing Execution",
+    "Opportunity Evaluation",
+})
+
+_EXIT = StageScope(
+    label="Exit",
+    dimensions=ALL_DIMENSION_CODES - STAGE_1_TO_10_PLUS_EXCLUDED,
+    emits_business_health=True,
+    extra_withheld_categories=EXIT_WITHHELD_CATEGORIES,
 )
 
 SCOPE_BY_STAGE_ORDER: dict[int, StageScope] = {
@@ -290,13 +342,17 @@ SCOPE_BY_STAGE_ORDER: dict[int, StageScope] = {
     2: _EARLY,
     3: _EARLY,
     4: _EARLY,
-    # Stage 1->10+ -- Growth, Expansion, Maturity, Exit. These differ from each
-    # other by question budget and by how the bank words a question, not by
-    # which dimensions are in scope.
+    # Stage 1->10+ -- Growth, Expansion and Maturity share a dimension set and
+    # a question bank, and differ from each other by question budget and by how
+    # the bank words a question.
     5: _FULL,
     6: _FULL,
     7: _FULL,
-    8: _FULL,
+    # Exit is the one that does not belong with them. It keeps the same
+    # dimensions -- a buyer cares about all six pillars -- and withholds the
+    # categories that only make sense to a founder with years ahead of them in
+    # this business. See EXIT_WITHHELD_CATEGORIES.
+    8: _EXIT,
 }
 
 

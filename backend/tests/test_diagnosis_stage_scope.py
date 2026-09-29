@@ -237,10 +237,17 @@ def test_withholding_is_a_deny_list_so_an_unknown_category_survives():
     assert "Partnerships & BD" not in SCOPE_BY_STAGE_ORDER[IDEATION].withheld_categories
 
 
-@pytest.mark.parametrize("stage_order", [2, 3, 4, 5, 6, 7, 8])
+@pytest.mark.parametrize("stage_order", [2, 3, 4, 5, 6, 7])
 def test_no_stage_past_ideation_withholds_a_category(stage_order):
-    """Part 3 puts all six pillars in scope from Validation on, so there is
-    nothing left to withhold."""
+    """Part 3 puts all six pillars in scope from Validation on, so nothing is
+    withheld by the DIMENSION SET from Validation through Maturity.
+
+    Exit is excluded from this list and is the one deliberate exception. Its
+    withholding does not come from Part 3 or from its dimensions -- it has the
+    same dimensions as Growth -- but from an explicit category list, because a
+    founder handing the business on does not need pushing to find a new market.
+    See EXIT_WITHHELD_CATEGORIES and the tests at the end of this file.
+    """
     assert SCOPE_BY_STAGE_ORDER[stage_order].withheld_categories == frozenset()
 
 
@@ -618,3 +625,81 @@ def test_no_live_stage_0_question_is_about_revenue_or_marketing():
     for row in kept:
         assert row["category"] not in EXECUTION_CATEGORIES
         assert row["pillar"] not in (REVENUE_MATURITY, TEAM_AND_LEADERSHIP)
+
+
+# --- Exit is not the same stage as Growth ----------------------------------
+#
+# Growth, Expansion, Maturity and Exit shared one scope and one question bank,
+# and that scope withheld nothing at all -- so a founder preparing to hand the
+# business on drew a candidate set byte-identical to one pushing hard on
+# growth. Measured: all four produced the same 2,765 questions.
+#
+# They share the same six pillars, and a buyer cares about several of them
+# harder than a growth founder does -- does it run without the founder, is the
+# revenue concentrated, is anything written down. What Exit does not share is
+# the forward-leaning half of the bank.
+
+from app.api.v1.diagnosis.stage_scope import EXIT_WITHHELD_CATEGORIES
+
+EXIT = 8
+
+
+def test_exit_has_its_own_scope():
+    assert SCOPE_BY_STAGE_ORDER[EXIT] is not SCOPE_BY_STAGE_ORDER[5]
+    assert SCOPE_BY_STAGE_ORDER[EXIT].label == "Exit"
+
+
+def test_growth_expansion_and_maturity_still_share_one():
+    scopes = {id(SCOPE_BY_STAGE_ORDER[o]) for o in (5, 6, 7)}
+    assert len(scopes) == 1, "those three differ by budget and wording, not scope"
+
+
+def test_exit_withholds_the_forward_leaning_categories():
+    withheld = SCOPE_BY_STAGE_ORDER[EXIT].withheld_categories
+    assert EXIT_WITHHELD_CATEGORIES <= withheld
+    assert not SCOPE_BY_STAGE_ORDER[5].withheld_categories
+
+
+def test_exit_keeps_every_pillar_and_dimension():
+    """The split is about which QUESTIONS, not which subjects. A buyer cares
+    about all six pillars, so withholding one would be a different and wrong
+    change."""
+    growth, exit_ = SCOPE_BY_STAGE_ORDER[5], SCOPE_BY_STAGE_ORDER[EXIT]
+    assert exit_.dimensions == growth.dimensions
+    assert exit_.pillars == growth.pillars
+
+
+def test_exit_no_longer_withholds_nothing():
+    """`withholds_nothing` short-circuits every filter in `_in_scope`. While it
+    was true for Exit, no category test ran at all."""
+    assert not SCOPE_BY_STAGE_ORDER[EXIT].withholds_nothing
+
+
+def test_only_exit_carries_an_explicit_category_withholding():
+    """Every other stage derives its withholding from its dimension set. An
+    explicit one that spread would mean the derivation had been abandoned."""
+    for order, scope in SCOPE_BY_STAGE_ORDER.items():
+        if order == EXIT:
+            continue
+        assert not scope.extra_withheld_categories, (
+            f"stage {order} gained an explicit category withholding"
+        )
+
+
+@pytest.mark.parametrize("category", sorted(EXIT_WITHHELD_CATEGORIES))
+def test_an_exit_founder_is_not_asked_to_chase_new_growth(category):
+    engine = _engine([
+        _q(MARKET_CLARITY, MARKET_CLARITY, category=category),
+        _q(REVENUE_MATURITY, REVENUE_MATURITY, category="Financial Management"),
+    ])
+    got = engine.candidate_questions(_session(), _founder(EXIT))
+    kept = {q.problem_id - 10 for q in got}
+    assert MARKET_CLARITY not in kept
+    assert REVENUE_MATURITY in kept, "the filter dropped everything, not just that one"
+
+
+@pytest.mark.parametrize("category", sorted(EXIT_WITHHELD_CATEGORIES))
+def test_a_growth_founder_still_is(category):
+    engine = _engine([_q(MARKET_CLARITY, MARKET_CLARITY, category=category)])
+    got = engine.candidate_questions(_session(), _founder(5))
+    assert {q.problem_id - 10 for q in got} == {MARKET_CLARITY}
