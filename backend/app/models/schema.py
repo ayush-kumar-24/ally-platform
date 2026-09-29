@@ -334,7 +334,7 @@ class Founders(Base):
         CheckConstraint("""emotional_state IS NULL OR (jsonb_typeof(emotional_state) = 'array' AND emotional_state <@ '["excited","inspired","confident","curious","overwhelmed","stuck","determined","hopeful"]'::jsonb)""", name='founders_emotional_state_check'),
         CheckConstraint("experience_level::text = ANY (ARRAY['first_time'::character varying, 'one_company'::character varying, 'serial'::character varying, 'investor'::character varying, 'mentor'::character varying, 'executive'::character varying]::text[])", name='founders_experience_level_check'),
         CheckConstraint("plan_type::text = ANY (ARRAY['free'::character varying, 'basic'::character varying, 'starter'::character varying, 'pro'::character varying, 'enterprise'::character varying]::text[])", name='founders_plan_type_check'),
-        CheckConstraint("team_size::text = ANY (ARRAY['solo'::character varying, '2_5'::character varying, '6_10'::character varying, '11_25'::character varying, '26_50'::character varying, '50_plus'::character varying]::text[])", name='founders_team_size_check'),
+        CheckConstraint("team_size IN ('solo', '2_5', '6_10', '11_25', '26_plus', '26_50', '50_plus')", name='founders_team_size_check'),
         CheckConstraint("working_relationship::text = ANY (ARRAY['coach'::character varying, 'cofounder'::character varying, 'strategist'::character varying, 'accountability'::character varying, 'brainstorm'::character varying, 'research'::character varying]::text[])", name='founders_working_relationship_check'),
         ForeignKeyConstraint(['industry_mapped_id'], ['industries.industry_id'], name='founders_industry_mapped_id_fkey'),
         ForeignKeyConstraint(['stage_id'], ['founder_stages.stage_id'], name='founders_stage_id_fkey'),
@@ -1358,7 +1358,7 @@ class Questions(Base):
         # place -- which is why the column below is still Optional here.
         CheckConstraint('primary_stage_group IS NOT NULL', name='questions_stage_group_required'),
         CheckConstraint("priority::text = ANY (ARRAY['CORE'::character varying, 'SUPPLEMENTARY'::character varying]::text[])", name='questions_priority_check'),
-        CheckConstraint("min_team_size IS NULL OR min_team_size IN ('solo', '2_5', '6_10', '11_25', '26_50', '50_plus')", name='questions_min_team_size_check'),
+        CheckConstraint("min_team_size IS NULL OR min_team_size IN ('solo', '2_5', '6_10', '11_25', '26_plus', '26_50', '50_plus')", name='questions_min_team_size_check'),
         CheckConstraint("question_type::text = ANY (ARRAY['open_text'::character varying, 'rating_scale'::character varying, 'yes_no'::character varying, 'multiple_choice'::character varying]::text[])", name='questions_question_type_check'),
         ForeignKeyConstraint(['follow_up_question_id'], ['questions.question_id'], name='questions_follow_up_question_id_fkey'),
         ForeignKeyConstraint(['problem_id'], ['problems.problem_id'], name='questions_problem_id_fkey'),

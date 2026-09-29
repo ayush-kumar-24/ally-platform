@@ -246,8 +246,12 @@ export const QUESTIONS = [
           { label: '2-5 people', value: '2_5' },
           { label: '6-10 people', value: '6_10' },
           { label: '11-25 people', value: '11_25' },
-          { label: '26-50 people', value: '26_50' },
-          { label: 'More than 50 people', value: '50_plus' },
+          // One band above 25, not two. "26-50" and "More than 50" produced an
+          // identical diagnosis -- nothing in the question bank tells a
+          // thirty-person company from a sixty-person one -- so asking a
+          // founder to choose between them asked for precision we never use.
+          // See migration d71a4e8c3f05.
+          { label: 'More than 25 people', value: '26_plus' },
         ],
       },
       {

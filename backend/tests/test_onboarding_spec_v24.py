@@ -17,10 +17,12 @@ that presupposes a business carries `paths: [PATH_2]`.
 """
 
 from types import SimpleNamespace
+from typing import get_args
 
 import pytest
 from pydantic import ValidationError
 
+from app.schemas.founder import RETIRED_TEAM_SIZES, TeamSize
 from app.schemas.sections import BusinessInfoUpdate
 from app.services.profile_progress import compute_progress, validate_profile
 
@@ -211,12 +213,24 @@ def test_candidate_query_still_filters_on_the_founders_stage_group():
 # rather than a CHECK violation, and that requiring it never becomes the reason
 # an existing founder's finished profile turns incomplete.
 
-TEAM_SIZES = ["solo", "2_5", "6_10", "11_25", "26_50", "50_plus"]
+# Read off the schema rather than hardcoded, so the merge of "26_50" and
+# "50_plus" into "26_plus" (migration d71a4e8c3f05) cannot leave this asserting
+# that the API still accepts a band no founder can pick.
+TEAM_SIZES = list(get_args(TeamSize))
 
 
 @pytest.mark.parametrize("value", TEAM_SIZES)
 def test_business_update_accepts_every_team_size(value):
     assert BusinessInfoUpdate(team_size=value).team_size == value
+
+
+@pytest.mark.parametrize("value", RETIRED_TEAM_SIZES)
+def test_business_update_refuses_a_retired_team_size(value):
+    """The column's CHECK still accepts these so a write from the old frontend
+    mid-deploy does not 500. The API must not, or onboarding would keep writing
+    a band nothing offers and the two would drift apart again."""
+    with pytest.raises(ValidationError):
+        BusinessInfoUpdate(team_size=value)
 
 
 @pytest.mark.parametrize("value", ["1", "just me", "SOLO", "6-10", "100_plus"])

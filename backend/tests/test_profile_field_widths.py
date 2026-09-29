@@ -151,9 +151,27 @@ def test_literal_members_match_the_database_check(column, literal):
         pytest.skip(f"no database available: {exc}")
 
     declared = set(get_args(literal))
-    assert declared == allowed, (
-        f"founders.{column}: schema accepts {sorted(declared)}, "
-        f"database allows {sorted(allowed)}"
+
+    # A value the schema accepts but the column refuses is a 500 waiting to
+    # happen, so this direction is absolute.
+    assert declared <= allowed, (
+        f"founders.{column}: schema accepts {sorted(declared - allowed)}, "
+        "which the database would reject"
+    )
+
+    # The other direction has one documented exception. team_size's "26_50"
+    # and "50_plus" were merged into "26_plus" by migration d71a4e8c3f05, and
+    # the CHECK still accepts the retired two on purpose: during a deploy the
+    # old frontend is served for a few minutes after the migration runs, and a
+    # founder finishing onboarding in that window must not get a 500 on the
+    # last question of their profile. Nothing may newly WRITE one, which is
+    # what leaving them out of the Literal enforces.
+    from app.schemas.founder import RETIRED_TEAM_SIZES
+
+    retired = set(RETIRED_TEAM_SIZES) if column == "team_size" else set()
+    assert allowed - declared <= retired, (
+        f"founders.{column}: database allows {sorted(allowed - declared - retired)}, "
+        "which the schema does not -- either offer it or drop it from the CHECK"
     )
 
 

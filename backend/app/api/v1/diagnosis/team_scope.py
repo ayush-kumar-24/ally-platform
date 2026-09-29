@@ -49,10 +49,22 @@ from app.core.logger import logger
 #: founders_team_size_check constraint; migration d4a1f8c62b73 pins the three
 #: against each other in tests so they cannot drift.
 TEAM_SIZE_ORDER: tuple[str, ...] = (
-    "solo", "2_5", "6_10", "11_25", "26_50", "50_plus",
+    "solo", "2_5", "6_10", "11_25", "26_plus",
 )
 
 _RANK: dict[str, int] = {band: i for i, band in enumerate(TEAM_SIZE_ORDER)}
+
+#: The two bands d71a4e8c3f05 replaced with '26_plus', ranked alongside it.
+#:
+#: Nothing can newly write one -- `TeamSize` does not offer them and the
+#: migration moved every row -- but the column's CHECK still accepts them so a
+#: write from the old frontend mid-deploy does not fail. Ranking them here is
+#: what makes that straggler harmless: without it, `team_size_of` would read
+#: the value as unrecognised, return None, and gate nothing at all, so a
+#: fifty-person company would be asked the solo questions alongside everything
+#: else. Failing open is right for a value we never asked for; it is wrong for
+#: one we did ask for and merely renamed.
+_RANK.update({band: _RANK["26_plus"] for band in ("26_50", "50_plus")})
 
 
 def team_size_of(founder: Any) -> str | None:

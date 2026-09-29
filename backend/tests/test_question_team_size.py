@@ -50,11 +50,21 @@ def _migration():
 
 # --- the bands cannot drift from what a founder can state -------------------
 
-def test_the_migrations_bands_are_exactly_founders_team_size():
-    assert _migration()._TEAM_SIZES == get_args(TeamSize)
+def test_the_migrations_bands_are_all_still_accepted_by_the_column():
+    """A migration records the bands that existed when it ran, not today's --
+    d4a1f8c62b73 predates the "26_50"/"50_plus" merge and must not be edited to
+    hide that. What has to stay true is that it can still run: every band it
+    writes must still be one the CHECK permits."""
+    from app.schemas.founder import RETIRED_TEAM_SIZES
+
+    permitted = set(get_args(TeamSize)) | set(RETIRED_TEAM_SIZES)
+    assert set(_migration()._TEAM_SIZES) <= permitted
 
 
 def test_the_review_scripts_bands_are_exactly_founders_team_size():
+    """Unlike a migration, this tool runs today and WRITES. It must offer
+    exactly what a founder can be, so a reviewer cannot tag a question with a
+    band nobody can ever hold."""
     from scripts.review_question_team_size import BANDS
 
     assert BANDS == get_args(TeamSize)
@@ -355,10 +365,10 @@ def test_questions_needing_an_organisation_are_not_put_to_a_small_team(catalogue
             sub=_retag_migration()._SUBCATEGORY,
         )
     }
-    # '26_50' joined the set with b93f5c07d2e1: SCL-166 and SCL-167 ask about
+    # '26_plus' joined the set with b93f5c07d2e1: SCL-166 and SCL-167 ask about
     # teams competing for budget and about two teams disagreeing, which needs
     # several teams rather than several managers.
-    assert bands and bands <= {"6_10", "11_25", "26_50"}, (
+    assert bands and bands <= {"6_10", "11_25", "26_plus"}, (
         f"People Management Complexity questions sized {sorted(bands)}; they "
         "presuppose employees, and most of them presuppose managers"
     )
@@ -447,15 +457,15 @@ def test_the_middle_bands_actually_change_the_diagnosis(catalogue):
     """'6_10', '11_25' and '26_50' each have to withhold something the band
     below does not, or the answer a founder gave was pointless to collect.
 
-    '50_plus' is deliberately absent from this list: no question in the bank
-    distinguishes a thirty-person company from a sixty-person one, so it
-    behaves like '26_50' on purpose. See migration b93f5c07d2e1."""
+    There is no band above '26_plus' to check: the two that used to sit there
+    behaved identically, so d71a4e8c3f05 merged them into one answer rather
+    than asking a founder for precision the bank never uses."""
     used = {
         r[0] for r in _rows(
             "SELECT DISTINCT min_team_size FROM questions WHERE min_team_size IS NOT NULL"
         )
     }
-    for band in ("6_10", "11_25", "26_50"):
+    for band in ("6_10", "11_25", "26_plus"):
         assert band in used, (
             f"no question requires '{band}', so picking it in onboarding gives "
             "the same diagnosis as the band below it"
