@@ -170,3 +170,60 @@ def test_the_engine_applies_the_gate_outside_the_stage_scope_shortcut():
         "the team-size gate runs after the stage-scope short-circuit, so a "
         "solo founder at Growth is still asked about their staff"
     )
+
+
+# --- a solo founder is not graded on a team they do not have ---------------
+#
+# The gate above is only half the fix. It gives a founder working alone the
+# Team & Leadership questions they CAN answer -- and several of those are about
+# not having anyone ("Is there anyone who pressure-tests your decisions?",
+# "During a hard stretch, is there anyone who carries some of the emotional
+# weight with you?"). They answer truthfully, the rubric scores every answer as
+# a gap, and the report tells them their leadership is failing. It is not: the
+# band is measuring their team size and presenting it as a verdict on them.
+
+from app.api.v1.diagnosis.team_scope import score_is_withheld
+
+TEAM_AND_LEADERSHIP = 5
+FOUNDER_READINESS = 1
+
+
+def test_team_and_leadership_is_not_scored_for_a_founder_working_alone():
+    assert score_is_withheld(TEAM_AND_LEADERSHIP, _founder(SOLO)) is True
+
+
+@pytest.mark.parametrize("band", [b for b in TEAM_SIZE_ORDER if b != SOLO])
+def test_it_is_scored_for_anyone_with_a_team(band):
+    assert score_is_withheld(TEAM_AND_LEADERSHIP, _founder(band)) is False
+
+
+def test_no_other_pillar_is_withheld_for_a_solo_founder():
+    """Founder Dependency lives in Pillar 1 and is exactly what a solo
+    founder's answers are evidence FOR. Withholding that too would throw away
+    the finding instead of filing it correctly."""
+    for pillar in (1, 2, 3, 4, 6):
+        assert score_is_withheld(pillar, _founder(SOLO)) is False
+
+
+def test_an_unknown_team_size_withholds_no_score():
+    """Same fail-open rule as the gate: every founder who onboarded before the
+    question existed has NULL, and blanking their Team & Leadership score would
+    be a visible regression for all of them."""
+    assert score_is_withheld(TEAM_AND_LEADERSHIP, _founder(None)) is False
+    assert score_is_withheld(TEAM_AND_LEADERSHIP, _founder("nonsense")) is False
+
+
+def test_the_scorer_asks_before_banding_a_pillar():
+    """Wired into the same branch as the evidence floor, so
+    `assessed_question_count` still carries the real number and a caller can
+    tell "nobody to ask about" from "never asked"."""
+    import inspect
+
+    from app.api.v1.reasoning.engines.business_health import BusinessHealthScorer
+
+    source = inspect.getsource(BusinessHealthScorer)
+    assert "score_is_withheld(" in source, "the scorer never asks"
+    assert "withheld or len(answer_scores) < minimum" in source, (
+        "the withholding is not on the same branch as the evidence floor, so a "
+        "withheld pillar may not report its real question count"
+    )

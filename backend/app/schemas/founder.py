@@ -34,7 +34,21 @@ CurrentRevenue = Literal[
 ExperienceLevel = Literal[
     "first_time", "one_company", "serial", "investor", "mentor", "executive",
 ]
-TeamSize = Literal["solo", "2_5", "6_10", "11_25", "26_50", "50_plus"]
+# Five bands, not the original six. "26-50" and "More than 50" produced an
+# identical diagnosis -- nothing in the question bank tells a thirty-person
+# company from a sixty-person one -- so they became one "More than 25" answer.
+# See migration d71a4e8c3f05.
+#
+# The retired "26_50" and "50_plus" are still accepted by the column's CHECK,
+# on purpose, so a write from the old frontend during a deploy does not 500 on
+# the last question of a founder's profile. They are deliberately NOT offered
+# here: nothing may newly write one.
+TeamSize = Literal["solo", "2_5", "6_10", "11_25", "26_plus"]
+
+#: Bands no founder can pick any more, kept only so a row written by the old
+#: frontend mid-deploy still ranks correctly in `team_scope` instead of reading
+#: as unknown and being gated at nothing.
+RETIRED_TEAM_SIZES: tuple[str, ...] = ("26_50", "50_plus")
 WorkingRelationship = Literal[
     "coach", "cofounder", "strategist", "accountability", "brainstorm", "research",
 ]

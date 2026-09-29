@@ -25,6 +25,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from typing import Protocol, runtime_checkable
 
 from app.api.v1.diagnosis.stage_scope import resolve_scope
+from app.api.v1.diagnosis.team_scope import score_is_withheld
 from app.api.v1.reasoning.errors import FeatureDisabledError
 from app.api.v1.reasoning.interfaces import ReasoningContext
 from app.api.v1.reasoning.repository import ReasoningRepository
@@ -305,7 +306,27 @@ class BusinessHealthScorer:
             #
             # assessed_question_count still carries the real count, so a caller
             # can tell "never asked" (0) from "asked, below the floor" (1-2).
-            if len(answer_scores) < minimum:
+            # A solo founder's Team & Leadership is reported the same way,
+            # however many answers they gave. The questions they were asked are
+            # the ones about not having anyone, and a truthful "no" to those
+            # scores as a gap -- so the band would measure their team size and
+            # present it as a verdict on how they lead. See
+            # team_scope.score_is_withheld.
+            withheld = score_is_withheld(
+                pillar.pillar_id, getattr(context, "founder", None)
+            )
+            # A pillar the STAGE does not assess never gets a band either,
+            # however many answers arrived. Normally none do, because the
+            # pillar filter withheld its questions -- but
+            # StageScope.ADMITTED_DESPITE_PILLAR lets an ideation founder be
+            # asked the `Idea & Validation` questions that happen to sit under
+            # Revenue Maturity problems ("Where would you actually get your
+            # product from?"). Those answers belong in the diagnosis; a
+            # Revenue Maturity band on a founder with no revenue does not, and
+            # the report has already told them that pillar was not assessed.
+            if scope is not None and not scope.withholds_nothing:
+                withheld = withheld or pillar.pillar_id not in scope.pillars
+            if withheld or len(answer_scores) < minimum:
                 pillar_scores.append(
                     PillarScore(
                         pillar_id=pillar.pillar_id,

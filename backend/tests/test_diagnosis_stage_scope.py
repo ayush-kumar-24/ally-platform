@@ -311,11 +311,38 @@ def test_a_stage_order_outside_the_table_is_unscoped():
 # --- filtering: pillars -----------------------------------------------------
 
 def test_ideation_never_sees_revenue_or_team_questions():
-    engine = _engine(_ONE_PER_PILLAR)
+    """Both pillars stay withheld at ideation -- an idea-stage founder has no
+    revenue to assess and no team to lead.
+
+    Categorised away from `Idea & Validation` on purpose. That category is the
+    one documented exception (StageScope.ADMITTED_DESPITE_PILLAR), and the
+    module-level fixture happens to use it as its neutral value, so testing the
+    pillar rule through it would test the exception instead of the rule.
+    """
+    engine = _engine([
+        _q(REVENUE_MATURITY, REVENUE_MATURITY, category="Business Model Design"),
+        _q(TEAM_AND_LEADERSHIP, TEAM_AND_LEADERSHIP, category="Team & Leadership"),
+        _q(MARKET_CLARITY, MARKET_CLARITY),
+    ])
     got = engine.candidate_questions(_session(), _founder(IDEATION))
     pillars = {q.problem_id - 10 for q in got}
     assert REVENUE_MATURITY not in pillars
     assert TEAM_AND_LEADERSHIP not in pillars
+    assert MARKET_CLARITY in pillars, "the filter dropped everything, not just those two"
+
+
+def test_ideation_does_see_the_validation_questions_filed_under_revenue():
+    """The documented exception. 139 questions sit under Revenue Maturity
+    problems and ask about sourcing, unit cost, delivery and returns -- "Where
+    would you actually get your product from?" -- which is validation work, not
+    revenue. They are the only industry-specific validation content an ideation
+    founder can get, and the pillar rule was locking them out as a side effect
+    of where their problems are filed."""
+    engine = _engine([
+        _q(REVENUE_MATURITY, REVENUE_MATURITY, category="Idea & Validation"),
+    ])
+    got = engine.candidate_questions(_session(), _founder(IDEATION))
+    assert {q.problem_id - 10 for q in got} == {REVENUE_MATURITY}
 
 
 def test_ideation_does_see_product_and_strategy_questions():

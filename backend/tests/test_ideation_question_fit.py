@@ -167,3 +167,184 @@ def test_the_purpose_written_ideation_bank_was_left_alone(catalogue):
     assert not [c for c in touched if c.startswith("S0-")], (
         "the fix reaches into the purpose-written Stage 0 bank"
     )
+
+
+# --- the whole operating-business family, not just seventeen questions ------
+#
+# c58d1e7b0a94 checked the 183 legacy-coded ideation questions and took the 988
+# `S0-` coded ones on trust. Collapsing those 1,127 by code shape gives 148
+# templates in two clearly different hands: `S0-XXX-0nn` for an idea with
+# nothing built, and `S0-XXX-1nn`/`2nn`/`3nn` for a business already trading
+# ("How did you arrive at your current price list?", "If your dispatcher left,
+# what would you lose?"). 410 of the second kind were still reachable by an
+# idea-stage founder. e4c9b21d8a76 moves them.
+
+import re
+
+OPERATING_FAMILY = re.compile(r"^S0-([A-Z]{3})-[123]\d\d(-\d)?$")
+
+#: `S0-` codes naming a SUBJECT rather than an industry. `S0-IVA-1nn` matches
+#: the number shape and is idea-stage content -- "Have you studied a failed
+#: attempt at something similar?" -- so the family is industry prefix AND
+#: number, never the number alone.
+NOT_INDUSTRIES = frozenset(
+    {"IVA", "BPL", "PRD", "PSY", "OPS", "TCI", "CMA", "RSK", "SCL"}
+)
+
+
+def _is_operating_family(code: str) -> bool:
+    match = OPERATING_FAMILY.match(code)
+    return bool(match) and match.group(1) not in NOT_INDUSTRIES
+
+
+def test_the_operating_business_family_is_off_the_ideation_bank(catalogue):
+    left = _rows(
+        "SELECT question_code FROM questions WHERE primary_stage_group = :g "
+        "ORDER BY question_code",
+        g=IDEATION_GROUP,
+    )
+    stranded = [c for (c,) in left if _is_operating_family(c)]
+    assert not stranded, (
+        f"{len(stranded)} question(s) written for a trading business are still "
+        f"asked of idea-stage founders, e.g. {stranded[:5]}"
+    )
+
+
+def test_the_idea_stage_family_was_not_swept_up_with_it(catalogue):
+    """The mirror. `S0-IVA-100` to `S0-IVA-114` match the family's number shape
+    and are idea-stage questions; a first pass matching the number alone moved
+    fifteen of them. Losing good ideation content to a too-broad rule would be
+    a worse outcome than the defect."""
+    kept = {
+        c for (c,) in _rows(
+            "SELECT question_code FROM questions WHERE primary_stage_group = :g",
+            g=IDEATION_GROUP,
+        )
+    }
+    survivors = [c for c in kept if c.startswith("S0-IVA-1")]
+    assert len(survivors) >= 10, (
+        "the S0-IVA-1nn idea-stage questions were swept out with the operating "
+        f"family; only {sorted(survivors)} remain"
+    )
+
+
+def test_an_idea_stage_founder_still_has_plenty_to_be_asked(catalogue):
+    """Moving 410 questions out must not leave the bank too thin to fill a
+    diagnosis. The ideation budget is 14."""
+    from app.api.v1.diagnosis.stage_scope import SCOPE_BY_STAGE_ORDER
+
+    scope = SCOPE_BY_STAGE_ORDER[1]
+    reachable = _rows(
+        """
+        SELECT count(*) FROM questions q
+        JOIN problems p ON p.problem_id = q.problem_id
+        WHERE q.primary_stage_group = :g
+          AND p.pillar_id = ANY(:pillars)
+          AND q.category <> ALL(:withheld)
+        """,
+        g=IDEATION_GROUP,
+        pillars=list(scope.pillars),
+        withheld=list(scope.withheld_categories or ()) or [""],
+    )[0][0]
+    assert reachable > 200, (
+        f"only {reachable} questions reachable at ideation; the bank is now too "
+        "thin to build a varied diagnosis from"
+    )
+
+
+# --- the one admitted exception --------------------------------------------
+#
+# 139 questions sit under Revenue Maturity problems and are categorised
+# `Idea & Validation`. Their text is not about revenue -- "Where would you
+# actually get your product from?", "How would the product reach the customer,
+# and who pays for that?" -- and they exist in 24 industry flavours, so they
+# are the only industry-specific validation content an ideation founder can
+# get. Ideation withholds Revenue Maturity correctly, and was locking these out
+# as a side effect of where their problems are filed rather than what they ask.
+
+IDEA_AND_VALIDATION = "Idea & Validation"
+REVENUE_MATURITY = 3
+
+
+def _ideation_scope():
+    from app.api.v1.diagnosis.stage_scope import SCOPE_BY_STAGE_ORDER
+
+    return SCOPE_BY_STAGE_ORDER[1]
+
+
+def test_validation_questions_are_admitted_despite_their_pillar():
+    assert _ideation_scope().admits(REVENUE_MATURITY, IDEA_AND_VALIDATION)
+
+
+def test_the_rest_of_revenue_maturity_stays_out():
+    """The exception is one category, not the pillar. Business Model Design
+    presumes a price already being charged."""
+    scope = _ideation_scope()
+    for category in ("Business Model Design", "Sales & Revenue", None):
+        assert not scope.admits(REVENUE_MATURITY, category)
+
+
+def test_team_and_leadership_is_not_admitted_by_the_same_door():
+    """The rule is deliberately (pillar, category), not "any withheld pillar's
+    Idea & Validation questions". A founder with no team has no more business
+    answering those than a founder with no revenue has answering about
+    pricing."""
+    assert not _ideation_scope().admits(5, IDEA_AND_VALIDATION)
+
+
+def test_pillars_in_scope_are_unaffected():
+    scope = _ideation_scope()
+    for pillar in scope.pillars:
+        assert scope.admits(pillar, IDEA_AND_VALIDATION)
+        assert scope.admits(pillar, "anything at all")
+
+
+def test_the_exception_is_switched_off_for_every_later_stage():
+    """Stages from Validation on assess Revenue Maturity outright, so the
+    exception must never be the reason a question is admitted there -- it would
+    be dead code pretending to be a rule."""
+    from app.api.v1.diagnosis.stage_scope import SCOPE_BY_STAGE_ORDER
+
+    for order, scope in SCOPE_BY_STAGE_ORDER.items():
+        if order == 1:
+            continue
+        assert REVENUE_MATURITY in scope.pillars, (
+            f"stage {order} withholds Revenue Maturity; the ideation exception "
+            "would silently start applying there too"
+        )
+
+
+def test_an_ideation_founder_actually_gains_the_questions(catalogue):
+    scope = _ideation_scope()
+    gained = _rows(
+        """
+        SELECT count(*) FROM questions q
+        JOIN problems p ON p.problem_id = q.problem_id
+        WHERE q.primary_stage_group = :g
+          AND p.pillar_id = :pillar
+          AND q.category = :cat
+        """,
+        g=IDEATION_GROUP,
+        pillar=REVENUE_MATURITY,
+        cat=IDEA_AND_VALIDATION,
+    )[0][0]
+    assert gained > 100, (
+        f"only {gained} validation questions on the Revenue Maturity shelf; "
+        "the set this exception exists for has moved or shrunk"
+    )
+    assert scope.admits(REVENUE_MATURITY, IDEA_AND_VALIDATION)
+
+
+def test_the_scorer_still_withholds_a_band_for_a_pillar_the_stage_skips():
+    """Admitting the questions must not publish a Revenue Maturity verdict on a
+    founder who has no revenue. The report has already told them that pillar
+    was not assessed."""
+    import inspect
+
+    from app.api.v1.reasoning.engines.business_health import BusinessHealthScorer
+
+    source = inspect.getsource(BusinessHealthScorer)
+    assert "pillar.pillar_id not in scope.pillars" in source, (
+        "nothing stops an admitted question's answers banding a pillar the "
+        "stage does not assess"
+    )

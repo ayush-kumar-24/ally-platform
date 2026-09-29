@@ -56,8 +56,11 @@ from sqlalchemy import text
 
 from app.db.session import SessionLocal
 
-#: founders.team_size's six bands. A question may not require anything else.
-BANDS = ("solo", "2_5", "6_10", "11_25", "26_50", "50_plus")
+#: founders.team_size's five bands. A question may not require anything else.
+#: "26_50" and "50_plus" were merged into "26_plus" by d71a4e8c3f05 and are
+#: deliberately absent: this tool writes, and nothing may newly write a retired
+#: band.
+BANDS = ("solo", "2_5", "6_10", "11_25", "26_plus")
 
 #: The value migration d4a1f8c62b73 leaves behind as "not yet read".
 DEFAULT_BAND = "2_5"

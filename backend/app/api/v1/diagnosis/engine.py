@@ -584,7 +584,7 @@ class QuestionSelectionEngine:
             if problem_to_pillar:
                 scoped = [
                     q for q in scoped
-                    if problem_to_pillar.get(q.problem_id) in scope.pillars
+                    if scope.admits(problem_to_pillar.get(q.problem_id), q.category)
                 ]
                 applied.append("pillar")
 
