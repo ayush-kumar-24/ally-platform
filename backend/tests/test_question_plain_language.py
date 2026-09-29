@@ -96,4 +96,4 @@ def test_knowledge_tests_that_could_not_be_reworded_stay_as_they_are():
 
 
 def test_it_follows_the_previous_head():
-    assert _migration().down_revision == "a2e7c481f96b"
+    assert _migration().down_revision == "c58d1e7b0a94"

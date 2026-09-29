@@ -41,7 +41,7 @@ compares meaning, and the meaning is unchanged; regenerate them with
 scripts/embedding_migration/02_regenerate_embeddings.py whenever convenient.
 
 Revision ID: c5e18b3f9a04
-Revises: a2e7c481f96b
+Revises: c58d1e7b0a94
 Create Date: 2026-09-29 15:00:00.000000
 
 """
@@ -51,7 +51,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "c5e18b3f9a04"
-down_revision: Union[str, Sequence[str], None] = "a2e7c481f96b"
+down_revision: Union[str, Sequence[str], None] = "c58d1e7b0a94"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
