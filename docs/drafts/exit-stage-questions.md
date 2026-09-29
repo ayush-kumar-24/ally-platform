@@ -13,7 +13,7 @@ about their actual situation.
 
 ## What is here
 
-**140 questions — 20 in each of 7 topics.** Twenty per topic so that two
+**200 questions — 20 in each of 10 topics.** Twenty per topic so that two
 founders at Exit do not get an identical diagnosis; the engine picks a handful
 from each.
 
@@ -26,6 +26,9 @@ from each.
 | 5 | Revenue Maturity | Revenue Model Clarity | 20 |
 | 6 | Team & Leadership | Decision Rights | 20 |
 | 7 | Product & Execution | Reliability in the Real World | 20 |
+| 8 | Strategic Clarity | Plan-to-Vision Alignment | 20 |
+| 9 | Revenue Maturity | Demand Reality | 20 |
+| 10 | Market Clarity | Customer Definition | 20 |
 
 ## How to read the two right-hand columns
 
@@ -244,6 +247,92 @@ somebody to look through?
 
 ---
 
+---
+
+## 8. Plan-to-Vision Alignment
+**Pillar: Strategic Clarity** — what you will do afterwards, and whether that is
+already shaping what you decide today.
+
+| # | Question | Team | Trading |
+|---|----------|------|---------|
+| 1 | What do you actually want to do after you hand this over? | any | no |
+| 2 | Is there a date in your head, or is it still "sometime"? | any | no |
+| 3 | Have you told anyone outside the business that you are thinking about this? | any | no |
+| 4 | What would have to be true before you felt ready to let go? | any | no |
+| 5 | Is there a number that would be enough for you? | any | no |
+| 6 | Are you making decisions now that only pay off in five years? | any | no |
+| 7 | Would you stay on for a year if a buyer asked, or is leaving the point? | any | no |
+| 8 | What matters more to you — the price, or what happens to the people here? | any | no |
+| 9 | Does your family know what you are planning? | any | no |
+| 10 | Have you spoken to anyone who has sold a business before? | any | no |
+| 11 | What are you still spending on that a buyer would stop tomorrow? | any | yes |
+| 12 | If a fair offer came next month, would you be ready or would you ask for time? | any | no |
+| 13 | Is anything in your plan for this year there only because you have always done it? | any | no |
+| 14 | What would make you call the whole thing off? | any | no |
+| 15 | Are you holding back from a big decision because you might be leaving? | any | no |
+| 16 | Does the way you run the business today match someone who is preparing to go? | any | no |
+| 17 | Is there work you keep starting because stopping would feel like giving up? | any | no |
+| 18 | What do you want this business to be known for after you are gone? | any | no |
+| 19 | Have you written any of this plan down, or does it live in your head? | any | no |
+| 20 | If you never sold and ran this for ten more years, would that be a failure? | any | no |
+
+---
+
+## 9. Demand Reality
+**Pillar: Revenue Maturity** — will the work keep coming once you are not the
+one bringing it in?
+
+| # | Question | Team | Trading |
+|---|----------|------|---------|
+| 1 | Is the work coming in growing, steady, or slowly dropping? | any | yes |
+| 2 | Where does most of your new business actually come from? | any | yes |
+| 3 | If you stopped asking people for work, would enquiries keep arriving? | any | yes |
+| 4 | Do customers come because of you, or because of what the business does? | any | yes |
+| 5 | How many enquiries did you get in the last three months? | any | yes |
+| 6 | Are most of your referrals from your own contacts? | any | yes |
+| 7 | Is your work seasonal, and does a buyer need to know that? | any | yes |
+| 8 | When did you last have to chase work rather than turn it away? | any | yes |
+| 9 | Could you say roughly what next quarter will bring in? | any | yes |
+| 10 | Does any of your demand depend on one rule, licence or contract staying in place? | any | yes |
+| 11 | Has a competitor appeared in the last two years? What changed? | any | yes |
+| 12 | Do customers come back on their own, or only when you remind them? | any | yes |
+| 13 | What share of this year's work came from customers you already had? | any | yes |
+| 14 | If a buyer watched your enquiries for a month, what would they see? | any | yes |
+| 15 | Is demand tied to something that might pass, like a trend or a shortage? | any | yes |
+| 16 | Do you have work booked beyond the next month? | any | yes |
+| 17 | Has demand ever dropped suddenly? What caused it? | any | yes |
+| 18 | Are you turning work away, and why? | any | yes |
+| 19 | Would the phone still ring if you took your name off everything? | any | yes |
+| 20 | What would worry you most about demand if you were the one buying? | any | yes |
+
+---
+
+## 10. Customer Definition
+**Pillar: Market Clarity** — who a buyer would really be buying.
+
+| # | Question | Team | Trading |
+|---|----------|------|---------|
+| 1 | Describe your typical customer in one sentence. | any | no |
+| 2 | Are your customers mostly one kind of person or business, or all sorts? | any | yes |
+| 3 | Who is your best customer, and what makes them the best? | any | yes |
+| 4 | Is there a written list of who your customers are? | any | yes |
+| 5 | Which customers would you not want to keep if you could choose? | any | yes |
+| 6 | Do your customers know each other, or come from the same circles? | any | yes |
+| 7 | How did you get your last five customers? | any | yes |
+| 8 | Are your customers loyal to you personally or to what they get? | any | yes |
+| 9 | What do your best customers have in common? | any | yes |
+| 10 | Is there a type of customer you keep saying no to? | any | yes |
+| 11 | Would a buyer recognise your customers as a group, or as a mixed bag? | any | yes |
+| 12 | How long does a typical customer stay with you? | any | yes |
+| 13 | Do you know why customers picked you over someone else? | any | yes |
+| 14 | Is there a customer you would be embarrassed for a buyer to call? | any | yes |
+| 15 | Which customers pay late, and do you keep taking their work? | any | yes |
+| 16 | Are you serving a narrow group well, or a wide group roughly? | any | yes |
+| 17 | Has the kind of customer you serve changed over the last few years? | any | yes |
+| 18 | Could someone else describe your customer the same way you just did? | 2_5 | no |
+| 19 | Do you know which customers would recommend you without being asked? | any | yes |
+| 20 | If you had to drop half your customers, which half would go? | any | yes |
+
 ## Notes for whoever edits this
 
 - **Cut freely.** 20 per topic is the target so founders get variety, not a quota
@@ -251,10 +340,10 @@ somebody to look through?
 - **Keep the Team and Trading columns right.** They are what stops these reaching
   a founder who cannot answer. If you reword a question so it no longer needs a
   team, change the column too.
-- **Three topics are optional extras** we did not draft: Plan-to-Vision Alignment
-  (what you will do afterwards), Demand Reality (will demand hold through a
-  handover) and Customer Definition (who a buyer is really buying). Say the word
-  and we add 20 each.
+- **All ten topics are drafted.** Topics 8 to 10 were added after the first
+  review: what you will do afterwards, whether demand holds through a handover,
+  and who a buyer is really buying. Customer Definition also brings Market
+  Clarity into the set, which the first seven topics did not touch.
 - **These need their own home.** Exit currently shares a question bank with
   Growth, Expansion and Maturity. Dropped in as-is, a founder scaling up would
   be asked what a buyer would discount them for. Adding a separate Exit bank is
