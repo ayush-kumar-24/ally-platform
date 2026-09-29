@@ -89,6 +89,11 @@ class StageGroup(StrEnum):
     STAGE_0 = "Stage 0"
     STAGE_0_TO_1 = "Stage 0→1"
     STAGE_1_TO_10_PLUS = "Stage 1→10+"
+    #: Exit only, and ADDITIONAL to STAGE_1_TO_10_PLUS rather than instead of
+    #: it -- an Exit founder draws from both. Questions here are written for
+    #: someone handing the business on, so a founder scaling up must never see
+    #: them. See migration c17a940e6b23 and `stage_groups_for`.
+    EXIT = "Exit"
 
 
 class ScoreLabel(StrEnum):

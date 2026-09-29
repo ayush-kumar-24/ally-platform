@@ -94,12 +94,28 @@ def _path_required(founder: Founder) -> list[tuple[str, str, str]]:
     known yet -- fails open the same way stage_groups_for itself does: a
     founder who hasn't answered the stage question yet is not held to either
     path's extra requirements until it's actually known which one applies."""
-    groups = stage_groups_for(getattr(founder, "stage", None))
-    if groups == [StageGroup.STAGE_1_TO_10_PLUS.value] or groups == [StageGroup.STAGE_0_TO_1.value]:
+    # The Exit bank is ADDITIVE -- an Exit founder draws from it as well as
+    # 'Stage 1->10+' -- so it never identifies a path and is dropped before the
+    # count below. Leaving it in broke this twice over: an equality test
+    # against a one-element list dropped every Path 2 requirement for an Exit
+    # founder, so their profile counted as complete with no revenue figure, no
+    # product description and no one-year vision; and a membership test instead
+    # of equality broke the fail-open, handing Path 2's requirements to a
+    # founder whose stage is not known at all.
+    groups = [
+        g for g in stage_groups_for(getattr(founder, "stage", None))
+        if g != StageGroup.EXIT.value
+    ]
+    # More than one general group back is `stage_groups_for` failing open,
+    # which means the stage is unknown -- and a founder we cannot place is held
+    # to neither path's extra requirements.
+    if len(groups) != 1:
+        return []
+    if groups[0] in (StageGroup.STAGE_1_TO_10_PLUS.value, StageGroup.STAGE_0_TO_1.value):
         return PATH_2_REQUIRED
-    if groups == [StageGroup.STAGE_0.value]:
+    if groups[0] == StageGroup.STAGE_0.value:
         return PATH_1_REQUIRED
-    return []  # stage unknown -- every group returned, fail open
+    return []
 
 
 def _all_fields(founder: Founder) -> list[tuple[str, str, str, bool]]:

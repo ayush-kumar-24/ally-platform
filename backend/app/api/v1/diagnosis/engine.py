@@ -82,6 +82,9 @@ _PRIORITY_RANK: dict[str, int] = {
 # Note Validation sits in Stage 0->1, not Stage 0: a founder testing demand
 # already has something to test, which is past pure ideation.
 # ---------------------------------------------------------------------------
+#: The one stage with a bank of its own on top of its general one.
+_EXIT_STAGE_ORDER = 8
+
 _STAGE_ORDER_TO_GROUP: tuple[tuple[int, StageGroup], ...] = (
     (1, StageGroup.STAGE_0),
     (4, StageGroup.STAGE_0_TO_1),
@@ -113,10 +116,21 @@ def stage_groups_for(stage) -> list[str]:
     # open to every group rather than raise, same convention as stage is None.
     order = getattr(stage, "stage_order", None)
     if stage is None or order is None:
-        return [group.value for group in StageGroup]
+        # Fail open to the three GENERAL banks, and deliberately not to Exit.
+        # Its questions are written for someone handing the business on -- "What
+        # would you have to fix before letting a buyer watch a normal week?" --
+        # and putting one to a founder whose stage we merely failed to read is
+        # worse than one question fewer. Three banks is not a dead end, which is
+        # the failure this fail-open exists to avoid.
+        return [group.value for group in StageGroup if group is not StageGroup.EXIT]
 
     for max_order, group in _STAGE_ORDER_TO_GROUP:
         if order <= max_order:
+            # Exit draws from its own bank AS WELL AS the general one. It needs
+            # both: the six pillars are still assessed, and only the handover
+            # questions are new.
+            if order == _EXIT_STAGE_ORDER:
+                return [group.value, StageGroup.EXIT.value]
             return [group.value]
 
     return [StageGroup.STAGE_1_TO_10_PLUS.value]

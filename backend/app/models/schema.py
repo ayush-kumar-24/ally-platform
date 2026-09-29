@@ -1350,7 +1350,7 @@ class Questions(Base):
     __tablename__ = 'questions'
     __table_args__ = (
         CheckConstraint('difficulty_level >= 1 AND difficulty_level <= 5', name='questions_difficulty_level_check'),
-        CheckConstraint("primary_stage_group::text = ANY (ARRAY['Stage 0'::character varying, 'Stage 0â†’1'::character varying, 'Stage 1â†’10+'::character varying]::text[])", name='questions_primary_stage_group_check'),
+        CheckConstraint("primary_stage_group IN ('Stage 0', 'Stage 0\u21921', 'Stage 1\u219210+', 'Exit')", name='questions_primary_stage_group_check'),
         # The constraint above bounds the VALUE of a tag but never requires
         # one: a SQL CHECK passes when its expression is NULL. This one
         # requires it. Added NOT VALID by migration b7e4f2a91c58, so it binds
