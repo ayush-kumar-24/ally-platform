@@ -167,3 +167,86 @@ def test_the_purpose_written_ideation_bank_was_left_alone(catalogue):
     assert not [c for c in touched if c.startswith("S0-")], (
         "the fix reaches into the purpose-written Stage 0 bank"
     )
+
+
+# --- the whole operating-business family, not just seventeen questions ------
+#
+# c58d1e7b0a94 checked the 183 legacy-coded ideation questions and took the 988
+# `S0-` coded ones on trust. Collapsing those 1,127 by code shape gives 148
+# templates in two clearly different hands: `S0-XXX-0nn` for an idea with
+# nothing built, and `S0-XXX-1nn`/`2nn`/`3nn` for a business already trading
+# ("How did you arrive at your current price list?", "If your dispatcher left,
+# what would you lose?"). 410 of the second kind were still reachable by an
+# idea-stage founder. e4c9b21d8a76 moves them.
+
+import re
+
+OPERATING_FAMILY = re.compile(r"^S0-([A-Z]{3})-[123]\d\d(-\d)?$")
+
+#: `S0-` codes naming a SUBJECT rather than an industry. `S0-IVA-1nn` matches
+#: the number shape and is idea-stage content -- "Have you studied a failed
+#: attempt at something similar?" -- so the family is industry prefix AND
+#: number, never the number alone.
+NOT_INDUSTRIES = frozenset(
+    {"IVA", "BPL", "PRD", "PSY", "OPS", "TCI", "CMA", "RSK", "SCL"}
+)
+
+
+def _is_operating_family(code: str) -> bool:
+    match = OPERATING_FAMILY.match(code)
+    return bool(match) and match.group(1) not in NOT_INDUSTRIES
+
+
+def test_the_operating_business_family_is_off_the_ideation_bank(catalogue):
+    left = _rows(
+        "SELECT question_code FROM questions WHERE primary_stage_group = :g "
+        "ORDER BY question_code",
+        g=IDEATION_GROUP,
+    )
+    stranded = [c for (c,) in left if _is_operating_family(c)]
+    assert not stranded, (
+        f"{len(stranded)} question(s) written for a trading business are still "
+        f"asked of idea-stage founders, e.g. {stranded[:5]}"
+    )
+
+
+def test_the_idea_stage_family_was_not_swept_up_with_it(catalogue):
+    """The mirror. `S0-IVA-100` to `S0-IVA-114` match the family's number shape
+    and are idea-stage questions; a first pass matching the number alone moved
+    fifteen of them. Losing good ideation content to a too-broad rule would be
+    a worse outcome than the defect."""
+    kept = {
+        c for (c,) in _rows(
+            "SELECT question_code FROM questions WHERE primary_stage_group = :g",
+            g=IDEATION_GROUP,
+        )
+    }
+    survivors = [c for c in kept if c.startswith("S0-IVA-1")]
+    assert len(survivors) >= 10, (
+        "the S0-IVA-1nn idea-stage questions were swept out with the operating "
+        f"family; only {sorted(survivors)} remain"
+    )
+
+
+def test_an_idea_stage_founder_still_has_plenty_to_be_asked(catalogue):
+    """Moving 410 questions out must not leave the bank too thin to fill a
+    diagnosis. The ideation budget is 14."""
+    from app.api.v1.diagnosis.stage_scope import SCOPE_BY_STAGE_ORDER
+
+    scope = SCOPE_BY_STAGE_ORDER[1]
+    reachable = _rows(
+        """
+        SELECT count(*) FROM questions q
+        JOIN problems p ON p.problem_id = q.problem_id
+        WHERE q.primary_stage_group = :g
+          AND p.pillar_id = ANY(:pillars)
+          AND q.category <> ALL(:withheld)
+        """,
+        g=IDEATION_GROUP,
+        pillars=list(scope.pillars),
+        withheld=list(scope.withheld_categories or ()) or [""],
+    )[0][0]
+    assert reachable > 200, (
+        f"only {reachable} questions reachable at ideation; the bank is now too "
+        "thin to build a varied diagnosis from"
+    )

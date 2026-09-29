@@ -25,6 +25,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from typing import Protocol, runtime_checkable
 
 from app.api.v1.diagnosis.stage_scope import resolve_scope
+from app.api.v1.diagnosis.team_scope import score_is_withheld
 from app.api.v1.reasoning.errors import FeatureDisabledError
 from app.api.v1.reasoning.interfaces import ReasoningContext
 from app.api.v1.reasoning.repository import ReasoningRepository
@@ -305,7 +306,16 @@ class BusinessHealthScorer:
             #
             # assessed_question_count still carries the real count, so a caller
             # can tell "never asked" (0) from "asked, below the floor" (1-2).
-            if len(answer_scores) < minimum:
+            # A solo founder's Team & Leadership is reported the same way,
+            # however many answers they gave. The questions they were asked are
+            # the ones about not having anyone, and a truthful "no" to those
+            # scores as a gap -- so the band would measure their team size and
+            # present it as a verdict on how they lead. See
+            # team_scope.score_is_withheld.
+            withheld = score_is_withheld(
+                pillar.pillar_id, getattr(context, "founder", None)
+            )
+            if withheld or len(answer_scores) < minimum:
                 pillar_scores.append(
                     PillarScore(
                         pillar_id=pillar.pillar_id,

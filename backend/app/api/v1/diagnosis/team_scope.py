@@ -142,3 +142,49 @@ def gate(candidates: list, founder: Any) -> list:
             },
         )
     return kept
+
+
+#: Team & Leadership. The one pillar whose subject can be absent entirely.
+_TEAM_PILLAR_ID = 5
+
+
+def score_is_withheld(pillar_id: Any, founder: Any) -> bool:
+    """Whether this pillar must be reported as not assessed for this founder.
+
+    True only for Team & Leadership, and only for a founder working alone.
+
+    WHY A SCORE IS WORSE THAN NO SCORE HERE. The gate above gives a solo
+    founder the Team & Leadership questions they can actually answer, and
+    several of those are about not having anyone:
+
+        Is there anyone who actually pressure-tests your decisions before you
+        commit to them?
+        During a hard stretch, is there anyone who actually carries some of the
+        emotional weight with you?
+        Does growth feel capped by how much one person -- you -- can personally
+        carry?
+
+    A founder working alone answers no, no and yes, truthfully, and the rubric
+    scores all three as gaps. The pillar then lands in the bottom band and the
+    report tells them their leadership is failing. It is not. They are solo,
+    and the answers describe that rather than any shortcoming -- so the score
+    measures their team size and presents it as a verdict on them.
+
+    The answers are still worth collecting: they are real evidence of founder
+    dependency, which is Pillar 1's `Founder Dependency / Bus Factor` and is
+    scored there. What is withheld is the Team & Leadership BAND, not the
+    information.
+
+    This is the same judgement the ideation scope already makes by withholding
+    the pillar outright -- you cannot grade how someone leads a team they do
+    not have -- applied on the axis that actually decides it. And it uses the
+    machinery that already exists for saying so: the same branch as the
+    evidence floor, so `assessed_question_count` still carries the real number
+    and a caller can tell "nobody to ask about" from "never asked".
+
+    Fails open like everything else here: an unknown team size withholds
+    nothing.
+    """
+    if pillar_id != _TEAM_PILLAR_ID:
+        return False
+    return team_size_of(founder) == "solo"
