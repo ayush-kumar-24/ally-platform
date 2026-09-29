@@ -1359,6 +1359,7 @@ class Questions(Base):
         CheckConstraint('primary_stage_group IS NOT NULL', name='questions_stage_group_required'),
         CheckConstraint("priority::text = ANY (ARRAY['CORE'::character varying, 'SUPPLEMENTARY'::character varying]::text[])", name='questions_priority_check'),
         CheckConstraint("min_team_size IS NULL OR min_team_size IN ('solo', '2_5', '6_10', '11_25', '26_plus', '26_50', '50_plus')", name='questions_min_team_size_check'),
+        CheckConstraint("max_team_size IS NULL OR max_team_size IN ('solo', '2_5', '6_10', '11_25', '26_plus', '26_50', '50_plus')", name='questions_max_team_size_check'),
         CheckConstraint("question_type::text = ANY (ARRAY['open_text'::character varying, 'rating_scale'::character varying, 'yes_no'::character varying, 'multiple_choice'::character varying]::text[])", name='questions_question_type_check'),
         ForeignKeyConstraint(['follow_up_question_id'], ['questions.question_id'], name='questions_follow_up_question_id_fkey'),
         ForeignKeyConstraint(['problem_id'], ['problems.problem_id'], name='questions_problem_id_fkey'),
@@ -1372,6 +1373,7 @@ class Questions(Base):
         Index('idx_questions_priority', 'priority'),
         Index('idx_questions_stage_group', 'primary_stage_group'),
         Index('idx_questions_min_team_size', 'min_team_size', postgresql_where='(min_team_size IS NOT NULL)'),
+        Index('idx_questions_max_team_size', 'max_team_size', postgresql_where='(max_team_size IS NOT NULL)'),
         Index('idx_questions_requires_trading', 'requires_trading', postgresql_where='(requires_trading)'),
     )
 
@@ -1410,6 +1412,18 @@ class Questions(Base):
     #: The values are founders.team_size's own six, so a question can never
     #: require a size a founder has no way to state.
     min_team_size: Mapped[Optional[str]] = mapped_column(String(20))
+
+    #: The LARGEST `founders.team_size` band this question still means
+    #: something to. NULL means every band, which is all but twenty rows.
+    #:
+    #: The mirror of `min_team_size`, and needed for the same class of defect
+    #: seen from the other side. "What would you need to see before you felt
+    #: safe paying someone a salary?" has a subject for a founder working alone
+    #: and none at all for one with twelve staff, who answered it years ago.
+    #:
+    #: Claimed by review, never inferred: see migration c92a41f7b508 for why
+    #: keyword screening is not an option here.
+    max_team_size: Mapped[Optional[str]] = mapped_column(String(20))
 
     #: Whether this question needs money to have changed hands already.
     #:
