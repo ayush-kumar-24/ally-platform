@@ -28,6 +28,7 @@ from app.api.v1.diagnosis.industry_scope import (
     relevance_ranker,
     requested_opening,
 )
+from app.api.v1.diagnosis.revenue_scope import gate as revenue_gate
 from app.api.v1.diagnosis.repository import DiagnosisRepository
 from app.api.v1.diagnosis.stage_scope import ALL_PILLARS, resolve_scope
 from app.api.v1.diagnosis.team_scope import gate as team_size_gate
@@ -567,6 +568,12 @@ class QuestionSelectionEngine:
         # Rebinding `candidates` again, so a stage-scope data problem below
         # cannot re-admit a question the founder has no way to answer.
         candidates = team_size_gate(candidates, founder)
+
+        # REVENUE, last of the founder-fact gates and outside the short-circuit
+        # for the same reason as the other three. A founder at Validation has
+        # not outgrown "Have you hit your sales targets for the last quarter?";
+        # they have never had a sales target. See revenue_scope.
+        candidates = revenue_gate(candidates, founder)
 
         scope = resolve_scope(founder)
         if scope is None or scope.withholds_nothing:
