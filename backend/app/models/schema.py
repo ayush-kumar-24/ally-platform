@@ -1372,6 +1372,7 @@ class Questions(Base):
         Index('idx_questions_priority', 'priority'),
         Index('idx_questions_stage_group', 'primary_stage_group'),
         Index('idx_questions_min_team_size', 'min_team_size', postgresql_where='(min_team_size IS NOT NULL)'),
+        Index('idx_questions_requires_trading', 'requires_trading', postgresql_where='(requires_trading)'),
     )
 
     question_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -1409,6 +1410,15 @@ class Questions(Base):
     #: The values are founders.team_size's own six, so a question can never
     #: require a size a founder has no way to state.
     min_team_size: Mapped[Optional[str]] = mapped_column(String(20))
+
+    #: Whether this question needs money to have changed hands already.
+    #:
+    #: A boolean and not a band, unlike `min_team_size`: the bank has real
+    #: content at five team sizes and exactly one revenue line -- trading or
+    #: not. See migration a6f3d2c81b47.
+    requires_trading: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
 
     follow_up_question: Mapped[Optional['Questions']] = relationship('Questions', remote_side=[question_id], back_populates='follow_up_question_reverse')
     follow_up_question_reverse: Mapped[list['Questions']] = relationship('Questions', remote_side=[follow_up_question_id], back_populates='follow_up_question')
