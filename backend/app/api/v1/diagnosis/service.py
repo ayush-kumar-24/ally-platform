@@ -8,6 +8,7 @@ while idle-in-transaction, failing the whole request after the answer had
 already been written. Every other public method still commits once.
 """
 
+import dataclasses
 from datetime import datetime, timezone
 from decimal import Decimal
 
@@ -127,11 +128,26 @@ _REPROMPT = (
     "more than a tidy answer."
 )
 
+#: What Ally says to a founder who did not understand the question, when the
+#: advisor flagged the confusion but gave no usable rewording. Deliberately
+#: puts the fault on the question and tells them the two answers that are
+#: always acceptable, so nobody is stuck on wording they cannot parse.
+_CLARIFY_FALLBACK = (
+    "Fair enough — that one wasn't worded clearly. Answer it in your own words, "
+    "as best you understand it. If it doesn't fit your business, just say so; "
+    "if you don't know, that's a fine answer too."
+)
+
 
 def should_discard_as_unresponsive(
     insight, *, created_here: bool, already_reprompted: bool
 ) -> bool:
     """Whether to discard this answer and re-ask the question.
+
+    Two verdicts lead here: the answer was about something else
+    (`responsive` False), or the founder said they did not understand the
+    question (`confused` True). Neither is evidence about the business, and
+    both share the same once-per-question bound below.
 
     A pure predicate rather than an inline condition because it encodes a safety
     property, and safety properties deserve a test that does not need a database:
@@ -143,9 +159,37 @@ def should_discard_as_unresponsive(
       * discards at most ONCE per question. The verdict is a model's and can be
         wrong, and a wrong one must never leave a founder unable to continue.
     """
-    if insight is None or insight.responsive:
+    if insight is None or (insight.responsive and not insight.confused):
         return False
     return created_here and not already_reprompted
+
+
+def reprompt_for(insight) -> str:
+    """What Ally says when an answer is held back and the question re-asked.
+
+    A founder who said they did not understand the question gets it explained
+    again in plainer words -- the advisor writes that in the same call that
+    judged the answer, so it costs no extra round-trip. Everyone else gets the
+    fixed "that answered a different question" line, which would be both wrong
+    and discouraging said to someone who was honest about being lost.
+    """
+    if insight is not None and insight.confused:
+        return insight.clarification or _CLARIFY_FALLBACK
+    return _REPROMPT
+
+
+def score_kept_confusion(insight):
+    """A kept "I don't understand the question" is never scored as evidence.
+
+    Reached when the founder is still lost after the one clarification the
+    bound allows. The answer is about Ally's wording, not the business, so it
+    gets NOT_APPLICABLE -- the one unscored band, excluded from both sides of
+    the pillar score -- rather than the Red the rubric gives "I don't know".
+    Anything that is not confusion passes through untouched.
+    """
+    if insight is None or not insight.confused:
+        return insight
+    return dataclasses.replace(insight, score_label=ScoreLabel.NOT_APPLICABLE.value)
 
 
 def needs_fallback_score(insight) -> bool:
@@ -593,6 +637,7 @@ class DiagnosisService:
                     "founder_id": founder.founder_id,
                     "session_id": session.session_id,
                     "question_id": question_id,
+                    "confused": insight.confused,
                 },
             )
             try:
@@ -605,7 +650,7 @@ class DiagnosisService:
                 session.last_activity_at = _utcnow()
                 session.updated_at = _utcnow()
                 self.db.commit()
-                return session, question, _REPROMPT
+                return session, question, reprompt_for(insight)
             except SQLAlchemyError as exc:
                 # Keeping a non-answer is worse than failing the request, but not
                 # much. Let it stand rather than 500 at a founder who did nothing
@@ -636,6 +681,7 @@ class DiagnosisService:
         # DISTRESS_QUESTIONS_TRIGGER -- so a founder whose language detector
         # reported "Open and Engaged" was handed a distress report telling him
         # burnout and isolation appeared to be active blockers.
+        insight = score_kept_confusion(insight)
         if not needs_fallback_score(insight):
             self._apply_insight(answer, insight)
         else:
