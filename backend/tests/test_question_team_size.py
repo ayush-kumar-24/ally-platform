@@ -497,3 +497,118 @@ def test_questions_naming_a_leadership_team_are_not_put_to_a_small_company(catal
         f"questions about a leadership team still reaching a 2-5 person "
         f"company: {sorted(leaked)}"
     )
+
+
+# --- before the first hire --------------------------------------------------
+#
+# A founder working alone gets the Team & Leadership questions they can answer,
+# but before Growth that was only fifteen, and every one was about founder
+# dependency: is anyone checking your thinking, is growth capped by what you
+# can carry. Nothing asked the thing they actually need help with -- when to
+# hire, what to hand over first, whether they can afford it. Migration
+# b48e5c12d709 adds twenty.
+
+FIRST_HIRE_PROBLEM = "TML-FH1"
+EARLY_GROUP = "Stage 0→1"
+
+
+def test_the_first_hire_questions_are_all_answerable_alone(catalogue):
+    rows = _rows(
+        """
+        SELECT q.question_code, q.min_team_size, q.requires_trading
+        FROM questions q JOIN problems p ON p.problem_id = q.problem_id
+        WHERE p.problem_code = :code
+        """,
+        code=FIRST_HIRE_PROBLEM,
+    )
+    assert len(rows) == 20, f"expected 20, found {len(rows)}"
+    for code, band, trading in rows:
+        assert band == "solo", f"{code} needs '{band}' -- it is for a founder alone"
+        assert trading is False, f"{code} needs a sale, which a first hire does not"
+
+
+def test_they_sit_in_the_bank_the_founders_they_are_for_actually_draw_from(catalogue):
+    groups = {
+        r[0] for r in _rows(
+            "SELECT DISTINCT q.primary_stage_group FROM questions q "
+            "JOIN problems p ON p.problem_id = q.problem_id "
+            "WHERE p.problem_code = :code",
+            code=FIRST_HIRE_PROBLEM,
+        )
+    }
+    assert groups == {EARLY_GROUP}
+
+
+def test_they_are_filed_under_role_clarity_and_not_hiring_repeatability(catalogue):
+    """Not only a naming preference. Part 3 switches Hiring Repeatability OFF
+    at Validation, Prototype/MVP and Early Traction, so a question filed there
+    would never reach the founders these were written for. This test fails if
+    that exclusion is ever lifted, because then the filing IS just a preference
+    and worth revisiting."""
+    from app.api.v1.diagnosis.stage_scope import SCOPE_BY_STAGE_ORDER
+
+    dimension = _rows(
+        "SELECT DISTINCT p.dimension_code FROM questions q "
+        "JOIN problems p ON p.problem_id = q.problem_id "
+        "WHERE p.problem_code = :code",
+        code=FIRST_HIRE_PROBLEM,
+    )
+    assert [d for (d,) in dimension] == ["team_structure_role_clarity"]
+    for order in (2, 3, 4):
+        assert "hiring_repeatability" in SCOPE_BY_STAGE_ORDER[order].excluded_dimensions
+
+
+def test_they_measurably_widen_what_a_solo_founder_is_asked(catalogue):
+    """Fifteen was thin enough that two solo founders drew nearly the same
+    Team & Leadership questions."""
+    from types import SimpleNamespace
+
+    from app.api.v1.diagnosis.engine import stage_groups_for
+    from app.api.v1.diagnosis.stage_scope import SCOPE_BY_STAGE_ORDER
+
+    groups = stage_groups_for(SimpleNamespace(stage_order=2))
+    scope = SCOPE_BY_STAGE_ORDER[2]
+    n = _rows(
+        """
+        SELECT count(*) FROM questions q
+        JOIN problems p ON p.problem_id = q.problem_id
+        LEFT JOIN (SELECT DISTINCT question_id FROM question_industry_mapping
+                    WHERE industry_code IS NOT NULL) m ON m.question_id = q.question_id
+        WHERE q.primary_stage_group = ANY(:groups) AND p.pillar_id = :pillar
+          AND q.min_team_size = 'solo' AND m.question_id IS NULL
+          AND q.category <> ALL(:withheld)
+        """,
+        groups=list(groups), pillar=TEAM_PILLAR_ID,
+        withheld=list(scope.withheld_categories or ()) or [""],
+    )[0][0]
+    assert n >= 30, (
+        f"a solo founder before Growth has {n} general Team & Leadership "
+        "questions; the first-hire set is missing or was filed elsewhere"
+    )
+
+
+def test_the_first_hire_set_matches_its_draft(catalogue):
+    """docs/drafts/first-hire-questions.md is the reviewable source."""
+    import re
+
+    from app.core.paths import BACKEND_DIR
+
+    draft = BACKEND_DIR.parent / "docs/drafts/first-hire-questions.md"
+    if not draft.exists():
+        pytest.skip("the draft is not in this checkout")
+    in_draft = {
+        t for n, t in re.findall(r"^\| (\d+) \| (.+?) \|$",
+                                 draft.read_text(encoding="utf-8"), re.M)
+    }
+    in_db = {
+        t for (t,) in _rows(
+            "SELECT q.question_text FROM questions q "
+            "JOIN problems p ON p.problem_id = q.problem_id "
+            "WHERE p.problem_code = :code",
+            code=FIRST_HIRE_PROBLEM,
+        )
+    }
+    assert in_db == in_draft, (
+        f"{len(in_db - in_draft)} in the database but not the draft, "
+        f"{len(in_draft - in_db)} the other way round"
+    )
