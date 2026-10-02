@@ -31,10 +31,14 @@ from app.api.v1.diagnosis.industry_scope import (
     relevance_ranker,
     requested_opening,
 )
+from app.api.v1.diagnosis.business_model_scope import gate as business_model_gate
 from app.api.v1.diagnosis.revenue_scope import gate as revenue_gate
 from app.api.v1.diagnosis.repository import DiagnosisRepository
 from app.api.v1.diagnosis.stage_scope import ALL_PILLARS, resolve_scope
-from app.api.v1.diagnosis.team_scope import gate as team_size_gate
+from app.api.v1.diagnosis.team_scope import (
+    gate as team_size_gate,
+    is_written_for_band,
+)
 from app.core.config import settings
 from app.core.logger import logger
 from app.models import (
@@ -262,26 +266,41 @@ class QuestionSelectionEngine:
         # anything, because question_id is a total order.
         industry_rank = self._industry_rank_for(session, founder)
 
-        # A question from the founder's OWN stage bank is as specific to them as
-        # one written for their industry, so it ranks alongside rather than
-        # below. Only Exit has such a bank, and only an Exit founder has those
-        # questions in their pool, so this changes nothing for anybody else.
+        # CONTENT WRITTEN FOR THIS FOUNDER IN PARTICULAR ranks alongside content
+        # written for their industry, rather than below it. Two things qualify,
+        # and the reason is one reason:
         #
-        # Without it the Exit bank is unreachable in practice. It is universal
-        # content, so `relevance_ranker` scores it UNIVERSAL_RANK, and this term
-        # sits above the tie-break -- a manufacturing founder's own 60 industry
-        # questions win every round first. Measured on a full 30-question
-        # diagnosis for an Exit founder: 1 of the 200 was asked. They were never
-        # out of scope; they simply never won a round.
+        #   their own STAGE BANK -- only Exit has one, and only an Exit founder
+        #   has those questions in their pool;
+        #   a question BOUNDED TO A TEAM SIZE -- `max_team_size`, twenty rows,
+        #   the first-hire bank.
+        #
+        # To an Exit founder "Would your biggest customer stay if you sold the
+        # business?" is more unmistakably theirs than anything written for
+        # manufacturing in general, and to a founder who has never hired, so is
+        # "What would you need to see before you felt safe paying a salary?".
+        #
+        # WITHOUT THIS BOTH ARE UNREACHABLE IN PRACTICE, never out of scope.
+        # Both are universal content, so `relevance_ranker` scores them
+        # UNIVERSAL_RANK, and this term sits above the tie-break -- so a
+        # founder's own 60 industry questions win every round first. Measured on
+        # full 30-question diagnoses: 1 of the 200 Exit questions asked, and 0 of
+        # the 20 first-hire questions. They simply never won a round.
+        #
+        # This cannot widen: `is_written_for_band` promotes only a bound claimed
+        # by review on a named question, never the pillar-wide `min_team_size`
+        # default. See that function for why the distinction decides everything.
         exit_group = StageGroup.EXIT.value
-        own_bank_rank = (PRIMARY_RANK, Decimal(0))
+        own_content_rank = (PRIMARY_RANK, Decimal(0))
 
         def relevance(question: Question):
             # getattr, not attribute access: every other ranking term reads a
             # question defensively, and a candidate that cannot say which bank
             # it came from is simply not from the Exit one.
             if getattr(question, "primary_stage_group", None) == exit_group:
-                return own_bank_rank
+                return own_content_rank
+            if is_written_for_band(question):
+                return own_content_rank
             return industry_rank(question)
 
         def key(question: Question):
@@ -389,14 +408,14 @@ class QuestionSelectionEngine:
             # heavily is not what makes the founder feel read. Those still win
             # their ties through the fourth term inside `base`.
             #
-            # The founder's own STAGE bank opens it too, for the same reason it
-            # ranks with industry inside `base`: to an Exit founder, "Would your
-            # biggest customer stay if you sold the business?" is more
-            # unmistakably theirs than anything written for manufacturing in
-            # general. Without this the block -- 14 of a 30-question budget for
-            # a well-stocked industry -- spends half the diagnosis before the
-            # Exit bank can win anything.
+            # Content written for this founder in particular opens it too, for
+            # the same reason it ranks with industry inside `base`, and the same
+            # two things qualify: their own stage bank, and a question bounded to
+            # their team size. Without this the block -- 14 of a 30-question
+            # budget for a well-stocked industry -- spends half the diagnosis
+            # before either can win anything.
             owned = (getattr(question, "primary_stage_group", None) == exit_group
+                     or is_written_for_band(question)
                      or rank(question)[0] <= SUPPORTING_RANK)
             return (0 if owned else 1, *base(question))
 
@@ -624,6 +643,7 @@ class QuestionSelectionEngine:
         # not outgrown "Have you hit your sales targets for the last quarter?";
         # they have never had a sales target. See revenue_scope.
         candidates = revenue_gate(candidates, founder)
+        candidates = business_model_gate(candidates, founder)
 
         scope = resolve_scope(founder)
         if scope is None or scope.withholds_nothing:

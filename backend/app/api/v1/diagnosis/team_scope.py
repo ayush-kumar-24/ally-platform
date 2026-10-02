@@ -15,10 +15,19 @@ industry. There is simply nobody the question is about. The answer they give is
 a blank or an apology, and the diagnosis scores it as a gap in Team &
 Leadership -- so working alone reads as failing at leadership.
 
-WHAT THIS READS. `questions.min_team_size`, the smallest `founders.team_size`
-band that can answer a question, added by migration d4a1f8c62b73. NULL means
-anyone can, which is every question outside Team & Leadership. See that
-migration for why the column is on `questions` and not on `problems`.
+WHAT THIS READS. Two columns, and the axis cuts both ways.
+
+`questions.min_team_size` (d4a1f8c62b73) is the smallest `founders.team_size`
+band that can answer a question. NULL means anyone can, which is every question
+outside Team & Leadership. See that migration for why the column is on
+`questions` and not on `problems`.
+
+`questions.max_team_size` (c92a41f7b508) is the largest band it still means
+anything to, and exists because the defect above has a mirror image. "What
+would you need to see before you felt safe paying someone a salary?" has a
+subject for a founder working alone; put to one with twelve staff it describes a
+decision they made years ago. Twenty rows carry it -- the first-hire bank -- and
+NULL everywhere else, so this half of the axis narrows nobody else's diagnosis.
 
 UNKNOWN TEAM SIZE ADMITS EVERYTHING. `founders.team_size` was not asked for
 until 2026-09-28, so every founder who onboarded before then has NULL. Gating on
@@ -81,20 +90,46 @@ def team_size_of(founder: Any) -> str | None:
     return band if band in _RANK else None
 
 
-def can_answer(min_team_size: Any, band: str | None) -> bool:
-    """Whether a founder in `band` can be asked a question needing
-    `min_team_size`.
+def _rank_or_none(value: Any) -> int | None:
+    """`value`'s band rank, or None when it is absent or not a band we know.
 
-    True whenever either side is unknown, which is the fail-open half of this
-    module: a question with no requirement is for everyone, and a founder whose
-    size we never asked for is not narrowed at all.
+    One reader for both bounds. An unreadable bound is indistinguishable from
+    no bound on purpose: a CHECK guards both columns, but a migration or a
+    hand-edit could still write something else, and a bad row must narrow
+    nobody.
     """
-    if min_team_size is None or band is None:
+    if not isinstance(value, str):
+        return None
+    return _RANK.get(value.strip())
+
+
+def can_answer(
+    min_team_size: Any, band: str | None, max_team_size: Any = None
+) -> bool:
+    """Whether a founder in `band` can be asked a question bounded by
+    `min_team_size` below and `max_team_size` above.
+
+    True whenever the founder's size is unknown, and true for each bound that
+    is absent or unreadable -- the fail-open half of this module. A question
+    with no bounds is for everyone, and a founder whose size we never asked for
+    is not narrowed at all.
+
+    `max_team_size` is keyword-safe to omit: callers written before
+    c92a41f7b508 keep asking exactly what they asked before.
+    """
+    if band is None:
         return True
-    required = _RANK.get(min_team_size if isinstance(min_team_size, str) else "")
-    if required is None:
-        return True                       # unknown requirement, admit
-    return required <= _RANK[band]
+    here = _RANK[band]
+
+    required = _rank_or_none(min_team_size)
+    if required is not None and required > here:
+        return False
+
+    ceiling = _rank_or_none(max_team_size)
+    if ceiling is not None and ceiling < here:
+        return False
+
+    return True
 
 
 def gate(candidates: list, founder: Any) -> list:
@@ -117,7 +152,8 @@ def gate(candidates: list, founder: Any) -> list:
         return candidates                 # never asked, or unreadable
 
     kept = [q for q in candidates
-            if can_answer(getattr(q, "min_team_size", None), band)]
+            if can_answer(getattr(q, "min_team_size", None), band,
+                          getattr(q, "max_team_size", None))]
 
     if not kept:
         logger.warning(
@@ -142,6 +178,31 @@ def gate(candidates: list, founder: Any) -> list:
             },
         )
     return kept
+
+
+def is_written_for_band(question: Any) -> bool:
+    """Whether this question was written for a founder of a PARTICULAR size,
+    rather than admitted to everyone of that size and larger.
+
+    Read by the diagnosis ranking, not by the gate. A question that only makes
+    sense below some team size is as specific to the founder in front of it as
+    one written for their industry, so it ranks alongside industry content
+    instead of behind it -- the same judgement `engine._round_robin_key_for`
+    already makes for a founder's own stage bank, on the axis this module owns.
+
+    WHY `max_team_size` AND NOT `min_team_size`. Only one of the two records a
+    decision about the individual question. 1,031 rows carry `min_team_size`
+    because '2_5' is Team & Leadership's reviewed default for the whole pillar
+    (d4a1f8c62b73), so the column being set says almost nothing about who the
+    question was aimed at. `max_team_size` is claimed one question at a time by
+    somebody who read it (c92a41f7b508) -- twenty rows today. Promote on the
+    first and half the pillar outranks industry content; promote on the second
+    and exactly the twenty questions somebody targeted are promoted.
+
+    Reads defensively for the same reason the ranking terms around it do: a
+    candidate that cannot say whether it has a bound does not have one.
+    """
+    return _rank_or_none(getattr(question, "max_team_size", None)) is not None
 
 
 #: Team & Leadership. The one pillar whose subject can be absent entirely.

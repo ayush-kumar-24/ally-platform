@@ -1359,6 +1359,7 @@ class Questions(Base):
         CheckConstraint('primary_stage_group IS NOT NULL', name='questions_stage_group_required'),
         CheckConstraint("priority::text = ANY (ARRAY['CORE'::character varying, 'SUPPLEMENTARY'::character varying]::text[])", name='questions_priority_check'),
         CheckConstraint("min_team_size IS NULL OR min_team_size IN ('solo', '2_5', '6_10', '11_25', '26_plus', '26_50', '50_plus')", name='questions_min_team_size_check'),
+        CheckConstraint("max_team_size IS NULL OR max_team_size IN ('solo', '2_5', '6_10', '11_25', '26_plus', '26_50', '50_plus')", name='questions_max_team_size_check'),
         CheckConstraint("question_type::text = ANY (ARRAY['open_text'::character varying, 'rating_scale'::character varying, 'yes_no'::character varying, 'multiple_choice'::character varying]::text[])", name='questions_question_type_check'),
         ForeignKeyConstraint(['follow_up_question_id'], ['questions.question_id'], name='questions_follow_up_question_id_fkey'),
         ForeignKeyConstraint(['problem_id'], ['problems.problem_id'], name='questions_problem_id_fkey'),
@@ -1372,6 +1373,9 @@ class Questions(Base):
         Index('idx_questions_priority', 'priority'),
         Index('idx_questions_stage_group', 'primary_stage_group'),
         Index('idx_questions_min_team_size', 'min_team_size', postgresql_where='(min_team_size IS NOT NULL)'),
+        Index('idx_questions_max_team_size', 'max_team_size', postgresql_where='(max_team_size IS NOT NULL)'),
+        Index('idx_questions_requires_operating_role', 'requires_operating_role', postgresql_where='(requires_operating_role)'),
+        Index('idx_questions_requires_multiple_locations', 'requires_multiple_locations', postgresql_where='(requires_multiple_locations)'),
         Index('idx_questions_requires_trading', 'requires_trading', postgresql_where='(requires_trading)'),
     )
 
@@ -1411,12 +1415,47 @@ class Questions(Base):
     #: require a size a founder has no way to state.
     min_team_size: Mapped[Optional[str]] = mapped_column(String(20))
 
+    #: The LARGEST `founders.team_size` band this question still means
+    #: something to. NULL means every band, which is all but twenty rows.
+    #:
+    #: The mirror of `min_team_size`, and needed for the same class of defect
+    #: seen from the other side. "What would you need to see before you felt
+    #: safe paying someone a salary?" has a subject for a founder working alone
+    #: and none at all for one with twelve staff, who answered it years ago.
+    #:
+    #: Claimed by review, never inferred: see migration c92a41f7b508 for why
+    #: keyword screening is not an option here.
+    max_team_size: Mapped[Optional[str]] = mapped_column(String(20))
+
     #: Whether this question needs money to have changed hands already.
     #:
     #: A boolean and not a band, unlike `min_team_size`: the bank has real
     #: content at five team sizes and exactly one revenue line -- trading or
     #: not. See migration a6f3d2c81b47.
     requires_trading: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
+
+    #: Whether this question's subject is the industry's OWN OPERATION -- a
+    #: kitchen, a clinical rota, a fleet, patients, guests.
+    #:
+    #: An industry is not a business model. A physiotherapy clinic, a medical
+    #: device maker and a company selling booking software to clinics all pick
+    #: Healthcare and share its bank, and 21 of its questions are written for
+    #: the first only. 71 rows carry this across twelve industries; Food &
+    #: Beverage is the largest. See migration b5d4e31a7c92.
+    requires_operating_role: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
+
+    #: Whether this question's subject is a SECOND site.
+    #:
+    #: Five rows. Separate from the flag above because the signal that gates
+    #: them today -- selling tooling rather than operating -- is a stand-in: a
+    #: single-outlet restaurant runs the operation and still has no second site.
+    #: Keeping the flag apart is what lets these five be gated on a real
+    #: location count later without disturbing the other 71.
+    requires_multiple_locations: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false")
     )
 
