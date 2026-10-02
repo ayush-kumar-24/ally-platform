@@ -74,22 +74,46 @@ ALREADY_FINE = frozenset({
     "S10-MFG-016", "S10-MFG-304-2", "S10-TEL-301-1",
 })
 
-#: Reviewed and found UNFIXABLE BY WORDING. The subject really is a kitchen, a
-#: fleet, a clinical rota or a second location, and no neutral noun keeps the
-#: question meaningful -- "Is there a maintenance calendar for your fleet?"
-#: cannot be rewritten for a founder with no vehicles, only withheld from them.
+#: Reviewed and WITHHELD rather than reworded, from founders who do not run the
+#: industry's core operation. Two kinds, deliberately together here because the
+#: review treated them the same way in the end:
 #:
-#: They need a scoping axis that does not exist: owns production, owns a fleet
-#: or premises, operates more than one location. Same shape as `min_team_size`
-#: and `requires_trading`. This set is the open work, written down so it stays
-#: visible instead of becoming folklore.
-NEEDS_A_SCOPING_RULE = frozenset({
-    "S01-DLV-010", "S01-DLV-013", "S10-DLV-306-1",
-    "S01-LOG-009", "S01-LOG-012", "S10-LOG-306-1", "S10-LOG-011", "S10-ECM-003",
-    "S0-FNB-006", "S0-FNB-104-2", "S01-FNB-104-2", "S01-FNB-302-2", "S10-FNB-006",
-    "S01-HLT-014", "S01-HLT-015", "S01-HLT-017", "S01-HLT-018", "S10-HLT-005",
-    "S10-HLT-303-1", "S10-HLT-305-1", "S10-RTL-301-1", "S0-TRV-007",
-    "S10-FNB-004", "S10-FNB-307-2", "S10-TRV-004", "S10-PRP-203-1", "S10-PRP-206-2",
+#:   49 whose original wording was RESTORED. They had been reworded -- patients
+#:   to customers, guests to customers, dish and menu to item and range -- and
+#:   that removed the premise and the specificity in one stroke. A homestay
+#:   owner reading "Do you ask happy guests to leave a review?" is understood;
+#:   reading "happy customers" could be any business alive. The founder who
+#:   prompted the fix is the minority, since most people who pick Healthcare ARE
+#:   a clinic, so rewording for everybody protected the exception by flattening
+#:   the majority.
+#:
+#:   27 that could never have been reworded. The subject really is a kitchen, a
+#:   fleet, a clinical rota or a second location, and no neutral noun keeps the
+#:   question meaningful. "Is there a maintenance calendar for your fleet?"
+#:   cannot be rewritten for a founder with no vehicles, only withheld.
+#:
+#: Tagged `requires_operating_role` (71) or `requires_multiple_locations` (5) by
+#: migration b5d4e31a7c92, and gated by `business_model_scope`.
+WITHHELD_FROM_NON_OPERATORS = frozenset({
+    "S0-DLV-304-1", "S0-ECM-006", "S0-ECM-009", "S0-EDU-304-1",
+    "S0-FNB-006", "S0-FNB-102-1", "S0-FNB-102-2", "S0-FNB-104-1",
+    "S0-FNB-104-2", "S0-FNB-301-1", "S0-FNB-303-2", "S0-FNB-306-2",
+    "S0-HLT-302-1", "S0-RTL-307-1", "S0-TRV-005", "S0-TRV-007",
+    "S0-TRV-303-2", "S01-DLV-006", "S01-DLV-010", "S01-DLV-013",
+    "S01-FNB-019", "S01-FNB-102-1", "S01-FNB-104-2", "S01-FNB-110-1",
+    "S01-FNB-301-2", "S01-FNB-302-2", "S01-FNB-303-2", "S01-HLT-006",
+    "S01-HLT-007", "S01-HLT-008", "S01-HLT-009", "S01-HLT-010",
+    "S01-HLT-011", "S01-HLT-014", "S01-HLT-015", "S01-HLT-016",
+    "S01-HLT-017", "S01-HLT-018", "S01-LOG-009", "S01-LOG-012",
+    "S01-RTL-008", "S01-TRV-004", "S01-TRV-010", "S01-TRV-012",
+    "S01-TRV-016", "S01-TRV-302-1", "S10-CEL-005", "S10-DLV-306-1",
+    "S10-ECM-003", "S10-EDU-307-1", "S10-FNB-004", "S10-FNB-006",
+    "S10-FNB-020", "S10-FNB-023", "S10-FNB-102-1", "S10-FNB-102-2",
+    "S10-FNB-307-2", "S10-HLT-002", "S10-HLT-003", "S10-HLT-005",
+    "S10-HLT-015", "S10-HLT-302-2", "S10-HLT-303-1", "S10-HLT-305-1",
+    "S10-LOG-011", "S10-LOG-306-1", "S10-PRP-203-1", "S10-PRP-206-2",
+    "S10-RTL-301-1", "S10-RTL-303-2", "S10-RTL-304-1", "S10-RTL-304-2",
+    "S10-TRV-004", "S10-TRV-013", "S10-TRV-015", "S10-TRV-305-1",
 })
 
 #: Two rewordings still name a clinic or a patient, because both questions LIST
@@ -174,8 +198,8 @@ def test_the_three_buckets_do_not_overlap():
     reworded = {code for code, _, _ in _migration()._REWORD}
     for a, b, names in (
         (reworded, ALREADY_FINE, "reworded / already fine"),
-        (reworded, NEEDS_A_SCOPING_RULE, "reworded / needs scoping"),
-        (ALREADY_FINE, NEEDS_A_SCOPING_RULE, "already fine / needs scoping"),
+        (reworded, WITHHELD_FROM_NON_OPERATORS, "reworded / needs scoping"),
+        (ALREADY_FINE, WITHHELD_FROM_NON_OPERATORS, "already fine / needs scoping"),
     ):
         assert not (a & b), f"{names} overlap on {sorted(a & b)}"
 
@@ -184,10 +208,10 @@ def test_the_review_covered_every_question_it_claims_to():
     """128 flagged, 128 accounted for. The arithmetic is the whole claim the
     review document makes, so it is pinned here rather than left in prose."""
     reworded = {code for code, _, _ in _migration()._REWORD}
-    assert len(reworded) == 64
-    assert len(ALREADY_FINE) == 37
-    assert len(NEEDS_A_SCOPING_RULE) == 27
-    assert len(reworded | ALREADY_FINE | NEEDS_A_SCOPING_RULE) == 128
+    assert len(reworded) == 15, "the rewordings that lose no specificity"
+    assert len(ALREADY_FINE) == 37, "flagged by the word, not actually broken"
+    assert len(WITHHELD_FROM_NON_OPERATORS) == 76, "withheld, not reworded"
+    assert len(reworded | ALREADY_FINE | WITHHELD_FROM_NON_OPERATORS) == 128
 
 
 # --- the live bank matches the review ---------------------------------------
@@ -201,14 +225,27 @@ def test_the_rewordings_are_live(live_questions):
         )
 
 
-def test_the_questions_needing_a_scoping_rule_are_all_still_there(live_questions):
-    """They were deliberately left alone, so they must still exist to be
-    scoped later. If one has been deleted or renamed, the open work above is
-    pointing at nothing."""
-    missing = sorted(c for c in NEEDS_A_SCOPING_RULE if c not in live_questions)
-    assert not missing, (
-        f"these await a scoping rule but are no longer in the bank: {missing}. "
-        f"Update {REVIEW_DOC} and this test together."
+def test_every_withheld_question_is_actually_tagged(live_questions):
+    """The gate reads the two flags, not this list, so a question on this list
+    with neither flag set is withheld from nobody -- and reads, to a software
+    founder, as being asked about a kitchen they do not have."""
+    from sqlalchemy import text as _t
+
+    from app.db.session import SessionLocal
+
+    db = SessionLocal()
+    try:
+        tagged = {
+            code for (code,) in db.execute(_t(
+                "SELECT question_code FROM questions "
+                "WHERE requires_operating_role OR requires_multiple_locations"
+            )).all()
+        }
+    finally:
+        db.close()
+    assert tagged == WITHHELD_FROM_NON_OPERATORS, (
+        f"tagged but not reviewed: {sorted(tagged - WITHHELD_FROM_NON_OPERATORS)}; "
+        f"reviewed but not tagged: {sorted(WITHHELD_FROM_NON_OPERATORS - tagged)}"
     )
 
 
@@ -224,13 +261,13 @@ def test_no_new_industry_question_presumes_a_business_model(live_questions):
     If you are reading this because the test failed: the new question either
     needs rewording (put the pair in a migration), or it is fine as written and
     belongs in ALREADY_FINE with a one-line reason, or its subject really is a
-    kitchen and it belongs in NEEDS_A_SCOPING_RULE. Do not widen
+    kitchen and it belongs in WITHHELD_FROM_NON_OPERATORS. Do not widen
     PRESUMES_A_MODEL to make it pass.
     """
     reviewed = (
         {code for code, _, _ in _migration()._REWORD}
         | ALREADY_FINE
-        | NEEDS_A_SCOPING_RULE
+        | WITHHELD_FROM_NON_OPERATORS
     )
     unreviewed = sorted(
         code for code, text_ in live_questions.items()

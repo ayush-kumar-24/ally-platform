@@ -1374,6 +1374,8 @@ class Questions(Base):
         Index('idx_questions_stage_group', 'primary_stage_group'),
         Index('idx_questions_min_team_size', 'min_team_size', postgresql_where='(min_team_size IS NOT NULL)'),
         Index('idx_questions_max_team_size', 'max_team_size', postgresql_where='(max_team_size IS NOT NULL)'),
+        Index('idx_questions_requires_operating_role', 'requires_operating_role', postgresql_where='(requires_operating_role)'),
+        Index('idx_questions_requires_multiple_locations', 'requires_multiple_locations', postgresql_where='(requires_multiple_locations)'),
         Index('idx_questions_requires_trading', 'requires_trading', postgresql_where='(requires_trading)'),
     )
 
@@ -1431,6 +1433,29 @@ class Questions(Base):
     #: content at five team sizes and exactly one revenue line -- trading or
     #: not. See migration a6f3d2c81b47.
     requires_trading: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
+
+    #: Whether this question's subject is the industry's OWN OPERATION -- a
+    #: kitchen, a clinical rota, a fleet, patients, guests.
+    #:
+    #: An industry is not a business model. A physiotherapy clinic, a medical
+    #: device maker and a company selling booking software to clinics all pick
+    #: Healthcare and share its bank, and 21 of its questions are written for
+    #: the first only. 71 rows carry this across twelve industries; Food &
+    #: Beverage is the largest. See migration b5d4e31a7c92.
+    requires_operating_role: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
+
+    #: Whether this question's subject is a SECOND site.
+    #:
+    #: Five rows. Separate from the flag above because the signal that gates
+    #: them today -- selling tooling rather than operating -- is a stand-in: a
+    #: single-outlet restaurant runs the operation and still has no second site.
+    #: Keeping the flag apart is what lets these five be gated on a real
+    #: location count later without disturbing the other 71.
+    requires_multiple_locations: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false")
     )
 

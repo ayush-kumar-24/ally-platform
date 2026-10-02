@@ -31,6 +31,7 @@ from app.api.v1.diagnosis.industry_scope import (
     relevance_ranker,
     requested_opening,
 )
+from app.api.v1.diagnosis.business_model_scope import gate as business_model_gate
 from app.api.v1.diagnosis.revenue_scope import gate as revenue_gate
 from app.api.v1.diagnosis.repository import DiagnosisRepository
 from app.api.v1.diagnosis.stage_scope import ALL_PILLARS, resolve_scope
@@ -642,6 +643,7 @@ class QuestionSelectionEngine:
         # not outgrown "Have you hit your sales targets for the last quarter?";
         # they have never had a sales target. See revenue_scope.
         candidates = revenue_gate(candidates, founder)
+        candidates = business_model_gate(candidates, founder)
 
         scope = resolve_scope(founder)
         if scope is None or scope.withholds_nothing:
