@@ -295,9 +295,12 @@ export default function AdminSystem() {
                     onChange={e => { setCohortPlan(e.target.value); setPreview(null); }}
                     aria-label="Cohort plan">
               <option value="">Any plan</option>
+              {/* Internal tier ids (plans/catalog.py), labelled with the names
+                  founders see -- basic is sold as "Starter", starter as "Plus". */}
               <option value="free">free</option>
+              <option value="basic">basic (Starter)</option>
+              <option value="starter">starter (Plus)</option>
               <option value="pro">pro</option>
-              <option value="elite">elite</option>
             </select>
             <select className="adm-select" value={cohortStatus}
                     onChange={e => { setCohortStatus(e.target.value); setPreview(null); }}

@@ -233,7 +233,12 @@ export default function AdminUserDetail() {
             <dt>Chats</dt><dd>{detail.chat_count}</dd>
             <dt>Reports</dt><dd>{detail.reports?.length ?? 0}</dd>
             <dt>Diagnosis sessions</dt><dd>{detail.diagnosis_history?.length ?? 0}</dd>
-            <dt>Logins recorded</dt><dd>{detail.login_history?.length ?? 0}</dd>
+            {/* No per-login history is stored; Supabase keeps only the latest
+                sign-in. A count here always read 0, which looked real. */}
+            <dt>Last sign-in</dt>
+            <dd>{detail.last_sign_in_at
+              ? new Date(detail.last_sign_in_at).toLocaleString('en-IN')
+              : '—'}</dd>
             <dt>Privacy requests</dt><dd>{detail.privacy_requests?.length ?? 0}</dd>
           </dl>
         </div>

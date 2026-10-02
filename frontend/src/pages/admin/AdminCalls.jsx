@@ -76,16 +76,16 @@ export default function AdminCalls() {
     try {
       if (mode === 'confirm') {
         await confirmCallRequest(call.call_id);
-        setFlash({ tone: 'ok', text: `Confirmed. ${call.founder_name || 'The founder'} has been emailed the joining link.` });
+        setFlash({ message: `Confirmed. ${call.founder_name || 'The founder'} has been emailed the joining link.` });
       } else {
         await declineCallRequest(call.call_id, reason.trim());
-        setFlash({ tone: 'ok', text: 'Request declined. The reason is on the record for when you follow up.' });
+        setFlash({ message: 'Request declined. The reason is on the record for when you follow up.' });
       }
       setDialog(null);
       setReason('');
       load();
     } catch (err) {
-      setFlash({ tone: 'bad', text: err?.detail || err?.message || 'That did not go through. Try again.' });
+      setFlash({ error: true, message: err?.detail || err?.message || 'That did not go through. Try again.' });
     } finally {
       setBusyId(null);
     }

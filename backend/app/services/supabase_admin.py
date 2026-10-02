@@ -147,3 +147,28 @@ def _find_by_email(email: str) -> UUID | None:
     except (httpx.HTTPError, ValueError, KeyError) as exc:
         logger.warning("Supabase admin lookup failed", extra={"error": str(exc)})
     return None
+
+
+def last_sign_in_at(user_id) -> str | None:
+    """When this identity last signed in, per Supabase -- or None.
+
+    Supabase keeps only the latest sign-in, not a history, and the database
+    behind the app (RDS) has no `auth` schema to query, so this asks the admin
+    API. Read-only and best-effort: the admin panel shows "—" rather than
+    failing the profile when the key is unset or Supabase is unreachable.
+    """
+    if not user_id or not is_configured():
+        return None
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/auth/v1/admin/users/{user_id}"
+    key = settings.SUPABASE_SERVICE_ROLE_KEY
+    try:
+        response = httpx.get(
+            url,
+            headers={"apikey": key, "Authorization": f"Bearer {key}"},
+            timeout=_TIMEOUT_SECONDS,
+        )
+        response.raise_for_status()
+        return (response.json() or {}).get("last_sign_in_at")
+    except (httpx.HTTPError, ValueError) as exc:
+        logger.warning("Supabase admin get_user failed", extra={"error": str(exc)})
+        return None

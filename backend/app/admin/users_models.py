@@ -122,4 +122,8 @@ class UserDetail:
     chat_count: int = 0
     diagnosis_history: list[dict] = field(default_factory=list)
     login_history: list[dict] = field(default_factory=list)
+    #: From Supabase's auth.users -- the only sign-in record that exists (there
+    #: is no per-login history table). None means never signed in, or not
+    #: readable in this environment.
+    last_sign_in_at: Any = None
     privacy_requests: list[dict] = field(default_factory=list)
