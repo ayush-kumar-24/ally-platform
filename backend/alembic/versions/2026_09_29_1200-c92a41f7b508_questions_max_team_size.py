@@ -34,7 +34,7 @@ from __future__ import annotations
 from alembic import op
 
 revision = "c92a41f7b508"
-down_revision = "b48e5c12d709"
+down_revision = "9d3e6a1f5c20"
 branch_labels = None
 depends_on = None
 
