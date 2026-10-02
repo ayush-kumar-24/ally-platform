@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from uuid import UUID
 
 from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -10,7 +11,7 @@ from app.core.auth.dev_provider import DEV_FOUNDER_EMAIL, DEV_FOUNDER_ID
 from app.core.auth.factory import get_auth_provider
 from app.core.auth.tokens import ACCESS, decode_token, identity_from_claims
 from app.core.logger import logger
-from app.db.session import get_db
+from app.db.session import get_db, set_founder_rls_context
 
 # auto_error=False so a missing header reaches our code, which decides what to do.
 _bearer = HTTPBearer(auto_error=False, description="Bearer token")
@@ -26,6 +27,32 @@ _LAST_ACTIVE_THROTTLE = timedelta(seconds=60)
 
 def _token(credentials: HTTPAuthorizationCredentials | None) -> str | None:
     return credentials.credentials if credentials else None
+
+
+def _bind_founder_rls(db: Session, user_id: str) -> None:
+    """Scope this session to the founder's own row BEFORE touching `founders`.
+
+    Production connects as `ally_app`, for which row-level security is on:
+    with no founder context set, `founders` is simply empty to it -- no error,
+    zero rows. These checks run in `get_current_founder`, which is resolved
+    before `get_founder_record` binds the context, so without this the UPDATE
+    in `record_last_active` matched nothing (the dashboard's Live now / Active
+    cards stayed at 0) and `is_account_active` found no row and failed open
+    (a suspended or banned founder was never actually refused).
+
+    The id comes from a verified token, so this grants nothing the founder
+    does not already own -- it is the same binding get_founder_record makes a
+    moment later. Best-effort: a non-uuid subject (dev tokens) or a session
+    that cannot take it is left as it was.
+    """
+    try:
+        founder_uuid = str(UUID(str(user_id)))
+    except (ValueError, TypeError, AttributeError):
+        return
+    try:
+        set_founder_rls_context(db, founder_uuid)
+    except Exception:
+        logger.warning("Could not bind founder RLS context", extra={"founder_id": user_id})
 
 
 def is_account_active(db: Session, user_id: str) -> bool:
@@ -47,6 +74,7 @@ def is_account_active(db: Session, user_id: str) -> bool:
     louder failure than the suspension check silently sitting out one request.
     A real `suspended`/`banned` row, once the query succeeds, always wins.
     """
+    _bind_founder_rls(db, user_id)
     try:
         row = db.execute(
             text("SELECT status FROM founders WHERE user_id = :uid"),
@@ -78,6 +106,7 @@ def record_last_active(db: Session, user_id: str, *, now: datetime | None = None
     whatever the route handler does with `db` next).
     """
     at = now or datetime.now(timezone.utc)
+    _bind_founder_rls(db, user_id)
     try:
         db.execute(
             text(

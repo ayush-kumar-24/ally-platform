@@ -387,3 +387,23 @@ def test_setting_a_plan_on_a_founder_who_does_not_exist_is_a_404():
     service, _, _ = build([user(1)])
     with pytest.raises(AdminFounderNotFoundError):
         service.set_plan(SUPER, 4242, "pro", reason="nobody")
+
+
+def test_a_team_account_cannot_be_moved_off_pro():
+    """Team accounts are put back on Pro by ensure_team_plan on their next
+    request, so a different tier "succeeded" and was silently undone. Refuse
+    it up front, and say why, instead."""
+    from app.admin.errors import TeamAccountPlanLockedError
+    from app.core.config import settings
+
+    team = sorted(settings.team_full_access_emails)[0]
+    service, repo, audit = build([user(1, email=team, plan="pro")])
+
+    with pytest.raises(TeamAccountPlanLockedError) as err:
+        service.set_plan(SUPER, 1, "free", reason="testing")
+
+    assert err.value.status_code == 409
+    assert repo.get_summary(1).plan_type == "pro"
+    assert audit.list(limit=10)[1] == 0          # nothing was audited as changed
+    # Pro itself is still allowed -- it is what the account is held at anyway.
+    assert service.set_plan(SUPER, 1, "pro", reason="noop").plan_type == "pro"
