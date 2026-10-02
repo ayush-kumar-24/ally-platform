@@ -22,6 +22,13 @@ function formatValue(m) {
   return pretty;
 }
 
+// Activity cards open the list of the people they count (AdminUsers ?active=).
+const CARD_LINKS = {
+  live_now: '/admin/users?active=live',
+  active_today: '/admin/users?active=today',
+  active_7d: '/admin/users?active=7d',
+};
+
 export default function AdminDashboard() {
   const { me } = useOutletContext();
   const [metrics, setMetrics] = useState([]);
@@ -66,6 +73,9 @@ export default function AdminDashboard() {
                  title={m.available ? undefined : (m.unavailable_reason || 'Not measurable')}>
               {formatValue(m)}
             </div>
+            {m.available && CARD_LINKS[m.key] && (
+              <Link to={CARD_LINKS[m.key]} style={{ fontSize: 13 }}>See who →</Link>
+            )}
             {!m.available && (
               <p className="adm-muted" style={{ fontSize: 12 }}>
                 {m.unavailable_reason || 'Not measurable in this environment'}
