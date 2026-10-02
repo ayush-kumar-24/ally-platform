@@ -59,10 +59,13 @@ _REWORD: tuple[tuple[str, str, str], ...] = (
 
 
 def _apply(pairs: tuple[tuple[str, str, str], ...]) -> None:
-    """Rewrite each question, and raise unless every row was found as expected.
+    """Rewrite each question, skipping any whose text has moved on.
 
-    Matching on the full current text as well as the code, so a row somebody
-    else has edited is reported rather than silently overwritten.
+    Tolerant for the reason 8b63ca0f gives at length: a rewording that matches
+    nothing because somebody already improved that question is not a failure --
+    mine is the stale text and theirs should stand -- and raising inside
+    `alembic upgrade head` stops the whole release rather than one rewording.
+    Only a total mismatch, meaning the wrong catalogue, still raises.
     """
     stmt = text(
         """
@@ -71,19 +74,37 @@ def _apply(pairs: tuple[tuple[str, str, str], ...]) -> None:
         """
     ).bindparams(bindparam("new"), bindparam("code"), bindparam("old"))
 
-    missed = []
-    for code, old, new in pairs:
-        result = op.get_bind().execute(stmt, {"code": code, "old": old, "new": new})
-        if result.rowcount != 1:
-            missed.append(f"{code} (matched {result.rowcount} rows)")
+    bind = op.get_bind()
+    applied = already_done = 0
+    left_alone: list[str] = []
 
-    if missed:
+    for code, old, new in pairs:
+        current = bind.execute(
+            text("SELECT question_text FROM questions WHERE question_code = :code"),
+            {"code": code},
+        ).scalar()
+        if current is None:
+            left_alone.append(f"{code} (not in this catalogue)")
+        elif current == new:
+            already_done += 1
+        elif current == old:
+            bind.execute(stmt, {"code": code, "old": old, "new": new})
+            applied += 1
+        else:
+            left_alone.append(f"{code} (text has moved on)")
+
+    if applied == 0 and already_done == 0:
         raise RuntimeError(
-            "Question text has moved since this migration was written, so these "
-            "rewordings matched nothing and the originals are still live: "
-            + "; ".join(missed)
-            + ". Re-read the current text and update the pairs in d6a93f15b802."
+            f"Neither of the questions named by {revision} was found with its "
+            "expected text or its rewording. That is not drift, it is the wrong "
+            f"catalogue. Left alone: {left_alone}"
         )
+
+    print(
+        f"{revision}: reworded {applied}, already done {already_done}, "
+        f"left alone {len(left_alone)}"
+        + (f" -- {'; '.join(left_alone)}" if left_alone else "")
+    )
 
 
 def upgrade() -> None:

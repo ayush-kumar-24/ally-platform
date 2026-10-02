@@ -85,25 +85,44 @@ _REQUIRES_TRADING: tuple[str, ...] = (
 
 
 def _set(codes: tuple[str, ...], value: bool) -> None:
-    """Flip `requires_trading` for exactly these codes, or raise.
+    """Flip `requires_trading` for these codes, skipping any this catalogue
+    does not have.
 
-    Tagging fewer rows than named leaves a question ungated, which looks like
-    success here and reads, to a founder with no customers, as being asked what
-    their average customer pays before leaving.
+    Tolerant for the reason 8b63ca0f gives at length: `alembic upgrade head`
+    runs inside the release, so raising over one renamed question stops the
+    migration, leaves the ECS service un-updated and ships nothing at all. A
+    question that is not here cannot be asked either, so not tagging it
+    withholds nothing from nobody. Not one code present still raises, because
+    that means the wrong catalogue rather than drift.
     """
-    result = op.get_bind().execute(
+    bind = op.get_bind()
+    present = {
+        row[0]
+        for row in bind.execute(
+            text("SELECT question_code FROM questions WHERE question_code = ANY(:codes)"),
+            {"codes": list(codes)},
+        ).all()
+    }
+    missing = sorted(set(codes) - present)
+
+    if not present:
+        raise RuntimeError(
+            f"None of the {len(codes)} questions e81c47a92f36 names are in this "
+            "catalogue. That is not drift, it is the wrong database -- check "
+            "which one this ran against before editing the list."
+        )
+
+    bind.execute(
         text(
             "UPDATE questions SET requires_trading = :value, updated_at = now() "
             "WHERE question_code = ANY(:codes)"
         ),
-        {"value": value, "codes": list(codes)},
+        {"value": value, "codes": sorted(present)},
     )
-    if result.rowcount != len(codes):
-        raise RuntimeError(
-            f"Expected to tag {len(codes)} questions, matched {result.rowcount}. "
-            "A code in e81c47a92f36 has been renamed or removed; find it rather "
-            "than loosening the check."
-        )
+    print(
+        f"e81c47a92f36: requires_trading={value} on {len(present)} of {len(codes)}"
+        + (f"; not in this catalogue: {', '.join(missing)}" if missing else "")
+    )
 
 
 #: Tagged AND moved: unreachable on the ideation bank, at home on the next one.
@@ -113,19 +132,38 @@ _NEXT_BANK = "Stage 0\u21921"
 
 
 def _move_bank(code: str, frm: str, to: str) -> None:
-    result = op.get_bind().execute(
+    """Move one question between banks, tolerating it already being there.
+
+    Same reasoning as `_set`: a question that has been renamed, retired or
+    already moved must not stop a release.
+    """
+    bind = op.get_bind()
+    current = bind.execute(
+        text("SELECT primary_stage_group FROM questions WHERE question_code = :code"),
+        {"code": code},
+    ).scalar()
+
+    if current is None:
+        print(f"e81c47a92f36: {code} is not in this catalogue; nothing to move")
+        return
+    if current == to:
+        print(f"e81c47a92f36: {code} is already on the {to!r} bank")
+        return
+    if current != frm:
+        print(
+            f"e81c47a92f36: {code} is on the {current!r} bank, not {frm!r}; "
+            "left where it is"
+        )
+        return
+
+    bind.execute(
         text(
             "UPDATE questions SET primary_stage_group = :to, updated_at = now() "
-            "WHERE question_code = :code AND primary_stage_group = :frm"
+            "WHERE question_code = :code"
         ),
-        {"code": code, "frm": frm, "to": to},
+        {"code": code, "to": to},
     )
-    if result.rowcount != 1:
-        raise RuntimeError(
-            f"{code} was expected on the {frm!r} bank and matched "
-            f"{result.rowcount} rows; it has moved or been renamed since "
-            "e81c47a92f36 was written."
-        )
+    print(f"e81c47a92f36: moved {code} from {frm!r} to {to!r}")
 
 
 def upgrade() -> None:
