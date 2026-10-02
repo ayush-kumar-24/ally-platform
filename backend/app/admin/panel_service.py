@@ -26,6 +26,7 @@ from app.admin.errors import (
     AdminFounderNotFoundError,
     InvalidPlanTierError,
     InvalidSearchError,
+    TeamAccountPlanLockedError,
 )
 from app.admin.panel_audit import AuditRecorder
 from app.admin.rbac import Capability, PanelRole, require
@@ -183,6 +184,9 @@ class AdminPanelService:
             raise InvalidPlanTierError(tier)
 
         before = self._require_user(founder_id)
+        from app.plans.team import TEAM_TIER, is_team_email
+        if is_team_email(before.email) and plan_tier.value != TEAM_TIER:
+            raise TeamAccountPlanLockedError(before.email)
         after = self.users.update_fields(founder_id, {"plan_type": plan_tier.value},
                                          at=self._now())
         # No subscription row is written. One would be a payment record for a

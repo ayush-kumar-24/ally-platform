@@ -41,6 +41,25 @@ class InvalidPlanTierError(AdminError):
         super().__init__(f"'{tier}' is not a plan.", status_code=422)
 
 
+class TeamAccountPlanLockedError(AdminError):
+    """A team account's plan cannot be changed from the panel.
+
+    Every account in TEAM_FULL_ACCESS_EMAILS is put back on Pro by
+    `ensure_team_plan` on the very next request it makes (app/plans/team.py).
+    Writing another tier "worked" -- the panel said "Plan changed" -- and was
+    silently undone a moment later, which read as the button being broken.
+    409: the request is fine; the account's state is what refuses it.
+    """
+
+    def __init__(self, email: str):
+        super().__init__(
+            f"{email} is a team account (TEAM_FULL_ACCESS_EMAILS), which is held "
+            "at Pro on every request -- any other plan would be undone the next "
+            "time it loads a page. Remove the address from that list to change "
+            "its plan.",
+            status_code=status.HTTP_409_CONFLICT)
+
+
 class InvalidAnnouncementError(AdminError):
     def __init__(self, reason: str):
         super().__init__(f"Invalid announcement: {reason}.", status_code=422)
