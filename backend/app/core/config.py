@@ -777,9 +777,37 @@ class Settings(BaseSettings):
     # used to sign the checkout-callback or to authenticate API calls.
     RAZORPAY_WEBHOOK_SECRET: str = ""
 
+    # Trial + autopay (app/payments/subscriptions.py). Both are created once in
+    # the Razorpay Dashboard per tier, and a tier offers no trial until BOTH of
+    # its ids are set:
+    #   PLAN_ID   Subscriptions -> Plans: monthly, at the tier's full price
+    #             (Starter Rs 199, Plus Rs 499, Pro Rs 999).
+    #   OFFER_ID  Offers -> a subscription offer of a flat discount equal to the
+    #             trial fee (Rs 19 / Rs 29 / Rs 49), applied to the FIRST
+    #             payment only. This is what makes day 11 charge Rs 950 for Pro
+    #             rather than Rs 999 -- without it the founder would be charged
+    #             the trial fee on top of the price, so a missing offer disables
+    #             the trial instead of silently overcharging.
+    # Tier ids are the internal ones: BASIC = "Starter", STARTER = "Plus".
+    RAZORPAY_PLAN_ID_BASIC: str = ""
+    RAZORPAY_PLAN_ID_STARTER: str = ""
+    RAZORPAY_PLAN_ID_PRO: str = ""
+    RAZORPAY_TRIAL_OFFER_ID_BASIC: str = ""
+    RAZORPAY_TRIAL_OFFER_ID_STARTER: str = ""
+    RAZORPAY_TRIAL_OFFER_ID_PRO: str = ""
+
     @property
     def payments_enabled(self) -> bool:
         return bool(self.RAZORPAY_KEY_ID and self.RAZORPAY_KEY_SECRET)
+
+    def razorpay_trial_ids(self, tier: str) -> tuple[str, str] | None:
+        """(plan_id, offer_id) for a tier's trial, or None when it is not set up."""
+        key = str(tier).upper()
+        plan_id = getattr(self, f"RAZORPAY_PLAN_ID_{key}", "")
+        offer_id = getattr(self, f"RAZORPAY_TRIAL_OFFER_ID_{key}", "")
+        if not (self.payments_enabled and plan_id and offer_id):
+            return None
+        return plan_id, offer_id
 
     # --- Google Calendar sync (per-founder, Plan Your Day) ---
     # Separate from GOOGLE_CALENDAR_* above: those are a SERVICE ACCOUNT on

@@ -39,6 +39,12 @@ class WebhookOutcome:
     FAILED_RECORDED = "failed_recorded"
     IGNORED_EVENT = "ignored_event"
     UNKNOWN_PAYMENT = "unknown_payment"
+    # Trial + autopay (app/payments/subscriptions.py).
+    TRIAL_STARTED = "trial_started"
+    RENEWED = "renewed"
+    CANCELLED = "cancelled"
+    EXPIRED = "expired"
+    RECORDED = "recorded"
 
 
 @dataclass(frozen=True)
@@ -67,3 +73,46 @@ class WebhookResult:
     founder_id: int | None = None
     plan: str | None = None
     granted_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class SubscriptionRecord:
+    """One row of `subscriptions` that a Razorpay autopay subscription backs."""
+
+    subscription_id: int
+    founder_id: int
+    plan_type: str
+    status: str
+    billing_cycle: str | None
+    amount_inr: int
+    trial_ends_at: datetime | None
+    expires_at: datetime | None
+    cancelled_at: datetime | None
+    gateway_subscription_id: str | None
+
+    @property
+    def access_until(self) -> datetime | None:
+        """When the plan stops if nothing else is charged: the paid period's end
+        once one exists, the trial's end before that. None = no end (a Starter
+        month, which is paid once and never lapses)."""
+        if self.expires_at is not None:
+            return self.expires_at
+        if self.status == "active":
+            return None
+        return self.trial_ends_at
+
+
+@dataclass(frozen=True)
+class TrialCheckout:
+    """What the frontend hands Checkout.js to start a trial. `subscription_id`
+    is Razorpay's; the widget opens on it instead of an order id."""
+
+    subscription_id: str
+    key_id: str
+    plan_name: str
+    trial_days: int
+    trial_amount_paise: int
+    plan_amount_paise: int
+    first_charge_paise: int
+    trial_ends_at: datetime
+    recurring: bool

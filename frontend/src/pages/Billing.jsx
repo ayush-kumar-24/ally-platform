@@ -4,7 +4,10 @@ import { MOCK_PLANS } from '../data/mockData';
 import { getProfile } from '../services/profile';
 import { getCatalog, getMyPlan } from '../services/plans';
 import { refreshPlanName } from '../hooks/usePlanName';
-import { confirmPayment, openCheckout, startCheckout, validateCoupon, waitForPlanActivation } from '../services/payments';
+import {
+  cancelAutopay, confirmPayment, confirmTrial, getAutopay, openCheckout, startCheckout, startTrial,
+  validateCoupon, waitForPlanActivation,
+} from '../services/payments';
 
 /** The Knowledge libraries, in the order the sidebar lists them.
  *
@@ -158,6 +161,8 @@ function useCatalog() {
             tag: p.tagline,
             popular: p.tier === 'pro',
             cta: p.price_inr ? `Start ${p.name}` : 'Current',
+            // Paid trial with autopay, or null when this tier offers none here.
+            trial: p.trial ?? null,
             features: [
               // Tokens, not credits: credits are an internal accounting unit.
               // Rs 199 has no metered surface at all, so it gets what it is.
@@ -190,7 +195,11 @@ function useCatalog() {
   return { plans, live };
 }
 
-function PlansView({ onSelectPlan, currentPlan }) {
+function PlansView({ onSelectPlan, currentPlan, autopay }) {
+  /* One trial per founder, ever, and autopay only ever starts from a trial --
+     so any autopay record at all (even a cancelled one) means the trial is
+     spent. Offering it again would only earn a refusal from the backend. */
+  const trialOpen = !autopay;
   const { plans: PLANS } = useCatalog();
   return (
     <>
@@ -245,6 +254,24 @@ function PlansView({ onSelectPlan, currentPlan }) {
               >
                 {isCurrent ? '✓ Current Plan' : plan.cta}
               </button>
+              {plan.trial && trialOpen && !isCurrent && (
+                <div className="pc-trial">
+                  <button
+                    id={`plan-trial-${plan.id}`}
+                    type="button"
+                    className="pc-cta pc-trial-btn"
+                    onClick={() => onSelectPlan({ ...plan, displayPrice: price, mode: 'trial' })}
+                  >
+                    Try {plan.trial.days} days for ₹{plan.trial.price_inr}
+                  </button>
+                  <p className="pc-trial-note">
+                    Autopay then charges ₹{plan.trial.first_charge_inr.toLocaleString('en-IN')} on
+                    day {plan.trial.days + 1}
+                    {plan.oneTime ? '.' : `, and ₹${price.toLocaleString('en-IN')}/mo after.`}
+                    {' '}Cancel any time before then and you won&apos;t be charged again.
+                  </p>
+                </div>
+              )}
               <ul className="pc-feats">
                 {plan.features.map((f, i) => (
                   <li key={i}>
@@ -668,6 +695,187 @@ function CheckoutView({ plan, onBack, onPaid }) {
 }
 
 /* ═══════════════════════════════════════════
+   VIEW 2a — Trial checkout (Razorpay autopay)
+═══════════════════════════════════════════ */
+/**
+ * Starting a paid trial. One Razorpay step does two things: charges the trial
+ * fee and sets up the autopay mandate that takes the first plan charge when the
+ * trial ends. Both amounts and the date are the backend's (POST /payments/trial)
+ * so what is promised here is exactly what the subscription will charge -- in
+ * particular the day-11 figure, which is the plan price LESS the trial fee.
+ */
+function TrialCheckoutView({ plan, onBack, onPaid }) {
+  const [trial, setTrial] = useState(null);
+  const [trialError, setTrialError] = useState(null);
+  const [payState, setPayState] = useState('idle'); // 'idle' | 'opening' | 'paid'
+  const [payError, setPayError] = useState(null);
+  const [prefill, setPrefill] = useState({ name: '', email: '' });
+  /* Set true on every mount, not just initialised: StrictMode mounts twice in
+     development, and a flag only ever cleared would read "unmounted" forever. */
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => { alive.current = false; };
+  }, []);
+
+  const create = useCallback(() => {
+    setTrial(null);
+    setTrialError(null);
+    return startTrial(plan.id)
+      .then((t) => { if (alive.current) setTrial(t); })
+      .catch((err) => { if (alive.current) setTrialError(err); });
+  }, [plan.id]);
+
+  useEffect(() => { create(); }, [create]);
+
+  useEffect(() => {
+    let cancelled = false;
+    getProfile()
+      .then((p) => { if (!cancelled && p) setPrefill({ name: p.full_name || '', email: p.email || '' }); })
+      .catch(() => { /* leave it to the widget */ });
+    return () => { cancelled = true; };
+  }, []);
+
+  /* Shaped like a checkout order so the activating and success screens can
+     quote the amount paid and a reference without a second code path. */
+  const asOrder = trial && {
+    ...trial,
+    order_id: trial.subscription_id,
+    amount_paise: trial.trial_amount_paise,
+  };
+
+  const handlePay = async () => {
+    if (!asOrder || payState !== 'idle') return;
+    setPayError(null);
+    setPayState('opening');
+    let outcome;
+    try {
+      outcome = await openCheckout({ order: asOrder, planName: plan.name, prefill });
+    } catch (err) {
+      if (alive.current) {
+        setPayState('idle');
+        setPayError(err?.message || 'Could not open the payment window. Please try again.');
+      }
+      return;
+    }
+    if (!alive.current) return;
+    if (outcome.status === 'paid') {
+      setPayState('paid');
+      onPaid({ plan, order: asOrder, callback: outcome.response ?? null });
+      return;
+    }
+    setPayState('idle');
+    setPayError(outcome.status === 'failed'
+      ? (outcome.error?.description || 'The payment did not go through. No money has been taken — you can try again.')
+      : 'Payment cancelled. You have not been charged and no autopay was set up.');
+  };
+
+  const busy = payState !== 'idle';
+  const trialFee = trial ? `₹${rupeesFromPaise(trial.trial_amount_paise)}` : null;
+  const firstCharge = trial ? `₹${rupeesFromPaise(trial.first_charge_paise)}` : null;
+  const fullPrice = trial ? `₹${rupeesFromPaise(trial.plan_amount_paise)}` : null;
+  const chargeDate = trial ? fmtRenewalDate(trial.trial_ends_at) : '';
+
+  return (
+    <div className="bl-checkout-wrap stagger d1">
+      <button id="trial-back-btn" className="bl-back-btn" onClick={onBack} disabled={busy}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+          <polyline points="15 18 9 12 15 6" />
+        </svg>
+        Back to Plans
+      </button>
+
+      <div className="bl-checkout-grid">
+        <div className="bl-checkout-form-col">
+          <div className="bl-section-label">Free trial · Autopay</div>
+          <h3 className="bl-pay-heading">Try {plan.name} for {plan.trial?.days ?? 10} days</h3>
+          <p className="bl-pay-lede">
+            You&apos;ll pay the trial fee and set up autopay in Razorpay&apos;s secure
+            window — card or UPI AutoPay. If you don&apos;t cancel before the trial
+            ends, autopay charges {firstCharge ?? 'the plan price less the trial fee'}
+            {chargeDate ? ` on ${chargeDate}` : ''}.
+          </p>
+
+          {trialError && (
+            <div className="bl-pay-alert err" role="alert">
+              <strong>We couldn&apos;t start this trial.</strong>
+              <span>{trialError.detail || trialError.message || 'Please try again in a moment.'}</span>
+              {trialError.status !== 409 && (
+                <button type="button" className="bl-link-btn" onClick={create}>Try again</button>
+              )}
+              {trialError.data?.request_id && (
+                <small className="bl-pay-ref">Reference: {trialError.data.request_id}</small>
+              )}
+            </div>
+          )}
+          {payError && (
+            <div className="bl-pay-alert warn" role="alert"><span>{payError}</span></div>
+          )}
+
+          <button
+            id="trial-pay-btn"
+            type="button"
+            className={`bl-pay-btn${busy ? ' loading' : ''}`}
+            onClick={handlePay}
+            disabled={!trial || busy}
+          >
+            {busy ? (
+              <>
+                <span className="bl-spinner" />
+                {payState === 'paid' ? 'Payment received…' : 'Opening Razorpay…'}
+              </>
+            ) : (
+              trial ? `Pay ${trialFee} & start trial` : 'Preparing secure checkout…'
+            )}
+          </button>
+          <p className="bl-pay-note">
+            🔒 Cancel any time from My Subscription. Cancelling during the trial
+            means no further charge; you keep {plan.name} until the trial ends.
+          </p>
+        </div>
+
+        <div className="bl-order-summary">
+          <div className="bl-section-label">What you&apos;ll pay</div>
+          <div className="bl-os-plan-badge">
+            <div className="bl-os-plan-name">{plan.name} Plan</div>
+            <div className="bl-os-plan-tag">{plan.tag}</div>
+            <div className="bl-os-plan-cycle">
+              {trial && !trial.recurring ? 'Trial, then one month' : 'Trial, then monthly autopay'}
+            </div>
+          </div>
+          <div className="bl-os-breakdown">
+            <div className="bl-os-line">
+              <span>Today · {plan.trial?.days ?? 10}-day trial</span>
+              <span>{trialFee ?? '—'}</span>
+            </div>
+            <div className="bl-os-line">
+              <span>
+                {chargeDate || `Day ${(plan.trial?.days ?? 10) + 1}`} · autopay
+                {trial ? ` (${fullPrice} less ${trialFee} paid today)` : ''}
+              </span>
+              <span>{firstCharge ?? '—'}</span>
+            </div>
+            <div className="bl-os-line">
+              <span>After that</span>
+              <span>{trial ? (trial.recurring ? `${fullPrice}/mo until you cancel` : 'No further charges') : '—'}</span>
+            </div>
+            <div className="bl-os-total">
+              <span>Due today</span>
+              <span>{trialFee ?? '—'}</span>
+            </div>
+          </div>
+          <ul className="bl-os-feats" style={{ marginTop: 18 }}>
+            {plan.features.map((f, i) => (
+              <li key={i}><CheckIcon size={14} />{f}</li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════
    VIEW 2b — Activating (settling the payment)
 ═══════════════════════════════════════════ */
 /**
@@ -709,7 +917,13 @@ function ActivatingView({ plan, order, callback, onActivated, onViewStatus }) {
        before this endpoint existed. A rejected or failed confirm therefore
        degrades to the webhook wait rather than to an error the founder can do
        nothing about. */
-    if (callback?.razorpay_payment_id && order?.order_id) {
+    if (callback?.razorpay_payment_id && order?.subscription_id) {
+      confirmTrial({
+        razorpay_subscription_id: callback.razorpay_subscription_id || order.subscription_id,
+        razorpay_payment_id: callback.razorpay_payment_id,
+        razorpay_signature: callback.razorpay_signature,
+      }).catch(() => { /* the webhook is still coming */ });
+    } else if (callback?.razorpay_payment_id && order?.order_id) {
       confirmPayment({
         order_id: order.order_id,
         razorpay_payment_id: callback.razorpay_payment_id,
@@ -805,6 +1019,43 @@ function ActivatingView({ plan, order, callback, onActivated, onViewStatus }) {
 function SuccessView({ plan, order, onViewStatus }) {
   const [founder, setFounder] = useState(null);
   useEffect(() => { getProfile().then(setFounder).catch(() => setFounder(null)); }, []);
+  if (order?.subscription_id) {
+    const chargeDate = fmtRenewalDate(order.trial_ends_at);
+    return (
+      <div className="bl-success-wrap stagger d1">
+        <div className="bl-success-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+        </div>
+        <h2 className="bl-success-title">Your {order.trial_days}-day trial has started</h2>
+        <p className="bl-success-sub">
+          You&apos;re on <strong>{plan.name}</strong>. Autopay will charge
+          {' '}<strong>₹{rupeesFromPaise(order.first_charge_paise)}</strong>
+          {chargeDate ? <> on <strong>{chargeDate}</strong></> : null} unless you cancel
+          before then from My Subscription.
+        </p>
+        <div className="bl-success-details">
+          <div className="bl-sd-row"><span>Plan</span><strong>{plan.name}</strong></div>
+          <div className="bl-sd-row">
+            <span>Paid today</span><strong>₹{rupeesFromPaise(order.trial_amount_paise)}</strong>
+          </div>
+          <div className="bl-sd-row"><span>Trial ends</span><strong>{chargeDate || '—'}</strong></div>
+          <div className="bl-sd-row">
+            <span>Then</span>
+            <strong>
+              ₹{rupeesFromPaise(order.first_charge_paise)}
+              {order.recurring ? `, then ₹${rupeesFromPaise(order.plan_amount_paise)}/mo` : ' once'}
+            </strong>
+          </div>
+          <div className="bl-sd-row"><span>Status</span><strong className="bl-status-badge active">Trial</strong></div>
+        </div>
+        <button id="view-subscription-btn" className="bl-pay-btn" onClick={onViewStatus}>
+          View My Subscription
+        </button>
+      </div>
+    );
+  }
   return (
     <div className="bl-success-wrap stagger d1">
       <div className="bl-success-icon">
@@ -850,14 +1101,34 @@ function SuccessView({ plan, order, onViewStatus }) {
 /* ═══════════════════════════════════════════
    VIEW 4 — Subscription Status
 ═══════════════════════════════════════════ */
-function StatusView({ onUpgrade, currentPlan, subscription }) {
+function StatusView({ onUpgrade, currentPlan, subscription, autopay, onAutopayChange }) {
   const [cancelModal, setCancelModal] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState(null);
   /* MOCK_PLANS lists the three PAID tiers, so `free` matches nothing -- and the
      old fallback was `|| MOCK_PLANS[1]`, which is Plus at Rs 499. A founder who
      had never paid a rupee opened this page and was told, with an Active badge
      and a Cancel Plan button, that they were on Plus. Nothing here is a
      subscription unless a paid tier matched. */
   const plan = MOCK_PLANS.find(p => p.id === currentPlan) || null;
+  /* The trial / autopay behind this plan, when there is one. Only it can be
+     cancelled for real; it is what the dates below are read from. */
+  const auto = autopay && plan && autopay.plan === plan.id ? autopay : null;
+  const accessUntil = auto?.access_until ? fmtRenewalDate(auto.access_until) : '';
+
+  const confirmCancel = async () => {
+    setCancelling(true);
+    setCancelError(null);
+    try {
+      const next = await cancelAutopay();
+      onAutopayChange(next);
+      setCancelModal(false);
+    } catch (err) {
+      setCancelError(err?.detail || err?.message || 'Could not cancel just now. Please try again.');
+    } finally {
+      setCancelling(false);
+    }
+  };
 
   if (!plan) {
     return (
@@ -900,11 +1171,21 @@ function StatusView({ onUpgrade, currentPlan, subscription }) {
                 <line x1="12" y1="17" x2="12.01" y2="17" />
               </svg>
             </div>
-            <h3>Cancel Subscription?</h3>
-            <p>Your access to {plan.name} features will continue until your current billing period ends (Aug 1, 2026). After that, your account reverts to the Free plan.</p>
+            <h3>{auto?.status === 'trial' ? 'Cancel your trial?' : 'Cancel Subscription?'}</h3>
+            {auto ? (
+              <p>
+                Autopay stops{auto.status === 'trial' ? ' now, and nothing more will be charged' : ''}.
+                {' '}You keep {plan.name} until <strong>{accessUntil || 'the end of this period'}</strong>,
+                then your account moves to the Free plan.
+              </p>
+            ) : (
+              <p>Your access to {plan.name} features will continue until your current billing period ends. After that, your account reverts to the Free plan.</p>
+            )}
+            {cancelError && <p className="bl-coupon-err" role="alert">{cancelError}</p>}
             <div className="bl-modal-actions">
-              <button id="cancel-confirm-btn" className="bl-modal-btn danger" onClick={() => setCancelModal(false)}>
-                Yes, Cancel Plan
+              <button id="cancel-confirm-btn" className="bl-modal-btn danger" disabled={cancelling}
+                      onClick={auto ? confirmCancel : () => setCancelModal(false)}>
+                {cancelling ? 'Cancelling…' : (auto?.status === 'trial' ? 'Yes, cancel trial' : 'Yes, Cancel Plan')}
               </button>
               <button id="cancel-dismiss-btn" className="bl-modal-btn ghost" onClick={() => setCancelModal(false)}>
                 Keep My Plan
@@ -919,7 +1200,9 @@ function StatusView({ onUpgrade, currentPlan, subscription }) {
           <div className="bl-section-label">Current Subscription</div>
           <h2 className="bl-status-plan-name">
             {plan.name} Plan
-            <span className="bl-status-badge active">Active</span>
+            <span className={`bl-status-badge ${auto?.status === 'cancelled' ? 'pending' : 'active'}`}>
+              {auto?.status === 'trial' ? 'Trial' : auto?.status === 'cancelled' ? 'Cancelled' : 'Active'}
+            </span>
           </h2>
           {/* Was the literal "August 1, 2026", shown to every founder on every
               plan -- so it was wrong for everyone the day it was written, and
@@ -927,7 +1210,22 @@ function StatusView({ onUpgrade, currentPlan, subscription }) {
               real one is stamped on the subscription when the payment is
               captured; when there is no row behind the plan (an admin grant),
               the date is omitted rather than guessed. */}
-          {plan.oneTime
+          {auto?.status === 'trial' ? (
+            <p className="bl-status-renew">
+              Trial ends <strong>{fmtRenewalDate(auto.trial_ends_at)}</strong> · autopay then
+              charges <strong>₹{(auto.next_charge_inr ?? 0).toLocaleString('en-IN')}</strong>
+              {auto.recurring ? `, then ₹${plan.price.toLocaleString('en-IN')}/mo` : ' once'}
+            </p>
+          ) : auto?.status === 'cancelled' ? (
+            <p className="bl-status-renew">
+              Autopay cancelled · {plan.name} until <strong>{accessUntil || '—'}</strong>, then Free
+            </p>
+          ) : auto?.status === 'active' && auto.next_charge_at ? (
+            <p className="bl-status-renew">
+              Autopay: <strong>₹{(auto.next_charge_inr ?? 0).toLocaleString('en-IN')}</strong> on
+              {' '}<strong>{fmtRenewalDate(auto.next_charge_at)}</strong>
+            </p>
+          ) : plan.oneTime
             ? <p className="bl-status-renew">One-time purchase · ₹{plan.price.toLocaleString()}</p>
             : (
               <p className="bl-status-renew">
@@ -942,9 +1240,11 @@ function StatusView({ onUpgrade, currentPlan, subscription }) {
           <button id="upgrade-plan-btn" className="bl-action-btn primary" onClick={onUpgrade}>
             Upgrade Plan
           </button>
-          <button id="cancel-plan-btn" className="bl-action-btn ghost" onClick={() => setCancelModal(true)}>
-            Cancel Plan
-          </button>
+          {(!auto || auto.can_cancel) && (
+            <button id="cancel-plan-btn" className="bl-action-btn ghost" onClick={() => setCancelModal(true)}>
+              {auto?.status === 'trial' ? 'Cancel trial' : 'Cancel Plan'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -1013,6 +1313,12 @@ export default function Billing() {
   // no subscription row (an admin grant), and the date must then be absent
   // rather than invented.
   const [subscription, setSubscription] = useState(null);
+  // The trial / autopay subscription, from GET /payments/subscription.
+  const [autopay, setAutopay] = useState(null);
+  const loadAutopay = useCallback(() => {
+    getAutopay().then(setAutopay).catch(() => { /* billing still works without it */ });
+  }, []);
+  useEffect(() => { loadAutopay(); }, [loadAutopay]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1052,6 +1358,7 @@ export default function Billing() {
     // founder who has just paid keeps seeing the plan they left behind --
     // on every screen -- until they reload the page.
     refreshPlanName();
+    loadAutopay();
     setView('success');
   };
 
@@ -1091,10 +1398,19 @@ export default function Billing() {
         <PlansView
           onSelectPlan={handleSelectPlan}
           currentPlan={currentPlan}
+          autopay={autopay}
         />
       )}
 
-      {view === 'checkout' && selectedPlan && (
+      {view === 'checkout' && selectedPlan?.mode === 'trial' && (
+        <TrialCheckoutView
+          plan={selectedPlan}
+          onBack={() => setView('plans')}
+          onPaid={handlePaid}
+        />
+      )}
+
+      {view === 'checkout' && selectedPlan && selectedPlan.mode !== 'trial' && (
         <CheckoutView
           plan={selectedPlan}
           onBack={() => setView('plans')}
@@ -1124,6 +1440,8 @@ export default function Billing() {
         <StatusView
           currentPlan={currentPlan}
           subscription={subscription}
+          autopay={autopay}
+          onAutopayChange={setAutopay}
           onUpgrade={() => setView('plans')}
         />
       )}

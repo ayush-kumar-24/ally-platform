@@ -4,6 +4,11 @@
     POST /payments/confirm            settle a just-paid order without waiting
                                       for the webhook
     POST /payments/coupons/validate   price a discount code before committing
+    POST /payments/trial              start a paid trial + autopay mandate
+    POST /payments/trial/confirm      settle a just-authorised trial without
+                                      waiting for the webhook
+    GET  /payments/subscription       where the founder's trial/autopay stands
+    POST /payments/subscription/cancel  stop autopay (plan runs to period end)
 
 `POST /payments/checkout` only ever creates a *pending* payment and hands back
 what the frontend needs to open Razorpay's Checkout.js widget.
@@ -22,6 +27,8 @@ closes the tab, and both end in the same idempotent grant.
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -29,7 +36,7 @@ from app.api.deps import get_founder_record
 from app.core.container import container
 from app.db.session import get_db, set_admin_rls_context
 from app.models import Founder
-from app.payments.models import CheckoutSession, WebhookOutcome
+from app.payments.models import CheckoutSession, TrialCheckout, WebhookOutcome
 from app.plans.catalog import PlanTier
 
 router = APIRouter(prefix="/payments", tags=["payments"])
@@ -171,3 +178,98 @@ def confirm_checkout(
     )
     activated = result.outcome in (WebhookOutcome.CAPTURED, WebhookOutcome.ALREADY_PROCESSED)
     return ConfirmResponse(activated=activated, outcome=result.outcome, plan=result.plan)
+
+
+# --- paid trial + autopay ----------------------------------------------------
+
+class TrialRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    tier: PlanTier
+
+
+class TrialResponse(BaseModel):
+    """Checkout.js opens on `subscription_id` (instead of an order id). Every
+    amount is the backend's; the page only displays them."""
+
+    subscription_id: str
+    key_id: str
+    plan_name: str
+    trial_days: int
+    trial_amount_paise: int
+    plan_amount_paise: int
+    first_charge_paise: int
+    trial_ends_at: datetime
+    recurring: bool
+
+    @classmethod
+    def from_domain(cls, t: TrialCheckout) -> "TrialResponse":
+        return cls(**t.__dict__)
+
+
+class TrialConfirmRequest(BaseModel):
+    """What Checkout.js's handler hands the browser for a subscription."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    razorpay_subscription_id: str = Field(min_length=1, max_length=64)
+    razorpay_payment_id: str = Field(min_length=1, max_length=64)
+    razorpay_signature: str | None = Field(default=None, max_length=128)
+
+
+def _subscriptions(service):
+    return service.subscriptions()
+
+
+@router.post("/trial", response_model=TrialResponse,
+             summary="Start a paid trial and set up autopay")
+def start_trial(
+    payload: TrialRequest,
+    founder: Founder = Depends(get_founder_record),
+    service=Depends(get_payment_service),
+    db=Depends(get_db),
+) -> TrialResponse:
+    """Writes a 'pending' subscription row, which grants nothing; the elevation
+    is for that write, as in /confirm. The founder still has to authorise the
+    mandate and pay the trial fee in Checkout.js before anything is granted."""
+    set_admin_rls_context(db)
+    return TrialResponse.from_domain(
+        _subscriptions(service).start_trial(founder.founder_id, payload.tier))
+
+
+@router.post("/trial/confirm", response_model=ConfirmResponse,
+             summary="Confirm a just-authorised trial with Razorpay")
+def confirm_trial(
+    payload: TrialConfirmRequest,
+    founder: Founder = Depends(get_founder_record),
+    service=Depends(get_payment_service),
+    db=Depends(get_db),
+) -> ConfirmResponse:
+    """Same trust model as /confirm: a trigger, settled by asking Razorpay."""
+    set_admin_rls_context(db)
+    result = _subscriptions(service).confirm_trial(
+        founder.founder_id, gateway_subscription_id=payload.razorpay_subscription_id,
+        gateway_payment_id=payload.razorpay_payment_id, signature=payload.razorpay_signature)
+    activated = result.outcome in (WebhookOutcome.TRIAL_STARTED,
+                                   WebhookOutcome.ALREADY_PROCESSED)
+    return ConfirmResponse(activated=activated, outcome=result.outcome, plan=result.plan)
+
+
+@router.get("/subscription", response_model=dict | None,
+            summary="My trial / autopay status")
+def my_subscription(
+    founder: Founder = Depends(get_founder_record),
+    service=Depends(get_payment_service),
+) -> dict | None:
+    return _subscriptions(service).status(founder.founder_id)
+
+
+@router.post("/subscription/cancel", response_model=dict | None,
+             summary="Cancel autopay")
+def cancel_subscription(
+    founder: Founder = Depends(get_founder_record),
+    service=Depends(get_payment_service),
+    db=Depends(get_db),
+) -> dict | None:
+    set_admin_rls_context(db)
+    return _subscriptions(service).cancel(founder.founder_id)

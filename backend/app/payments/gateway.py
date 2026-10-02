@@ -56,6 +56,15 @@ class GatewayOrder:
     currency: str
 
 
+@dataclass(frozen=True)
+class GatewaySubscription:
+    """A Razorpay subscription as created -- the founder authorises it (and pays
+    the trial fee) in Checkout.js using `subscription_id`."""
+
+    subscription_id: str
+    status: str
+
+
 class PaymentGateway(Protocol):
     def create_order(
         self, *, amount_paise: int, currency: str, receipt: str, notes: dict[str, str]
@@ -68,6 +77,24 @@ class PaymentGateway(Protocol):
     ) -> bool: ...
 
     def fetch_payment(self, payment_id: str) -> dict: ...
+
+    # --- trial + autopay (app/payments/subscriptions.py) ---
+
+    def create_subscription(
+        self, *, plan_id: str, total_count: int, start_at: int, offer_id: str,
+        upfront_amount_paise: int, upfront_label: str, expire_by: int,
+        notes: dict[str, str],
+    ) -> GatewaySubscription: ...
+
+    def fetch_subscription(self, subscription_id: str) -> dict: ...
+
+    def cancel_subscription(self, subscription_id: str, *, at_cycle_end: bool) -> dict: ...
+
+    def fetch_invoice(self, invoice_id: str) -> dict: ...
+
+    def verify_subscription_checkout_signature(
+        self, *, subscription_id: str, payment_id: str, signature: str
+    ) -> bool: ...
 
 
 def _error_description(resp: httpx.Response) -> str | None:
@@ -205,3 +232,76 @@ class RazorpayGateway:
 
         data = resp.json()
         return data if isinstance(data, dict) else {}
+
+    # --- trial + autopay ------------------------------------------------------
+
+    def _call(self, method: str, path: str, what: str, json: dict | None = None) -> dict:
+        try:
+            resp = self._client.request(method, path, json=json)
+            resp.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            status_code = exc.response.status_code
+            gateway_message = _error_description(exc.response)
+            raise PaymentGatewayError(
+                f"razorpay: {what} failed: HTTP {status_code}"
+                + (f": {gateway_message}" if gateway_message else ""),
+                status_code=status_code, gateway_message=gateway_message,
+            ) from exc
+        except httpx.HTTPError as exc:
+            raise PaymentGatewayError(f"razorpay: {what} failed: {exc}") from exc
+        data = resp.json()
+        return data if isinstance(data, dict) else {}
+
+    def create_subscription(
+        self, *, plan_id: str, total_count: int, start_at: int, offer_id: str,
+        upfront_amount_paise: int, upfront_label: str, expire_by: int,
+        notes: dict[str, str],
+    ) -> GatewaySubscription:
+        """A subscription whose first charge is `start_at` (end of the trial).
+
+        The trial fee rides as an upfront ADDON, which Razorpay charges in the
+        same transaction that authorises the mandate -- so the founder pays the
+        fee and sets up autopay in one step, and a founder who cannot set up
+        autopay is never charged the fee. `offer_id` takes the fee back off the
+        first cycle's charge (see settings.RAZORPAY_TRIAL_OFFER_ID_*).
+        """
+        data = self._call("POST", "/subscriptions", "subscription creation", json={
+            "plan_id": plan_id,
+            "total_count": total_count,
+            "quantity": 1,
+            "start_at": start_at,
+            "expire_by": expire_by,
+            "customer_notify": 1,
+            "offer_id": offer_id,
+            "addons": [{"item": {"name": upfront_label, "amount": upfront_amount_paise,
+                                 "currency": "INR"}}],
+            "notes": notes,
+        })
+        return GatewaySubscription(subscription_id=data["id"], status=data.get("status", ""))
+
+    def fetch_subscription(self, subscription_id: str) -> dict:
+        return self._call("GET", f"/subscriptions/{subscription_id}", "subscription fetch")
+
+    def cancel_subscription(self, subscription_id: str, *, at_cycle_end: bool) -> dict:
+        return self._call("POST", f"/subscriptions/{subscription_id}/cancel",
+                          "subscription cancel",
+                          json={"cancel_at_cycle_end": 1 if at_cycle_end else 0})
+
+    def fetch_invoice(self, invoice_id: str) -> dict:
+        """Subscription payments arrive with an `invoice_id` and an order this
+        backend never created; the invoice is what names the subscription."""
+        return self._call("GET", f"/invoices/{invoice_id}", "invoice fetch")
+
+    def verify_subscription_checkout_signature(
+        self, *, subscription_id: str, payment_id: str, signature: str
+    ) -> bool:
+        """Checkout.js's handler signature for a subscription: HMAC-SHA256 of
+        `payment_id|subscription_id` under the key secret -- the reverse order
+        of the order flow's `order_id|payment_id`."""
+        if not subscription_id or not payment_id:
+            return False
+        expected = hmac.new(
+            self.key_secret.encode(), f"{payment_id}|{subscription_id}".encode(),
+            hashlib.sha256,
+        ).hexdigest()
+        return hmac.compare_digest(expected, signature or "")

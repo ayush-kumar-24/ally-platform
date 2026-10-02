@@ -42,6 +42,7 @@ router = APIRouter(prefix="/webhooks/razorpay", tags=["webhooks"])
 async def handle_razorpay_event(
     request: Request,
     x_razorpay_signature: str | None = Header(default=None),
+    x_razorpay_event_id: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ) -> dict:
     """Reads the body, then does every blocking thing off the event loop.
@@ -60,10 +61,11 @@ async def handle_razorpay_event(
     """
     body = await request.body()
     return await run_in_threadpool(
-        _handle_event, db, body, x_razorpay_signature or "")
+        _handle_event, db, body, x_razorpay_signature or "", x_razorpay_event_id)
 
 
-def _handle_event(db: Session, body: bytes, x_razorpay_signature: str) -> dict:
+def _handle_event(db: Session, body: bytes, x_razorpay_signature: str,
+                  x_razorpay_event_id: str | None = None) -> dict:
     # Razorpay is a system actor: this request carries no founder identity, and
     # the work it does legitimately spans founders -- it has to find a payment
     # by gateway order id before it can know whose it is. Without a context the
@@ -86,6 +88,15 @@ def _handle_event(db: Session, body: bytes, x_razorpay_signature: str) -> dict:
     event = str(payload.get("event") or "unknown")
     entity = ((payload.get("payload") or {}).get("payment") or {}).get("entity") or {}
     gateway_event_id = str(entity.get("id") or f"razorpay-{event}-unkeyed")
+    if event.startswith("subscription."):
+        # Keyed per EVENT, not per payment: one subscription sends several
+        # events, some with no payment at all, and keying them on a payment id
+        # (or the shared "unkeyed" fallback) would make the unique constraint
+        # drop every one after the first from the audit log. Razorpay's own
+        # event id is stable across its retries, which keeps the dedup.
+        sub_id = (((payload.get("payload") or {}).get("subscription") or {})
+                  .get("entity") or {}).get("id")
+        gateway_event_id = x_razorpay_event_id or f"{sub_id}:{event}:{entity.get('id') or ''}"
 
     log_id = _log_webhook(db, event_type=event, gateway_event_id=gateway_event_id, payload=payload)
 

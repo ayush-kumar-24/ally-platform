@@ -29,7 +29,7 @@
  * the backend order does not carry.
  */
 
-import { post } from './api';
+import { get, post } from './api';
 import { getMyPlan } from './plans';
 
 const CHECKOUT_JS_URL = 'https://checkout.razorpay.com/v1/checkout.js';
@@ -82,6 +82,39 @@ export function confirmPayment({ order_id, razorpay_payment_id, razorpay_signatu
     // still settles the outcome with Razorpay directly.
     ...(razorpay_signature ? { razorpay_signature } : {}),
   });
+}
+
+/**
+ * Start a paid trial with autopay. The backend creates a Razorpay subscription
+ * (trial fee charged up front, first plan charge at the end of the trial) and
+ * returns what Checkout.js needs to open on it. Grants nothing by itself.
+ *
+ * @param {'basic'|'starter'|'pro'} tier
+ * @returns {Promise<{subscription_id:string, key_id:string, plan_name:string,
+ *   trial_days:number, trial_amount_paise:number, plan_amount_paise:number,
+ *   first_charge_paise:number, trial_ends_at:string, recurring:boolean}>}
+ */
+export function startTrial(tier) {
+  return post('/payments/trial', { tier });
+}
+
+/** The trial's equivalent of confirmPayment: a trigger, settled server-side. */
+export function confirmTrial({ razorpay_subscription_id, razorpay_payment_id, razorpay_signature }) {
+  return post('/payments/trial/confirm', {
+    razorpay_subscription_id,
+    razorpay_payment_id,
+    ...(razorpay_signature ? { razorpay_signature } : {}),
+  });
+}
+
+/** Where the founder's trial / autopay stands, or null when there is none. */
+export function getAutopay() {
+  return get('/payments/subscription');
+}
+
+/** Stop autopay. The plan stays until the trial or paid month ends. */
+export function cancelAutopay() {
+  return post('/payments/subscription/cancel', {});
 }
 
 // Checkout.js is loaded on demand rather than from index.html: it is a
@@ -146,13 +179,22 @@ export function openCheckout({ order, planName, prefill = {} }) {
     const rzp = new Razorpay({
       // Public key, straight from the order response. Never the secret.
       key: order.key_id,
-      order_id: order.order_id,
-      // Sent for display only; the order on Razorpay's side is what is
-      // actually charged, and it was created and priced by the backend.
-      amount: order.amount_paise,
-      currency: order.currency,
+      /* A trial opens on a Razorpay SUBSCRIPTION rather than an order: the
+         founder authorises autopay and pays the trial fee in one step, and
+         Razorpay's own subscription carries the amounts. */
+      ...(order.subscription_id
+        ? { subscription_id: order.subscription_id }
+        : {
+          order_id: order.order_id,
+          // Sent for display only; the order on Razorpay's side is what is
+          // actually charged, and it was created and priced by the backend.
+          amount: order.amount_paise,
+          currency: order.currency,
+        }),
       name: 'GoXL Ally',
-      description: `${planName} plan`,
+      description: order.subscription_id
+        ? `${planName} · ${order.trial_days}-day trial with autopay`
+        : `${planName} plan`,
       image: '/ally-logo.png',
       prefill: {
         name: prefill.name || '',

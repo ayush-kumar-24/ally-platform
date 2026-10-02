@@ -11,7 +11,7 @@ from datetime import datetime
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.payments.models import PaymentRecord
+from app.payments.models import PaymentRecord, SubscriptionRecord
 
 
 class PaymentRepository:
@@ -142,6 +142,158 @@ class PaymentRepository:
             {"plan": plan_type, "fid": founder_id},
         )
         self.db.commit()
+
+    def revoke_plan(self, founder_id: int, plan_type: str) -> bool:
+        """Back to Free -- but only from the plan being revoked. A founder whom
+        an admin or another purchase has since moved elsewhere keeps that."""
+        moved = self.db.execute(
+            text("UPDATE founders SET plan_type = 'free', updated_at = now() "
+                 "WHERE founder_id = :fid AND plan_type = :plan"),
+            {"plan": plan_type, "fid": founder_id},
+        ).rowcount
+        self.db.commit()
+        return bool(moved)
+
+    # --- trial + autopay subscriptions --------------------------------------
+
+    _SUB_COLUMNS = ("subscription_id, founder_id, plan_type, status, billing_cycle, amount_inr, "
+                    "trial_ends_at, expires_at, cancelled_at, gateway_subscription_id")
+
+    def create_pending_subscription(
+        self, *, founder_id: int, plan_type: str, amount_inr: int, billing_cycle: str,
+        trial_ends_at: datetime, gateway_subscription_id: str,
+    ) -> int:
+        """The row exists from checkout, before anything is authorised or paid:
+        the webhook that later says "authorised" names only Razorpay's id, and
+        this row is what turns that id back into a founder. 'pending' grants
+        nothing."""
+        subscription_id = self.db.execute(
+            text(
+                "INSERT INTO subscriptions "
+                "(founder_id, plan_type, status, billing_cycle, amount_inr, trial_ends_at, "
+                " payment_gateway, gateway_subscription_id) "
+                "VALUES (:fid, :plan, 'pending', :cycle, :amt, :trial, 'razorpay', :gsid) "
+                "RETURNING subscription_id"
+            ),
+            {"fid": founder_id, "plan": plan_type, "cycle": billing_cycle, "amt": amount_inr,
+             "trial": trial_ends_at, "gsid": gateway_subscription_id},
+        ).scalar()
+        self.db.commit()
+        return subscription_id
+
+    def get_subscription_by_gateway_id(self, gateway_subscription_id: str
+                                       ) -> SubscriptionRecord | None:
+        row = self.db.execute(
+            text(f"SELECT {self._SUB_COLUMNS} FROM subscriptions "
+                 "WHERE gateway_subscription_id = :gsid"),
+            {"gsid": gateway_subscription_id},
+        ).mappings().first()
+        return _to_subscription(row)
+
+    def get_current_autopay(self, founder_id: int) -> SubscriptionRecord | None:
+        """The founder's latest autopay subscription that has got past checkout.
+        A 'pending' row is an abandoned or in-flight checkout, not a plan."""
+        row = self.db.execute(
+            text(f"SELECT {self._SUB_COLUMNS} FROM subscriptions "
+                 "WHERE founder_id = :fid AND gateway_subscription_id IS NOT NULL "
+                 "  AND status <> 'pending' "
+                 "ORDER BY created_at DESC, subscription_id DESC LIMIT 1"),
+            {"fid": founder_id},
+        ).mappings().first()
+        return _to_subscription(row)
+
+    def has_used_trial(self, founder_id: int) -> bool:
+        """One trial per founder, ever. Without this, cancel-and-restart would
+        buy Pro at Rs 49 per ten days indefinitely."""
+        return bool(self.db.execute(
+            text("SELECT 1 FROM subscriptions WHERE founder_id = :fid "
+                 "AND trial_ends_at IS NOT NULL AND status <> 'pending' LIMIT 1"),
+            {"fid": founder_id},
+        ).first())
+
+    def update_subscription(self, subscription_id: int, *, status: str | None = None,
+                            billing_cycle: str | None = None,
+                            expires_at: datetime | None = None, clear_expiry: bool = False,
+                            cancelled_at: datetime | None = None,
+                            cancellation_reason: str | None = None) -> None:
+        sets, params = ["updated_at = now()"], {"sid": subscription_id}
+        for column, value in (("status", status), ("billing_cycle", billing_cycle),
+                              ("expires_at", expires_at), ("cancelled_at", cancelled_at),
+                              ("cancellation_reason", cancellation_reason)):
+            if value is not None:
+                sets.append(f"{column} = :{column}")
+                params[column] = value
+        if clear_expiry:
+            sets.append("expires_at = NULL")
+        self.db.execute(
+            text(f"UPDATE subscriptions SET {', '.join(sets)} WHERE subscription_id = :sid"),
+            params,
+        )
+        self.db.commit()
+
+    def record_subscription_payment(
+        self, *, founder_id: int, subscription_id: int, plan_tier: str, amount_inr: int,
+        gateway_payment_id: str, gateway_order_id: str | None, paid_at: datetime,
+    ) -> int:
+        """A captured autopay charge (or the trial fee), written straight as
+        'success': unlike an order checkout there is no pending row before it,
+        because Razorpay, not this backend, decided when to charge."""
+        payment_id = self.db.execute(
+            text(
+                "INSERT INTO payments "
+                "(founder_id, amount_inr, currency, status, payment_gateway, gateway_order_id, "
+                " gateway_payment_id, plan_tier, subscription_id, paid_at) "
+                "VALUES (:fid, :amt, 'INR', 'success', 'razorpay', :goid, :gpid, :tier, :sid, :at) "
+                "RETURNING payment_id"
+            ),
+            {"fid": founder_id, "amt": amount_inr, "goid": gateway_order_id,
+             "gpid": gateway_payment_id, "tier": plan_tier, "sid": subscription_id,
+             "at": paid_at},
+        ).scalar()
+        self.db.commit()
+        return payment_id
+
+    def has_other_live_plan(self, founder_id: int, *, excluding_subscription_id: int,
+                            now: datetime) -> bool:
+        """Is anything other than this subscription still entitling the founder
+        to a paid plan? Revoking access must never take away a plan they hold
+        through a different purchase."""
+        return bool(self.db.execute(
+            text("SELECT 1 FROM subscriptions WHERE founder_id = :fid "
+                 "AND subscription_id <> :sid AND plan_type <> 'free' AND ("
+                 "  (status IN ('active', 'trial') AND (expires_at IS NULL OR expires_at > :now))"
+                 "  OR (status = 'cancelled' AND COALESCE(expires_at, trial_ends_at) > :now)"
+                 ") LIMIT 1"),
+            {"fid": founder_id, "sid": excluding_subscription_id, "now": now},
+        ).first())
+
+    def find_lapsed_autopay(self, now: datetime) -> list[SubscriptionRecord]:
+        """Cancelled or expired autopay subscriptions whose access has run out
+        while the founder still holds that plan -- what the expiry sweep acts
+        on. Founders already moved off the plan are not returned, which is what
+        makes the sweep idempotent."""
+        rows = self.db.execute(
+            text(f"SELECT s.{self._SUB_COLUMNS.replace(', ', ', s.')} "
+                 "FROM subscriptions s JOIN founders f ON f.founder_id = s.founder_id "
+                 "WHERE s.gateway_subscription_id IS NOT NULL "
+                 "  AND s.status IN ('cancelled', 'expired') "
+                 "  AND COALESCE(s.expires_at, s.trial_ends_at) <= :now "
+                 "  AND f.plan_type = s.plan_type"),
+            {"now": now},
+        ).mappings().all()
+        return [_to_subscription(r) for r in rows]
+
+
+def _to_subscription(row) -> SubscriptionRecord | None:
+    if row is None:
+        return None
+    return SubscriptionRecord(
+        subscription_id=row["subscription_id"], founder_id=row["founder_id"],
+        plan_type=row["plan_type"], status=row["status"], billing_cycle=row["billing_cycle"],
+        amount_inr=int(row["amount_inr"] or 0), trial_ends_at=row["trial_ends_at"],
+        expires_at=row["expires_at"], cancelled_at=row["cancelled_at"],
+        gateway_subscription_id=row["gateway_subscription_id"],
+    )
 
 
 def _to_record(row) -> PaymentRecord | None:

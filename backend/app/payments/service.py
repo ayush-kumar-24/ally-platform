@@ -88,6 +88,11 @@ class PaymentService:
         self.coupons = coupons
         self._now = clock or (lambda: datetime.now(timezone.utc))
 
+    def subscriptions(self):
+        """Trial + autopay, on the same gateway, rows and credits as checkout."""
+        from app.payments.subscriptions import SubscriptionService
+        return SubscriptionService(self.gateway, self.repository, self.credits, clock=self._now)
+
     # --- founder-initiated ---------------------------------------------------
 
     def start_checkout(self, founder_id: int, tier: PlanTier,
@@ -263,6 +268,8 @@ class PaymentService:
         event = payload.get("event")
         entity = ((payload.get("payload") or {}).get("payment") or {}).get("entity") or {}
 
+        if event.startswith("subscription."):
+            return self.subscriptions().handle_event(event, payload)
         if event == "payment.captured":
             return self._grant_for_captured(entity)
         if event == "payment.failed":
@@ -288,6 +295,12 @@ class PaymentService:
             return WebhookResult(outcome=WebhookOutcome.ALREADY_PROCESSED)
 
         payment = self.repository.get_by_gateway_order_id(gateway_order_id)
+        if payment is None and entity.get("invoice_id"):
+            # An autopay payment: Razorpay made the order, not us, and the
+            # invoice is what names the subscription it belongs to.
+            handled = self.subscriptions().handle_invoice_payment(entity)
+            if handled is not None:
+                return handled
         if payment is None:
             # A captured payment for an order this backend never created --
             # never silently grant a plan to nobody in particular.
@@ -395,6 +408,11 @@ class PaymentService:
     def _handle_failed(self, entity: dict[str, Any]) -> WebhookResult:
         gateway_order_id = entity.get("order_id")
         payment = self.repository.get_by_gateway_order_id(gateway_order_id)
+        if payment is None and entity.get("invoice_id"):
+            # A failed autopay attempt. Razorpay retries it and reports the
+            # outcome as subscription.pending / .halted, which is where it is
+            # acted on.
+            return WebhookResult(outcome=WebhookOutcome.IGNORED_EVENT)
         if payment is None:
             return WebhookResult(outcome=WebhookOutcome.UNKNOWN_PAYMENT)
 

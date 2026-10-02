@@ -66,6 +66,16 @@ jobs:
           API: ${{ vars.ALLY_API_BASE || 'https://api.goxlally.ai' }}
           SECRET: ${{ secrets.INTERNAL_JOBS_SECRET }}
 
+      - name: Expire lapsed autopay subscriptions
+        if: github.event.schedule == '*/10 * * * *' || github.event_name == 'workflow_dispatch'
+        run: |
+          curl -sS -f -X POST \
+            "$API/api/v1/internal/jobs/expire-subscriptions" \
+            -H "X-Internal-Secret: $SECRET"
+        env:
+          API: ${{ vars.ALLY_API_BASE || 'https://api.goxlally.ai' }}
+          SECRET: ${{ secrets.INTERNAL_JOBS_SECRET }}
+
       - name: Send due task reminders
         if: github.event.schedule == '*/10 * * * *' || github.event_name == 'workflow_dispatch'
         run: |

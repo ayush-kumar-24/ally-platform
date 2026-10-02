@@ -26,6 +26,7 @@ from app.api.v1.plans.dependencies import _plan_context, get_entitlement_service
 from app.models import Founder
 from app.core.config import settings
 from app.plans.catalog import (
+    TRIAL_DAYS,
     CALL_PRICE_INR,
     TOKENS_PER_CREDIT,
     TOPUP_CREDITS,
@@ -67,6 +68,15 @@ def catalog() -> dict:
                 # One-time vs monthly is a fact about the plan, decided here,
                 # so the pricing page cannot label a single purchase "/mo".
                 "one_time": p.one_time,
+                # Paid trial + autopay. `trial` is null when this tier offers
+                # none in this environment (its Razorpay plan/offer ids unset),
+                # so the page shows only "buy" rather than a button that 409s.
+                "trial": {
+                    "days": TRIAL_DAYS,
+                    "price_inr": p.trial_price_inr,
+                    "first_charge_inr": p.first_charge_inr,
+                    "credits": p.trial_credits,
+                } if p.offers_trial and settings.razorpay_trial_ids(p.tier.value) else None,
             }
             for p in sold_plans()
         ],
@@ -169,7 +179,12 @@ def my_entitlements(founder: Founder = Depends(get_founder_record),
     # ORM object. `getattr(founder, "credits_expires_at", None)` looks like it
     # works and silently returns None for everyone, which is how this shipped
     # returning trial: null for founders who definitely had an expiry.
-    _, trial_expires_at = _plan_context(db, founder.founder_id)
+    tier, trial_expires_at = _plan_context(db, founder.founder_id)
+    # The free trial's expiry outlives the free plan: credits_expires_at is not
+    # cleared when a founder pays. Reporting it for a paid tier told the chat
+    # page "your free trial ended" about a founder who has since paid.
+    if get_plan(tier).is_paid:
+        trial_expires_at = None
     e = service.entitlements(founder.founder_id, getattr(founder, "plan_type", None))
     return {
         "founder_id": e.founder_id,

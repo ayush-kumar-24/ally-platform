@@ -73,3 +73,31 @@ class PaymentNotFoundError(PaymentError):
     def __init__(self):
         super().__init__("We could not find that payment.",
                          status_code=status.HTTP_404_NOT_FOUND)
+
+
+class TrialUnavailableError(PaymentError):
+    """This tier has no trial, or its Razorpay plan/offer ids are not set in this
+    environment. 409 rather than 503 when payments themselves work: buying the
+    plan outright is still open."""
+
+    def __init__(self, plan_name: str):
+        super().__init__(f"A trial of {plan_name} isn't available right now.",
+                         status_code=status.HTTP_409_CONFLICT)
+
+
+class TrialAlreadyUsedError(PaymentError):
+    def __init__(self):
+        super().__init__("You've already used your free trial. Choose a plan to continue.",
+                         status_code=status.HTTP_409_CONFLICT)
+
+
+class AutopayAlreadyActiveError(PaymentError):
+    def __init__(self):
+        super().__init__("You already have a plan on autopay. Cancel it before starting another.",
+                         status_code=status.HTTP_409_CONFLICT)
+
+
+class NoAutopayError(PaymentError):
+    def __init__(self):
+        super().__init__("There is no autopay subscription to cancel.",
+                         status_code=status.HTTP_404_NOT_FOUND)

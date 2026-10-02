@@ -397,3 +397,27 @@ def send_notification_emails(
 
     result = send_pending_notification_emails(db)
     return {**result, "email_configured": settings.email_enabled}
+
+
+@router.post(
+    "/expire-subscriptions",
+    summary="Move founders off plans whose cancelled or failed autopay has run out",
+)
+def expire_subscriptions(
+    db: Session = Depends(get_db),
+    _: None = Depends(authorise_internal_job),
+) -> dict:
+    """The other half of cancelling autopay.
+
+    Cancelling (or a mandate Razorpay gave up on) never takes the plan away at
+    once: the founder keeps what they paid for until the trial or the paid
+    month ends. Nothing marks that moment except this sweep, which returns them
+    to Free once it has passed. Without it a cancelled trial is Pro for life.
+
+    **Call this every 10 minutes** (or hourly; a late run only means a founder
+    keeps the plan a little past their period). Idempotent: a founder already
+    moved off the plan is not selected again.
+    """
+    from app.core.container import container
+
+    return container.payment_service(db).subscriptions().expire_lapsed()

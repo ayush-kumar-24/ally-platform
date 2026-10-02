@@ -131,6 +131,19 @@ STANDARD_CALL_LEAD_DAYS = 3
 #: the calendar service and the booking path both read. Not duplicated here --
 #: two constants for one number is how they end up disagreeing.
 
+#: PAID TRIAL WITH AUTOPAY, settled by the team 2026-10-02.
+#:
+#: Every paid tier can be started as a 10-day trial for a small fee
+#: (`trial_price_inr` on each Plan below). Starting one sets up a Razorpay
+#: autopay mandate in the same step, and the trial fee is the mandate's upfront
+#: charge. If the founder does not cancel, autopay charges on day 11 -- the plan
+#: price LESS the trial fee already paid (Pro: Rs 999 - Rs 49 = Rs 950), then the
+#: full price every month after for Plus and Pro. Starter stays a single month:
+#: its day-11 charge is the only one.
+#:
+#: The mechanics live in app/payments/subscriptions.py.
+TRIAL_DAYS = 10
+
 #: Price of a credit top-up pack (the Free tier's path once the trial ends).
 TOPUP_PRICE_INR = 300
 TOPUP_CREDITS = 120
@@ -247,6 +260,29 @@ class Plan:
     #: one-time purchase labelled monthly is a false claim about what the founder
     #: will be charged next month, not a wording nit.
     one_time: bool = False
+    #: What a TRIAL_DAYS trial of this tier costs, charged when the founder sets
+    #: up autopay. 0 = no trial offered. Deducted from the first autopay charge,
+    #: so the founder pays the plan price once across trial + first month, not
+    #: the plan price plus the fee.
+    trial_price_inr: int = 0
+
+    @property
+    def offers_trial(self) -> bool:
+        return 0 < self.trial_price_inr < self.price_inr
+
+    @property
+    def first_charge_inr(self) -> int:
+        """What autopay takes on day TRIAL_DAYS + 1: the price less the trial fee."""
+        return self.price_inr - self.trial_price_inr
+
+    @property
+    def trial_credits(self) -> int:
+        """Credits granted for the trial: the monthly grant pro-rated to
+        TRIAL_DAYS of 30, rounded up. Chat refuses a zero balance with a 402,
+        so a trial with no credits would sell access to a wall."""
+        if not self.monthly_credits:
+            return 0
+        return -(-self.monthly_credits * TRIAL_DAYS // 30)
 
     @property
     def has_offer(self) -> bool:
@@ -374,6 +410,7 @@ PLANS: dict[PlanTier, Plan] = {
         planning_daily_token_limit=0,
         free_calls_per_month=0,
         features=_BASE,
+        trial_price_inr=19,
         tagline="One adaptive diagnosis, and the Clarity Report it writes.",
     ),
     PlanTier.STARTER: Plan(
@@ -390,6 +427,7 @@ PLANS: dict[PlanTier, Plan] = {
         daily_token_limit=3_500,
         free_calls_per_month=0,
         features=_BASE | _WORKSPACE,
+        trial_price_inr=29,
         tagline="For founders working on the business weekly.",
     ),
     PlanTier.PRO: Plan(
@@ -404,6 +442,7 @@ PLANS: dict[PlanTier, Plan] = {
         # Know My Energy is declared here so the gate and the pricing page are
         # already correct; its founder-facing implementation is still to be built.
         features=_BASE | _WORKSPACE | _ADVISOR,
+        trial_price_inr=49,
         tagline="Ally as your standing advisor.",
     ),
 }
