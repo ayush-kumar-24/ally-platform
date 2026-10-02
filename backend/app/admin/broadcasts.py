@@ -107,7 +107,11 @@ class BroadcastRepository(abc.ABC):
     def create(self, broadcast: Broadcast) -> Broadcast: ...
 
     @abc.abstractmethod
-    def list(self, *, include_inactive: bool = False) -> list[Broadcast]: ...
+    def list(self, *, include_inactive: bool = False,
+             strict: bool = False) -> list[Broadcast]:
+        """`strict` re-raises a failed read instead of answering []. The admin
+        list passes it; founder delivery does not, because showing a founder
+        nothing is the safe failure there."""
 
     @abc.abstractmethod
     def get(self, broadcast_id: str) -> Broadcast | None: ...
@@ -133,7 +137,8 @@ class InMemoryBroadcastRepository(BroadcastRepository):
             self._rows[broadcast.broadcast_id] = broadcast
             return broadcast
 
-    def list(self, *, include_inactive: bool = False) -> list[Broadcast]:
+    def list(self, *, include_inactive: bool = False,
+             strict: bool = False) -> list[Broadcast]:
         with self._lock:
             rows = sorted(self._rows.values(), key=lambda b: b.created_at, reverse=True)
         return rows if include_inactive else [b for b in rows if b.active]
@@ -174,16 +179,22 @@ class SqlAlchemyBroadcastRepository(BroadcastRepository):
         self.db.commit()
         return broadcast
 
-    def list(self, *, include_inactive: bool = False) -> list[Broadcast]:
+    def list(self, *, include_inactive: bool = False,
+             strict: bool = False) -> list[Broadcast]:
         # Table arrives with a pending migration -- "no broadcasts yet" is simply
-        # true until then, and delivering nothing is the safe failure direction.
+        # true until then, and delivering nothing is the safe failure direction
+        # for founders. The admin list is strict: there, [] reads as "none
+        # published" when the read actually failed.
         try:
             q = self.db.query(BroadcastRow)
             if not include_inactive:
                 q = q.filter(BroadcastRow.active.is_(True))
             return [_to_domain(r) for r in q.order_by(BroadcastRow.created_at.desc()).all()]
-        except Exception:
+        except Exception as exc:
             self.db.rollback()
+            if strict:
+                from app.admin.errors import AdminDataUnavailableError
+                raise AdminDataUnavailableError("broadcasts") from exc
             return []
 
     def get(self, broadcast_id: str) -> Broadcast | None:
@@ -259,7 +270,7 @@ class BroadcastService:
             ends_at=ends_at, active=True, created_by=admin_id, created_at=self._now()))
 
     def list_all(self, *, include_inactive: bool = True) -> list[Broadcast]:
-        return self.repository.list(include_inactive=include_inactive)
+        return self.repository.list(include_inactive=include_inactive, strict=True)
 
     def deactivate(self, broadcast_id: str) -> Broadcast | None:
         return self.repository.set_active(broadcast_id, False)

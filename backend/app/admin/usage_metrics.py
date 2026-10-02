@@ -20,6 +20,9 @@ from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy import text
 
+from app.admin.errors import AdminDataUnavailableError
+from app.core.logger import logger
+
 #: Blended USD per 1,000 tokens. Override with ALLY_BLENDED_COST_PER_1K.
 DEFAULT_COST_PER_1K_USD = 0.002
 
@@ -52,8 +55,13 @@ class UsageSummary:
 
 
 class UsageMetricsService:
-    """Read-only aggregations. Every query degrades to zero rather than raising:
-    a missing table must dim one number, not break the admin dashboard."""
+    """Read-only aggregations.
+
+    A failed query raises AdminDataUnavailableError rather than reading as 0.
+    It used to degrade to zero, which made a broken query indistinguishable
+    from "no usage" -- including "Nothing unbilled", which is a claim someone
+    acts on. A genuinely empty table still sums to 0 through coalesce().
+    """
 
     def __init__(self, db, *, clock=None):
         self.db = db
@@ -62,10 +70,14 @@ class UsageMetricsService:
     def _scalar(self, sql: str, params: dict | None = None, default=0):
         try:
             value = self.db.execute(text(sql), params or {}).scalar()
-            return default if value is None else value
-        except Exception:
-            self.db.rollback()
-            return default
+        except Exception as exc:
+            self._fail(exc)
+        return default if value is None else value
+
+    def _fail(self, exc: Exception):
+        self.db.rollback()
+        logger.warning("admin usage metrics query failed", exc_info=exc)
+        raise AdminDataUnavailableError("usage data") from exc
 
     def summary(self, founder_id: int | None = None) -> UsageSummary:
         now = self._now()
@@ -131,9 +143,8 @@ class UsageMetricsService:
                       from daily_token_usage
                      where usage_date >= :since {scope}
                      group by usage_date order by usage_date asc"""), p).mappings().all()
-        except Exception:
-            self.db.rollback()
-            return []
+        except Exception as exc:
+            self._fail(exc)
         return [{"date": r["usage_date"].isoformat(), "tokens": int(r["tokens"]),
                  "estimated_cost_usd": estimate_cost_usd(int(r["tokens"]))} for r in rows]
 
@@ -150,9 +161,8 @@ class UsageMetricsService:
                     group by d.founder_id, f.full_name, f.email, f.plan_type
                     order by tokens desc limit :lim"""),
                 {"since": month_start, "lim": limit}).mappings().all()
-        except Exception:
-            self.db.rollback()
-            return []
+        except Exception as exc:
+            self._fail(exc)
         return [{"founder_id": r["founder_id"], "full_name": r["full_name"],
                  "email": r["email"], "plan_type": r["plan_type"],
                  "tokens": int(r["tokens"]),

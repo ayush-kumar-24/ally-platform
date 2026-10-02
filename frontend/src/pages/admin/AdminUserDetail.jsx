@@ -74,6 +74,9 @@ export default function AdminUserDetail() {
   const [detail, setDetail] = useState(null);
   const [ledger, setLedger] = useState(null);
   const [timeline, setTimeline] = useState([]);
+  // A failed ledger/timeline read is kept as an error, never shown as "none".
+  const [ledgerError, setLedgerError] = useState(null);
+  const [timelineError, setTimelineError] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [flash, setFlash] = useFlash();
@@ -95,11 +98,15 @@ export default function AdminUserDetail() {
     setLoading(true);
     setError(null);
     // The ledger and timeline are supplementary — if either is unavailable the
-    // profile must still render, so their failures are caught individually.
+    // profile must still render, so their failures are caught individually. They
+    // are kept as errors: swallowing them showed "No credit transactions" and a
+    // 0 balance for a founder whose ledger simply failed to load.
+    setLedgerError(null);
+    setTimelineError(null);
     Promise.all([
       getUser(id),
-      getCredits(id).catch(() => null),
-      getTimeline(id).catch(() => null),
+      getCredits(id).catch((e) => { setLedgerError(e); return null; }),
+      getTimeline(id).catch((e) => { setTimelineError(e); return null; }),
     ])
       .then(([d, l, t]) => { setDetail(d); setLedger(l); setTimeline(t?.events ?? []); })
       .catch(setError)
@@ -183,7 +190,14 @@ export default function AdminUserDetail() {
   const canResetDiag = can(me, 'reset_diagnosis');
   const canResetChat = can(me, 'reset_conversations');
   const canResetOnboarding = can(me, 'reset_onboarding');
-  const balance = ledger?.balance ?? detail.credits?.balance ?? 0;
+  // The settled balance comes with the ledger. If that failed, fall back to the
+  // cached column and say so, rather than presenting it as the settled figure.
+  const balance = ledger?.balance ?? detail.credits?.balance;
+  // Sections whose query failed on the server. Their value is an empty default,
+  // so they must read "could not load", not "none".
+  const failed = new Set(detail.unavailable_sections ?? []);
+  const notLoaded = <p className="adm-warn">Could not load — this is an error, not “none”.</p>;
+  const countOrError = (key, value) => (failed.has(key) ? 'Could not load' : value);
 
   return (
     <>
@@ -209,12 +223,14 @@ export default function AdminUserDetail() {
         </div>
         <div className="adm-panel">
           <h2>Subscription</h2>
-          {detail.subscription ? <KV data={detail.subscription} />
+          {failed.has('subscription') ? notLoaded
+            : detail.subscription ? <KV data={detail.subscription} />
             : <p className="adm-muted">No subscription record.</p>}
         </div>
         <div className="adm-panel">
           <h2>Terms &amp; Privacy</h2>
-          {detail.consent ? <KV data={detail.consent} />
+          {failed.has('consent') ? notLoaded
+            : detail.consent ? <KV data={detail.consent} />
             : <p className="adm-muted">Never accepted.</p>}
         </div>
         {/* Its own panel, not folded into the one above. The cookie banner is a
@@ -224,28 +240,35 @@ export default function AdminUserDetail() {
             two answers this panel now tells apart. */}
         <div className="adm-panel">
           <h2>Cookies</h2>
-          {detail.cookie_consent ? <KV data={detail.cookie_consent} />
+          {failed.has('cookie_consent') ? notLoaded
+            : detail.cookie_consent ? <KV data={detail.cookie_consent} />
             : <p className="adm-muted">Banner never answered.</p>}
         </div>
         <div className="adm-panel">
           <h2>Activity</h2>
           <dl className="adm-kv">
-            <dt>Chats</dt><dd>{detail.chat_count}</dd>
-            <dt>Reports</dt><dd>{detail.reports?.length ?? 0}</dd>
-            <dt>Diagnosis sessions</dt><dd>{detail.diagnosis_history?.length ?? 0}</dd>
+            <dt>Chats</dt><dd>{countOrError('chats', detail.chat_count)}</dd>
+            <dt>Reports</dt><dd>{countOrError('reports', detail.reports?.length ?? 0)}</dd>
+            <dt>Diagnosis sessions</dt>
+            <dd>{countOrError('diagnosis_history', detail.diagnosis_history?.length ?? 0)}</dd>
             {/* No per-login history is stored; Supabase keeps only the latest
                 sign-in. A count here always read 0, which looked real. */}
             <dt>Last sign-in</dt>
             <dd>{detail.last_sign_in_at
               ? new Date(detail.last_sign_in_at).toLocaleString('en-IN')
               : '—'}</dd>
-            <dt>Privacy requests</dt><dd>{detail.privacy_requests?.length ?? 0}</dd>
+            <dt>Privacy requests</dt>
+            <dd>{countOrError('privacy_requests', detail.privacy_requests?.length ?? 0)}</dd>
           </dl>
         </div>
         <div className="adm-panel">
           <h2>Credits</h2>
-          <div className="adm-stat">{balance}</div>
-          <p className="adm-muted">Current balance</p>
+          <div className={`adm-stat ${balance == null ? 'adm-muted' : ''}`}>{balance ?? '—'}</div>
+          <p className="adm-muted">
+            {ledgerError
+              ? 'Last stored balance — the settled balance could not be loaded.'
+              : 'Current balance'}
+          </p>
         </div>
       </div>
 
@@ -299,7 +322,9 @@ export default function AdminUserDetail() {
           <p className="adm-muted">Your role cannot modify credits.</p>
         )}
 
-        {!ledger || ledger.items.length === 0 ? (
+        {ledgerError ? (
+          <ErrorState error={ledgerError} onRetry={load} />
+        ) : !ledger || ledger.items.length === 0 ? (
           <EmptyState title="No credit transactions" hint="Adjustments will appear here." />
         ) : (
           <div className="adm-table-wrap">
@@ -338,7 +363,9 @@ export default function AdminUserDetail() {
       {/* ── Timeline ── */}
       <div className="adm-panel">
         <h2>Timeline</h2>
-        {timeline.length === 0 ? (
+        {timelineError ? (
+          <ErrorState error={timelineError} onRetry={load} />
+        ) : timeline.length === 0 ? (
           <EmptyState title="No timeline events"
                       hint="Account, diagnosis, report, credit and admin events appear here." />
         ) : (
@@ -356,7 +383,10 @@ export default function AdminUserDetail() {
                 {timeline.map((e, i) => (
                   <tr key={`${e.at}-${i}`}>
                     <td className="adm-muted">{fmt(e.at)}</td>
-                    <td><span className="adm-pill inactive">{e.kind}</span></td>
+                    {/* kind "error": a source the server could not read. */}
+                    <td><span className={`adm-pill ${e.kind === 'error' ? 'banned' : 'inactive'}`}>
+                      {e.kind}
+                    </span></td>
                     <td>{e.title}</td>
                     <td className="adm-muted">{e.detail || '—'}</td>
                   </tr>

@@ -239,27 +239,32 @@ class SqlAlchemyAdminUserRepository(AdminUserRepository):
             return None
         f = dict(base)
 
-        def section(sql: str, default):
+        unavailable: list[str] = []
+
+        def section(sql: str, default, name: str):
             """A missing/renamed table must not blank the whole profile -- the admin
-            still needs the rest. The gap is returned rather than hidden."""
+            still needs the rest. But the gap is named in `unavailable_sections`,
+            not hidden: an empty default alone reads as "No subscription record"
+            or "Never accepted", which is a false statement when the query failed."""
             try:
                 return [dict(r) for r in
                         self.db.execute(text(sql), {"fid": founder_id}).mappings().all()]
             except Exception:
                 self.db.rollback()
+                unavailable.append(name)
                 return default
 
         subs = section("""select * from subscriptions where founder_id = :fid
-                          order by created_at desc limit 1""", [])
+                          order by created_at desc limit 1""", [], "subscription")
         txs = section("""select id, type, amount, balance_before, balance_after, reason,
                                 admin_id, created_at
                            from credit_transactions where user_id = :fid
-                          order by created_at desc limit 10""", [])
+                          order by created_at desc limit 10""", [], "credits")
         consents = section("""select terms_version, privacy_version, agree_terms,
                                      agree_diagnosis, age_confirmed, ip_address,
                                      consented_at
                                 from founder_consents where founder_id = :fid
-                               order by consented_at desc limit 1""", [])
+                               order by consented_at desc limit 1""", [], "consent")
         # Cookie choice is a SEPARATE consent under a separate legal basis, and
         # until now the panel could not show it at all: a founder who rejected
         # analytics looked identical to one who had never seen the banner.
@@ -268,8 +273,8 @@ class SqlAlchemyAdminUserRepository(AdminUserRepository):
         cookies = section("""select banner_action, necessary, analytics, marketing,
                                     functional, ip_address, created_at
                                from cookie_preferences where founder_id = :fid
-                              order by created_at desc limit 1""", [])
-        chat_rows = section("select count(*) as n from conversations where founder_id = :fid", [])
+                              order by created_at desc limit 1""", [], "cookie_consent")
+        chat_rows = section("select count(*) as n from conversations where founder_id = :fid", [], "chats")
         from app.services import supabase_admin
         sign_in_at = supabase_admin.last_sign_in_at(f.get("user_id"))
 
@@ -290,17 +295,18 @@ class SqlAlchemyAdminUserRepository(AdminUserRepository):
             # distinct from an answer of "rejected everything", which is a row.
             cookie_consent=cookies[0] if cookies else None,
             reports=section("""select * from founder_reports where founder_id = :fid
-                               order by created_at desc limit 20""", []),
+                               order by created_at desc limit 20""", [], "reports"),
             chat_count=int(chat_rows[0]["n"]) if chat_rows else 0,
             diagnosis_history=section("""select * from sessions
                                           where founder_id = :fid
-                                          order by started_at desc limit 20""", []),
+                                          order by started_at desc limit 20""", [], "diagnosis_history"),
             login_history=[],   # no login_history table in this schema
             last_sign_in_at=sign_in_at,
+            unavailable_sections=unavailable,
             privacy_requests=section("""select request_id, request_type, status,
                                                requested_at, due_by
                                           from privacy_requests where founder_id = :fid
-                                         order by requested_at desc limit 20""", []),
+                                         order by requested_at desc limit 20""", [], "privacy_requests"),
         )
 
     # --- writes ---------------------------------------------------------

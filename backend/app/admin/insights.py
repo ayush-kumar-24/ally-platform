@@ -103,14 +103,6 @@ class SqlAlchemyInsightsRepository(InsightsRepository):
                           unavailable_reason="source table unavailable")
         return Metric(key=key, label=label, value=value, unit=unit)
 
-    def _rows(self, sql: str, params: dict | None = None) -> list[dict]:
-        try:
-            return [dict(r) for r in
-                    self.db.execute(text(sql), params or {}).mappings().all()]
-        except Exception:
-            self.db.rollback()
-            return []
-
     # --- metrics ---------------------------------------------------------
 
     def metrics(self, now: datetime) -> list[Metric]:
@@ -156,41 +148,53 @@ class SqlAlchemyInsightsRepository(InsightsRepository):
     def timeline(self, founder_id: int, *, limit: int = 200) -> list[TimelineEvent]:
         """Merge every dated record for one founder into one chronological stream.
 
-        Each source is queried independently and a missing one contributes nothing,
-        so the timeline degrades source-by-source instead of failing whole.
+        Each source is queried independently, so the timeline degrades
+        source-by-source instead of failing whole. A source that fails is NOT
+        silently left out: it contributes an "error" event saying so, because a
+        history with a hole in it otherwise reads as "this never happened".
         """
         p = {"fid": founder_id}
         events: list[TimelineEvent] = []
+        failed: list[str] = []
 
-        for r in self._rows("select created_at, full_name, email from founders "
-                            "where founder_id = :fid", p):
+        def rows(source: str, sql: str) -> list[dict]:
+            try:
+                return [dict(r) for r in
+                        self.db.execute(text(sql), p).mappings().all()]
+            except Exception:
+                self.db.rollback()
+                failed.append(source)
+                return []
+
+        for r in rows("account", "select created_at, full_name, email from founders "
+                            "where founder_id = :fid"):
             events.append(TimelineEvent(at=r["created_at"], kind="account",
                                         title="Account created",
                                         detail=r.get("email") or ""))
 
-        for r in self._rows("""select created_at, session_id, status from sessions
-                                where founder_id = :fid order by started_at desc limit 50""", p):
+        for r in rows("diagnosis sessions", """select created_at, session_id, status from sessions
+                                where founder_id = :fid order by started_at desc limit 50"""):
             events.append(TimelineEvent(at=r["created_at"], kind="diagnosis",
                                         title="Diagnosis session",
                                         detail=str(r.get("status") or ""),
                                         meta={"session_id": r.get("session_id")}))
 
-        for r in self._rows("""select created_at, report_id, report_type from founder_reports
-                                where founder_id = :fid order by created_at desc limit 50""", p):
+        for r in rows("reports", """select created_at, report_id, report_type from founder_reports
+                                where founder_id = :fid order by created_at desc limit 50"""):
             events.append(TimelineEvent(at=r["created_at"], kind="report",
                                         title="Report generated",
                                         detail=str(r.get("report_type") or ""),
                                         meta={"report_id": r.get("report_id")}))
 
-        for r in self._rows("""select created_at, plan_type, status from subscriptions
-                                where founder_id = :fid order by created_at desc limit 20""", p):
+        for r in rows("subscriptions", """select created_at, plan_type, status from subscriptions
+                                where founder_id = :fid order by created_at desc limit 20"""):
             events.append(TimelineEvent(at=r["created_at"], kind="subscription",
                                         title=f"Subscription {r.get('status') or ''}".strip(),
                                         detail=str(r.get("plan_type") or "")))
 
-        for r in self._rows("""select created_at, type, amount, balance_after, reason
+        for r in rows("credit transactions", """select created_at, type, amount, balance_after, reason
                                  from credit_transactions where user_id = :fid
-                                order by created_at desc limit 50""", p):
+                                order by created_at desc limit 50"""):
             sign = "+" if (r.get("amount") or 0) >= 0 else ""
             events.append(TimelineEvent(
                 at=r["created_at"], kind="credits",
@@ -198,27 +202,33 @@ class SqlAlchemyInsightsRepository(InsightsRepository):
                 detail=str(r.get("reason") or ""),
                 meta={"balance_after": r.get("balance_after")}))
 
-        for r in self._rows("""select created_at, conversation_id, title from conversations
-                                where founder_id = :fid order by created_at desc limit 50""", p):
+        for r in rows("conversations", """select created_at, conversation_id, title from conversations
+                                where founder_id = :fid order by created_at desc limit 50"""):
             events.append(TimelineEvent(at=r["created_at"], kind="chat",
                                         title="Conversation started",
                                         detail=str(r.get("title") or ""),
                                         meta={"conversation_id": r.get("conversation_id")}))
 
-        for r in self._rows("""select requested_at, request_type, status from privacy_requests
-                                where founder_id = :fid order by requested_at desc limit 50""", p):
+        for r in rows("privacy requests", """select requested_at, request_type, status from privacy_requests
+                                where founder_id = :fid order by requested_at desc limit 50"""):
             events.append(TimelineEvent(at=r["requested_at"], kind="privacy",
                                         title=f"Privacy request: {r.get('request_type')}",
                                         detail=str(r.get("status") or "")))
 
-        for r in self._rows("""select timestamp, action, admin_email, reason
+        for r in rows("admin actions", """select timestamp, action, admin_email, reason
                                  from admin_audit_log where target_user_id = :fid
-                                order by timestamp desc limit 50""", p):
+                                order by timestamp desc limit 50"""):
             events.append(TimelineEvent(at=r["timestamp"], kind="admin",
                                         title=f"Admin action: {r.get('action')}",
                                         detail=str(r.get("admin_email") or ""),
                                         meta={"reason": r.get("reason")}))
 
+        now = datetime.now(timezone.utc)
+        for source in failed:
+            events.append(TimelineEvent(
+                at=now, kind="error", title=f"Could not read {source}",
+                detail="The query failed, so these events are missing from this "
+                       "timeline -- they are not absent from the account."))
         return merge_timeline(events, limit=limit)
 
 

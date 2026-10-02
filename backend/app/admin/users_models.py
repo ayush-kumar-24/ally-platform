@@ -126,4 +126,7 @@ class UserDetail:
     #: is no per-login history table). None means never signed in, or not
     #: readable in this environment.
     last_sign_in_at: Any = None
+    #: Sections whose query failed. Their value above is an empty default, so
+    #: the UI must show "could not load" for these rather than "none".
+    unavailable_sections: list[str] = field(default_factory=list)
     privacy_requests: list[dict] = field(default_factory=list)

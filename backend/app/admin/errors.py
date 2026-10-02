@@ -49,3 +49,19 @@ class InvalidAnnouncementError(AdminError):
 class InvalidSearchError(AdminError):
     def __init__(self, reason: str):
         super().__init__(f"Invalid search: {reason}.", status_code=422)
+
+
+class AdminDataUnavailableError(AdminError):
+    """A read the admin panel depends on failed.
+
+    503 rather than an empty 200: these reads used to swallow the error and
+    answer zero / [], so a broken query looked exactly like "no usage yet" or
+    "no feedback yet" -- and got believed. The panel shows this as an error
+    with a retry instead.
+    """
+
+    def __init__(self, what: str):
+        super().__init__(
+            f"Could not read {what} from the database. This is an error, not an "
+            "empty result -- try again, and check the server log if it persists.",
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE)

@@ -261,21 +261,30 @@ def test_bad_cost_basis_falls_back_to_default(monkeypatch):
     assert usage_metrics.cost_per_1k() == usage_metrics.DEFAULT_COST_PER_1K_USD
 
 
-def test_usage_summary_degrades_when_tables_are_missing():
-    """A missing table must dim one number, not break the admin dashboard."""
+def test_usage_summary_reports_a_failed_read_instead_of_zero():
+    """A failed query is an error, not "no usage". Degrading to 0 made a broken
+    read indistinguishable from an idle system -- and showed "Nothing unbilled"."""
+    from app.admin.errors import AdminDataUnavailableError
     from app.admin.usage_metrics import UsageMetricsService
 
     class DeadDB:
+        rolled_back = False
+
         def execute(self, *a, **k):
             raise RuntimeError("relation does not exist")
 
         def rollback(self):
-            pass
+            DeadDB.rolled_back = True
 
-    s = UsageMetricsService(DeadDB(), clock=lambda: T0).summary(founder_id=UID)
-    assert s.tokens_today == 0 and s.tokens_month == 0
-    assert s.avg_tokens_per_request == 0.0
-    assert s.estimated_cost_month_usd == 0.0
+    svc = UsageMetricsService(DeadDB(), clock=lambda: T0)
+    with pytest.raises(AdminDataUnavailableError) as err:
+        svc.summary(founder_id=UID)
+    assert err.value.status_code == 503
+    assert DeadDB.rolled_back
+    with pytest.raises(AdminDataUnavailableError):
+        svc.daily_series()
+    with pytest.raises(AdminDataUnavailableError):
+        svc.top_consumers()
 
 
 # --- ChatGate.record() must not lose `source` -------------------------------
