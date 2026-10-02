@@ -168,12 +168,26 @@ _REWORD: tuple[tuple[str, str, str], ...] = (
 
 
 def _apply(pairs: tuple[tuple[str, str, str], ...]) -> None:
-    """Rewrite each question, and raise unless every row was found as expected.
+    """Rewrite each question, skipping any whose text has moved on.
 
-    One statement per pair, matching on BOTH the code and the full current text.
-    The code alone would find the row; the text is in the WHERE clause so that a
-    row somebody else has already edited is left alone and reported, rather than
-    silently overwritten with a rewording of text that no longer exists.
+    THIS DELIBERATELY DOES NOT FAIL ON DRIFT, and the first version did. It
+    required every pair to match exactly one row and raised otherwise, with a
+    comment saying not to loosen it. That was wrong, and it cost a production
+    deploy: `alembic upgrade head` runs inside the release, so one question whose
+    text had moved since this migration was written stopped the migration, the
+    ECS service was never updated, and nothing shipped -- not this rewording,
+    not the two migrations behind it, not the application image.
+
+    The original reasoning conflated two different things. A rewording that
+    matches nothing because somebody ALREADY IMPROVED that question is not a
+    failure: this migration's text is the stale one, and the right thing is to
+    leave theirs alone. Only one case means the migration is pointed at the
+    wrong database entirely -- when NOT ONE pair matches, in either direction --
+    and that is what still raises.
+
+    So: text already equal to the new wording counts as done; text equal to the
+    old wording is rewritten; anything else is left exactly as it is and named
+    in the output.
     """
     stmt = text(
         """
@@ -182,20 +196,38 @@ def _apply(pairs: tuple[tuple[str, str, str], ...]) -> None:
         """
     ).bindparams(bindparam("new"), bindparam("code"), bindparam("old"))
 
-    missed = []
-    for code, old, new in pairs:
-        result = op.get_bind().execute(stmt, {"code": code, "old": old, "new": new})
-        if result.rowcount != 1:
-            missed.append(f"{code} (matched {result.rowcount} rows)")
+    bind = op.get_bind()
+    applied = already_done = 0
+    left_alone: list[str] = []
 
-    if missed:
+    for code, old, new in pairs:
+        current = bind.execute(
+            text("SELECT question_text FROM questions WHERE question_code = :code"),
+            {"code": code},
+        ).scalar()
+        if current is None:
+            left_alone.append(f"{code} (not in this catalogue)")
+        elif current == new:
+            already_done += 1
+        elif current == old:
+            bind.execute(stmt, {"code": code, "old": old, "new": new})
+            applied += 1
+        else:
+            left_alone.append(f"{code} (text has moved on)")
+
+    if applied == 0 and already_done == 0:
         raise RuntimeError(
-            "Question text has moved since this migration was written, so these "
-            "rewordings matched nothing and the originals are still live: "
-            + "; ".join(missed)
-            + ". Re-read the current text and update the pairs in "
-            "a3f7b21c6d84 -- do not loosen the match."
+            f"None of the {len(pairs)} questions named by {revision} were found "
+            "with either their expected text or their rewording. That is not "
+            "drift, it is the wrong catalogue -- check which database this ran "
+            f"against before changing the pairs. Left alone: {left_alone}"
         )
+
+    print(
+        f"{revision}: reworded {applied}, already done {already_done}, "
+        f"left alone {len(left_alone)}"
+        + (f" -- {'; '.join(left_alone)}" if left_alone else "")
+    )
 
 
 def upgrade() -> None:

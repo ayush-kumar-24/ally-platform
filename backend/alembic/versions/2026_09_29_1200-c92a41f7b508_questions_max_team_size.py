@@ -48,17 +48,21 @@ _FIRST_HIRE_PREFIX = "FHIRE-"
 
 
 def upgrade() -> None:
-    op.execute("ALTER TABLE questions ADD COLUMN max_team_size VARCHAR(20)")
+    op.execute(
+        "ALTER TABLE questions ADD COLUMN IF NOT EXISTS max_team_size VARCHAR(20)"
+    )
     values = ", ".join(f"'{b}'" for b in _BANDS)
     op.execute(
         f"""
+        ALTER TABLE questions DROP CONSTRAINT IF EXISTS
+            questions_max_team_size_check;
         ALTER TABLE questions ADD CONSTRAINT questions_max_team_size_check
         CHECK (max_team_size IS NULL OR max_team_size IN ({values}))
         """
     )
     op.execute(
         """
-        CREATE INDEX idx_questions_max_team_size ON questions (max_team_size)
+        CREATE INDEX IF NOT EXISTS idx_questions_max_team_size ON questions (max_team_size)
         WHERE max_team_size IS NOT NULL
         """
     )
@@ -74,4 +78,4 @@ def downgrade() -> None:
     # Dropping the column takes the constraint and the index with it, and takes
     # the twenty bounds too -- which is the whole of this migration's data, so
     # there is nothing here to preserve separately the way e4c9b21d8a76 had to.
-    op.execute("ALTER TABLE questions DROP COLUMN max_team_size")
+    op.execute("ALTER TABLE questions DROP COLUMN IF EXISTS max_team_size")
