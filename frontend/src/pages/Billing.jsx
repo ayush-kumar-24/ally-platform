@@ -195,6 +195,170 @@ function useCatalog() {
   return { plans, live };
 }
 
+/* ─── Paid trial: showcase + timeline ─── */
+
+const REDUCED_MOTION = typeof window !== 'undefined'
+  && Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
+
+const inr = n => `₹${Number(n ?? 0).toLocaleString('en-IN')}`;
+
+/** Animate a number towards `target` (ease-out), so switching plans reads as
+ *  the price changing rather than text being swapped. Picks up from wherever
+ *  it is mid-animation; jumps straight there when motion is reduced. */
+function useCountUp(target, ms = 480) {
+  const [val, setVal] = useState(target);
+  const current = useRef(target);
+  useEffect(() => {
+    if (REDUCED_MOTION) { current.current = target; setVal(target); return undefined; }
+    const from = current.current;
+    const t0 = performance.now();
+    let raf;
+    const step = (t) => {
+      const k = Math.min(1, (t - t0) / ms);
+      const v = Math.round(from + (target - from) * (1 - (1 - k) ** 3));
+      current.current = v;
+      setVal(v);
+      if (k < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [target, ms]);
+  return val;
+}
+
+/**
+ * The four moments of a trial, as a timeline the founder can step through:
+ * today's fee, the trial days, the day-11 autopay (price less the fee) and
+ * what follows. Every figure comes from the backend's catalog or trial
+ * response, so this is the same promise the subscription will keep.
+ */
+function TrialTimeline({ planName, days, fee, firstCharge, price, oneTime, chargeDate, dark = false }) {
+  const [active, setActive] = useState(0);
+  const steps = [
+    { when: 'Today', amount: inr(fee), title: 'Trial starts',
+      desc: `Full ${planName} access from the first minute. Autopay is set up in the same step.` },
+    { when: `Day 1–${days}`, amount: 'Full access', title: `${days} days of ${planName}`,
+      desc: 'Use everything. Cancel any time and nothing more is charged.', dots: true },
+    { when: chargeDate || `Day ${days + 1}`, amount: inr(firstCharge), title: 'First autopay',
+      desc: `${inr(price)} less the ${inr(fee)} you already paid.` },
+    oneTime
+      ? { when: 'After that', amount: '₹0', title: 'Nothing more',
+          desc: `${planName} is a single month. Autopay doesn't charge again.` }
+      : { when: 'Every month', amount: `${inr(price)}/mo`, title: 'Monthly autopay',
+          desc: 'Until you cancel, from My Subscription. No questions asked.' },
+  ];
+  return (
+    <ol className={`tr-line${dark ? ' dark' : ''}`} style={{ '--tr-active': active }}>
+      {steps.map((st, i) => (
+        <li
+          key={st.title}
+          className={`tr-step${i === active ? ' on' : ''}${i < active ? ' past' : ''}`}
+          tabIndex={0}
+          onMouseEnter={() => setActive(i)}
+          onFocus={() => setActive(i)}
+          onClick={() => setActive(i)}
+          style={{ '--i': i }}
+        >
+          <span className="tr-node" aria-hidden="true">{i + 1}</span>
+          <div className="tr-body">
+            <div className="tr-head">
+              <span className="tr-when">{st.when}</span>
+              <span className="tr-val">{st.amount}</span>
+            </div>
+            <div className="tr-title">{st.title}</div>
+            <p className="tr-desc">{st.desc}</p>
+            {st.dots && (
+              <div className="tr-dots" aria-hidden="true">
+                {Array.from({ length: days }, (_, d) => <i key={d} style={{ '--d': d }} />)}
+              </div>
+            )}
+          </div>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+/**
+ * "Try any plan for 10 days" -- the trial pitched once, above the cards, with
+ * a plan switcher that re-prices everything live. Shown only when at least one
+ * tier offers a trial here and this founder has not used theirs.
+ */
+function TrialShowcase({ plans, onStart }) {
+  const trialPlans = plans.filter(p => p.trial);
+  const [sel, setSel] = useState(() => (trialPlans.find(p => p.popular) || trialPlans.at(-1))?.id);
+  const plan = trialPlans.find(p => p.id === sel) || trialPlans.at(-1);
+  const fee = useCountUp(plan?.trial.price_inr ?? 0);
+  if (!plan) return null;
+  const { days } = plan.trial;
+
+  return (
+    <section className="tr-show stagger d2" aria-labelledby="tr-show-h">
+      <div className="tr-glow" aria-hidden="true" />
+      <div className="tr-left">
+        <div className="tr-eye"><span className="lv" />{days}-day trial · any plan</div>
+        <h2 id="tr-show-h">Try it properly. <em>{days} days</em>, full access.</h2>
+        <p className="tr-sub">
+          Pick a plan, pay a small trial fee, and use everything. That fee comes
+          off your first bill. Cancel before day {days + 1} and nothing more is charged.
+        </p>
+
+        <div className="tr-pick" role="radiogroup" aria-label="Choose a plan to try">
+          {trialPlans.map(p => (
+            <button
+              key={p.id}
+              type="button"
+              role="radio"
+              aria-checked={p.id === plan.id}
+              className={`tr-pill${p.id === plan.id ? ' on' : ''}`}
+              onClick={() => setSel(p.id)}
+            >
+              <span className="tr-pill-n">{p.name}</span>
+              <span className="tr-pill-p">{inr(p.trial.price_inr)}</span>
+            </button>
+          ))}
+        </div>
+
+        <div className="tr-price" aria-live="polite">
+          <span className="tr-cur">₹</span>
+          <span className="tr-amt">{fee.toLocaleString('en-IN')}</span>
+          <span className="tr-for">for {days} days of <strong>{plan.name}</strong></span>
+        </div>
+        <div className="tr-save">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
+          {plan.oneTime
+            ? <>{inr(plan.price)} in total. The {inr(plan.trial.price_inr)} comes off your day-{days + 1} bill.</>
+            : <>Trial + first month = {inr(plan.price)}, not {inr(plan.price + plan.trial.price_inr)}.</>}
+        </div>
+
+        <button
+          type="button"
+          id="trial-showcase-cta"
+          className="tr-cta"
+          onClick={() => onStart({ ...plan, displayPrice: plan.price, mode: 'trial' })}
+        >
+          Start {plan.name} trial · {inr(plan.trial.price_inr)}
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+        </button>
+        <p className="tr-fine">Card or UPI AutoPay via Razorpay · Cancel any time from My Subscription</p>
+      </div>
+
+      <div className="tr-right">
+        <TrialTimeline
+          key={plan.id}
+          dark
+          planName={plan.name}
+          days={days}
+          fee={plan.trial.price_inr}
+          firstCharge={plan.trial.first_charge_inr}
+          price={plan.price}
+          oneTime={plan.oneTime}
+        />
+      </div>
+    </section>
+  );
+}
+
 function PlansView({ onSelectPlan, currentPlan, autopay }) {
   /* One trial per founder, ever, and autopay only ever starts from a trial --
      so any autopay record at all (even a cancelled one) means the trial is
@@ -215,6 +379,10 @@ function PlansView({ onSelectPlan, currentPlan, autopay }) {
           includes a full diagnosis and your Clarity Report.</p>
       </div>
 
+      {trialOpen && PLANS.some(p => p.trial) && (
+        <TrialShowcase plans={PLANS} onStart={onSelectPlan} />
+      )}
+
       {/* Plan cards */}
       <div className="plans stagger d2">
         {PLANS.map(plan => {
@@ -223,7 +391,12 @@ function PlansView({ onSelectPlan, currentPlan, autopay }) {
           return (
             <div key={plan.id} className={`plan-card${plan.popular ? ' popular' : ''}`}>
               {plan.popular && <div className="pc-ribbon">⭐ Most Popular</div>}
-              <div className="pc-name">{plan.name}</div>
+              <div className="pc-name">
+                {plan.name}
+                {plan.trial && trialOpen && !isCurrent && (
+                  <span className="pc-trial-chip">{plan.trial.days} days · {inr(plan.trial.price_inr)}</span>
+                )}
+              </div>
               <div className="pc-tag">{plan.tag}</div>
               <div className="pc-price">
                 {plan.price === 0 ? (
@@ -262,13 +435,12 @@ function PlansView({ onSelectPlan, currentPlan, autopay }) {
                     className="pc-cta pc-trial-btn"
                     onClick={() => onSelectPlan({ ...plan, displayPrice: price, mode: 'trial' })}
                   >
-                    Try {plan.trial.days} days for ₹{plan.trial.price_inr}
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
+                    Try {plan.trial.days} days for {inr(plan.trial.price_inr)}
                   </button>
                   <p className="pc-trial-note">
-                    Autopay then charges ₹{plan.trial.first_charge_inr.toLocaleString('en-IN')} on
-                    day {plan.trial.days + 1}
-                    {plan.oneTime ? '.' : `, and ₹${price.toLocaleString('en-IN')}/mo after.`}
-                    {' '}Cancel any time before then and you won&apos;t be charged again.
+                    Then {inr(plan.trial.first_charge_inr)} on day {plan.trial.days + 1}
+                    {plan.oneTime ? '' : `, ${inr(price)}/mo after`} · cancel any time
                   </p>
                 </div>
               )}
@@ -773,7 +945,6 @@ function TrialCheckoutView({ plan, onBack, onPaid }) {
   const busy = payState !== 'idle';
   const trialFee = trial ? `₹${rupeesFromPaise(trial.trial_amount_paise)}` : null;
   const firstCharge = trial ? `₹${rupeesFromPaise(trial.first_charge_paise)}` : null;
-  const fullPrice = trial ? `₹${rupeesFromPaise(trial.plan_amount_paise)}` : null;
   const chargeDate = trial ? fmtRenewalDate(trial.trial_ends_at) : '';
 
   return (
@@ -843,22 +1014,21 @@ function TrialCheckoutView({ plan, onBack, onPaid }) {
               {trial && !trial.recurring ? 'Trial, then one month' : 'Trial, then monthly autopay'}
             </div>
           </div>
+          {trial ? (
+            <TrialTimeline
+              dark
+              planName={plan.name}
+              days={trial.trial_days}
+              fee={trial.trial_amount_paise / 100}
+              firstCharge={trial.first_charge_paise / 100}
+              price={trial.plan_amount_paise / 100}
+              oneTime={!trial.recurring}
+              chargeDate={chargeDate}
+            />
+          ) : (
+            <div className="tr-skel" aria-hidden="true"><i /><i /><i /><i /></div>
+          )}
           <div className="bl-os-breakdown">
-            <div className="bl-os-line">
-              <span>Today · {plan.trial?.days ?? 10}-day trial</span>
-              <span>{trialFee ?? '—'}</span>
-            </div>
-            <div className="bl-os-line">
-              <span>
-                {chargeDate || `Day ${(plan.trial?.days ?? 10) + 1}`} · autopay
-                {trial ? ` (${fullPrice} less ${trialFee} paid today)` : ''}
-              </span>
-              <span>{firstCharge ?? '—'}</span>
-            </div>
-            <div className="bl-os-line">
-              <span>After that</span>
-              <span>{trial ? (trial.recurring ? `${fullPrice}/mo until you cancel` : 'No further charges') : '—'}</span>
-            </div>
             <div className="bl-os-total">
               <span>Due today</span>
               <span>{trialFee ?? '—'}</span>

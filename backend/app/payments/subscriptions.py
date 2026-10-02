@@ -3,9 +3,9 @@
 What the founder buys
 ---------------------
 A TRIAL_DAYS (10) trial of any paid tier for that tier's `trial_price_inr`
-(Starter Rs 19, Plus Rs 29, Pro Rs 49). Paying it and setting up autopay are
+(Starter Rs 19, Plus Rs 49, Pro Rs 99). Paying it and setting up autopay are
 one step. Unless they cancel, autopay charges on day 11 the plan price less the
-trial fee (Pro: Rs 950), then the full price monthly for Plus and Pro. Starter
+trial fee (Pro: Rs 900), then the full price monthly for Plus and Pro. Starter
 is charged on day 11 and never again.
 
 How that maps onto Razorpay
@@ -17,7 +17,7 @@ price (settings.RAZORPAY_PLAN_ID_*):
   - an upfront ADDON of the trial fee, which Razorpay charges in the same
     transaction that authorises the mandate;
   - a subscription OFFER (settings.RAZORPAY_TRIAL_OFFER_ID_*) worth the trial
-    fee, on the first payment only -- which is what makes day 11 Rs 950;
+    fee, on the first payment only -- which is what makes day 11 Rs 900;
   - `total_count` 1 for Starter, so its mandate charges exactly once.
 
 The lifecycle, and what each step does here

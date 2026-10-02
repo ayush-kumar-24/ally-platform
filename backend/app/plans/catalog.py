@@ -137,7 +137,7 @@ STANDARD_CALL_LEAD_DAYS = 3
 #: (`trial_price_inr` on each Plan below). Starting one sets up a Razorpay
 #: autopay mandate in the same step, and the trial fee is the mandate's upfront
 #: charge. If the founder does not cancel, autopay charges on day 11 -- the plan
-#: price LESS the trial fee already paid (Pro: Rs 999 - Rs 49 = Rs 950), then the
+#: price LESS the trial fee already paid (Pro: Rs 999 - Rs 99 = Rs 900), then the
 #: full price every month after for Plus and Pro. Starter stays a single month:
 #: its day-11 charge is the only one.
 #:
@@ -427,7 +427,7 @@ PLANS: dict[PlanTier, Plan] = {
         daily_token_limit=3_500,
         free_calls_per_month=0,
         features=_BASE | _WORKSPACE,
-        trial_price_inr=29,
+        trial_price_inr=49,
         tagline="For founders working on the business weekly.",
     ),
     PlanTier.PRO: Plan(
@@ -442,7 +442,7 @@ PLANS: dict[PlanTier, Plan] = {
         # Know My Energy is declared here so the gate and the pricing page are
         # already correct; its founder-facing implementation is still to be built.
         features=_BASE | _WORKSPACE | _ADVISOR,
-        trial_price_inr=49,
+        trial_price_inr=99,
         tagline="Ally as your standing advisor.",
     ),
 }
