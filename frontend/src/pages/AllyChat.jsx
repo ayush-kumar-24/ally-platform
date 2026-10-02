@@ -664,7 +664,7 @@ export default function AllyChat() {
 
       // 403/402/429 are the plan gate doing its job -- show what it means and
       // what to do about it, rather than a generic failure.
-      const limit = explainLimit(err);
+      const limit = explainLimit(err, plan);
       const isNetwork = err instanceof ApiError && err.isNetwork;
       if (limit) {
         setLimitNotice(limit);
@@ -801,6 +801,12 @@ export default function AllyChat() {
   const dailyLeft = plan?.daily_tokens_remaining ?? 0;
   const usedPct = dailyLimit ? Math.min(100, Math.round(((dailyLimit - dailyLeft) / dailyLimit) * 100)) : 0;
   const near = dailyLimit > 0 && dailyLeft <= dailyLimit * 0.15;
+  /* The daily allowance is only a rate ceiling; it says nothing about whether
+     the founder may chat at all. A lapsed trial still reports a full day's
+     tokens, so the meter read "8,000 of 8,000 tokens left today" directly under
+     "Your free trial ended" -- an invitation to send that is certain to be
+     refused. When the trial is over, the meter says that instead. */
+  const trialEnded = Boolean(plan?.trial?.has_expired);
   const isEmpty = messages.length === 0;
   const firstName = (user?.name || '').split(' ')[0] || 'there';
 
@@ -1096,13 +1102,15 @@ export default function AllyChat() {
               empty bar labelled "Usage" -- identical to a healthy account with
               nothing spent. Say we don't know instead. */}
           <div style={{ maxWidth: 800, margin: '0 auto 8px', textAlign: 'center' }}>
-            <span className={`ac-remain${near ? ' near' : ''}`}>
+            <span className={`ac-remain${near || trialEnded ? ' near' : ''}`}>
               <span>
-                {plan
-                  ? `${dailyLeft.toLocaleString('en-IN')} of ${dailyLimit.toLocaleString('en-IN')} tokens left today`
-                  : 'Usage unavailable'}
+                {!plan
+                  ? 'Usage unavailable'
+                  : trialEnded
+                    ? 'Free trial ended · upgrade to keep chatting'
+                    : `${dailyLeft.toLocaleString('en-IN')} of ${dailyLimit.toLocaleString('en-IN')} tokens left today`}
               </span>
-              {plan && <span className="arm-bar"><i style={{ width: `${usedPct}%` }} /></span>}
+              {plan && !trialEnded && <span className="arm-bar"><i style={{ width: `${usedPct}%` }} /></span>}
             </span>
           </div>
           {/* Persistent proof of what is attached. The upload toast is

@@ -106,8 +106,10 @@ export function requiredPlanFor(catalog, feature) {
  * "resets tomorrow": it never resets. `error.code`, the backend's own error
  * class name, is what tells the two apart -- checking status alone would show
  * a false promise that waiting helps.
+ *
+ * `plan` (the /plans/me reading, optional) only sharpens the 402 title.
  */
-export function explainLimit(error) {
+export function explainLimit(error, plan = null) {
   if (!error) return null;
   if (error.code === 'DiagnosisAlreadyCompletedError') {
     return { kind: 'completed', title: 'Diagnosis already completed',
@@ -116,6 +118,14 @@ export function explainLimit(error) {
   if (error.status === 403) {
     return { kind: 'upgrade', title: 'Not on your plan',
              message: error.detail || 'Upgrade to unlock this feature.' };
+  }
+  // Both an expired trial and a spent balance are 402 OutOfCreditsError, and the
+  // body carries nothing else to tell them apart -- so the plan the page
+  // already holds does. "Out of credits" above "Your free trial ended" read as
+  // a contradiction to a founder who had never spent a credit.
+  if (error.status === 402 && plan?.trial?.has_expired) {
+    return { kind: 'topup', title: 'Free trial ended',
+             message: error.detail || 'Upgrade to keep using Ally.' };
   }
   if (error.status === 402) {
     return { kind: 'topup', title: 'Out of credits',
