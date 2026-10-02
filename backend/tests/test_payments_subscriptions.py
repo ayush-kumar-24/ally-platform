@@ -193,9 +193,9 @@ def _pay(pid, rupees, at, status="captured"):
 
 def test_trial_prices_and_day_11_charges():
     assert [PLANS[t].trial_price_inr for t in (PlanTier.BASIC, PlanTier.STARTER, PlanTier.PRO)] \
-        == [19, 49, 99]
-    assert PLANS[PlanTier.PRO].first_charge_inr == 900
-    assert PLANS[PlanTier.STARTER].first_charge_inr == 450
+        == [19, 29, 49]
+    assert PLANS[PlanTier.PRO].first_charge_inr == 950
+    assert PLANS[PlanTier.STARTER].first_charge_inr == 470
     assert PLANS[PlanTier.BASIC].first_charge_inr == 180
     assert TRIAL_DAYS == 10
     assert PLANS[PlanTier.PRO].trial_credits == 80
@@ -210,10 +210,10 @@ def test_start_trial_asks_razorpay_for_the_right_subscription(env):
 
     sent = gateway.created[0]
     assert sent["plan_id"] == "plan_pro" and sent["offer_id"] == "offer_pro"
-    assert sent["upfront_amount_paise"] == 9_900
+    assert sent["upfront_amount_paise"] == 4_900
     assert sent["start_at"] == int((NOW + timedelta(days=10)).timestamp())
     assert sent["total_count"] > 1
-    assert checkout.first_charge_paise == 90_000 and checkout.recurring is True
+    assert checkout.first_charge_paise == 95_000 and checkout.recurring is True
     # Nothing granted until the mandate is authorised.
     assert repo.subs[1]["status"] == "pending" and repo.plan_of == {}
 
@@ -262,7 +262,7 @@ def test_autopay_already_active_blocks_a_second(env):
 def test_authenticated_starts_the_trial_once(env):
     svc, _, repo, credits, _ = env
     svc.start_trial(7, PlanTier.PRO)
-    fee = _pay("pay_fee", 99, NOW)
+    fee = _pay("pay_fee", 49, NOW)
     first = svc.handle_event("subscription.authenticated",
                              _event("subscription.authenticated", "sub_1", fee))
     again = svc.handle_event("subscription.authenticated",
@@ -272,14 +272,14 @@ def test_authenticated_starts_the_trial_once(env):
     assert again.outcome == WebhookOutcome.ALREADY_PROCESSED
     assert repo.plan_of[7] == "pro" and repo.subs[1]["status"] == "trial"
     assert credits.adjustments == [(7, CreditOperation.ADD, 80)]
-    assert repo.payments["pay_fee"]["amount_inr"] == 99
+    assert repo.payments["pay_fee"]["amount_inr"] == 49
 
 
 def test_confirm_trial_checks_signature_and_ownership(env):
     svc, gateway, repo, _, _ = env
     svc.start_trial(7, PlanTier.PRO)
     gateway.subscriptions["sub_1"]["status"] = "authenticated"
-    gateway.payments["pay_fee"] = _pay("pay_fee", 99, NOW)
+    gateway.payments["pay_fee"] = _pay("pay_fee", 49, NOW)
 
     with pytest.raises(PaymentNotFoundError):
         svc.confirm_trial(8, gateway_subscription_id="sub_1", gateway_payment_id="pay_fee")
@@ -307,7 +307,7 @@ def _trialing(env, tier=PlanTier.PRO):
     svc, _, _, _, clock = env
     svc.start_trial(7, tier)
     svc.handle_event("subscription.authenticated",
-                     _event("subscription.authenticated", "sub_1", _pay("pay_fee", 99, NOW)))
+                     _event("subscription.authenticated", "sub_1", _pay("pay_fee", 49, NOW)))
     clock.at = NOW + timedelta(days=10, minutes=5)
 
 
@@ -315,7 +315,7 @@ def test_day_11_charge_renews_and_grants_monthly_credits_once(env):
     svc, _, repo, credits, clock = env
     _trialing(env)
     period_end = NOW + timedelta(days=40)
-    charge = _pay("pay_d11", 900, clock.at)
+    charge = _pay("pay_d11", 950, clock.at)
     first = svc.handle_event("subscription.charged", _event(
         "subscription.charged", "sub_1", charge, int(period_end.timestamp())))
     again = svc.handle_event("subscription.charged", _event(
@@ -331,7 +331,7 @@ def test_day_11_charge_renews_and_grants_monthly_credits_once(env):
 def test_invoice_payment_then_charged_event_grants_once(env):
     svc, gateway, repo, credits, clock = env
     _trialing(env)
-    charge = {**_pay("pay_d11", 900, clock.at), "invoice_id": "inv_1"}
+    charge = {**_pay("pay_d11", 950, clock.at), "invoice_id": "inv_1"}
     gateway.invoices["inv_1"] = {"id": "inv_1", "subscription_id": "sub_1"}
 
     assert svc.handle_invoice_payment(charge).outcome == WebhookOutcome.RENEWED
@@ -346,13 +346,13 @@ def test_trial_fee_payment_arriving_late_is_not_a_renewal(env):
     svc.start_trial(7, PlanTier.PRO)
     svc.handle_event("subscription.authenticated", _event("subscription.authenticated", "sub_1"))
     clock.at = NOW + timedelta(minutes=2)
-    fee = {**_pay("pay_fee", 99, NOW), "invoice_id": "inv_0"}
+    fee = {**_pay("pay_fee", 49, NOW), "invoice_id": "inv_0"}
     gateway.invoices["inv_0"] = {"id": "inv_0", "subscription_id": "sub_1"}
 
     result = svc.handle_invoice_payment(fee)
     assert result.outcome == WebhookOutcome.ALREADY_PROCESSED
     assert repo.subs[1]["status"] == "trial"
-    assert repo.payments["pay_fee"]["amount_inr"] == 99
+    assert repo.payments["pay_fee"]["amount_inr"] == 49
 
 
 def test_starter_day_11_charge_has_no_expiry_and_completion_keeps_it(env):
@@ -398,7 +398,7 @@ def test_cancel_when_paid_runs_to_cycle_end(env):
     svc, gateway, repo, _, clock = env
     _trialing(env)
     svc.handle_event("subscription.charged", _event(
-        "subscription.charged", "sub_1", _pay("pay_d11", 900, clock.at)))
+        "subscription.charged", "sub_1", _pay("pay_d11", 950, clock.at)))
     svc.cancel(7)
     assert gateway.cancelled == [("sub_1", True)]
     assert repo.plan_of[7] == "pro"
@@ -416,7 +416,7 @@ def test_status_reports_the_day_11_charge(env):
     assert svc.status(7) is None          # pending is not a plan yet
     svc.handle_event("subscription.authenticated", _event("subscription.authenticated", "sub_1"))
     st = svc.status(7)
-    assert st["status"] == "trial" and st["next_charge_inr"] == 900
+    assert st["status"] == "trial" and st["next_charge_inr"] == 950
     assert st["next_charge_at"] == NOW + timedelta(days=10)
 
 

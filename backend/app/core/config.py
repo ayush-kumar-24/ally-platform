@@ -783,8 +783,8 @@ class Settings(BaseSettings):
     #   PLAN_ID   Subscriptions -> Plans: monthly, at the tier's full price
     #             (Starter Rs 199, Plus Rs 499, Pro Rs 999).
     #   OFFER_ID  Offers -> a subscription offer of a flat discount equal to the
-    #             trial fee (Rs 19 / Rs 49 / Rs 99), applied to the FIRST
-    #             payment only. This is what makes day 11 charge Rs 900 for Pro
+    #             trial fee (Rs 19 / Rs 29 / Rs 49), applied to the FIRST
+    #             payment only. This is what makes day 11 charge Rs 950 for Pro
     #             rather than Rs 999 -- without it the founder would be charged
     #             the trial fee on top of the price, so a missing offer disables
     #             the trial instead of silently overcharging.

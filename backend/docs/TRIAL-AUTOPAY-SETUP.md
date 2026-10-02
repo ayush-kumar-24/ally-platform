@@ -8,8 +8,8 @@ is the plan price **less the trial fee** they already paid.
 | Plan (internal tier) | Trial fee | Day-11 charge | After that |
 |---|---|---|---|
 | Starter (`basic`) | ₹19 | ₹180 | nothing (Starter is one month) |
-| Plus (`starter`) | ₹49 | ₹450 | ₹499 every month until cancelled |
-| Pro (`pro`) | ₹99 | ₹900 | ₹999 every month until cancelled |
+| Plus (`starter`) | ₹29 | ₹470 | ₹499 every month until cancelled |
+| Pro (`pro`) | ₹49 | ₹950 | ₹999 every month until cancelled |
 
 Each founder gets **one trial, ever**. The prices live in
 `app/plans/catalog.py` (`trial_price_inr`, `TRIAL_DAYS`). The flow lives in
@@ -32,10 +32,10 @@ breaks, and buying the plan outright keeps working.
    subscriptions). Each is a **flat discount equal to the trial fee**, applied to
    the **first payment only**:
    - ₹19 off → `RAZORPAY_TRIAL_OFFER_ID_BASIC`
-   - ₹49 off → `RAZORPAY_TRIAL_OFFER_ID_STARTER`
-   - ₹99 off → `RAZORPAY_TRIAL_OFFER_ID_PRO`
+   - ₹29 off → `RAZORPAY_TRIAL_OFFER_ID_STARTER`
+   - ₹49 off → `RAZORPAY_TRIAL_OFFER_ID_PRO`
 
-   The offer is what makes day 11 charge ₹900 instead of ₹999. Without it,
+   The offer is what makes day 11 charge ₹950 instead of ₹999. Without it,
    founders would pay the trial fee on top of the full price. That's why the
    code refuses to start a trial when the offer ID is missing.
 4. **Webhook** (Settings → Webhooks, the existing `/api/v1/webhooks/razorpay`
@@ -71,12 +71,12 @@ with live keys.
 
 ## 4. Verify in Test mode before going live
 
-1. On Billing, click **Try 10 days for ₹99** on Pro and pay with a test card or
-   UPI. Check that the payment window shows ₹99, and that afterwards you're on
+1. On Billing, click **Try 10 days for ₹49** on Pro and pay with a test card or
+   UPI. Check that the payment window shows ₹49, and that afterwards you're on
    Pro with 80 credits.
 2. In the Dashboard, open the subscription. Check that its start date is 10 days
-   out **and that the first charge shows ₹900**. This checks that the offer is
-   applied to the day-11 charge, not to today's ₹99. If it shows ₹999, fix the
+   out **and that the first charge shows ₹950**. This checks that the offer is
+   applied to the day-11 charge, not to today's ₹49. If it shows ₹999, fix the
    offer before going live.
 3. Bring the first charge forward from the Dashboard (or wait). Check that the
    founder's subscription row turns `active` and 240 credits are added.
