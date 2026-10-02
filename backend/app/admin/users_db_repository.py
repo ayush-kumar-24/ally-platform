@@ -94,6 +94,31 @@ _ONBOARDING_COLUMNS: tuple[str, ...] = (
 )
 
 
+#: The founder's Terms/Privacy consent, from the consent ledger -- the same
+#: source the detail page shows. `founders.consent_version` is NOT used: signup
+#: stamps it automatically, so it read "granted" for everyone whether or not
+#: they ever accepted anything. Newest ledger row wins (it is append-only);
+#: no row means never consented, superseded versions mean stale.
+_CONSENT_JOIN = """
+    left join lateral (
+        select case
+                 when not fc.agree_terms then 'missing'
+                 when fc.terms_version = :terms_v
+                      and fc.privacy_version = :privacy_v then 'granted'
+                 else 'stale'
+               end as consent_state
+          from founder_consents fc
+         where fc.founder_id = f.founder_id
+         order by fc.consented_at desc
+         limit 1
+    ) cs on true"""
+
+
+def _consent_params() -> dict:
+    from app.consents.defaults import CURRENT_PRIVACY_VERSION, CURRENT_TERMS_VERSION
+    return {"terms_v": CURRENT_TERMS_VERSION, "privacy_v": CURRENT_PRIVACY_VERSION}
+
+
 class SqlAlchemyAdminUserRepository(AdminUserRepository):
     def __init__(self, db):
         self.db = db
@@ -125,7 +150,7 @@ class SqlAlchemyAdminUserRepository(AdminUserRepository):
 
     def search(self, filters: UserFilters, *, page: int, page_size: int,
                sort_by: SortField, descending: bool) -> UserPage:
-        where, params = ["1=1"], {}
+        where, params = ["1=1"], _consent_params()
 
         if filters.search:
             # Only search columns that exist -- phone/business_name arrive with a
@@ -155,10 +180,14 @@ class SqlAlchemyAdminUserRepository(AdminUserRepository):
         if filters.diagnosis_completed is not None:
             where.append("(f.diagnosis_locked_at is not null) = :diag")
             params["diag"] = filters.diagnosis_completed
+        if filters.consent_status is not None:
+            where.append("coalesce(cs.consent_state, 'missing') = :consent")
+            params["consent"] = filters.consent_status.value
 
         clause = " and ".join(where)
         total = self.db.execute(
-            text(f"select count(*) from founders f where {clause}"), params).scalar() or 0
+            text(f"select count(*) from founders f{_CONSENT_JOIN} where {clause}"),
+            params).scalar() or 0
 
         order = _SORT_COLUMNS.get(sort_by, "f.created_at")
         if order.split(".")[-1] not in self._available():
@@ -181,8 +210,9 @@ class SqlAlchemyAdminUserRepository(AdminUserRepository):
                  limit 1
             ) ck on true"""
         rows = self.db.execute(text(f"""
-            select {self._select_list()}, ck.banner_action as cookie_action
-              from founders f{cookie_join}
+            select {self._select_list()}, ck.banner_action as cookie_action,
+                   coalesce(cs.consent_state, 'missing') as consent_state
+              from founders f{cookie_join}{_CONSENT_JOIN}
              where {clause}
              order by {order} {direction} nulls last, f.founder_id asc
              limit :lim offset :off"""), params).mappings().all()
@@ -194,9 +224,11 @@ class SqlAlchemyAdminUserRepository(AdminUserRepository):
 
     def get_summary(self, founder_id: int) -> UserSummary | None:
         row = self.db.execute(text(f"""
-            select {self._select_list("")}
-              from founders where founder_id = :fid"""),
-            {"fid": founder_id}).mappings().first()
+            select {self._select_list()},
+                   coalesce(cs.consent_state, 'missing') as consent_state
+              from founders f{_CONSENT_JOIN}
+             where f.founder_id = :fid"""),
+            {"fid": founder_id, **_consent_params()}).mappings().first()
         return _to_summary(row) if row else None
 
     def get_detail(self, founder_id: int) -> UserDetail | None:
@@ -207,27 +239,32 @@ class SqlAlchemyAdminUserRepository(AdminUserRepository):
             return None
         f = dict(base)
 
-        def section(sql: str, default):
+        unavailable: list[str] = []
+
+        def section(sql: str, default, name: str):
             """A missing/renamed table must not blank the whole profile -- the admin
-            still needs the rest. The gap is returned rather than hidden."""
+            still needs the rest. But the gap is named in `unavailable_sections`,
+            not hidden: an empty default alone reads as "No subscription record"
+            or "Never accepted", which is a false statement when the query failed."""
             try:
                 return [dict(r) for r in
                         self.db.execute(text(sql), {"fid": founder_id}).mappings().all()]
             except Exception:
                 self.db.rollback()
+                unavailable.append(name)
                 return default
 
         subs = section("""select * from subscriptions where founder_id = :fid
-                          order by created_at desc limit 1""", [])
+                          order by created_at desc limit 1""", [], "subscription")
         txs = section("""select id, type, amount, balance_before, balance_after, reason,
                                 admin_id, created_at
                            from credit_transactions where user_id = :fid
-                          order by created_at desc limit 10""", [])
+                          order by created_at desc limit 10""", [], "credits")
         consents = section("""select terms_version, privacy_version, agree_terms,
                                      agree_diagnosis, age_confirmed, ip_address,
                                      consented_at
                                 from founder_consents where founder_id = :fid
-                               order by consented_at desc limit 1""", [])
+                               order by consented_at desc limit 1""", [], "consent")
         # Cookie choice is a SEPARATE consent under a separate legal basis, and
         # until now the panel could not show it at all: a founder who rejected
         # analytics looked identical to one who had never seen the banner.
@@ -236,8 +273,10 @@ class SqlAlchemyAdminUserRepository(AdminUserRepository):
         cookies = section("""select banner_action, necessary, analytics, marketing,
                                     functional, ip_address, created_at
                                from cookie_preferences where founder_id = :fid
-                              order by created_at desc limit 1""", [])
-        chat_rows = section("select count(*) as n from conversations where founder_id = :fid", [])
+                              order by created_at desc limit 1""", [], "cookie_consent")
+        chat_rows = section("select count(*) as n from conversations where founder_id = :fid", [], "chats")
+        from app.services import supabase_admin
+        sign_in_at = supabase_admin.last_sign_in_at(f.get("user_id"))
 
         return UserDetail(
             founder_id=founder_id,
@@ -256,16 +295,18 @@ class SqlAlchemyAdminUserRepository(AdminUserRepository):
             # distinct from an answer of "rejected everything", which is a row.
             cookie_consent=cookies[0] if cookies else None,
             reports=section("""select * from founder_reports where founder_id = :fid
-                               order by created_at desc limit 20""", []),
+                               order by created_at desc limit 20""", [], "reports"),
             chat_count=int(chat_rows[0]["n"]) if chat_rows else 0,
             diagnosis_history=section("""select * from sessions
                                           where founder_id = :fid
-                                          order by started_at desc limit 20""", []),
+                                          order by started_at desc limit 20""", [], "diagnosis_history"),
             login_history=[],   # no login_history table in this schema
+            last_sign_in_at=sign_in_at,
+            unavailable_sections=unavailable,
             privacy_requests=section("""select request_id, request_type, status,
                                                requested_at, due_by
                                           from privacy_requests where founder_id = :fid
-                                         order by requested_at desc limit 20""", []),
+                                         order by requested_at desc limit 20""", [], "privacy_requests"),
         )
 
     # --- writes ---------------------------------------------------------
@@ -394,8 +435,7 @@ def _to_summary(r) -> UserSummary:
         plan_type=r.get("plan_type"),
         credits_balance=int(r.get("credits_balance") or 0),
         diagnosis_completed=r.get("diagnosis_locked_at") is not None,
-        consent_status=(ConsentStatus.GRANTED if r.get("consent_version")
-                        else ConsentStatus.MISSING),
+        consent_status=ConsentStatus(r.get("consent_state") or "missing"),
         # An unrecognised banner_action falls to NEVER_ANSWERED rather than
         # raising: an admin list must not 500 because one row holds a value the
         # CHECK constraint has since stopped allowing.

@@ -83,6 +83,9 @@ export default function AdminCoupons() {
   const [flash, setFlash] = useFlash();
   const [busy, setBusy] = useState(false);
   const [dialog, setDialog] = useState(null);
+  // The codes a batch just minted. The API returns them once and nowhere
+  // else lists them by batch, so they stay on screen until dismissed.
+  const [generated, setGenerated] = useState(null);
   const [expanded, setExpanded] = useState(null);
   const [redemptions, setRedemptions] = useState({});
   const inFlight = useRef(false);
@@ -119,11 +122,11 @@ export default function AdminCoupons() {
     setBusy(true);
     try {
       const result = await fn();
-      setFlash({ kind: 'ok', message });
+      setFlash({ message });
       load();
       return result;
     } catch (err) {
-      setFlash({ kind: 'err', message: err?.detail || err?.message || 'That did not work.' });
+      setFlash({ error: true, message: err?.detail || err?.message || 'That did not work.' });
       throw err;
     } finally {
       setBusy(false);
@@ -138,7 +141,7 @@ export default function AdminCoupons() {
       const d = await couponRedemptions(couponId);
       setRedemptions(r => ({ ...r, [couponId]: d.redemptions || [] }));
     } catch (err) {
-      setFlash({ kind: 'err', message: err?.detail || 'Could not load redemptions.' });
+      setFlash({ error: true, message: err?.detail || 'Could not load redemptions.' });
     }
   };
 
@@ -178,7 +181,10 @@ export default function AdminCoupons() {
         discount_value: Number(batchValue),
         valid_until: until,
       }), `${count} codes generated.`)
-        .then(() => { setPrefix(''); setCount(''); setBatchValue(''); })
+        .then((res) => {
+          setGenerated(res?.codes || []);
+          setPrefix(''); setCount(''); setBatchValue('');
+        })
         .catch(() => {}),
     });
   };
@@ -194,6 +200,21 @@ export default function AdminCoupons() {
         &ldquo;first 100 customers&rdquo;; a batch is one code per recipient.
       </p>
       <Flash flash={flash} />
+
+      {generated && (
+        <div className="adm-panel">
+          <h2>Generated codes ({generated.length})</h2>
+          <p className="adm-muted">
+            Copy these now — they are not listed together anywhere else.
+          </p>
+          <textarea className="adm-input" readOnly rows={Math.min(12, generated.length + 1)}
+                    value={generated.join('\n')} aria-label="Generated codes"
+                    style={{ width: '100%', fontFamily: 'monospace' }} />
+          <button className="adm-btn" type="button" onClick={() => setGenerated(null)}>
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {mayManage && (
         <div className="adm-panel">
@@ -412,7 +433,15 @@ export default function AdminCoupons() {
         )}
       </div>
 
-      <ConfirmDialog dialog={dialog} onClose={() => setDialog(null)} busy={busy} />
+      <ConfirmDialog
+        open={Boolean(dialog)}
+        title={dialog?.title}
+        body={dialog?.body}
+        confirmLabel={dialog?.confirmLabel}
+        busy={busy}
+        onConfirm={async () => { await dialog?.run(); setDialog(null); }}
+        onCancel={() => setDialog(null)}
+      />
     </>
   );
 }

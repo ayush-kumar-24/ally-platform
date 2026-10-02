@@ -65,7 +65,9 @@ class UserDetailResponse(BaseModel):
     chat_count: int
     diagnosis_history: list[dict]
     login_history: list[dict]
+    last_sign_in_at: Any = None
     privacy_requests: list[dict]
+    unavailable_sections: list[str] = []
 
     @classmethod
     def from_domain(cls, d: UserDetail) -> "UserDetailResponse":
@@ -74,6 +76,8 @@ class UserDetailResponse(BaseModel):
                    cookie_consent=d.cookie_consent,
                    reports=d.reports, chat_count=d.chat_count,
                    diagnosis_history=d.diagnosis_history, login_history=d.login_history,
+                   last_sign_in_at=d.last_sign_in_at,
+                   unavailable_sections=d.unavailable_sections,
                    privacy_requests=d.privacy_requests)
 
 

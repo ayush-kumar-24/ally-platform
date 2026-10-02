@@ -94,8 +94,18 @@ export default function AdminPrivacy() {
     if (!canView) { setLoading(false); return; }
     setLoading(true);
     setError(null);
-    listPrivacyRequests({ status: onlyPending ? 'pending' : null })
-      .then((r) => setRows(Array.isArray(r?.items) ? r.items : []))
+    // "Waiting on us" means pending AND in_progress -- a request someone marked
+    // "On it" is still open. The API filters on one status, so ask for both.
+    const items = (r) => (Array.isArray(r?.items) ? r.items : []);
+    const request = onlyPending
+      ? Promise.all([
+        listPrivacyRequests({ status: 'pending' }),
+        listPrivacyRequests({ status: 'in_progress' }),
+      ]).then(([p, ip]) => [...items(p), ...items(ip)]
+        .sort((a, b) => String(b.requested_at).localeCompare(String(a.requested_at))))
+      : listPrivacyRequests({ status: null }).then(items);
+    request
+      .then(setRows)
       .catch(setError)
       .finally(() => setLoading(false));
   }, [canView, onlyPending]);
@@ -121,7 +131,7 @@ export default function AdminPrivacy() {
     const { req, mode } = dialog;
     const text = note.trim();
     if (mode === 'rejected' && !text) {
-      setFlash({ tone: 'bad', text: 'A rejection needs a reason — the founder is owed one.' });
+      setFlash({ error: true, message: 'A rejection needs a reason — the founder is owed one.' });
       return;
     }
     setBusyId(req.request_id);
@@ -131,8 +141,7 @@ export default function AdminPrivacy() {
         ...(mode === 'rejected' ? { rejectionReason: text } : { processingNotes: text || undefined }),
       });
       setFlash({
-        tone: 'ok',
-        text: mode === 'completed' ? 'Marked done.'
+        message: mode === 'completed' ? 'Marked done.'
           : mode === 'rejected' ? 'Rejected, with the reason on the record.'
           : 'Marked as being worked on.',
       });
@@ -140,7 +149,7 @@ export default function AdminPrivacy() {
       setNote('');
       load();
     } catch (err) {
-      setFlash({ tone: 'bad', text: err?.detail || err?.message || 'That did not go through. Try again.' });
+      setFlash({ error: true, message: err?.detail || err?.message || 'That did not go through. Try again.' });
     } finally {
       setBusyId(null);
     }

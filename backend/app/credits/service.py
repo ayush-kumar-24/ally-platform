@@ -39,8 +39,10 @@ class CreditService:
             user_id, admin_id=admin_id, operation=operation,
             requested_amount=amount, reason=cleaned, at=self._now())
 
-    def get_balance(self, user_id: int) -> CreditBalance:
-        return self.repository.get_balance(user_id)
+    def get_balance(self, user_id: int, *, strict: bool = False) -> CreditBalance:
+        """`strict` raises when the balance cannot be read instead of reporting
+        0. Admin reads pass it; the charging path keeps the lenient default."""
+        return self.repository.get_balance(user_id, strict=strict)
 
     def list_transactions(self, user_id: int, *, limit: int = 50, offset: int = 0):
         return self.repository.list_transactions(user_id, limit=limit, offset=offset)

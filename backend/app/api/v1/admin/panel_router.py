@@ -31,6 +31,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, Query
 
+from app.admin.errors import AdminDataUnavailableError
 from app.admin.rbac import capabilities_for
 from app.admin.users_models import (
     ConsentStatus,
@@ -67,6 +68,7 @@ from app.api.v1.admin.panel_schemas import (
     SubscriptionUpdateRequest,
     UserUpdateRequest,
 )
+from app.core.logger import logger
 from app.middleware.error_handler import AppError
 
 router = APIRouter(prefix="/admin", tags=["admin-panel"])
@@ -241,7 +243,15 @@ def list_credits(founder_id: int,
                  service=Depends(get_panel_service)) -> CreditLedgerResponse:
     items, total = service.list_credit_transactions(admin, founder_id,
                                                     limit=limit, offset=offset)
-    balance = service.credits.get_balance(founder_id).balance
+    # Strict: a balance that could not be read is an error, not 0 -- the admin
+    # page would otherwise show "0 credits" for a founder who has plenty.
+    try:
+        balance = service.credits.get_balance(founder_id, strict=True).balance
+    except AppError:
+        raise
+    except Exception as exc:
+        logger.warning("admin credit balance read failed", exc_info=exc)
+        raise AdminDataUnavailableError("the credit balance") from exc
     return CreditLedgerResponse(
         items=[CreditTransactionResponse.from_domain(t) for t in items],
         total=total, balance=balance)

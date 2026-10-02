@@ -187,7 +187,7 @@ class SqlAlchemyCreditRepository(CreditRepository):
             reason=reason, created_at=last_row["created_at"],
         )
 
-    def get_balance(self, user_id: int) -> CreditBalance:
+    def get_balance(self, user_id: int, *, strict: bool = False) -> CreditBalance:
         """Settle, then report. A balance read that skipped settlement could show
         credits that have already expired -- and the user would try to spend them.
 
@@ -203,6 +203,8 @@ class SqlAlchemyCreditRepository(CreditRepository):
             raise
         except Exception:
             self.db.rollback()
+            if strict:
+                raise
             return CreditBalance(user_id=user_id, balance=0)
         row = self.db.execute(
             text("""select (select max(created_at) from credit_transactions

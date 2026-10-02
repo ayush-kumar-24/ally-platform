@@ -35,8 +35,9 @@ class CreditRepository(abc.ABC):
         if the result would be negative, leaving no partial write behind."""
 
     @abc.abstractmethod
-    def get_balance(self, user_id: int) -> CreditBalance:
-        """Settled total. Must settle before reporting."""
+    def get_balance(self, user_id: int, *, strict: bool = False) -> CreditBalance:
+        """Settled total. Must settle before reporting. With `strict`, a failed
+        read raises rather than reporting 0."""
 
     @abc.abstractmethod
     def list_transactions(self, user_id: int, *, limit: int = 50,
@@ -170,7 +171,7 @@ class InMemoryCreditRepository(CreditRepository):
                 balance_before=settled.total, balance_after=final_state.total,
                 reason=reason, created_at=at)
 
-    def get_balance(self, user_id: int) -> CreditBalance:
+    def get_balance(self, user_id: int, *, strict: bool = False) -> CreditBalance:
         from datetime import timezone
         with self._lock:
             self._require(user_id)

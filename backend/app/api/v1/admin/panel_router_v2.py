@@ -238,11 +238,13 @@ def list_support_misses(limit: int = Query(default=100, ge=1, le=500),
              order by times_asked desc, last_asked desc
              limit :limit
         """), {"limit": limit}).fetchall()
-    except SQLAlchemyError:
-        # Table absent on a target that has not run the migration. An empty
-        # panel is a better answer than a 500 on a read-only review screen.
+    except SQLAlchemyError as exc:
+        # Reported, not answered with an empty list: "the help bot answered
+        # everything" is what an empty panel says, and it would be false.
+        db.rollback()
         logger.warning("support_bot_misses unavailable", exc_info=True)
-        return {"total": 0, "items": []}
+        from app.admin.errors import AdminDataUnavailableError
+        raise AdminDataUnavailableError("unanswered help-bot questions") from exc
     return {"total": len(rows), "items": [
         {"question": r[0], "times_asked": r[1], "founders": r[2],
          "last_asked": r[3], "reason": r[4]} for r in rows]}

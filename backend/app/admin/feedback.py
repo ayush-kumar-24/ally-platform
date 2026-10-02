@@ -21,6 +21,9 @@ from datetime import datetime
 
 from sqlalchemy import text
 
+from app.admin.errors import AdminDataUnavailableError
+from app.core.logger import logger
+
 
 @dataclass(frozen=True)
 class FeedbackItem:
@@ -91,11 +94,15 @@ class SqlAlchemyFeedbackReadRepository(FeedbackReadRepository):
         self.db = db
 
     def _rows(self, sql: str, params: dict) -> list[dict]:
+        # Raises rather than answering []: an empty list here renders as "No
+        # feedback yet" with stats of 0, which is a false statement when the
+        # query simply failed.
         try:
             return [dict(r) for r in self.db.execute(text(sql), params).mappings().all()]
-        except Exception:
+        except Exception as exc:
             self.db.rollback()
-            return []
+            logger.warning("admin feedback query failed", exc_info=exc)
+            raise AdminDataUnavailableError("founder feedback") from exc
 
     def list_feedback(self, *, feedback_type=None, limit=50, offset=0):
         total_rows = self._rows(

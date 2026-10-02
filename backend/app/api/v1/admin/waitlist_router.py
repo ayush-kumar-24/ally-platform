@@ -75,6 +75,10 @@ class CapOut(BaseModel):
     slots_opened: int
     remaining: int
     is_full: bool
+    #: Strangers who may sign in right now with no queue (cap_status computes
+    #: it). Must be declared here: an undeclared key is dropped by the
+    #: response model, and the panel then always read "Direct sign-in is closed".
+    direct_signup_capacity: int = 0
     #: Whether approving can create a login at all right now. False means
     #: SUPABASE_SERVICE_ROLE_KEY is unset, and the panel says so up front
     #: rather than letting someone click approve into a 503.

@@ -71,7 +71,10 @@ class FeatureFlagOverrideRow(Base):
 
 class FeatureFlagRepository(abc.ABC):
     @abc.abstractmethod
-    def list_flags(self) -> list[FeatureFlag]: ...
+    def list_flags(self, *, strict: bool = False) -> list[FeatureFlag]:
+        """`strict` re-raises a failed read instead of answering []. The admin
+        list passes it; flag resolution does not, because reading as OFF is the
+        fail-closed answer there."""
 
     @abc.abstractmethod
     def get_flag(self, key: str) -> FeatureFlag | None: ...
@@ -99,7 +102,7 @@ class InMemoryFeatureFlagRepository(FeatureFlagRepository):
         self._overrides: dict[tuple[str, int], FlagOverride] = {}
         self._lock = threading.RLock()
 
-    def list_flags(self) -> list[FeatureFlag]:
+    def list_flags(self, *, strict: bool = False) -> list[FeatureFlag]:
         with self._lock:
             return sorted(self._flags.values(), key=lambda f: f.key)
 
@@ -146,9 +149,18 @@ class SqlAlchemyFeatureFlagRepository(FeatureFlagRepository):
             self.db.rollback()
             return fallback
 
-    def list_flags(self) -> list[FeatureFlag]:
-        return self._safe(lambda: [_flag(r) for r in
-                self.db.query(FeatureFlagRow).order_by(FeatureFlagRow.key).all()], [])
+    def list_flags(self, *, strict: bool = False) -> list[FeatureFlag]:
+        def read():
+            return [_flag(r) for r in
+                    self.db.query(FeatureFlagRow).order_by(FeatureFlagRow.key).all()]
+        if not strict:
+            return self._safe(read, [])
+        try:
+            return read()
+        except Exception as exc:
+            self.db.rollback()
+            from app.admin.errors import AdminDataUnavailableError
+            raise AdminDataUnavailableError("feature flags") from exc
 
     def get_flag(self, key: str) -> FeatureFlag | None:
         row = self._safe(lambda: self.db.get(FeatureFlagRow, key), None)
@@ -215,7 +227,8 @@ class FeatureFlagService:
         return flag.enabled if flag is not None else default
 
     def list_flags(self) -> list[FeatureFlag]:
-        return self.repository.list_flags()
+        """The admin list -- strict, so a failed read is an error, not "no flags"."""
+        return self.repository.list_flags(strict=True)
 
     def set_flag(self, key: str, *, enabled: bool, description: str = "",
                  admin_id: int | None = None) -> FeatureFlag:

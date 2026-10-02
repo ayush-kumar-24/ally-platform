@@ -22,6 +22,8 @@ from typing import Any
 from sqlalchemy import DateTime, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
+from app.admin.errors import AdminDataUnavailableError
+from app.core.logger import logger
 from app.db.session import Base
 
 
@@ -128,16 +130,16 @@ class SqlAlchemyPanelAuditRepository(PanelAuditRepository):
     def list(self, *, limit: int = 100, offset: int = 0, admin_id: int | None = None,
              target_user_id: int | None = None, action: str | None = None
              ) -> tuple[list[PanelAuditEvent], int]:
-        # The audit table arrives with a pending migration. Until then an empty
-        # trail is the truthful answer -- and far better than 500-ing the page an
-        # admin opens to find out what happened. Writes are NOT softened: a failed
-        # audit write must still fail its action.
+        # A failed read is reported, not answered with an empty trail: "No audit
+        # entries" is exactly what someone checking for an admin's actions would
+        # believe, and it would be false.
         try:
             return self._list(limit=limit, offset=offset, admin_id=admin_id,
                               target_user_id=target_user_id, action=action)
-        except Exception:
+        except Exception as exc:
             self.db.rollback()
-            return [], 0
+            logger.warning("admin audit log read failed", exc_info=exc)
+            raise AdminDataUnavailableError("the audit log") from exc
 
     def _list(self, *, limit, offset, admin_id, target_user_id, action):
         q = self.db.query(PanelAuditRow)
