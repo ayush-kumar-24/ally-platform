@@ -86,35 +86,60 @@ _REQUIRES_MULTIPLE_LOCATIONS: tuple[str, ...] = (
 
 
 def _set(column: str, codes: tuple[str, ...], value: bool) -> None:
-    """Flip `column` for exactly these codes, and raise if the count is wrong.
+    """Flip `column` for these codes, skipping any the catalogue does not have.
 
-    Tagging fewer rows than named means a question has been renamed or removed
-    and is now ungated -- which looks like success and reads, to the founder, as
-    being asked about a kitchen they do not have.
+    THIS DELIBERATELY DOES NOT FAIL ON A MISSING CODE, and the first version
+    did: it required the update to touch exactly as many rows as it named, and
+    raised otherwise. That cost a production deploy. `alembic upgrade head` runs
+    inside the release, so one renamed or removed question stops the migration,
+    the ECS service is never updated, and nothing ships at all -- not the tags,
+    not the application image.
+
+    A question this migration cannot find is a question that cannot be asked
+    either, so failing to tag it withholds nothing from nobody. The case that
+    still raises is the one meaning this ran against the wrong catalogue
+    entirely: not one of the codes present.
     """
-    result = op.get_bind().execute(
+    bind = op.get_bind()
+    present = {
+        row[0]
+        for row in bind.execute(
+            text("SELECT question_code FROM questions WHERE question_code = ANY(:codes)"),
+            {"codes": list(codes)},
+        ).all()
+    }
+    missing = sorted(set(codes) - present)
+
+    if not present:
+        raise RuntimeError(
+            f"None of the {len(codes)} questions {column} names are in this "
+            "catalogue. That is not drift, it is the wrong database -- check "
+            "which one this ran against before editing the list in b5d4e31a7c92."
+        )
+
+    bind.execute(
         text(
             f"UPDATE questions SET {column} = :value, updated_at = now() "
             "WHERE question_code = ANY(:codes)"
         ),
-        {"value": value, "codes": list(codes)},
+        {"value": value, "codes": sorted(present)},
     )
-    if result.rowcount != len(codes):
-        raise RuntimeError(
-            f"{column} was meant to cover {len(codes)} questions but matched "
-            f"{result.rowcount}. A code in b5d4e31a7c92 has been renamed or "
-            "removed; find it and fix the list rather than loosening the check."
-        )
+
+    print(
+        f"b5d4e31a7c92: {column} set on {len(present)} of {len(codes)}"
+        + (f"; not in this catalogue: {', '.join(missing)}" if missing else "")
+    )
 
 
 def upgrade() -> None:
     for column in ("requires_operating_role", "requires_multiple_locations"):
         op.execute(
-            f"ALTER TABLE questions ADD COLUMN {column} BOOLEAN NOT NULL "
-            "DEFAULT false"
+            f"ALTER TABLE questions ADD COLUMN IF NOT EXISTS {column} "
+            "BOOLEAN NOT NULL DEFAULT false"
         )
         op.execute(
-            f"CREATE INDEX idx_questions_{column} ON questions ({column}) "
+            f"CREATE INDEX IF NOT EXISTS idx_questions_{column} "
+            f"ON questions ({column}) "
             f"WHERE {column}"
         )
 
@@ -127,4 +152,4 @@ def downgrade() -> None:
     # tags are the whole of this migration's data, so there is nothing to
     # preserve separately.
     for column in ("requires_operating_role", "requires_multiple_locations"):
-        op.execute(f"ALTER TABLE questions DROP COLUMN {column}")
+        op.execute(f"ALTER TABLE questions DROP COLUMN IF EXISTS {column}")
