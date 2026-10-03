@@ -600,6 +600,7 @@ class ReportNarrativeGenerator:
                             else pf.band_description),
                         "red_flag_triggered": pf.red_flag_triggered,
                         "red_flag_note": pf.red_flag_note,
+                        "not_assessed_reason": pf.not_assessed_reason,
                         # Part 3 scopes some pillars partially -- Product &
                         # Execution is one of three dimensions at ideation. The
                         # narrator qualifies the pillar's name with these so the

@@ -327,6 +327,17 @@ class BusinessHealthScorer:
             if scope is not None and not scope.withholds_nothing:
                 withheld = withheld or pillar.pillar_id not in scope.pillars
             if withheld or len(answer_scores) < minimum:
+                # Which of the three, in the order they override each other: a
+                # solo founder's Team & Leadership is withheld however much
+                # evidence arrived, and a pillar the stage does not assess is
+                # withheld before thin evidence can be the explanation.
+                if score_is_withheld(pillar.pillar_id,
+                                     getattr(context, "founder", None)):
+                    reason = "solo"
+                elif withheld:
+                    reason = "stage"
+                else:
+                    reason = "thin"
                 pillar_scores.append(
                     PillarScore(
                         pillar_id=pillar.pillar_id,
@@ -337,6 +348,7 @@ class BusinessHealthScorer:
                         red_flag_triggered=False,
                         red_flag_note=None,
                         assessed_question_count=len(answer_scores),
+                        not_assessed_reason=reason,
                         dimensions_in_scope=covered,
                         dimensions_total=total,
                     )

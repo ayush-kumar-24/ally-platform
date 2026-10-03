@@ -104,6 +104,10 @@ def _pillar(pillar_id, score, weight, covered=("a", "b", "c"), total=3):
         pillar_id=pillar_id, pillar_name=f"P{pillar_id}", weight=weight, score=score,
         band=("Strong" if score is not None else None), red_flag_triggered=False,
         red_flag_note=None, assessed_question_count=(3 if score is not None else 0),
+        # Mirrors PillarScore: an unscored pillar carries WHY, so the report
+        # screen can say it instead of showing a blank card. "thin" is the
+        # right default for a fixture that withholds by giving no answers.
+        not_assessed_reason=(None if score is not None else "thin"),
         dimensions_in_scope=covered, dimensions_total=total,
     )
 

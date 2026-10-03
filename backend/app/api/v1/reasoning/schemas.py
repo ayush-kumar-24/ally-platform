@@ -427,6 +427,23 @@ class PillarScore:
     red_flag_note: str | None
     assessed_question_count: int
 
+    #: WHY this pillar has no score, or None when it has one. Three reasons,
+    #: and the report must be able to tell them apart because they say
+    #: completely different things to the founder:
+    #:
+    #:   "solo"      -- they work alone, so there is no team to grade. Nothing
+    #:                  they answered could change it. See
+    #:                  team_scope.score_is_withheld.
+    #:   "stage"     -- their stage does not assess this pillar at all.
+    #:   "thin"      -- fewer answers than MIN_ANSWERS_PER_PILLAR_SCORE, so a
+    #:                  band would claim more than the sample supports.
+    #:
+    #: Without this the screen showed a blank card and the founder had to guess,
+    #: which defeats the point of withholding the score in the first place: a
+    #: solo founder reading an unexplained gap concludes they failed, which is
+    #: the exact impression `score_is_withheld` exists to prevent.
+    not_assessed_reason: str | None = None
+
     #: Which of this pillar's Business DNA Part 2 dimensions the founder's STAGE
     #: covers, by the document's own names, and how many the pillar has in total.
     #:

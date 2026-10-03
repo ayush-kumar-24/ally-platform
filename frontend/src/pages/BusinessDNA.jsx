@@ -5,6 +5,28 @@ import ClampedText from '../components/ClampedText';
 import { DnaError, DnaLoading, DnaNoReport, DnaNoSection } from '../components/DnaState';
 import { useNavigate } from 'react-router-dom';
 
+/* What to tell the founder about a pillar that carries no band.
+ *
+ * Without this the card showed the pillar's name and nothing else, in the same
+ * amber as a middling score. A founder reading an unexplained gap concludes
+ * they did badly -- which is the exact impression withholding the score was
+ * meant to prevent. A solo founder's Team & Leadership is the case that matters:
+ * no answer they could give would change it, and saying so is the whole point.
+ *
+ * The reason comes from the engine (PillarScore.not_assessed_reason). A report
+ * stored before that existed carries none, so the fallback states the fact
+ * without inventing a cause. */
+const NOT_ASSESSED = {
+  solo: 'Not assessed \u2014 you are working on your own, so there is no team to grade here. '
+      + 'Nothing you answered counted against you.',
+  stage: 'Not assessed \u2014 this is not something we judge at your stage yet.',
+  thin: 'Not assessed \u2014 too few answers here to say anything fair.',
+};
+
+function notAssessedText(reason) {
+  return NOT_ASSESSED[reason] || 'Not assessed in this report.';
+}
+
 /* The six readiness_pillars (backend-canonical business dimensions). Scores and
    descriptions here are placeholder mock content; 4c wires them to the real
    business_dna snapshot (per-pillar band + description). */
@@ -105,7 +127,9 @@ function BusinessDNAView({ section, report }) {
                 <div className="fd-progress-bar" style={{ width: `${bandFill(p.band)}%` }} />
               </div>
             )}
-            {p.description && <ClampedText text={p.description} lines={4} />}
+            {p.band
+              ? (p.description && <ClampedText text={p.description} lines={4} />)
+              : <p className="fd-card-unassessed">{notAssessedText(p.notAssessedReason)}</p>}
           </div>
         ))}
         {otherFacts.map((f) => (
