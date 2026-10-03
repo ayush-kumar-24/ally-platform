@@ -66,6 +66,10 @@ SELLS_INTO_A_TRADE = [
     # Names a product category and no trade at all; still not an operator.
     "AI-powered SaaS that helps businesses diagnose problems and turn "
     "insights into actionable growth decisions.",
+    # The mirror of the hotel above: a purpose clause in a description that
+    # genuinely IS selling into the trade. "Used by homestays" settles it, and
+    # the "to cut commission" must not undo that.
+    "Channel manager used by homestays to cut commission.",
 ]
 
 
@@ -104,12 +108,39 @@ OPERATES_THE_BUSINESS = [
     "sold D2C and through salons.",
     "Nothing built yet. Stream and career guidance for parents of 9th-10th "
     "standard students.",
+    # BUILDING A TOOL FOR YOURSELF IS USING ONE. This is a hotel, and it read
+    # as a software company: "software TO stop paying" matched the shape of
+    # "software TO clinics", because both are a tooling word followed by a
+    # preposition. The infinitive is the difference -- one names a purpose, the
+    # other names a customer -- and the hotel lost six of its thirteen guest
+    # questions until that was separated. Found in test case E6.
+    "A boutique hotel. We built our own booking software to stop paying commission.",
+    "A 22-room hotel using a CRM to manage our guests.",
+    "Heritage homestay in Coorg, listed on three platforms, software handles "
+    "the calendar.",
+    # An operator who ALSO sells its tooling is still an operator: every
+    # question about running the place is still theirs.
+    "We run a resort and also licence our booking system to two other properties.",
 ]
 
 
 @pytest.mark.parametrize("description", OPERATES_THE_BUSINESS)
 def test_an_operator_is_never_mistaken_for_a_supplier(description):
     assert sells_tooling_into_industry(_f(description)) is False
+
+
+def test_naming_yourself_as_the_trade_is_not_naming_your_customer():
+    """The preposition is the whole difference, and the order of the checks is
+    what encodes it.
+
+    "A 40-room hotel" and "Fee collection and attendance for schools" both open
+    with a trade business. The first is saying what it IS; the second is saying
+    who it SELLS TO. Reading the self-description first gets the second one
+    wrong, which is how this was found."""
+    assert sells_tooling_into_industry(_f("A 40-room hotel in Goa.")) is False
+    assert sells_tooling_into_industry(
+        _f("Fee collection and attendance for schools and coaching centres.")
+    ) is True
 
 
 # --- failing open -----------------------------------------------------------
