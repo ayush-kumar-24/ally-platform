@@ -303,15 +303,55 @@ class QuestionSelectionEngine:
                 return own_content_rank
             return industry_rank(question)
 
+        # FIRST TERM, ahead of everything: a pillar the report WILL score, that
+        # does not yet have enough answers to score.
+        #
+        # Without it an idea-stage founder could answer all fourteen questions
+        # and be shown nothing. Ideation assesses four pillars; the other two
+        # are withheld whatever is answered. But `ADMITTED_DESPITE_PILLAR` lets
+        # the `Idea & Validation` questions filed under Revenue Maturity
+        # problems through -- rightly, they belong in the diagnosis -- and the
+        # round-robin then treated Revenue Maturity as a pillar needing
+        # coverage like any other. Measured across ten industries: three to six
+        # of the fourteen questions went to a pillar whose answers are discarded
+        # at scoring, leaving eight for four pillars that need three each. Eight
+        # of ten idea-stage founders could not be scored on Founder Readiness,
+        # and a foodtech founder answered every question and got a report with
+        # all six sections blank and an overall of zero.
+        #
+        # So in-scope pillars reach the floor FIRST, and then the ordinary
+        # round-robin resumes with everything competing again. The extra
+        # questions keep their place; they just stop taking the seats that have
+        # to be filled for the report to say anything at all.
+        scope = resolve_scope(founder)
+        scored_pillars = (
+            None if scope is None or scope.withholds_nothing else scope.pillars
+        )
+        floor = max(1, settings.MIN_ANSWERS_PER_PILLAR_SCORE)
+
+        def still_needed(pillar_id: int | None) -> int:
+            """0 while this pillar still needs answers to be scoreable, else 1.
+
+            Returns 1 for everything when the stage is unknown or assesses
+            everything, which is the pre-existing order exactly -- the same
+            fail-open contract the scope filters themselves keep.
+            """
+            if scored_pillars is None or pillar_id is None:
+                return 1
+            if pillar_id not in scored_pillars:
+                return 1
+            return 0 if per_pillar.get(pillar_id, 0) < floor else 1
+
         def key(question: Question):
             pillar_id = problem_to_pillar.get(question.problem_id)
             # A question with no pillar cannot advance pillar coverage, so it
             # sorts behind every pillar-bearing question rather than competing
             # for a round it does not belong to.
             if pillar_id is None:
-                return (len(per_pillar) + 1_000, 0,
+                return (1, len(per_pillar) + 1_000, 0,
                         relevance(question), *_sort_key(question))
             return (
+                still_needed(pillar_id),
                 per_pillar.get(pillar_id, 0),
                 per_cat.get((pillar_id, question.category), 0),
                 relevance(question),
@@ -417,7 +457,30 @@ class QuestionSelectionEngine:
             owned = (getattr(question, "primary_stage_group", None) == exit_group
                      or is_written_for_band(question)
                      or rank(question)[0] <= SUPPORTING_RANK)
-            return (0 if owned else 1, *base(question))
+            # COVERAGE OUTRANKS OWNERSHIP, and only while a pillar the report
+            # will score still cannot be scored. `base`'s first term is exactly
+            # that flag, so taking it before the promotion lets the block keep
+            # its whole size and simply stop clustering.
+            #
+            # It used to promote industry questions ahead of everything, which
+            # is fine when the industry bank is spread across pillars and ruins
+            # the report when it is not. Agritech's ideation bank is six Market
+            # Clarity questions and nothing for Founder Readiness; foodtech's is
+            # six under Revenue Maturity, which ideation does not even score. Six
+            # of fourteen questions went into one or two pillars, eight were left
+            # for four pillars needing three each, and the founder answered
+            # everything to be shown nothing.
+            #
+            # `opening_block_size` was supposed to bound this, through
+            # MIN_QUESTIONS_PER_PILLAR -- which is 2, chosen over the scoring
+            # floor of 3 on purpose, to protect the industry signal at exactly
+            # these stages. That reasoning holds; the number cannot. Two
+            # questions per pillar cannot produce a pillar that needs three. So
+            # rather than raise the reserve and shrink the block everywhere,
+            # this yields a seat only where one is actually needed, and the
+            # block keeps every seat that is not.
+            head = base(question)
+            return (head[0], 0 if owned else 1, *head[1:])
 
         return key
 

@@ -61,6 +61,26 @@ FOUNDERS = [
         "11_25", "25L_1Cr",
         id="exit-with-staff",
     ),
+    # IDEATION, AND THE INDUSTRY THAT BROKE IT. Fourteen questions, four
+    # pillars scored, three answers each: twelve of the fourteen are spoken
+    # for before anything else gets a say. Food & Beverage's whole ideation
+    # bank -- fifteen questions -- sits under Revenue Maturity problems, which
+    # ideation does not score, and the opening block used to promote all of
+    # them. This founder answered every question and was shown a report with
+    # all six sections blank and an overall of zero.
+    pytest.param(
+        "pytest-coverage-kavya@ally-test.invalid", 1, "foodtech",
+        "An idea for packaged snacks. Nothing built yet.", "solo", None,
+        id="ideation-industry-bank-entirely-out-of-scope",
+    ),
+    # The other shape: an ideation bank concentrated in ONE in-scope pillar.
+    # Agritech is fifteen Market Clarity questions and nothing for Founder
+    # Readiness, so the block filled Market and starved the rest.
+    pytest.param(
+        "pytest-coverage-arun@ally-test.invalid", 1, "agritech",
+        "An idea for a soil testing service. Nothing built yet.", "solo", None,
+        id="ideation-industry-bank-in-one-pillar",
+    ),
 ]
 
 
