@@ -131,8 +131,17 @@ _SELLS_TO_TRADE = re.compile(
 #: The older, narrower signal, kept for the descriptions that name a product
 #: category but no customer: "AI-powered SaaS that helps businesses diagnose
 #: problems" names no trade at all, and is still unmistakably not an operator.
+#: The infinitive after "to" that makes it a PURPOSE rather than a customer.
+#: "Software to stop paying commission" is a hotel describing why it built a
+#: thing; "software to clinics" is somebody selling one. Without this the first
+#: reads as the second, and a real hotel loses its guest questions.
+_PURPOSE = (
+    r"stop|save|avoid|reduce|cut|manage|run|handle|track|speed|automate|keep"
+    r"|make|help|let|get|do|take|free|replace|improve|simplify|organise|organize"
+)
+
 _SELLS_TOOLING = re.compile(
-    rf"\b({_TOOLING})\b[^.]{{0,60}}?\b(for|to|used by)\b"
+    rf"\b({_TOOLING})\b[^.]{{0,60}}?\b(for|to|used by)\b(?!\s+({_PURPOSE})\b)"
     rf"|\bb2b\b[^.]{{0,40}}?\b({_TOOLING})\b"
     rf"|\b({_TOOLING})\b[^.]{{0,40}}?\bthat helps\b"
     rf"|\bhelps?\b[^.]{{0,40}}?\b({_TOOLING})\b",
@@ -165,7 +174,21 @@ _RUNS_IT = re.compile(
 _USES_TOOLING = re.compile(
     rf"\b(we|i)\s+(use|uses|used|using|run on|built on|work with)\b"
     rf"[^.]{{0,40}}?\b({_TOOLING})\b"
-    rf"|\b({_TOOLING})\b[^.]{{0,30}}?\bto\s+(manage|run|handle|track)\s+our\b",
+    rf"|\b({_TOOLING})\b[^.]{{0,30}}?\bto\s+(manage|run|handle|track)\s+our\b"
+    # Building a tool FOR YOURSELF is using one. "We built our own booking
+    # software to stop paying commission" is a hotel, and was read as a
+    # software company until this was added.
+    rf"|\b(we|i)\s+(built|build|made|wrote|developed)\b[^.]{{0,30}}?\bour own\b"
+    rf"|\bour own\b[^.]{{0,20}}?\b({_TOOLING})\b",
+    re.I,
+)
+
+#: The description OPENS by naming what the founder is. "A 40-room hotel", "A
+#: physiotherapy clinic in Pune", "A six-room homestay" -- a supplier does not
+#: introduce itself as the thing it sells to. Checked only near the start, so a
+#: software company that mentions hotels later is unaffected.
+_IS_ONE = re.compile(
+    rf"^\W*(a|an|the)?\s*[^.]{{0,44}}?\b({_TRADE_BUSINESSES})\b",
     re.I,
 )
 
@@ -186,7 +209,18 @@ def sells_tooling_into_industry(founder: Any) -> bool:
         return False
     if _RUNS_IT.search(text) or _USES_TOOLING.search(text):
         return False
-    return bool(_SELLS_TO_TRADE.search(text) or _SELLS_TOOLING.search(text))
+
+    sells_to_trade = bool(_SELLS_TO_TRADE.search(text))
+
+    # Order matters here. "Fee collection and attendance for schools and
+    # coaching centres" opens with a trade business too, and is a supplier --
+    # the preposition is the whole difference between naming your CUSTOMER and
+    # naming YOURSELF. So the self-description only counts when nothing says
+    # the trade is being sold to.
+    if not sells_to_trade and _IS_ONE.search(text):
+        return False
+
+    return bool(sells_to_trade or _SELLS_TOOLING.search(text))
 
 
 def can_answer(question: Any, sells_tooling: bool) -> bool:
