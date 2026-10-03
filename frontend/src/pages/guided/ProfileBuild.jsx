@@ -135,11 +135,16 @@ function firstUnresolved(active, path, answers, from = 0) {
    buffer so the group still commits whole. A founder who answered the stage
    but left before the experience card must not be asked their stage again.
    startAt === active.length means there is nothing left to ask. */
-function resumePoint(active, path, answers) {
+/* `stageOrder` is a PARAMETER, like controlFor and panelRowsFor beside it, and
+   not a ref reached from the closure: this function sits outside the component,
+   so `stageOrderRef` is not in scope here. It read it anyway for a while, which
+   threw a ReferenceError the moment a founder resumed a part-finished profile --
+   the one path that calls this. Caught by `npm run lint`, not by a test. */
+function resumePoint(active, path, answers, stageOrder) {
   const found = firstUnresolved(active, path, answers);
   const startAt = found === -1 ? active.length : found;
   const question = active[startAt];
-  const parts = question && question.type === 'group' ? activeParts(question, path, stageOrderRef.current) : [];
+  const parts = question && question.type === 'group' ? activeParts(question, path, stageOrder) : [];
   const startPart = Math.max(0, parts.findIndex((pt) => !isFilled(answers[pt.key])));
   const buf = Object.fromEntries(
     parts.slice(0, startPart)
@@ -575,7 +580,8 @@ export default function ProfileBuild() {
       if (cleared.length) {
         addAlly(`These don't apply at your new stage, so I've taken them off your profile: ${cleared.join(', ')}.`);
       }
-      const { startAt, startPart, buf } = resumePoint(active, pathRef.current, profileRef.current);
+      const { startAt, startPart, buf } = resumePoint(
+        active, pathRef.current, profileRef.current, stageOrderRef.current);
       if (startAt < active.length) {
         qiRef.current = startAt;
         askQ(startAt, startPart, buf);
@@ -901,7 +907,8 @@ export default function ProfileBuild() {
       //
       // firstUnresolved/resumePoint are shared with commitEdit, which needs
       // exactly the same answer after a changed stage re-plans the flow.
-      const { startAt, startPart, buf: resumeBuf } = resumePoint(active, path, answers);
+      const { startAt, startPart, buf: resumeBuf } = resumePoint(
+        active, path, answers, stageOrderRef.current);
 
       if (startAt > 0 || startPart > 0) {
         const filled = rows.filter((x) => isFilled(answers[x.key]));

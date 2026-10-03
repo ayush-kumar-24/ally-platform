@@ -37,6 +37,18 @@ _BANDS = [
 ]
 
 
+#: The scorer filters on `label.is_scored` before touching `score`, because
+#: NOT_APPLICABLE carries no score and must dilute nothing. This fixture
+#: predates that guard and built classifications with no label at all, so every
+#: test here raised AttributeError rather than asserting anything. Mapping the
+#: risk value to its real label keeps the fixture honest: 0 is a Green answer,
+#: 2 a Red one, and the numbers the tests assert on are unchanged.
+def _label_for(score):
+    from app.models.enums import ScoreLabel
+
+    return {0: ScoreLabel.GREEN, 1: ScoreLabel.AMBER}.get(int(score), ScoreLabel.RED)
+
+
 def _pillar(pillar_id, weight):
     return SimpleNamespace(
         pillar_id=pillar_id, pillar_name=f"Pillar {pillar_id}",
@@ -60,7 +72,8 @@ def _scorer(answers_per_pillar):
             qid += 1
             questions[qid] = SimpleNamespace(question_id=qid, problem_id=100 + pillar_id)
             classifications.append(
-                SimpleNamespace(question_id=qid, score=Decimal(str(score)))
+                SimpleNamespace(question_id=qid, score=Decimal(str(score)),
+                                label=_label_for(score))
             )
     problems = {
         100 + p: SimpleNamespace(pillar_id=p) for p in answers_per_pillar
@@ -179,3 +192,80 @@ def test_an_abandoned_ideation_session_narrows_rather_than_misleads():
     assert scored == {1, 2}
     assert _by_id(result)[4].score is None
     assert _by_id(result)[6].score is None
+
+
+# --- why a pillar has no band ------------------------------------------------
+#
+# The floor and the solo rule and an out-of-scope stage all produce the same
+# thing: score None, band None. Downstream that was indistinguishable, so the
+# report screen drew a blank card and the founder was left to guess. A solo
+# founder guesses they failed, which is the exact impression
+# `score_is_withheld` exists to prevent -- so the reason now travels with the
+# score. These pin the three values and, more importantly, pin them APART.
+
+def _solo():
+    return SimpleNamespace(team_size="solo", stage=None)
+
+
+def _staffed():
+    return SimpleNamespace(team_size="11_25", stage=None)
+
+
+def _scorer_with_founder(answers_per_pillar, founder):
+    """`_scorer` with a founder attached, so team_scope and stage_scope see one."""
+    classifications, questions = [], {}
+    qid = 0
+    for pillar_id, scores in answers_per_pillar.items():
+        for score in scores:
+            qid += 1
+            questions[qid] = SimpleNamespace(question_id=qid, problem_id=100 + pillar_id)
+            classifications.append(
+                SimpleNamespace(question_id=qid, score=Decimal(str(score)),
+                                label=_label_for(score))
+            )
+    problems = {100 + p: SimpleNamespace(pillar_id=p) for p in answers_per_pillar}
+    repo = SimpleNamespace(
+        get_readiness_pillars=lambda: _PILLARS,
+        get_problems_by_ids=lambda ids: problems,
+    )
+    scorer = BusinessHealthScorer(repo, RiskInversionPillarScoreStrategy())
+    return scorer.compute(classifications, questions,
+                          context=SimpleNamespace(founder=founder))
+
+
+TEAM_PILLAR = 5
+
+
+def test_a_scored_pillar_carries_no_reason():
+    assert _by_id(_scorer({1: [0, 0, 0]}))[1].not_assessed_reason is None
+
+
+def test_too_few_answers_reads_as_thin():
+    assert _by_id(_scorer({1: [0, 0]}))[1].not_assessed_reason == "thin"
+
+
+def test_a_solo_founders_team_pillar_reads_as_solo_not_thin():
+    """The distinction the whole field exists for. With six answers -- double
+    the floor -- "thin" would be a lie, and it is the wrong thing to tell
+    somebody working alone."""
+    result = _scorer_with_founder({TEAM_PILLAR: [0] * 6}, _solo())
+    team = _by_id(result)[TEAM_PILLAR]
+
+    assert team.score is None
+    assert team.assessed_question_count == 6
+    assert team.not_assessed_reason == "solo"
+
+
+def test_the_same_answers_from_a_staffed_founder_are_scored():
+    """Control. If this ever stops scoring, the test above is passing for the
+    wrong reason."""
+    result = _scorer_with_founder({TEAM_PILLAR: [0] * 6}, _staffed())
+    assert _by_id(result)[TEAM_PILLAR].not_assessed_reason is None
+    assert _by_id(result)[TEAM_PILLAR].score is not None
+
+
+def test_solo_beats_thin_when_both_are_true():
+    """A solo founder with two team answers is solo, not thin. Telling them
+    "too few answers" invites them to answer more, which cannot change it."""
+    result = _scorer_with_founder({TEAM_PILLAR: [0, 0]}, _solo())
+    assert _by_id(result)[TEAM_PILLAR].not_assessed_reason == "solo"

@@ -454,6 +454,23 @@
   background: linear-gradient(90deg, #fbbf24, #f59e0b);
 }
 
+/* A pillar the report deliberately did not grade. Neutral on purpose: this
+   card used to fall through to .fd-cat-orange and so wore the same amber as a
+   middling score, which made the one pillar we took care NOT to judge look
+   like the one that needed attention. No bar is drawn here at all -- the card
+   hides the track rather than showing an empty one, which would read as zero. */
+.fd-cat-none .fd-card-icon {
+  background: rgba(100, 116, 139, 0.08);
+  color: #64748b;
+}
+
+.fd-card-unassessed {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: #64748b;
+}
+
 .fd-cat-red .fd-card-icon {
   background: rgba(239, 68, 68, 0.08);
   color: #b91c1c;

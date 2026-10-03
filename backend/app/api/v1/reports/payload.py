@@ -63,6 +63,11 @@ class PillarFinding:
     red_flag_note: str | None
     band_description: str | None = None  # score_bands description for `band` (shown)
 
+    #: Why there is no band: "solo", "stage" or "thin". None when scored. The
+    #: screen needs this to say something true instead of leaving a blank card
+    #: the founder reads as a failure. See PillarScore.not_assessed_reason.
+    not_assessed_reason: str | None = None
+
     #: Which of this pillar's Part 2 dimensions the founder's stage covers, and
     #: how many it has. Empty/0 means no coverage claim -- an older report row
     #: stored before this existed, or a founder whose stage could not be
@@ -339,6 +344,7 @@ def build_report_payload(db: Session, report) -> ReportPayload:
             pillar_id=p.get("pillar_id"), name=p.get("pillar_name"),
             score=p.get("score"), band=p.get("band"),
             band_description=band_desc.get((p.get("pillar_id"), p.get("band"))),
+            not_assessed_reason=p.get("not_assessed_reason"),
             red_flag_triggered=bool(p.get("red_flag_triggered")),
             red_flag_note=p.get("red_flag_note"),
             dimensions_in_scope=tuple(p.get("dimensions_in_scope") or ()),

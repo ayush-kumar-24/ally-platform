@@ -41,10 +41,21 @@ const BAND_FILL = {
   'fd-cat-red': 33,
   'fd-cat-orange': 66,
   'fd-cat-green': 100,
+  // An ungraded pillar draws no bar at all; the card hides the track rather
+  // than drawing an empty one, which would read as a score of zero.
+  'fd-cat-none': 0,
 };
 
 export function bandTone(band) {
-  if (!band) return 'fd-cat-orange';
+  // NO band is not a middling score. It means the report deliberately did not
+  // grade this pillar -- a founder working alone has no team to grade -- and
+  // returning the amber tone painted that card the same colour as "Needs
+  // Attention", so the one pillar we took care not to judge was the one that
+  // looked like a warning.
+  //
+  // An UNRECOGNISED band still falls back to amber: that is a band we failed
+  // to map, which is a different thing from no band at all.
+  if (!band) return 'fd-cat-none';
   return BAND_TONE[String(band).trim().toLowerCase()] || 'fd-cat-orange';
 }
 

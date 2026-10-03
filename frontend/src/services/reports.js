@@ -254,6 +254,10 @@ export function pillarList(facts) {
       band: p.band ? String(p.band) : null,
       description: p.band_description ? String(p.band_description) : '',
       redFlag: Boolean(p.red_flag_triggered),
+      // Why there is no band, so the card can say it. Older reports stored
+      // before this existed carry nothing, and the card falls back to a plain
+      // "Not assessed" rather than guessing a reason.
+      notAssessedReason: p.not_assessed_reason ? String(p.not_assessed_reason) : null,
     }));
 }
 

@@ -1084,6 +1084,7 @@ class ReasoningService:
                     "dimensions_in_scope": list(p.dimensions_in_scope),
                     "dimensions_total": p.dimensions_total,
                     "assessed_question_count": p.assessed_question_count,
+                    "not_assessed_reason": p.not_assessed_reason,
                 }
                 for p in business_health.pillars
             ],
