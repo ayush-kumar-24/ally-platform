@@ -612,3 +612,80 @@ def test_the_first_hire_set_matches_its_draft(catalogue):
         f"{len(in_db - in_draft)} in the database but not the draft, "
         f"{len(in_draft - in_db)} the other way round"
     )
+
+
+# --- the other five pillars -------------------------------------------------
+#
+# d4a1f8c62b73 sized Team & Leadership by giving the whole pillar a default,
+# because all three of its dimensions presuppose other people. The same
+# presumption turned up in the other five pillars, where no default applied and
+# nothing was sized: thirty-four questions about "your sales team", "your
+# managers" and "your staff", twenty-five of them sitting in a SOLO founder's
+# candidate pool at Growth. Fixed in a95e3d17c284.
+#
+# This sweep is what stops that returning as the banks grow. It is deliberately
+# narrow -- possessive, naming a group the founder employs -- because the bank
+# says "your customers" everywhere to mean TARGET customers, of a founder who
+# may have none.
+
+#: Deliberately the WIDEST pattern, not a careful one. Three attempts at a
+#: careful one were each narrower than the thing they described: "your staff"
+#: missed "your staffing model", "your leaders" missed "your leadership's
+#: attention", and matching only "your <function> team" missed "your
+#: salespeople", "your reps", "your drivers" and "your teachers" -- seventeen
+#: questions, including a founder's own drivers and tutors.
+#:
+#: So this over-matches on purpose. A false positive costs somebody one reading;
+#: a miss ships a question about staff to a founder working alone.
+PRESUMES_A_TEAM = (
+    r"your (sales|marketing|support|engineering|product|finance|ops|design|data) team"
+    r"|your managers|your team members|your staff|your direct reports"
+    r"|your heads of|your leaders|your leadership"
+    r"|your (salespeople|sales ?reps|reps|engineers|developers|designers"
+    r"|marketers|employees|technicians|operators|analysts|accountants|agents"
+    r"|consultants|advisors|crew|workers|drivers|riders|chefs|stylists"
+    r"|trainers|teachers|nurses|clinicians|supervisors|team leads?)\y"
+)
+
+
+def test_no_question_presuming_a_team_is_left_unsized(catalogue):
+    """Every question that names a group the founder employs must say how many
+    people it needs, whatever pillar it sits in.
+
+    If this fails on something new: read it, decide which band it needs -- '2_5'
+    for anyone but a lone founder, '6_10' for a named function, '11_25' for a
+    management layer -- and size it in a migration. Do not widen the pattern to
+    make it pass, and do not size it by running the pattern: these were read one
+    at a time, because "your customers" and "your staff" look identical to a
+    regex and mean opposite things here.
+    """
+    unsized = _rows(
+        """
+        SELECT q.question_code, q.question_text
+        FROM questions q
+        WHERE q.min_team_size IS NULL
+          AND q.question_text ~* :pattern
+        ORDER BY q.question_code
+        """,
+        pattern=PRESUMES_A_TEAM,
+    )
+    assert not unsized, (
+        f"{len(unsized)} question(s) presume a team the founder may not have "
+        f"and carry no min_team_size: {[c for c, _t in unsized]}"
+    )
+
+
+def test_a_manager_question_needs_a_management_layer(catalogue):
+    """You do not have managers at ten people; you have colleagues. Pinned
+    because '6_10' would look like a reasonable guess for these and is not."""
+    too_small = _rows(
+        """
+        SELECT question_code, min_team_size FROM questions
+        WHERE question_text ~* 'your managers'
+          AND (min_team_size IS NULL OR min_team_size IN ('solo', '2_5', '6_10'))
+        ORDER BY question_code
+        """
+    )
+    assert not too_small, (
+        f"questions about the founder's managers, sized below 11_25: {too_small}"
+    )
