@@ -31,7 +31,27 @@ MIGRATION = "f0b82e4d5a19"
 #: premise is the subject rather than scenery.
 ALLOWED_TO_ASSUME_A_BOARD = frozenset({"S10-NGO-007", "S10-NGO-008"})
 
-NAMES_A_BOARD = re.compile(r"(your board|your investors)", re.I)
+#: Presupposes the founder HAS outside money or a board, rather than merely
+#: mentioning one. The distinction is the whole rule, and it is why the pattern
+#: is this shape:
+#:
+#:   "Do you fear negative reactions from investors who funded a specific
+#:   direction?" leaves a bootstrapped founder nothing to answer. Caught.
+#:
+#:   "Have you ever felt underprepared going into a board meeting?" and "Do you
+#:   feel prepared to run a formal board meeting, or is this all genuinely new
+#:   to you?" both permit "never" -- the second offers it outright. Not caught,
+#:   and they should not be.
+#:
+#: WIDENED AFTER A MISS. The first version was `(your board|your investors)`,
+#: which reads as a complete rule and is not: IVA-061 said "investors WHO
+#: funded", slipped through the sweep below, and reached a solo pre-revenue
+#: founder in a real diagnosis. Fixed in f74b2e9c1a60.
+NAMES_A_BOARD = re.compile(
+    r"(your board|your investors|investors who|who funded you"
+    r"|your cap table|your backers|your last round)",
+    re.I,
+)
 
 
 def _migration():
@@ -131,12 +151,22 @@ def test_no_question_outside_fundraising_assumes_a_board(catalogue):
     Fundraising questions are exempt because `context_scope` withholds that
     whole family from a founder who has not said they are raising -- there the
     premise is checked before the question is ever asked.
+
+    THIS SWEEP HAS ALREADY MISSED ONE, which is why its pattern is wider than
+    the obvious two phrases. IVA-061 sat under "Failure to Pivot" and read
+    "investors WHO funded a specific direction"; the sweep looked for "your
+    investors", found nothing, and passed. A solo bootstrapped founder at
+    Validation met it in a real diagnosis. If this test is ever failing on a
+    question that genuinely permits "I have never had one", widen the exemption
+    with a reason -- do not narrow the pattern back.
     """
     stray = _rows(
         """
         SELECT q.question_code, q.question_text FROM questions q
         JOIN problems p ON p.problem_id = q.problem_id
-        WHERE q.question_text ~* '(your board|your investors)'
+        WHERE q.question_text ~* '(your board|your investors|investors who'
+                                 '|who funded you|your cap table|your backers'
+                                 '|your last round)'
           AND q.question_code <> ALL(:kept)
           AND p.problem_code NOT LIKE 'FND-%'
         ORDER BY q.question_code
