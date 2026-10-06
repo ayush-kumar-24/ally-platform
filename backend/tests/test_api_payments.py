@@ -177,7 +177,8 @@ def test_validate_returns_the_price_breakdown(client):
 
     assert r.status_code == 200
     assert r.json() == {"code": "FOUNDER100", "description": "First 100",
-                        "list_amount_inr": 999, "discount_inr": 500, "payable_inr": 499}
+                        "list_amount_inr": 999, "discount_inr": 500, "payable_inr": 499,
+                        "trial_days": None}
 
 
 def test_validate_passes_the_authenticated_founders_own_id(client):

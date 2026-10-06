@@ -60,6 +60,9 @@ class CouponQuoteResponse(BaseModel):
     list_amount_inr: int
     discount_inr: int
     payable_inr: int
+    #: Set when the code starts an autopay trial: `payable_inr` is paid today,
+    #: then `list_amount_inr` every month from the day after the trial.
+    trial_days: int | None = None
 
 
 class CheckoutResponse(BaseModel):
@@ -107,7 +110,7 @@ def validate_coupon(
     return CouponQuoteResponse(
         code=quote.code, description=quote.description,
         list_amount_inr=quote.list_amount_inr, discount_inr=quote.discount_inr,
-        payable_inr=quote.payable_inr)
+        payable_inr=quote.payable_inr, trial_days=quote.trial_days)
 
 
 @router.post("/checkout", response_model=CheckoutResponse,
@@ -171,3 +174,93 @@ def confirm_checkout(
     )
     activated = result.outcome in (WebhookOutcome.CAPTURED, WebhookOutcome.ALREADY_PROCESSED)
     return ConfirmResponse(activated=activated, outcome=result.outcome, plan=result.plan)
+
+
+# --- autopay trial ------------------------------------------------------------
+#
+# A trial coupon (e.g. 100FOUNDERS) starts a Razorpay subscription: a small fee
+# today, the plan's full price every month from the day after the trial, until
+# the founder cancels. See app/payments/subscriptions.py.
+
+
+def get_subscription_service(db=Depends(get_db)):
+    return container.subscription_service(db)
+
+
+class TrialStartRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    tier: PlanTier = PlanTier.PRO
+    coupon_code: str = Field(min_length=1, max_length=40)
+
+
+class TrialStartResponse(BaseModel):
+    subscription_id: str
+    key_id: str
+    plan_tier: str
+    upfront_paise: int
+    recurring_paise: int
+    trial_days: int
+    trial_ends_at: str
+    coupon_code: str
+
+
+@router.post("/trial/start", response_model=TrialStartResponse,
+             summary="Start an autopay trial with a trial code")
+def start_trial(
+    payload: TrialStartRequest,
+    founder: Founder = Depends(get_founder_record),
+    service=Depends(get_subscription_service),
+) -> TrialStartResponse:
+    s = service.start_trial(founder.founder_id, payload.tier, payload.coupon_code)
+    return TrialStartResponse(
+        subscription_id=s.subscription_id, key_id=s.key_id, plan_tier=s.plan_tier,
+        upfront_paise=s.upfront_paise, recurring_paise=s.recurring_paise,
+        trial_days=s.trial_days, trial_ends_at=s.trial_ends_at.isoformat(),
+        coupon_code=s.coupon_code)
+
+
+class TrialConfirmRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    razorpay_subscription_id: str = Field(min_length=1, max_length=200)
+    razorpay_payment_id: str = Field(min_length=1, max_length=200)
+    razorpay_signature: str | None = Field(default=None, max_length=200)
+
+
+@router.post("/trial/confirm", response_model=ConfirmResponse,
+             summary="Confirm a just-approved autopay trial with Razorpay")
+def confirm_trial(
+    payload: TrialConfirmRequest,
+    founder: Founder = Depends(get_founder_record),
+    service=Depends(get_subscription_service),
+    db=Depends(get_db),
+) -> ConfirmResponse:
+    """Elevated for the same reason as /confirm: activating writes the
+    subscription and plan rows a system actor writes. The service has already
+    refused a subscription that is not this founder's."""
+    set_admin_rls_context(db)
+    result = service.confirm_trial(
+        founder.founder_id, subscription_id=payload.razorpay_subscription_id,
+        payment_id=payload.razorpay_payment_id, signature=payload.razorpay_signature)
+    activated = result.outcome in (WebhookOutcome.CAPTURED, WebhookOutcome.ALREADY_PROCESSED)
+    return ConfirmResponse(activated=activated, outcome=result.outcome, plan=result.plan)
+
+
+class CancelAutopayResponse(BaseModel):
+    cancelled: bool
+    access_until: str | None
+
+
+@router.post("/subscription/cancel", response_model=CancelAutopayResponse,
+             summary="Cancel autopay; access lasts to the end of what was paid for")
+def cancel_autopay(
+    founder: Founder = Depends(get_founder_record),
+    service=Depends(get_subscription_service),
+    db=Depends(get_db),
+) -> CancelAutopayResponse:
+    set_admin_rls_context(db)
+    sub = service.cancel(founder.founder_id)
+    return CancelAutopayResponse(
+        cancelled=True,
+        access_until=sub.expires_at.isoformat() if sub and sub.expires_at else None)

@@ -31,7 +31,7 @@ _LIVE_REDEMPTION_PREDICATE = (
 
 _COUPON_COLUMNS = (
     "coupon_id, code, description, discount_type, discount_value, applies_to, "
-    "max_redemptions, max_per_founder, valid_from, valid_until, is_active"
+    "max_redemptions, max_per_founder, valid_from, valid_until, is_active, trial_days"
 )
 
 
@@ -114,7 +114,7 @@ class CouponRepository:
                 SELECT c.coupon_id, c.code, c.description, c.discount_type,
                        c.discount_value, c.applies_to, c.max_redemptions,
                        c.max_per_founder, c.valid_from, c.valid_until, c.is_active,
-                       c.created_at,
+                       c.trial_days, c.created_at,
                        count(r.redemption_id) FILTER (
                            WHERE r.status = 'confirmed') AS confirmed_count,
                        count(r.redemption_id) FILTER (
@@ -139,19 +139,19 @@ class CouponRepository:
                discount_value: int, applies_to: list[str] | None,
                max_redemptions: int | None, max_per_founder: int,
                valid_from: datetime | None, valid_until: datetime,
-               admin_id: int) -> int:
+               admin_id: int, trial_days: int | None = None) -> int:
         coupon_id = self.db.execute(
             text("INSERT INTO coupons "
                  "(code, description, discount_type, discount_value, applies_to, "
                  " max_redemptions, max_per_founder, valid_from, valid_until, "
-                 " created_by_admin_id) "
+                 " created_by_admin_id, trial_days) "
                  "VALUES (:code, :descr, :dtype, :dval, :applies, :maxr, :maxf, "
-                 "        COALESCE(:vfrom, now()), :vuntil, :admin) "
+                 "        COALESCE(:vfrom, now()), :vuntil, :admin, :trial) "
                  "RETURNING coupon_id"),
             {"code": code, "descr": description, "dtype": discount_type,
              "dval": discount_value, "applies": applies_to, "maxr": max_redemptions,
              "maxf": max_per_founder, "vfrom": valid_from, "vuntil": valid_until,
-             "admin": admin_id},
+             "admin": admin_id, "trial": trial_days},
         ).scalar()
         self.db.commit()
         return coupon_id
@@ -208,4 +208,5 @@ def _to_coupon(row) -> Coupon | None:
         valid_from=row["valid_from"],
         valid_until=row["valid_until"],
         is_active=bool(row["is_active"]),
+        trial_days=row.get("trial_days"),
     )

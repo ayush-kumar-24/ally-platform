@@ -397,3 +397,38 @@ def send_notification_emails(
 
     result = send_pending_notification_emails(db)
     return {**result, "email_configured": settings.email_enabled}
+
+
+@router.post(
+    "/autopay-lifecycle",
+    summary="End lapsed autopay access and send trial-ending reminders",
+)
+def autopay_lifecycle(
+    db: Session = Depends(get_db),
+    _: None = Depends(authorise_internal_job),
+) -> dict:
+    """Two sweeps for autopay subscriptions (app/payments/subscriptions.py):
+
+    * founders whose paid-for access has ended -- cancelled, halted, or a
+      renewal that never arrived within the grace window -- go back to Free;
+    * founders whose trial ends within two days get one email (and a bell
+      notification) saying exactly when autopay will charge and how to cancel.
+
+    **Call this every 10-15 minutes.** Idempotent: an expired subscription is
+    closed out once, and each trial gets one reminder.
+    """
+    from app.core.container import container
+    from app.notifications.writer import notify
+    from app.services.email import send_email
+
+    service = container.subscription_service(db)
+    expired = service.expire_ended()
+
+    def _bell(founder_id, *, title, body, dedup_key):
+        notify(db, founder_id=founder_id, type="subscription_expiring", title=title,
+               body=body, action_url="/app/billing", dedup_key=dedup_key)
+
+    reminders = service.send_trial_reminders(
+        lambda to, subject, body: send_email(to, subject, body), notify=_bell)
+    logger.info("internal job: autopay lifecycle", extra={**expired, **reminders})
+    return {**expired, **reminders, "email_configured": settings.email_enabled}

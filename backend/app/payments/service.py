@@ -78,6 +78,7 @@ class PaymentService:
         credits: CreditService,
         *,
         coupons: CouponService | None = None,
+        subscriptions=None,
         clock=None,
     ):
         self.gateway = gateway
@@ -86,6 +87,9 @@ class PaymentService:
         # Optional so every existing construction of this service keeps
         # working; a checkout that passes no code never touches it.
         self.coupons = coupons
+        # SubscriptionService, for autopay events; None keeps the one-time
+        # checkout working exactly as before.
+        self.subscriptions = subscriptions
         self._now = clock or (lambda: datetime.now(timezone.utc))
 
     # --- founder-initiated ---------------------------------------------------
@@ -114,6 +118,11 @@ class PaymentService:
             # payment row, because the last slot of a capped code can be taken
             # between this line and that one.
             quote = self.coupons.quote(code=coupon_code, tier=tier, founder_id=founder_id)
+            if getattr(quote, "trial_days", None):
+                # Refused before an order exists: a trial code priced as a
+                # one-time discount would sell a month for the trial fee.
+                from app.coupons.errors import CouponStartsTrialError
+                raise CouponStartsTrialError(quote.code)
             discount_inr = quote.discount_inr
 
         charge_inr = list_amount_inr - discount_inr
@@ -262,6 +271,17 @@ class PaymentService:
         payload = json.loads(body)
         event = payload.get("event")
         entity = ((payload.get("payload") or {}).get("payment") or {}).get("entity") or {}
+
+        # Autopay: the subscription events drive the lifecycle. The payment
+        # events Razorpay ALSO sends for a subscription's charges carry an
+        # order id this app never created, so they must not reach the
+        # one-time-order path below (which would log them as unknown orders).
+        if str(event).startswith("subscription."):
+            if self.subscriptions is None:
+                return WebhookResult(outcome=WebhookOutcome.IGNORED_EVENT)
+            return self.subscriptions.handle_event(str(event), payload)
+        if entity.get("subscription_id") or entity.get("invoice_id"):
+            return WebhookResult(outcome=WebhookOutcome.IGNORED_EVENT)
 
         if event == "payment.captured":
             return self._grant_for_captured(entity)

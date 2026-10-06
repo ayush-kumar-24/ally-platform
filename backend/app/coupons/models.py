@@ -33,6 +33,14 @@ class Coupon:
     valid_from: datetime
     valid_until: datetime
     is_active: bool
+    #: Set for a trial coupon: instead of discounting a one-time order, it
+    #: starts an autopay subscription -- the discounted price is paid up front
+    #: for `trial_days`, then the plan's full price recurs until cancelled.
+    trial_days: int | None = None
+
+    @property
+    def is_trial(self) -> bool:
+        return bool(self.trial_days)
 
     def discount_for(self, list_price_inr: int) -> int:
         """Whole rupees off `list_price_inr`, floored at a ₹1 charge.
@@ -59,3 +67,6 @@ class CouponQuote:
     list_amount_inr: int
     discount_inr: int
     payable_inr: int
+    #: Set when this code starts an autopay trial: `payable_inr` is then what
+    #: is paid today, and `list_amount_inr` recurs monthly after the trial.
+    trial_days: int | None = None

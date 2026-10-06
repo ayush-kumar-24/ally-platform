@@ -446,6 +446,11 @@ class CouponCreateRequest(BaseModel):
     # Required, with no default. Every coupon expires at a moment somebody
     # chose; a discount with no end date is one nobody remembers to switch off.
     valid_until: datetime
+    # Set to make this a trial code: the discounted price is paid today for
+    # this many days, then the plan's full price recurs by autopay until the
+    # founder cancels (app/payments/subscriptions.py). Unset: a one-time
+    # discount, exactly as before.
+    trial_days: int | None = Field(default=None, ge=1, le=30)
 
 
 class CouponUpdateRequest(BaseModel):
@@ -512,7 +517,7 @@ def create_coupon(payload: CouponCreateRequest,
         discount_value=payload.discount_value, applies_to=payload.applies_to,
         max_redemptions=payload.max_redemptions, max_per_founder=payload.max_per_founder,
         valid_from=payload.valid_from, valid_until=payload.valid_until,
-        admin_id=admin.admin_id)
+        admin_id=admin.admin_id, trial_days=payload.trial_days)
     logger.info("admin: coupon created", extra={"admin_id": admin.admin_id, "code": code,
                                                 "coupon_id": coupon_id})
     return {"coupon_id": coupon_id, "code": code}
@@ -625,6 +630,7 @@ def _coupon_row(r: dict) -> dict:
         "valid_from": r["valid_from"].isoformat() if r["valid_from"] else None,
         "valid_until": r["valid_until"].isoformat() if r["valid_until"] else None,
         "is_active": bool(r["is_active"]),
+        "trial_days": r.get("trial_days"),
         "confirmed_count": confirmed,
         # In-flight checkouts. Shown separately so "3 of 100 used" and "and 2
         # people are paying right now" are not the same number.

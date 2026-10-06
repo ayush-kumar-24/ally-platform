@@ -42,6 +42,7 @@ router = APIRouter(prefix="/webhooks/razorpay", tags=["webhooks"])
 async def handle_razorpay_event(
     request: Request,
     x_razorpay_signature: str | None = Header(default=None),
+    x_razorpay_event_id: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ) -> dict:
     """Reads the body, then does every blocking thing off the event loop.
@@ -60,10 +61,11 @@ async def handle_razorpay_event(
     """
     body = await request.body()
     return await run_in_threadpool(
-        _handle_event, db, body, x_razorpay_signature or "")
+        _handle_event, db, body, x_razorpay_signature or "", x_razorpay_event_id)
 
 
-def _handle_event(db: Session, body: bytes, x_razorpay_signature: str) -> dict:
+def _handle_event(db: Session, body: bytes, x_razorpay_signature: str,
+                  event_id: str | None = None) -> dict:
     # Razorpay is a system actor: this request carries no founder identity, and
     # the work it does legitimately spans founders -- it has to find a payment
     # by gateway order id before it can know whose it is. Without a context the
@@ -85,7 +87,10 @@ def _handle_event(db: Session, body: bytes, x_razorpay_signature: str) -> dict:
         payload = {}
     event = str(payload.get("event") or "unknown")
     entity = ((payload.get("payload") or {}).get("payment") or {}).get("entity") or {}
-    gateway_event_id = str(entity.get("id") or f"razorpay-{event}-unkeyed")
+    # Razorpay's own per-delivery event id when sent: subscription events carry
+    # no payment entity, and keying them all on "razorpay-<event>-unkeyed"
+    # collided on the unique key after the first one, so they went unlogged.
+    gateway_event_id = event_id or str(entity.get("id") or f"razorpay-{event}-unkeyed")
 
     log_id = _log_webhook(db, event_type=event, gateway_event_id=gateway_event_id, payload=payload)
 

@@ -4,7 +4,10 @@ import { MOCK_PLANS } from '../data/mockData';
 import { getProfile } from '../services/profile';
 import { getCatalog, getMyPlan } from '../services/plans';
 import { refreshPlanName } from '../hooks/usePlanName';
-import { confirmPayment, openCheckout, startCheckout, validateCoupon, waitForPlanActivation } from '../services/payments';
+import {
+  cancelAutopay, confirmPayment, confirmTrial, openCheckout, startCheckout, startTrial,
+  validateCoupon, waitForPlanActivation,
+} from '../services/payments';
 
 /** The Knowledge libraries, in the order the sidebar lists them.
  *
@@ -383,11 +386,19 @@ function CheckoutView({ plan, onBack, onPaid }) {
   const alive = useRef(true);
   useEffect(() => () => { alive.current = false; }, []);
 
-  const createOrder = useCallback((couponCode = null) => {
+  const createOrder = useCallback((couponCode = null, trial = false) => {
     setOrder(null);
     setOrderError(null);
     setPayError(null);
-    return startCheckout(plan.id, couponCode)
+    /* A trial code starts an autopay SUBSCRIPTION rather than a one-time
+       order. Shaped like an order (amount_paise = what is paid today) so the
+       rest of this view reads it the same way; `trial` switches the copy. */
+    const request = trial
+      ? startTrial(couponCode, plan.id).then(t => ({
+        ...t, trial: true, amount_paise: t.upfront_paise, currency: 'INR',
+      }))
+      : startCheckout(plan.id, couponCode);
+    return request
       .then((o) => { if (alive.current) setOrder(o); })
       .catch((err) => {
         if (!alive.current) return;
@@ -418,7 +429,7 @@ function CheckoutView({ plan, onBack, onPaid }) {
       setApplied(quote);
       /* Rebuild the order at the discounted price. The quote is a preview; the
          order is what Razorpay charges, and it must agree with the summary. */
-      await createOrder(quote.code);
+      await createOrder(quote.code, Boolean(quote.trial_days));
     } catch (err) {
       if (!alive.current) return;
       setApplied(null);
@@ -496,6 +507,9 @@ function CheckoutView({ plan, onBack, onPaid }) {
   const discountLabel = order?.discount_paise
     ? `₹${rupeesFromPaise(order.discount_paise)}` : null;
   const busy = payState !== 'idle';
+  const trial = order?.trial ? order : null;
+  const firstChargeDate = trial ? fmtRenewalDate(trial.trial_ends_at) : null;
+  const recurringLabel = trial ? `₹${rupeesFromPaise(trial.recurring_paise)}` : null;
 
   return (
     <div className="bl-checkout-wrap stagger d1">
@@ -512,7 +526,9 @@ function CheckoutView({ plan, onBack, onPaid }) {
         <div className="bl-checkout-form-col">
           <div className="bl-section-label">Secure Payment</div>
 
-          <h3 className="bl-pay-heading">Pay for {plan.name}</h3>
+          <h3 className="bl-pay-heading">
+            {trial ? `Start your ${trial.trial_days}-day ${plan.name} trial` : `Pay for ${plan.name}`}
+          </h3>
           <p className="bl-pay-lede">
             You&apos;ll complete payment in Razorpay&apos;s secure window — card, UPI,
             net banking and wallets are all available there. Your payment details
@@ -542,6 +558,23 @@ function CheckoutView({ plan, onBack, onPaid }) {
             </div>
           )}
 
+          {/* The autopay terms, stated before the founder pays -- in plain
+              numbers and dates, not fine print. Razorpay shows the recurring
+              amount again when the mandate is approved; this is so nobody
+              reaches that screen surprised. */}
+          {trial && (
+            <div className="bl-trial-terms" role="note">
+              <strong>How your trial works</strong>
+              <ul>
+                <li><b>Today:</b> pay {amountLabel} for {trial.trial_days} days of {plan.name}.</li>
+                <li><b>From {firstChargeDate}:</b> autopay charges {recurringLabel} for each month of {plan.name}, until you cancel.</li>
+                <li><b>Cancel anytime</b> from Billing before {firstChargeDate} and you won&apos;t be charged {recurringLabel}.</li>
+                <li>We&apos;ll email you 2 days before the first charge.</li>
+              </ul>
+              <small>In the next step you&apos;ll approve autopay (UPI AutoPay, card or bank) for {recurringLabel}/month.</small>
+            </div>
+          )}
+
           {/* Discount code. Sits above Pay because it changes what Pay costs,
               and a founder who spots it afterwards has already committed. */}
           <div className="bl-coupon">
@@ -549,7 +582,9 @@ function CheckoutView({ plan, onBack, onPaid }) {
               <div className="bl-coupon-applied">
                 <span className="bl-coupon-code">{applied.code}</span>
                 <span className="bl-coupon-saved">
-                  &minus;&#8377;{applied.discount_inr.toLocaleString('en-IN')}
+                  {applied.trial_days
+                    ? `${applied.trial_days}-day trial · ₹${applied.payable_inr.toLocaleString('en-IN')}`
+                    : <>&minus;&#8377;{applied.discount_inr.toLocaleString('en-IN')}</>}
                 </span>
                 <button type="button" className="bl-link-btn" onClick={removeCoupon}
                         disabled={busy}>
@@ -603,7 +638,9 @@ function CheckoutView({ plan, onBack, onPaid }) {
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
                   <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
                 </svg>
-                {order ? `Pay ${amountLabel}` : 'Preparing secure checkout…'}
+                {order
+                  ? (trial ? `Pay ${amountLabel} & start trial` : `Pay ${amountLabel}`)
+                  : 'Preparing secure checkout…'}
               </>
             )}
           </button>
@@ -614,7 +651,10 @@ function CheckoutView({ plan, onBack, onPaid }) {
           </p>
 
           {order && (
-            <p className="bl-pay-order-ref">Order reference: {order.order_id}</p>
+            <p className="bl-pay-order-ref">
+              {trial ? `Subscription reference: ${trial.subscription_id}`
+                : `Order reference: ${order.order_id}`}
+            </p>
           )}
         </div>
 
@@ -625,7 +665,10 @@ function CheckoutView({ plan, onBack, onPaid }) {
           <div className="bl-os-plan-badge">
             <div className="bl-os-plan-name">{plan.name} Plan</div>
             <div className="bl-os-plan-tag">{plan.tag}</div>
-            <div className="bl-os-plan-cycle">{plan.oneTime ? 'One-time payment' : 'Billed Monthly'}</div>
+            <div className="bl-os-plan-cycle">
+              {trial ? `${trial.trial_days}-day trial, then autopay monthly`
+                : plan.oneTime ? 'One-time payment' : 'Billed Monthly'}
+            </div>
           </div>
 
           <ul className="bl-os-feats">
@@ -639,6 +682,22 @@ function CheckoutView({ plan, onBack, onPaid }) {
 
           {/* Every figure here comes from the order the backend created, so what
               the founder reads is exactly what Razorpay will charge. */}
+          {trial ? (
+            <div className="bl-os-breakdown">
+              <div className="bl-os-line">
+                <span>{trial.trial_days}-day trial ({trial.coupon_code})</span>
+                <span>{amountLabel}</span>
+              </div>
+              <div className="bl-os-line">
+                <span>From {firstChargeDate}, monthly by autopay</span>
+                <span>{recurringLabel}/mo</span>
+              </div>
+              <div className="bl-os-total">
+                <span>Payable today</span>
+                <span>{amountLabel}</span>
+              </div>
+            </div>
+          ) : (
           <div className="bl-os-breakdown">
             <div className="bl-os-line">
               <span>{plan.name} ({plan.oneTime ? 'One-time' : 'Monthly'})</span>
@@ -655,10 +714,12 @@ function CheckoutView({ plan, onBack, onPaid }) {
               <span>{amountLabel ?? '—'}</span>
             </div>
           </div>
+          )}
 
           <div className="bl-os-trust">
             <span>Payments secured by Razorpay</span>
             <span>Your plan activates as soon as payment is confirmed</span>
+            {trial && <span>Cancel autopay anytime from Billing</span>}
             <span>No card details are stored by GoXL Ally</span>
           </div>
         </div>
@@ -709,7 +770,9 @@ function ActivatingView({ plan, order, callback, onActivated, onViewStatus }) {
        before this endpoint existed. A rejected or failed confirm therefore
        degrades to the webhook wait rather than to an error the founder can do
        nothing about. */
-    if (callback?.razorpay_payment_id && order?.order_id) {
+    if (callback?.razorpay_payment_id && order?.subscription_id) {
+      confirmTrial(callback).catch(() => { /* the webhook is still coming */ });
+    } else if (callback?.razorpay_payment_id && order?.order_id) {
       confirmPayment({
         order_id: order.order_id,
         razorpay_payment_id: callback.razorpay_payment_id,
@@ -850,8 +913,34 @@ function SuccessView({ plan, order, onViewStatus }) {
 /* ═══════════════════════════════════════════
    VIEW 4 — Subscription Status
 ═══════════════════════════════════════════ */
-function StatusView({ onUpgrade, currentPlan, subscription }) {
+function StatusView({ onUpgrade, currentPlan, subscription, onSubscriptionChange }) {
   const [cancelModal, setCancelModal] = useState(false);
+  const [cancelBusy, setCancelBusy] = useState(false);
+  const [cancelError, setCancelError] = useState(null);
+  /* Cancel exists only where something actually renews: an autopay
+     subscription. A one-time purchase has nothing to stop, and the old modal
+     -- which promised a cancellation, showed a hard-coded date and did
+     nothing -- is gone. */
+  const autopayOn = Boolean(subscription?.autopay_active);
+  const inTrial = subscription?.status === 'trial';
+  const accessUntil = subscription?.access_until ? fmtRenewalDate(subscription.access_until) : null;
+
+  const confirmCancel = async () => {
+    setCancelBusy(true);
+    setCancelError(null);
+    try {
+      await cancelAutopay();
+      const me = await getMyPlan().catch(() => null);
+      onSubscriptionChange?.(me?.subscription || {
+        ...subscription, status: 'cancelled', autopay_active: false, next_charge_at: null,
+      });
+      setCancelModal(false);
+    } catch (err) {
+      setCancelError(err?.detail || err?.message || 'Could not cancel right now. Please try again.');
+    } finally {
+      setCancelBusy(false);
+    }
+  };
   /* MOCK_PLANS lists the three PAID tiers, so `free` matches nothing -- and the
      old fallback was `|| MOCK_PLANS[1]`, which is Plus at Rs 499. A founder who
      had never paid a rupee opened this page and was told, with an Active badge
@@ -890,8 +979,8 @@ function StatusView({ onUpgrade, currentPlan, subscription }) {
   return (
     <div className="bl-status-wrap stagger d1">
       {/* Cancel modal */}
-      {cancelModal && (
-        <div className="bl-modal-overlay" onClick={() => setCancelModal(false)}>
+      {cancelModal && autopayOn && (
+        <div className="bl-modal-overlay" onClick={() => !cancelBusy && setCancelModal(false)}>
           <div className="bl-modal" onClick={e => e.stopPropagation()}>
             <div className="bl-modal-icon warn">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -900,14 +989,21 @@ function StatusView({ onUpgrade, currentPlan, subscription }) {
                 <line x1="12" y1="17" x2="12.01" y2="17" />
               </svg>
             </div>
-            <h3>Cancel Subscription?</h3>
-            <p>Your access to {plan.name} features will continue until your current billing period ends (Aug 1, 2026). After that, your account reverts to the Free plan.</p>
+            <h3>Cancel autopay?</h3>
+            <p>
+              {inTrial
+                ? <>You won&apos;t be charged {`₹${(subscription.next_charge_inr ?? plan.price).toLocaleString('en-IN')}`}. You keep {plan.name} until your trial ends on <strong>{accessUntil}</strong>, then move to the Free plan.</>
+                : <>No further charges. You keep {plan.name} until <strong>{accessUntil}</strong> — the end of the month you&apos;ve paid for — then move to the Free plan.</>}
+            </p>
+            {cancelError && <p className="bl-coupon-err" role="alert">{cancelError}</p>}
             <div className="bl-modal-actions">
-              <button id="cancel-confirm-btn" className="bl-modal-btn danger" onClick={() => setCancelModal(false)}>
-                Yes, Cancel Plan
+              <button id="cancel-confirm-btn" className="bl-modal-btn danger" onClick={confirmCancel}
+                      disabled={cancelBusy}>
+                {cancelBusy ? 'Cancelling…' : 'Yes, cancel autopay'}
               </button>
-              <button id="cancel-dismiss-btn" className="bl-modal-btn ghost" onClick={() => setCancelModal(false)}>
-                Keep My Plan
+              <button id="cancel-dismiss-btn" className="bl-modal-btn ghost"
+                      onClick={() => setCancelModal(false)} disabled={cancelBusy}>
+                Keep my plan
               </button>
             </div>
           </div>
@@ -919,7 +1015,7 @@ function StatusView({ onUpgrade, currentPlan, subscription }) {
           <div className="bl-section-label">Current Subscription</div>
           <h2 className="bl-status-plan-name">
             {plan.name} Plan
-            <span className="bl-status-badge active">Active</span>
+            <span className="bl-status-badge active">{inTrial ? 'Trial' : 'Active'}</span>
           </h2>
           {/* Was the literal "August 1, 2026", shown to every founder on every
               plan -- so it was wrong for everyone the day it was written, and
@@ -927,7 +1023,15 @@ function StatusView({ onUpgrade, currentPlan, subscription }) {
               real one is stamped on the subscription when the payment is
               captured; when there is no row behind the plan (an admin grant),
               the date is omitted rather than guessed. */}
-          {plan.oneTime
+          {subscription?.autopay
+            ? (
+              <p className="bl-status-renew">
+                {autopayOn
+                  ? <>{inTrial ? 'Trial ends' : 'Next charge'}: <strong>{fmtRenewalDate(subscription.next_charge_at)}</strong> · autopay ₹{(subscription.next_charge_inr ?? plan.price).toLocaleString('en-IN')}/mo</>
+                  : <>Autopay cancelled · {plan.name} until <strong>{accessUntil}</strong>, then Free</>}
+              </p>
+            )
+            : plan.oneTime
             ? <p className="bl-status-renew">One-time purchase · ₹{plan.price.toLocaleString()}</p>
             : (
               <p className="bl-status-renew">
@@ -942,9 +1046,11 @@ function StatusView({ onUpgrade, currentPlan, subscription }) {
           <button id="upgrade-plan-btn" className="bl-action-btn primary" onClick={onUpgrade}>
             Upgrade Plan
           </button>
-          <button id="cancel-plan-btn" className="bl-action-btn ghost" onClick={() => setCancelModal(true)}>
-            Cancel Plan
-          </button>
+          {autopayOn && (
+            <button id="cancel-plan-btn" className="bl-action-btn ghost" onClick={() => setCancelModal(true)}>
+              Cancel autopay
+            </button>
+          )}
         </div>
       </div>
 
@@ -1047,6 +1153,7 @@ export default function Billing() {
   /* The backend itself now reports the new tier. */
   const handleActivated = (entitlements) => {
     if (entitlements?.tier) setCurrentPlan(entitlements.tier);
+    if (entitlements) setSubscription(entitlements.subscription || null);
     // The shell's plan badge reads a module-level cache filled once per
     // session. It is not remounted by activating a plan, so without this a
     // founder who has just paid keeps seeing the plan they left behind --
@@ -1124,6 +1231,7 @@ export default function Billing() {
         <StatusView
           currentPlan={currentPlan}
           subscription={subscription}
+          onSubscriptionChange={setSubscription}
           onUpgrade={() => setView('plans')}
         />
       )}

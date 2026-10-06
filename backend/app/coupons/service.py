@@ -23,8 +23,10 @@ from app.coupons.errors import (
     CouponInactiveError,
     CouponNotApplicableError,
     CouponNotFoundError,
+    CouponNotTrialError,
     CouponNotValidForPlanError,
     CouponNotYetValidError,
+    CouponStartsTrialError,
 )
 from app.coupons.models import Coupon, CouponQuote
 from app.coupons.repository import CouponRepository
@@ -60,12 +62,13 @@ class CouponService:
             list_amount_inr=plan.price_inr,
             discount_inr=discount,
             payable_inr=plan.price_inr - discount,
+            trial_days=coupon.trial_days,
         )
 
     # --- the binding check --------------------------------------------------
 
     def reserve(self, *, code: str, tier: PlanTier, founder_id: int,
-                payment_id: int) -> tuple[Coupon, int]:
+                payment_id: int, for_trial: bool = False) -> tuple[Coupon, int]:
         """Re-validate and claim a slot against `payment_id`.
 
         Caller must be inside the transaction that created the payment row and
@@ -74,6 +77,12 @@ class CouponService:
         plan = PLANS[tier]
         coupon = self._validated(code=code, tier=tier, plan_name=plan.name,
                                  founder_id=founder_id)
+        # A trial code and a one-time discount are different promises; each
+        # is only redeemable on its own checkout.
+        if coupon.is_trial and not for_trial:
+            raise CouponStartsTrialError(coupon.code)
+        if for_trial and not coupon.is_trial:
+            raise CouponNotTrialError()
         discount = coupon.discount_for(plan.price_inr)
         self.repository.reserve(coupon_id=coupon.coupon_id, founder_id=founder_id,
                                 payment_id=payment_id, discount_inr=discount)

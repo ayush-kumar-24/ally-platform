@@ -1000,6 +1000,12 @@ body.sb-collapsed .sb-toggle .ic{transform:rotate(180deg)}
 .bl-pay-alert.warn{background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);color:#92400e}
 .bl-pay-alert .bl-link-btn{font-size:12.5px}
 .bl-pay-alert .bl-pay-ref{font-size:11px;opacity:.75;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+/* Autopay trial terms -- stated before paying, in plain numbers and dates. */
+.bl-trial-terms{border:1px solid rgba(16,185,129,.28);border-left:3px solid var(--emerald,#10B981);background:rgba(16,185,129,.07);color:var(--forest,#1B4332);border-radius:12px;padding:12px 14px;margin-bottom:16px;font-size:13px;line-height:1.55}
+.bl-trial-terms strong{display:block;font-weight:750;margin-bottom:4px}
+.bl-trial-terms ul{margin:0;padding-left:18px}
+.bl-trial-terms li{margin:2px 0}
+.bl-trial-terms small{display:block;margin-top:6px;opacity:.8;font-size:11.5px}
 .bl-pay-order-ref{font-size:11px;color:#8b978f;text-align:center;margin:10px 0 0;font-variant-numeric:tabular-nums;word-break:break-all}
 /* Waiting on the payment webhook. Green like success (the money has arrived)
    but spinning, because the plan is not granted until the backend says so. */
