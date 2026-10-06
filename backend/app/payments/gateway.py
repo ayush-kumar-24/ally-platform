@@ -69,6 +69,23 @@ class PaymentGateway(Protocol):
 
     def fetch_payment(self, payment_id: str) -> dict: ...
 
+    # --- Subscriptions (autopay) -------------------------------------------
+
+    def create_plan(self, *, amount_paise: int, period: str, interval: int,
+                    name: str, notes: dict[str, str]) -> str: ...
+
+    def create_subscription(self, *, plan_id: str, start_at: int, total_count: int,
+                            upfront_paise: int, upfront_name: str,
+                            notes: dict[str, str]) -> dict: ...
+
+    def fetch_subscription(self, subscription_id: str) -> dict: ...
+
+    def cancel_subscription(self, subscription_id: str, *, at_cycle_end: bool) -> dict: ...
+
+    def verify_subscription_signature(
+        self, *, subscription_id: str, payment_id: str, signature: str
+    ) -> bool: ...
+
 
 def _error_description(resp: httpx.Response) -> str | None:
     """Razorpay's error body is `{"error": {"code": ..., "description": ...}}`.
@@ -205,3 +222,77 @@ class RazorpayGateway:
 
         data = resp.json()
         return data if isinstance(data, dict) else {}
+
+    # --- Subscriptions (autopay) -------------------------------------------
+    #
+    # Razorpay's Subscriptions product: a Plan is the recurring price, a
+    # Subscription binds a customer's mandate (UPI AutoPay / card / eMandate)
+    # to it. A paid trial is a subscription whose `start_at` is in the future
+    # with an upfront add-on: the add-on is charged when the founder approves
+    # the mandate, and the first plan charge happens at `start_at`.
+
+    def _call(self, method: str, path: str, what: str, json: dict | None = None) -> dict:
+        try:
+            resp = self._client.request(method, path, json=json)
+            resp.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            status_code = exc.response.status_code
+            gateway_message = _error_description(exc.response)
+            raise PaymentGatewayError(
+                f"razorpay: {what} failed: HTTP {status_code}"
+                + (f": {gateway_message}" if gateway_message else ""),
+                status_code=status_code, gateway_message=gateway_message,
+            ) from exc
+        except httpx.HTTPError as exc:
+            raise PaymentGatewayError(f"razorpay: {what} failed: {exc}") from exc
+        data = resp.json()
+        return data if isinstance(data, dict) else {}
+
+    def create_plan(self, *, amount_paise: int, period: str, interval: int,
+                    name: str, notes: dict[str, str]) -> str:
+        data = self._call("POST", "/plans", "plan creation", json={
+            "period": period, "interval": interval,
+            "item": {"name": name, "amount": amount_paise, "currency": "INR"},
+            "notes": notes,
+        })
+        return data["id"]
+
+    def create_subscription(self, *, plan_id: str, start_at: int, total_count: int,
+                            upfront_paise: int, upfront_name: str,
+                            notes: dict[str, str]) -> dict:
+        body: dict = {
+            "plan_id": plan_id,
+            "total_count": total_count,
+            "quantity": 1,
+            # Razorpay emails/SMSes the founder about the mandate and each
+            # charge -- on top of the bank's own pre-debit notice.
+            "customer_notify": 1,
+            "start_at": start_at,
+            "notes": notes,
+        }
+        if upfront_paise:
+            body["addons"] = [{"item": {"name": upfront_name, "amount": upfront_paise,
+                                        "currency": "INR"}}]
+        return self._call("POST", "/subscriptions", "subscription creation", json=body)
+
+    def fetch_subscription(self, subscription_id: str) -> dict:
+        return self._call("GET", f"/subscriptions/{subscription_id}", "subscription fetch")
+
+    def cancel_subscription(self, subscription_id: str, *, at_cycle_end: bool) -> dict:
+        return self._call("POST", f"/subscriptions/{subscription_id}/cancel",
+                          "subscription cancel",
+                          json={"cancel_at_cycle_end": 1 if at_cycle_end else 0})
+
+    def verify_subscription_signature(
+        self, *, subscription_id: str, payment_id: str, signature: str
+    ) -> bool:
+        """Checkout.js signature for a subscription: HMAC-SHA256 of
+        `payment_id|subscription_id` under the KEY secret -- note the order is
+        the reverse of the order-based one."""
+        if not subscription_id or not payment_id:
+            return False
+        expected = hmac.new(
+            self.key_secret.encode(), f"{payment_id}|{subscription_id}".encode(),
+            hashlib.sha256,
+        ).hexdigest()
+        return hmac.compare_digest(expected, signature or "")

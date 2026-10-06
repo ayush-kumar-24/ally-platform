@@ -143,14 +143,22 @@ export function openCheckout({ order, planName, prefill = {} }) {
       resolve(outcome);
     };
 
+    // An autopay trial opens Checkout on a SUBSCRIPTION instead of an order:
+    // Razorpay then asks the founder to approve the mandate (UPI AutoPay,
+    // card or bank) and shows the recurring amount before they approve.
+    const target = order.subscription_id
+      ? { subscription_id: order.subscription_id }
+      : {
+        order_id: order.order_id,
+        // Sent for display only; the order on Razorpay's side is what is
+        // actually charged, and it was created and priced by the backend.
+        amount: order.amount_paise,
+        currency: order.currency,
+      };
     const rzp = new Razorpay({
       // Public key, straight from the order response. Never the secret.
       key: order.key_id,
-      order_id: order.order_id,
-      // Sent for display only; the order on Razorpay's side is what is
-      // actually charged, and it was created and priced by the backend.
-      amount: order.amount_paise,
-      currency: order.currency,
+      ...target,
       name: 'GoXL Ally',
       description: `${planName} plan`,
       image: '/ally-logo.png',
@@ -180,6 +188,33 @@ export function openCheckout({ order, planName, prefill = {} }) {
     rzp.on('payment.failed', (e) => { lastError = e?.error ?? null; });
     rzp.open();
   }));
+}
+
+// --- autopay trial ---------------------------------------------------------
+//
+// A trial code (e.g. 100FOUNDERS) starts a Razorpay subscription: a small fee
+// today, the plan's full price monthly from the day after the trial, until
+// cancelled. The backend creates and prices it; the browser only opens it.
+
+/** Create the trial subscription. Returns { subscription_id, key_id,
+ *  upfront_paise, recurring_paise, trial_days, trial_ends_at, ... }. */
+export function startTrial(couponCode, tier = 'pro') {
+  return post('/payments/trial/start', { tier, coupon_code: couponCode });
+}
+
+/** Tell the backend the mandate was just approved; it re-reads Razorpay. */
+export function confirmTrial(response = {}) {
+  const body = {
+    razorpay_subscription_id: response.razorpay_subscription_id,
+    razorpay_payment_id: response.razorpay_payment_id,
+  };
+  if (response.razorpay_signature) body.razorpay_signature = response.razorpay_signature;
+  return post('/payments/trial/confirm', body);
+}
+
+/** Stop autopay. Access runs to the end of what was already paid for. */
+export function cancelAutopay() {
+  return post('/payments/subscription/cancel', {});
 }
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));

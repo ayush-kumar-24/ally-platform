@@ -86,6 +86,20 @@ jobs:
           API: ${{ vars.ALLY_API_BASE || 'https://api.goxlally.ai' }}
           SECRET: ${{ secrets.INTERNAL_JOBS_SECRET }}
 
+      # Autopay subscriptions: ends access that has lapsed (cancelled, halted,
+      # or a renewal that never came) and sends the "trial ends in 2 days"
+      # email. Neither is minute-sensitive -- a renewal already has a 3-day
+      # grace window -- so this cron's real-world 2-5h spacing is fine.
+      - name: Autopay lifecycle
+        if: github.event.schedule == '*/10 * * * *' || github.event_name == 'workflow_dispatch'
+        run: |
+          curl -sS -f -X POST \
+            "$API/api/v1/internal/jobs/autopay-lifecycle" \
+            -H "X-Internal-Secret: $SECRET"
+        env:
+          API: ${{ vars.ALLY_API_BASE || 'https://api.goxlally.ai' }}
+          SECRET: ${{ secrets.INTERNAL_JOBS_SECRET }}
+
       # This step was gated on workflow_dispatch ALONE, while every other step
       # in this file also runs on the schedule. So it only ever ran when
       # somebody clicked the button: a founder whose 30-day window closed was

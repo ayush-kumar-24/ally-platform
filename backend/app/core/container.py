@@ -427,7 +427,14 @@ class Container:
         from app.payments.repository import PaymentRepository
         from app.payments.service import PaymentService
         return PaymentService(self.payment_gateway(), PaymentRepository(db),
-                              self.credit_service(db), coupons=self.coupon_service(db))
+                              self.credit_service(db), coupons=self.coupon_service(db),
+                              subscriptions=self.subscription_service(db))
+
+    def subscription_service(self, db: Session):
+        from app.payments.subscription_repository import SubscriptionRepository
+        from app.payments.subscriptions import SubscriptionService
+        return SubscriptionService(self.payment_gateway(), SubscriptionRepository(db),
+                                   self.credit_service(db), self.coupon_service(db))
 
     def admin_panel_service(self, db: Session) -> AdminPanelService:
         """Request-scoped panel service. The audit repository is DB-backed so the

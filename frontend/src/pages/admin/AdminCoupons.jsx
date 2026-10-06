@@ -61,9 +61,12 @@ function defaultExpiry() {
 }
 
 function describeDiscount(c) {
-  return c.discount_type === 'percent'
+  const off = c.discount_type === 'percent'
     ? `${c.discount_value}% off`
     : `₹${c.discount_value.toLocaleString('en-IN')} off`;
+  // A trial code: the discounted price is paid today for N days, then the
+  // full price recurs by autopay until the founder cancels.
+  return c.trial_days ? `${c.trial_days}-day trial (${off} today), then autopay` : off;
 }
 
 function describeScope(c) {
@@ -96,6 +99,7 @@ export default function AdminCoupons() {
   const [discountType, setDiscountType] = useState('percent');
   const [discountValue, setDiscountValue] = useState('');
   const [maxRedemptions, setMaxRedemptions] = useState('');
+  const [trialDays, setTrialDays] = useState('');
   const [scope, setScope] = useState([]);
   const [validUntil, setValidUntil] = useState(defaultExpiry);
 
@@ -158,10 +162,11 @@ export default function AdminCoupons() {
       max_redemptions: maxRedemptions ? Number(maxRedemptions) : null,
       max_per_founder: 1,
       valid_until: until,
+      trial_days: trialDays ? Number(trialDays) : null,
     }), `Coupon ${code.trim().toUpperCase()} created.`)
       .then(() => {
         setCode(''); setDescription(''); setDiscountValue('');
-        setMaxRedemptions(''); setScope([]);
+        setMaxRedemptions(''); setScope([]); setTrialDays('');
       })
       .catch(() => {});
   };
@@ -240,7 +245,18 @@ export default function AdminCoupons() {
                      value={maxRedemptions}
                      onChange={e => setMaxRedemptions(e.target.value)}
                      aria-label="Maximum redemptions" />
+              <input className="adm-input" type="number" min="1" max="30"
+                     placeholder="Trial days (blank = one-time discount)"
+                     value={trialDays} onChange={e => setTrialDays(e.target.value)}
+                     aria-label="Trial days" style={{ minWidth: 260 }} />
             </div>
+            {trialDays && (
+              <p className="adm-muted" style={{ margin: '4px 0 8px' }}>
+                Trial code: the founder pays the discounted price today for {trialDays} days,
+                then the plan&apos;s full price every month by autopay until they cancel.
+                Only works on monthly plans (Plus, Pro).
+              </p>
+            )}
             <div className="adm-filters">
               <input className="adm-input adm-search" placeholder="What is this for?"
                      value={description} onChange={e => setDescription(e.target.value)}

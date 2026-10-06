@@ -118,18 +118,26 @@ def _subscription(db: Session, founder: Founder) -> dict | None:
     Newest row wins: a founder who upgrades gets a second active row, and the
     one they are on is the one they just bought.
     """
+    # Autopay subscriptions are live in 'trial' too, and stay worth showing
+    # after a cancel until the access already paid for runs out -- the founder
+    # needs to see "Pro until 14 Oct, autopay off", not nothing.
     row = db.execute(
         text(
             "SELECT plan_type, status, billing_cycle, started_at, expires_at, "
-            "       cancelled_at "
+            "       cancelled_at, trial_ends_at, amount_inr, "
+            "       gateway_subscription_id IS NOT NULL AS autopay "
             "FROM subscriptions "
-            "WHERE founder_id = :fid AND status = 'active' "
+            "WHERE founder_id = :fid AND (status IN ('active', 'trial') "
+            "   OR (gateway_subscription_id IS NOT NULL "
+            "       AND status IN ('cancelled', 'halted') AND expires_at > now())) "
             "ORDER BY started_at DESC, subscription_id DESC LIMIT 1"
         ),
         {"fid": founder.founder_id},
     ).mappings().first()
     if row is None:
         return None
+    autopay = bool(row["autopay"])
+    autopay_on = autopay and row["status"] in ("active", "trial")
     return {
         "plan_type": row["plan_type"],
         "status": row["status"],
@@ -139,6 +147,13 @@ def _subscription(db: Session, founder: Founder) -> dict | None:
         # must show "one-time purchase" there rather than inventing a date.
         "renews_at": row["expires_at"],
         "cancelled_at": row["cancelled_at"],
+        # Autopay: whether it will charge again, when, and how much.
+        "autopay": autopay,
+        "autopay_active": autopay_on,
+        "trial_ends_at": row["trial_ends_at"] if row["status"] == "trial" else None,
+        "next_charge_at": row["expires_at"] if autopay_on else None,
+        "next_charge_inr": int(row["amount_inr"] or 0) if autopay_on else None,
+        "access_until": row["expires_at"],
     }
 
 

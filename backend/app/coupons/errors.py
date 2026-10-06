@@ -56,6 +56,20 @@ class CouponNotValidForPlanError(CouponError):
         super().__init__(f"That code can't be used on the {plan_name} plan.")
 
 
+class CouponStartsTrialError(CouponError):
+    """A trial code used on the one-time checkout. It must not quietly act as
+    a plain discount: it was promised as a trial with autopay, priced on that."""
+
+    def __init__(self, code: str):
+        super().__init__(f"{code} starts a free-trial subscription -- apply it on the "
+                         "trial checkout instead.")
+
+
+class CouponNotTrialError(CouponError):
+    def __init__(self):
+        super().__init__("That code doesn't start a trial.")
+
+
 class CouponNotApplicableError(CouponError):
     """A free plan needs no checkout, so it needs no coupon either."""
 
