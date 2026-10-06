@@ -1,7 +1,7 @@
 """Autopay subscriptions with a paid trial (Razorpay Subscriptions).
 
 Revision ID: 5b8e2f4a7c19
-Revises: 9d3e6a1f5c20
+Revises: b6e82f4d13a7
 Create Date: 2026-10-06 09:00:00
 
 Until now every purchase was a single one-time order (app/payments/). This adds
@@ -29,7 +29,7 @@ from alembic import op
 from sqlalchemy import text
 
 revision = "5b8e2f4a7c19"
-down_revision = "9d3e6a1f5c20"
+down_revision = "b6e82f4d13a7"
 branch_labels = None
 depends_on = None
 
