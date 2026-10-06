@@ -63,7 +63,7 @@ export default function Login() {
   const returnTo = location.state?.from || '/guided/welcome';
   const { setUser } = useApp();
 
-  const [step, setStep] = useState('password');
+  const [step, setStep] = useState('email');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [code, setCode] = useState('');
@@ -593,10 +593,10 @@ export default function Login() {
               Send me a code
             </button>
             <p className="auth-alt">
-              Already have a password?{' '}
+              Already a user?{' '}
               <button type="button" className="auth-link-btn" disabled={submitting}
                       onClick={() => goToStep('password')}>
-                Sign in instead
+                Sign in here
               </button>
             </p>
           </form>
