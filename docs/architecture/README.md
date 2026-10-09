@@ -36,6 +36,30 @@ them, silently. Now a new table fails the build until somebody files it and
 writes one line about what it is. It has already caught one — `gateway_plans`,
 added by `5b8e2f4a7c19` the day these were written.
 
+## Word versions
+
+`ER_Diagram.docx` and `Entity_Mapping.docx` are the same content as the
+Markdown, for circulating to anyone who would rather read in Word. They are
+generated too, so regenerate them in the same pass:
+
+```bash
+pandoc docs/architecture/ER_Diagram.md     -o docs/architecture/ER_Diagram.docx \
+       --toc --toc-depth=2 --standalone
+pandoc docs/architecture/Entity_Mapping.md -o docs/architecture/Entity_Mapping.docx \
+       --toc --toc-depth=2 --standalone
+python3 backend/scripts/docs/fix_docx_tables.py docs/architecture/*.docx
+```
+
+The last step is not optional. Pandoc gives every table equal column widths,
+which in these documents puts `Notes` -- a sentence -- on the same width as
+`Req`, which holds the word "Yes", and leaves the table occupying 5.50 of the
+6.27 inches available. `fix_docx_tables.py` picks a width profile from each
+table's own header row and uses the full page. It re-laid out 221 tables
+across the two documents.
+
+Pass `--reference-doc=<an existing .docx>` to pandoc to inherit house styles
+from a previous version of the document.
+
 ## Where the words come from
 
 Types, keys, relationships, row counts and constraints are read from the
