@@ -23,7 +23,10 @@ from app.coupons.errors import (
 )
 from app.coupons.models import Coupon, DiscountType
 from app.coupons.service import CouponService
-from app.payments.errors import InvalidCheckoutCallbackError
+from app.payments.errors import (
+    InvalidCheckoutCallbackError,
+    PaymentGatewayUnavailableError,
+)
 from app.payments.gateway import PaymentGatewayError
 from app.payments.models import WebhookOutcome
 from app.payments.subscription_repository import AutopaySubscription
@@ -819,3 +822,108 @@ def test_reconcile_is_inert_without_a_gateway():
                               clock=lambda: NOW)
     assert svc.reconcile_unsettled_trials() == {
         "checked": 0, "activated": 0, "not_ready": 0, "errors": 0}
+
+
+# --- settle: the path that does not need the browser to have been told -------
+#
+# /trial/confirm needs Razorpay Checkout's success callback. A card produces
+# one; UPI AutoPay generally does not, because the mandate is approved in the
+# founder's UPI app after Checkout has closed. Production proved it: a founder
+# paid ₹11, approved, and NO request reached the API at all. These pin the
+# path that asks Razorpay instead of waiting to be told.
+
+def test_settle_activates_a_upi_mandate_the_browser_never_saw():
+    """No payment id, no signature -- a UPI founder has neither to give."""
+    svc, gw, repo, credits, crepo = build()
+    s = started(svc)
+    _approved_at_razorpay(gw, s.subscription_id)
+
+    r = svc.settle_trial(1, subscription_id=s.subscription_id)
+
+    assert r.outcome is WebhookOutcome.CAPTURED and r.plan == "pro"
+    assert repo.plans[1] == "pro"
+    assert repo.by_gateway_id(s.subscription_id).status == "trial"
+    assert crepo.confirmed == [1]
+    assert credits.grants == [(1, PRO.monthly_credits)]
+
+
+def test_settle_says_not_yet_while_the_founder_is_still_in_their_upi_app():
+    """The activating screen polls this. 'Not yet' is the normal answer for
+    the first few seconds and must not grant, fail, or raise."""
+    svc, gw, repo, credits, _ = build()
+    s = started(svc)                                   # still 'created'
+
+    r = svc.settle_trial(1, subscription_id=s.subscription_id)
+
+    assert r.outcome is WebhookOutcome.NOT_CAPTURED
+    assert repo.plans == {} and credits.grants == []
+
+
+def test_settle_cannot_be_used_to_claim_someone_elses_trial():
+    """The browser names the subscription, so the subscription is checked
+    against the caller's own pending fee before anything is granted."""
+    svc, gw, repo, credits, _ = build()
+    s = started(svc, founder_id=1)
+    _approved_at_razorpay(gw, s.subscription_id)
+
+    with pytest.raises(InvalidCheckoutCallbackError):
+        svc.settle_trial(99, subscription_id=s.subscription_id)
+    assert repo.plans == {} and credits.grants == []
+
+
+def test_settle_will_not_hand_over_an_already_active_trial_to_another_founder():
+    svc, gw, repo, *_ = build()
+    s = started(svc, founder_id=1)
+    _approved_at_razorpay(gw, s.subscription_id)
+    svc.settle_trial(1, subscription_id=s.subscription_id)
+
+    with pytest.raises(InvalidCheckoutCallbackError):
+        svc.settle_trial(99, subscription_id=s.subscription_id)
+
+
+def test_settle_is_cheap_and_idempotent_because_the_screen_calls_it_repeatedly():
+    """Polled every few seconds while the founder waits: a second call must
+    not re-grant, and must not go back to Razorpay at all."""
+    svc, gw, repo, credits, crepo = build()
+    s = started(svc)
+    _approved_at_razorpay(gw, s.subscription_id)
+    svc.settle_trial(1, subscription_id=s.subscription_id)
+
+    reads = []
+    real = gw.fetch_subscription
+    gw.fetch_subscription = lambda sid: (reads.append(sid), real(sid))[1]
+
+    again = svc.settle_trial(1, subscription_id=s.subscription_id)
+
+    assert again.outcome is WebhookOutcome.ALREADY_PROCESSED and again.plan == "pro"
+    assert reads == []                                  # no gateway call at all
+    assert credits.grants == [(1, PRO.monthly_credits)]
+    assert crepo.confirmed == [1]
+
+
+def test_settle_and_the_webhook_cannot_both_grant():
+    svc, gw, repo, credits, _ = build()
+    s = started(svc)
+    _approved_at_razorpay(gw, s.subscription_id)
+    svc.settle_trial(1, subscription_id=s.subscription_id)
+
+    r = svc.handle_event("subscription.authenticated",
+                         event("subscription.authenticated", s.subscription_id,
+                               start_at=s.trial_ends_at, payment={"id": "pay_fee"}))
+
+    assert r.outcome is WebhookOutcome.ALREADY_PROCESSED
+    assert credits.grants == [(1, PRO.monthly_credits)]
+
+
+def test_settle_surfaces_a_gateway_outage_instead_of_denying_the_founder():
+    """A Razorpay that cannot be read is not a founder who did not pay."""
+    svc, gw, repo, *_ = build()
+    s = started(svc)
+
+    def down(_sid):
+        raise PaymentGatewayError("Razorpay is down", status_code=503)
+
+    gw.fetch_subscription = down
+    with pytest.raises(PaymentGatewayUnavailableError):
+        svc.settle_trial(1, subscription_id=s.subscription_id)
+    assert repo.plans == {}

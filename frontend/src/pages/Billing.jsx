@@ -7,7 +7,7 @@ import { refreshPlanName } from '../hooks/usePlanName';
 import { reportError } from '../services/errorReporting';
 import {
   cancelAutopay, confirmPayment, confirmTrial, openCheckout, startCheckout, startTrial,
-  validateCoupon, waitForPlanActivation,
+  settleTrial, validateCoupon, waitForPlanActivation,
 } from '../services/payments';
 
 /** The Knowledge libraries, in the order the sidebar lists them.
@@ -792,7 +792,16 @@ function ActivatingView({ plan, order, callback, onActivated, onViewStatus }) {
       }).catch(err => reportConfirmFailure(err, 'billing.confirmPayment'));
     }
 
-    waitForPlanActivation(plan.id, { isCancelled: () => cancelled })
+    /* While we wait, ASK. A card payment has already told us through the
+       confirm call above; a UPI AutoPay founder never will, because they
+       approve the mandate in their UPI app once Checkout has closed. Nudging
+       the backend to re-read Razorpay is what makes those two founders wait
+       the same handful of seconds instead of one of them waiting forever. */
+    const nudge = order?.subscription_id
+      ? () => settleTrial(order.subscription_id)
+      : null;
+
+    waitForPlanActivation(plan.id, { isCancelled: () => cancelled, nudge })
       .then((result) => {
         if (cancelled) return;
         if (result.activated) onActivated(result.entitlements);
