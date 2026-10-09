@@ -217,6 +217,24 @@ export function cancelAutopay() {
   return post('/payments/subscription/cancel', {});
 }
 
+/**
+ * Ask the backend whether an autopay mandate has gone live yet.
+ *
+ * THE PAYMENT-METHOD-AGNOSTIC PATH. `confirmTrial` above needs Razorpay
+ * Checkout's success callback. A card produces one; UPI AutoPay usually does
+ * not, because the founder approves the mandate in their UPI app after
+ * Checkout has already closed — the browser is simply never told. This asks
+ * rather than waiting to be told, so UPI, card, net banking and wallets all
+ * activate the same way and at the same speed.
+ *
+ * Safe to call repeatedly: the backend answers from its own rows without
+ * touching Razorpay once the trial is active, or once there is no pending
+ * fee to settle.
+ */
+export function settleTrial(subscriptionId) {
+  return post('/payments/trial/settle', { razorpay_subscription_id: subscriptionId });
+}
+
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 /**
@@ -242,9 +260,26 @@ export async function waitForPlanActivation(tier, {
   attempts = 45,
   intervalMs = 2000,
   isCancelled = () => false,
+  /* Called every few rounds while we wait. For an autopay trial this is
+     `settleTrial`, which asks Razorpay whether the mandate went live — the
+     only activation path a UPI founder has, since their approval happens
+     outside the browser and fires no callback here. Nudging rather than
+     purely waiting is what makes the wait the same length for every payment
+     method. Its result is ignored: the plan check below stays the authority,
+     exactly as when the webhook was the only thing that could activate. */
+  nudge = null,
+  nudgeEvery = 2,
 } = {}) {
   for (let i = 0; i < attempts; i += 1) {
     if (isCancelled()) return { activated: false, cancelled: true };
+    if (nudge && i % nudgeEvery === 0) {
+      try {
+        await nudge();
+      } catch {
+        // A failed nudge is not a failed payment. Keep polling.
+      }
+      if (isCancelled()) return { activated: false, cancelled: true };
+    }
     try {
       const me = await getMyPlan();
       if (me?.tier === tier) return { activated: true, entitlements: me };

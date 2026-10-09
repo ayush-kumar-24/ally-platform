@@ -203,6 +203,59 @@ class SubscriptionService:
             return WebhookResult(outcome=WebhookOutcome.NOT_CAPTURED, founder_id=founder_id)
         return self._activate_trial(entity, gateway_payment_id=payment_id)
 
+    def settle_trial(self, founder_id: int, *, subscription_id: str) -> WebhookResult:
+        """Has this founder's mandate gone live yet? Ask Razorpay and grant on
+        its word. No payment id, no signature -- and that is the whole point.
+
+        WHY THIS IS SEPARATE FROM confirm_trial. `confirm_trial` is driven by
+        Razorpay Checkout's success callback, which carries a payment id and a
+        signature to verify. That callback fires for a card: the founder
+        authorises in the Razorpay window and the browser is told then and
+        there. It does NOT reliably fire for UPI AutoPay, where the mandate is
+        approved in the founder's UPI app, minutes later, with the browser no
+        longer part of the conversation -- Checkout closes as "dismissed" and
+        the page never learns a thing. Observed in production: a founder paid
+        ₹11, approved the mandate, and no request reached this API at all.
+
+        So this path carries no proof from the browser, because for half our
+        payment methods the browser has none to give. It is not needed: the
+        browser is only saying "go and look", and the answer comes from
+        Razorpay server-to-server, exactly as the webhook's would. The only
+        thing taken on trust is WHICH subscription to look at, and that is
+        checked against the founder's own pending payment below -- a founder
+        cannot settle somebody else's trial.
+
+        Called repeatedly by the activating screen while the founder waits, so
+        it is deliberately cheap on the common path: a subscription already
+        activated, or one with no pending fee, returns without touching
+        Razorpay at all.
+        """
+        if self.gateway is None:
+            raise PaymentsNotConfiguredError()
+
+        existing = self.repository.by_gateway_id(subscription_id)
+        if existing is not None:
+            if existing.founder_id != founder_id:
+                raise InvalidCheckoutCallbackError()
+            return WebhookResult(outcome=WebhookOutcome.ALREADY_PROCESSED,
+                                 founder_id=founder_id, plan=existing.plan_type)
+
+        pending = self.repository.pending_trial_payment(subscription_id)
+        if pending is None or pending["founder_id"] != founder_id:
+            raise InvalidCheckoutCallbackError()
+
+        try:
+            entity = self.gateway.fetch_subscription(subscription_id)
+        except PaymentGatewayError as exc:
+            raise PaymentGatewayUnavailableError() from exc
+
+        if entity.get("status") not in ("authenticated", "active"):
+            # Normal while the founder is still in their UPI app. The screen
+            # keeps asking; the reconcile sweep covers them if they close it.
+            return WebhookResult(outcome=WebhookOutcome.NOT_CAPTURED,
+                                 founder_id=founder_id)
+        return self._activate_trial(entity, gateway_payment_id=None)
+
     def cancel(self, founder_id: int) -> AutopaySubscription:
         """Stop autopay. Access runs to the end of what has been paid for --
         the trial, or the current month -- and is then removed by the sweep."""

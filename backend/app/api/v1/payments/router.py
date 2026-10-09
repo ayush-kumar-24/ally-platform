@@ -247,6 +247,42 @@ def confirm_trial(
     return ConfirmResponse(activated=activated, outcome=result.outcome, plan=result.plan)
 
 
+class TrialSettleRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    razorpay_subscription_id: str = Field(min_length=1, max_length=200)
+
+
+@router.post("/trial/settle", response_model=ConfirmResponse,
+             summary="Ask whether an autopay mandate has gone live yet")
+def settle_trial(
+    payload: TrialSettleRequest,
+    founder: Founder = Depends(get_founder_record),
+    service=Depends(get_subscription_service),
+    db=Depends(get_db),
+) -> ConfirmResponse:
+    """The activating screen's poll, and the one activation path that works
+    for EVERY payment method.
+
+    /trial/confirm needs Razorpay Checkout's success callback, which a card
+    produces and UPI AutoPay generally does not -- that mandate is approved in
+    the founder's UPI app after the browser is out of the loop. A founder who
+    pays by UPI therefore has no callback to send, and before this route the
+    only thing left was the webhook. When that was not configured either, the
+    founder paid and got nothing, which is exactly what happened in production.
+
+    This asks instead of being told, so the payment method stops mattering.
+    Elevated for the same reason as /confirm: activating writes rows a system
+    actor writes. The service refuses a subscription that is not this
+    founder's before anything is granted.
+    """
+    set_admin_rls_context(db)
+    result = service.settle_trial(
+        founder.founder_id, subscription_id=payload.razorpay_subscription_id)
+    activated = result.outcome in (WebhookOutcome.CAPTURED, WebhookOutcome.ALREADY_PROCESSED)
+    return ConfirmResponse(activated=activated, outcome=result.outcome, plan=result.plan)
+
+
 class CancelAutopayResponse(BaseModel):
     cancelled: bool
     access_until: str | None
