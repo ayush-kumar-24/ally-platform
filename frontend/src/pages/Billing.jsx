@@ -4,6 +4,7 @@ import { MOCK_PLANS } from '../data/mockData';
 import { getProfile } from '../services/profile';
 import { getCatalog, getMyPlan } from '../services/plans';
 import { refreshPlanName } from '../hooks/usePlanName';
+import { reportError } from '../services/errorReporting';
 import {
   cancelAutopay, confirmPayment, confirmTrial, openCheckout, startCheckout, startTrial,
   validateCoupon, waitForPlanActivation,
@@ -770,14 +771,25 @@ function ActivatingView({ plan, order, callback, onActivated, onViewStatus }) {
        before this endpoint existed. A rejected or failed confirm therefore
        degrades to the webhook wait rather than to an error the founder can do
        nothing about. */
+    /* REPORTED, not swallowed. These used to discard the rejection entirely,
+       on the reasoning that the webhook is the backstop -- which is true right
+       up until the webhook is also missing, and then a founder has paid for a
+       plan they do not hold and nothing anywhere says so. That happened on the
+       first real trial. The poll below still decides what the founder sees, so
+       reporting changes nothing for them; it just means the failure leaves a
+       trace someone can find. `reconcile_unsettled_trials` on the backend is
+       what actually rescues the payment. */
+    const reportConfirmFailure = (err, source) => reportError(err, { source });
+
     if (callback?.razorpay_payment_id && order?.subscription_id) {
-      confirmTrial(callback).catch(() => { /* the webhook is still coming */ });
+      confirmTrial(callback)
+        .catch(err => reportConfirmFailure(err, 'billing.confirmTrial'));
     } else if (callback?.razorpay_payment_id && order?.order_id) {
       confirmPayment({
         order_id: order.order_id,
         razorpay_payment_id: callback.razorpay_payment_id,
         razorpay_signature: callback.razorpay_signature,
-      }).catch(() => { /* the webhook is still coming */ });
+      }).catch(err => reportConfirmFailure(err, 'billing.confirmPayment'));
     }
 
     waitForPlanActivation(plan.id, { isCancelled: () => cancelled })

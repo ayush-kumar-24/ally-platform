@@ -113,6 +113,43 @@ class SubscriptionRepository:
         ).mappings().first()
         return dict(row) if row else None
 
+    def unsettled_trial_payments(self, *, older_than: datetime,
+                                 limit: int = 50) -> list[dict]:
+        """Trial fees still `pending` whose subscription has no local row yet.
+
+        Each one is a founder who went through checkout and may well have
+        approved the mandate -- Razorpay has their money -- while this app
+        never heard that it happened. Activation normally arrives twice over
+        (the `subscription.authenticated` webhook, and the browser's
+        /trial/confirm), and when BOTH are lost the founder is left paying for
+        a plan they do not hold, with nothing in the system that would ever
+        notice. That is what this feeds; see
+        SubscriptionService.reconcile_unsettled_trials.
+
+        `older_than` keeps a checkout the founder is still sitting in out of
+        the sweep: the mandate screen takes a minute or two, and a founder
+        mid-approval is pending for a perfectly good reason.
+
+        The NOT EXISTS is belt to the service's own `by_gateway_id` check --
+        an already-activated subscription should not be re-read from Razorpay
+        on every pass just because its payment row was left behind.
+        """
+        rows = self.db.execute(
+            text("""SELECT p.payment_id, p.founder_id, p.gateway_subscription_id,
+                           p.created_at
+                      FROM payments p
+                     WHERE p.status = 'pending'
+                       AND p.gateway_subscription_id IS NOT NULL
+                       AND p.created_at < :cutoff
+                       AND NOT EXISTS (
+                             SELECT 1 FROM subscriptions s
+                              WHERE s.gateway_subscription_id = p.gateway_subscription_id)
+                     ORDER BY p.payment_id
+                     LIMIT :limit"""),
+            {"cutoff": older_than, "limit": limit},
+        ).mappings().all()
+        return [dict(r) for r in rows]
+
     def payment_recorded(self, gateway_payment_id: str) -> bool:
         return self.db.execute(
             text("SELECT 1 FROM payments WHERE gateway_payment_id = :gpid LIMIT 1"),

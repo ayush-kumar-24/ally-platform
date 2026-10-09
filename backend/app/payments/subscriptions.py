@@ -57,6 +57,11 @@ _TOTAL_COUNT = 120
 #: renewal is in flight (UPI AutoPay announces a debit 24h ahead and may land
 #: a day late). Past this, an unpaid renewal costs the plan.
 RENEWAL_GRACE = timedelta(days=3)
+#: How long a trial fee may sit `pending` before the reconcile sweep goes and
+#: asks Razorpay what actually happened to it. Long enough that a founder still
+#: on the mandate screen is not chased; short enough that a lost webhook costs
+#: them minutes rather than their whole trial.
+RECONCILE_AFTER = timedelta(minutes=10)
 #: The "your trial ends soon" email goes out this far ahead of the first charge.
 REMINDER_LEAD = timedelta(days=2)
 
@@ -184,7 +189,17 @@ class SubscriptionService:
             entity = self.gateway.fetch_subscription(subscription_id)
         except PaymentGatewayError as exc:
             raise PaymentGatewayUnavailableError() from exc
-        if entity.get("status") not in ("authenticated", "active"):
+        status = entity.get("status")
+        if status not in ("authenticated", "active"):
+            # Logged, not silent. The browser fires this call without awaiting
+            # it and discards the answer, so a founder whose mandate Razorpay
+            # has not finished recording leaves no trace at all otherwise --
+            # and if the webhook is also lost, nothing downstream ever asks
+            # again. `reconcile_unsettled_trials` is what picks them up; this
+            # line is how anyone finds out it had to.
+            logger.warning("subscriptions: trial confirm found no live mandate yet",
+                           extra={"founder_id": founder_id, "subscription": subscription_id,
+                                  "gateway_status": status})
             return WebhookResult(outcome=WebhookOutcome.NOT_CAPTURED, founder_id=founder_id)
         return self._activate_trial(entity, gateway_payment_id=payment_id)
 
@@ -385,6 +400,95 @@ class SubscriptionService:
                                                  amount_inr=price_inr, period="monthly")
 
     # --- sweeps ----------------------------------------------------------------------
+
+    def reconcile_unsettled_trials(self, *, limit: int = 50) -> dict:
+        """Activate trials Razorpay authorised but nothing told us about.
+
+        WHY THIS EXISTS. Activation had two paths and no third: the
+        `subscription.authenticated` webhook, and the browser calling
+        /trial/confirm straight after the mandate is approved. Each is a good
+        path and either alone is enough -- but they share a failure mode. The
+        webhook depends on dashboard configuration this app cannot see, and
+        the browser call is fired and deliberately not awaited (Billing.jsx
+        swallows its rejection, because normally the webhook is the backstop).
+        Lose both and the founder has paid, Razorpay holds a live mandate, and
+        this system holds a `pending` payment row it will never look at again.
+
+        Observed in production on the first real ₹11 trial: payment taken,
+        autopay mandate authorised, founder left on Free, and nothing anywhere
+        reporting a problem. Recurring charges already had this safety net --
+        `subscription.charged` is reconciled by nobody, but a missed one only
+        shortens access, where a missed activation denies it outright.
+
+        So: ask Razorpay. It is the only party that actually knows, and
+        `fetch_subscription` is the same server-to-server read /trial/confirm
+        makes. A subscription Razorpay reports as `authenticated` or `active`
+        is one the founder paid for, whatever this app did or did not hear.
+
+        Safe to run on a schedule and safe to run twice: `_activate_trial`
+        returns ALREADY_PROCESSED for a subscription that has a local row, and
+        the unique index on gateway_subscription_id settles any race with a
+        webhook arriving at the same moment.
+
+        One founder's bad row never stops the sweep -- a gateway error or an
+        unexpected status is counted and stepped over, because the next
+        founder in the list is also waiting for a plan they paid for.
+        """
+        if self.gateway is None:
+            return {"checked": 0, "activated": 0, "not_ready": 0, "errors": 0}
+
+        cutoff = self._now() - RECONCILE_AFTER
+        rows = self.repository.unsettled_trial_payments(older_than=cutoff, limit=limit)
+        checked = activated = not_ready = errors = 0
+
+        for row in rows:
+            gid = row["gateway_subscription_id"]
+            checked += 1
+            try:
+                entity = self.gateway.fetch_subscription(gid)
+            except PaymentGatewayError as exc:
+                errors += 1
+                logger.warning(
+                    "subscriptions: could not re-read an unsettled trial",
+                    extra={"subscription": gid, "founder_id": row["founder_id"],
+                           "gateway_status": exc.status_code, "error": str(exc)})
+                continue
+
+            status = entity.get("status")
+            if status not in ("authenticated", "active"):
+                # Created but never approved, or already dead. Not ours to
+                # grant -- `expire_ended` and the coupon TTL clean these up.
+                not_ready += 1
+                continue
+
+            try:
+                # No gateway_payment_id: the add-on charge is not named on the
+                # subscription entity, and the payment row is better marked
+                # paid with it unknown than left pending with it missing. A
+                # later webhook carrying the id updates nothing -- the row is
+                # already settled -- which is the right trade.
+                result = self._activate_trial(entity, gateway_payment_id=None)
+            except Exception as exc:                       # noqa: BLE001
+                errors += 1
+                self.repository.db.rollback()
+                logger.error("subscriptions: reconcile could not activate a trial",
+                             extra={"subscription": gid,
+                                    "founder_id": row["founder_id"], "error": str(exc)})
+                continue
+
+            if result.outcome is WebhookOutcome.CAPTURED:
+                activated += 1
+                logger.warning(
+                    "subscriptions: trial activated by reconcile, not by webhook",
+                    extra={"subscription": gid, "founder_id": row["founder_id"],
+                           "paid_at": row["created_at"].isoformat()
+                                      if row.get("created_at") else None})
+
+        if activated:
+            logger.warning("subscriptions: reconcile rescued paid trials",
+                           extra={"activated": activated, "checked": checked})
+        return {"checked": checked, "activated": activated,
+                "not_ready": not_ready, "errors": errors}
 
     def expire_ended(self) -> dict:
         """Move founders whose autopay access has ended back to Free.

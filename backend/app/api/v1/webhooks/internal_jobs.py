@@ -407,21 +407,28 @@ def autopay_lifecycle(
     db: Session = Depends(get_db),
     _: None = Depends(authorise_internal_job),
 ) -> dict:
-    """Two sweeps for autopay subscriptions (app/payments/subscriptions.py):
+    """Three sweeps for autopay subscriptions (app/payments/subscriptions.py):
 
+    * trials Razorpay authorised that never reached us -- the founder paid,
+      the mandate is live, and both the webhook and the browser's confirm
+      were lost. Re-read from Razorpay and granted. This runs FIRST: a
+      founder who paid and holds nothing is the most urgent of the three,
+      and activating them here keeps them clear of the expiry sweep below;
     * founders whose paid-for access has ended -- cancelled, halted, or a
       renewal that never arrived within the grace window -- go back to Free;
     * founders whose trial ends within two days get one email (and a bell
       notification) saying exactly when autopay will charge and how to cancel.
 
-    **Call this every 10-15 minutes.** Idempotent: an expired subscription is
-    closed out once, and each trial gets one reminder.
+    **Call this every 10-15 minutes.** Idempotent: a trial is activated once
+    (unique index on the gateway id), an expired subscription is closed out
+    once, and each trial gets one reminder.
     """
     from app.core.container import container
     from app.notifications.writer import notify
     from app.services.email import send_email
 
     service = container.subscription_service(db)
+    rescued = service.reconcile_unsettled_trials()
     expired = service.expire_ended()
 
     def _bell(founder_id, *, title, body, dedup_key):
@@ -430,5 +437,8 @@ def autopay_lifecycle(
 
     reminders = service.send_trial_reminders(
         lambda to, subject, body: send_email(to, subject, body), notify=_bell)
-    logger.info("internal job: autopay lifecycle", extra={**expired, **reminders})
-    return {**expired, **reminders, "email_configured": settings.email_enabled}
+    logger.info("internal job: autopay lifecycle",
+                extra={**expired, **reminders,
+                       **{f"reconcile_{k}": v for k, v in rescued.items()}})
+    return {**expired, **reminders, "reconciled": rescued,
+            "email_configured": settings.email_enabled}
