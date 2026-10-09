@@ -24,6 +24,7 @@ from app.coupons.errors import (
 from app.coupons.models import Coupon, DiscountType
 from app.coupons.service import CouponService
 from app.payments.errors import InvalidCheckoutCallbackError
+from app.payments.gateway import PaymentGatewayError
 from app.payments.models import WebhookOutcome
 from app.payments.subscription_repository import AutopaySubscription
 from app.payments.subscriptions import (
@@ -122,6 +123,9 @@ class FakeSubRepo:
         self.plans: dict[int, str] = {}
         self.emails: dict[int, str] = {}
         self.fail_insert_once = False
+        #: When a trial payment row is stamped. Tests age it to put a checkout
+        #: outside the reconcile sweep's "still deciding" window.
+        self.now = NOW
 
     # gateway plans
     def get_gateway_plan(self, *, tier, amount_inr, period):
@@ -134,7 +138,7 @@ class FakeSubRepo:
     def create_trial_payment(self, **kw):
         pid = len(self.payments) + 1
         self.payments[pid] = {**kw, "payment_id": pid, "status": "pending",
-                              "gateway_payment_id": None}
+                              "gateway_payment_id": None, "created_at": self.now}
         return pid
 
     def attach_coupon(self, payment_id, *, coupon_id):
@@ -146,6 +150,21 @@ class FakeSubRepo:
                 return {"payment_id": p["payment_id"], "founder_id": p["founder_id"],
                         "amount_inr": p["amount_inr"], "plan_tier": p["plan_tier"]}
         return None
+
+    def unsettled_trial_payments(self, *, older_than, limit=50):
+        out = []
+        for p in sorted(self.payments.values(), key=lambda r: r["payment_id"]):
+            if p["status"] != "pending" or not p.get("gateway_subscription_id"):
+                continue
+            if p.get("created_at") is not None and p["created_at"] >= older_than:
+                continue
+            if any(r["gateway_subscription_id"] == p["gateway_subscription_id"]
+                   for r in self.subs.values()):
+                continue
+            out.append({"payment_id": p["payment_id"], "founder_id": p["founder_id"],
+                        "gateway_subscription_id": p["gateway_subscription_id"],
+                        "created_at": p.get("created_at")})
+        return out[:limit]
 
     def payment_recorded(self, gpid):
         return any(p.get("gateway_payment_id") == gpid for p in self.payments.values())
@@ -646,3 +665,157 @@ def test_webhook_routes_subscription_events_and_keeps_their_payments_out_of_orde
             "id": "pay_1", "order_id": "order_rzp", "subscription_id": "sub_A"}}}}).encode()
         assert svc.handle_webhook(body=body, signature="x").outcome == \
             WebhookOutcome.IGNORED_EVENT
+
+
+# --- reconcile: the trial Razorpay took money for and nobody recorded ---------
+#
+# Activation has two paths and they share a failure mode. The webhook depends
+# on dashboard configuration this app cannot see; the browser's /trial/confirm
+# is fired without being awaited and its rejection is swallowed. Lose both and
+# the founder has paid, the mandate is live at Razorpay, and this system holds
+# a `pending` row it would never look at again. That happened on the first real
+# ₹11 trial. These pin the sweep that now catches it.
+
+def _approved_at_razorpay(gw, subscription_id, status="authenticated"):
+    """What the founder approving the mandate looks like from Razorpay's side,
+    with neither the webhook nor the confirm call reaching us."""
+    gw.subscriptions[subscription_id]["status"] = status
+
+
+def _paid_a_while_ago(repo, minutes=30):
+    """Age every pending trial fee past the sweep's grace window."""
+    for row in repo.payments.values():
+        row["created_at"] = NOW - timedelta(minutes=minutes)
+
+
+def test_reconcile_grants_the_trial_when_webhook_and_confirm_were_both_lost():
+    """The production incident, start to finish."""
+    svc, gw, repo, credits, crepo = build()
+    s = started(svc)
+    _approved_at_razorpay(gw, s.subscription_id)
+    _paid_a_while_ago(repo)
+
+    # Nothing has reached us: no subscription row, founder still unpaid.
+    assert repo.by_gateway_id(s.subscription_id) is None
+    assert repo.plans.get(1) is None
+
+    out = svc.reconcile_unsettled_trials()
+
+    assert out == {"checked": 1, "activated": 1, "not_ready": 0, "errors": 0}
+    sub = repo.by_gateway_id(s.subscription_id)
+    assert sub is not None and sub.status == "trial" and sub.plan_type == "pro"
+    assert repo.plans[1] == "pro"
+    assert repo.payments[1]["status"] == "success"
+    assert crepo.confirmed == [1]          # the coupon slot is spent, not stranded
+    assert credits.grants == [(1, PRO.monthly_credits)]
+
+
+def test_reconcile_leaves_alone_a_checkout_the_founder_is_still_sitting_in():
+    """Approving a mandate takes a minute or two. A founder mid-approval is
+    pending for a good reason and must not be read as a lost activation."""
+    svc, gw, repo, *_ = build()
+    s = started(svc)
+    _approved_at_razorpay(gw, s.subscription_id)
+    # created_at is NOW -- inside RECONCILE_AFTER.
+
+    assert svc.reconcile_unsettled_trials() == {
+        "checked": 0, "activated": 0, "not_ready": 0, "errors": 0}
+    assert repo.by_gateway_id(s.subscription_id) is None
+
+
+def test_reconcile_does_not_grant_a_mandate_that_was_never_approved():
+    """`created` means the founder opened checkout and walked away. Razorpay
+    has charged nothing, so there is nothing to grant."""
+    svc, gw, repo, credits, crepo = build()
+    started(svc)
+    _paid_a_while_ago(repo)                 # status stays 'created'
+
+    assert svc.reconcile_unsettled_trials() == {
+        "checked": 1, "activated": 0, "not_ready": 1, "errors": 0}
+    assert repo.plans == {} and credits.grants == [] and crepo.confirmed == []
+
+
+def test_reconcile_grants_an_already_charging_subscription_too():
+    """`active` means the first real charge has landed -- even more certainly
+    paid for than `authenticated`."""
+    svc, gw, repo, *_ = build()
+    s = started(svc)
+    _approved_at_razorpay(gw, s.subscription_id, status="active")
+    _paid_a_while_ago(repo)
+
+    assert svc.reconcile_unsettled_trials()["activated"] == 1
+    assert repo.plans[1] == "pro"
+
+
+def test_reconcile_is_safe_to_run_again():
+    """It runs every ten minutes. A trial it already rescued must not be
+    granted, credited or counted twice."""
+    svc, gw, repo, credits, crepo = build()
+    s = started(svc)
+    _approved_at_razorpay(gw, s.subscription_id)
+    _paid_a_while_ago(repo)
+
+    first = svc.reconcile_unsettled_trials()
+    second = svc.reconcile_unsettled_trials()
+
+    assert first["activated"] == 1
+    # The payment is settled and a subscription row exists, so the second pass
+    # has nothing left to look at -- it never reaches Razorpay at all.
+    assert second == {"checked": 0, "activated": 0, "not_ready": 0, "errors": 0}
+    assert credits.grants == [(1, PRO.monthly_credits)]
+    assert crepo.confirmed == [1]
+
+
+def test_reconcile_does_not_fight_the_webhook():
+    """If the webhook turns up first, the sweep is a no-op rather than a
+    second grant."""
+    svc, gw, repo, credits, _ = build()
+    s = started(svc)
+    svc.handle_event("subscription.authenticated",
+                     event("subscription.authenticated", s.subscription_id,
+                           start_at=s.trial_ends_at, payment={"id": "pay_fee"}))
+    _paid_a_while_ago(repo)
+
+    assert svc.reconcile_unsettled_trials()["activated"] == 0
+    assert credits.grants == [(1, PRO.monthly_credits)]
+
+
+def test_one_founders_gateway_error_does_not_strand_the_next():
+    """Everyone in this list has paid. A single bad read must cost one founder
+    a ten-minute wait, not block the queue behind them."""
+    svc, gw, repo, credits, _ = build()
+    first = started(svc, founder_id=1)
+    second = started(svc, founder_id=2)
+    _approved_at_razorpay(gw, first.subscription_id)
+    _approved_at_razorpay(gw, second.subscription_id)
+    _paid_a_while_ago(repo)
+
+    real_fetch = gw.fetch_subscription
+
+    def flaky(sid):
+        if sid == first.subscription_id:
+            raise PaymentGatewayError("Razorpay is down", status_code=502)
+        return real_fetch(sid)
+
+    gw.fetch_subscription = flaky
+
+    out = svc.reconcile_unsettled_trials()
+    assert out == {"checked": 2, "activated": 1, "not_ready": 0, "errors": 1}
+    assert repo.plans == {2: "pro"}
+
+    # And the one that errored is picked up on the next pass, not forgotten.
+    gw.fetch_subscription = real_fetch
+    assert svc.reconcile_unsettled_trials()["activated"] == 1
+    assert repo.plans[1] == "pro"
+
+
+def test_reconcile_is_inert_without_a_gateway():
+    """Payments unconfigured: report nothing rather than raise inside a
+    scheduled job that also does two unrelated sweeps."""
+    repo = FakeSubRepo()
+    svc = SubscriptionService(None, repo, FakeCredits(),
+                              CouponService(FakeCouponRepo(trial_coupon()),
+                                            clock=lambda: NOW),
+                              clock=lambda: NOW)
+    assert svc.reconcile_unsettled_trials() == {
+        "checked": 0, "activated": 0, "not_ready": 0, "errors": 0}
